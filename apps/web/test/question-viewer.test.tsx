@@ -4,16 +4,19 @@
 // renders no favorite / retry; the UX7 rules hold per mode — `displayStem` (the trailing empty
 // answer mark hidden), the hidden 보기 label, the grading border with its 정답 / 내 선택 text
 // (QPLAY-01-AC12/AC13), and the practice-mode session cache (practice-cache.test.tsx covers
-// its rules in full). The call sites' use of the viewer is checked at the bottom.
+// its rules in full). The call sites' use of the viewer is checked at the bottom. ASK-Q: which
+// modes render `질문하기` (ASK-01 "문제 쪽 진입점") and what they attach.
 import './dom-setup';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
 import type { PracticeRun, RunItem } from '../src/lib/questions/practice-runs';
 import type { RunClient } from '../src/components/questions/viewer/question-viewer';
+import type { AskLauncher } from '../src/components/ask/ask-launcher';
 
 const openSession = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
 vi.mock('../src/lib/questions/practice-actions', () => ({
@@ -29,6 +32,7 @@ vi.mock('../src/lib/questions/actions', () => ({
 }));
 
 const { QuestionViewer } = await import('../src/components/questions/viewer/question-viewer');
+const { AskLauncherProvider } = await import('../src/components/ask/ask-launcher');
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const QID = '22222222-2222-4222-8222-000000000001';
@@ -143,7 +147,11 @@ function fakeClient(overrides: Partial<RunClient> = {}): RunClient {
       ok: true as const,
       data: { total: 0, offset: 0, limit: 200, items: [] },
     })),
-    flags: vi.fn(async () => ({ is_favorite: false, needs_retry: false })),
+    flags: vi.fn(async () => ({
+      is_favorite: false,
+      needs_retry: false,
+      last_graded_result: 'correct' as const,
+    })),
     setFlags: vi.fn(),
     ...overrides,
   } as RunClient;
@@ -170,6 +178,8 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
           preview: STEM,
           isFavorite: false,
           needsRetry: false,
+          lastGradedResult: 'correct',
+          isPendingGrading: false,
         }}
         readOnly={false}
         onClose={noop}
@@ -189,6 +199,282 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
     expect(openSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('RETRY-01-C04 practice: 다시 풀기 is not rendered unless the last graded result is correct, even when the flag is on', () => {
+    const question = {
+      id: QID,
+      title: '3장 12번 문제',
+      chapterTitle: '3장 물의 순환',
+      questionType: 'MCQ' as const,
+      preview: STEM,
+      isFavorite: false,
+      needsRetry: true,
+    };
+    const props = { workspaceId: WS, readOnly: false, onClose: noop, onFlagsChange: noop };
+    const { rerender } = render(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: null, isPendingGrading: false }}
+      />,
+    );
+    for (const result of [null, 'incorrect'] as const) {
+      rerender(
+        <QuestionViewer
+          mode="practice"
+          {...props}
+          onViewed={noop}
+          question={{ ...question, lastGradedResult: result, isPendingGrading: false }}
+        />,
+      );
+      const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
+      expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+    }
+    // D1: a correct result with a newer submission still waiting for grading hides it too.
+    rerender(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: 'correct', isPendingGrading: true }}
+      />,
+    );
+    expect(
+      within(screen.getByRole('dialog', { name: '3장 12번 문제' })).queryByRole('button', {
+        name: /다시 풀기/,
+      }),
+    ).toBeNull();
+    rerender(
+      <QuestionViewer
+        mode="practice"
+        {...props}
+        onViewed={noop}
+        question={{ ...question, lastGradedResult: 'correct', isPendingGrading: false }}
+      />,
+    );
+    expect(
+      within(screen.getByRole('dialog', { name: '3장 12번 문제' })).getByRole('button', {
+        name: '다시 풀기 해제',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('RETRY-01-C04 sequence(bank): a refused retry keeps the typed answer and the open session', async () => {
+    const user = userEvent.setup();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'correct',
+      })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    const client = fakeClient({
+      flags: flags as unknown as RunClient['flags'],
+      setFlags: vi.fn(async () => ({
+        ok: false as const,
+        kind: 'retryNotAllowed' as const,
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      })) as unknown as RunClient['setFlags'],
+    });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={client}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '응결' }));
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+    expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
+    expect(client.openSession).toHaveBeenCalledTimes(1);
+    expect(client.getItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('RETRY-01-C04 sequence(bank): after a local correct grading, the refresh of a refused retry shows the server state', async () => {
+    const user = userEvent.setup();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({ is_favorite: false, needs_retry: false, last_graded_result: null })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: flags as unknown as RunClient['flags'],
+          submit: vi.fn(async () => ({
+            ok: true as const,
+            data: { ...graded, result: 'correct' as const },
+          })),
+          setFlags: vi.fn(async () => ({
+            ok: false as const,
+            kind: 'retryNotAllowed' as const,
+            message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+          })) as unknown as RunClient['setFlags'],
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '증발' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    // Graded correct here: the toggle shows (it beats the older lookup that knew no result).
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    // Another tab graded it incorrect meanwhile: the refresh started after the local grading
+    // is the newer truth and hides the toggle.
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+  });
+
+  it('RETRY-01-C04 sequence(bank): a refused retry (409) shows the message, reads the state again and hides the toggle', async () => {
+    const user = userEvent.setup();
+    const message = '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.';
+    const onFlagsFailed = vi.fn();
+    const flags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'correct',
+      })
+      .mockResolvedValue({
+        is_favorite: false,
+        needs_retry: false,
+        last_graded_result: 'incorrect',
+      });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        onFlagsFailed={onFlagsFailed}
+        client={fakeClient({
+          flags: flags as unknown as RunClient['flags'],
+          setFlags: vi.fn(async () => ({
+            ok: false as const,
+            kind: 'retryNotAllowed' as const,
+            message,
+          })) as unknown as RunClient['setFlags'],
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    await waitFor(() => expect(onFlagsFailed).toHaveBeenCalledWith(message));
+    await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+  });
+
+  it('RETRY-01-C04 sequence(bank): no 다시 풀기 while the latest submission is pending grading', async () => {
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(async () => ({
+            is_favorite: false,
+            needs_retry: false,
+            last_graded_result: 'correct' as const,
+            is_pending_grading: true,
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: /즐겨찾기/ });
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+  });
+
+  it('RETRY-01-C04 sequence(bank): no 다시 풀기 for a question not answered correctly', async () => {
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(async () => ({
+            is_favorite: false,
+            needs_retry: true,
+            last_graded_result: null,
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: /즐겨찾기/ });
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+  });
+
+  it('RETRY-01-C04 sequence(bank): a delayed first flags lookup does not undo a grading made meanwhile', async () => {
+    const user = userEvent.setup();
+    let release!: (value: { is_favorite: boolean; needs_retry: boolean }) => void;
+    const lookup = new Promise<{ is_favorite: boolean; needs_retry: boolean }>((resolve) => {
+      release = resolve;
+    });
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          flags: vi.fn(() => lookup) as unknown as RunClient['flags'],
+          submit: vi.fn(async () => ({
+            ok: true as const,
+            data: { ...graded, result: 'correct' as const },
+          })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '증발' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    expect(await within(panel).findByRole('status')).toHaveTextContent('정답');
+    // The lookup (made before the submission) now answers: it knows no graded result.
+    await act(async () => release({ is_favorite: false, needs_retry: false }));
+    expect(
+      await within(panel).findByRole('button', { name: '다시 풀기 표시' }),
+    ).toBeInTheDocument();
   });
 
   it('manage: the 문제 상세 dialog shows the answers and renders no submit UI', () => {
@@ -228,7 +514,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(dialog).queryByRole('button', { name: /즐겨찾기|다시 풀기/ })).toBeNull();
   });
 
-  it('read-only: a non-modal preview with the answers, no submit UI and no toggles', () => {
+  it('read-only: a modal preview (UX9) with the answers, no submit UI and no toggles', () => {
     render(
       <QuestionViewer
         mode="read-only"
@@ -239,7 +525,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       />,
     );
     const panel = screen.getByRole('dialog', { name: '1번 문제' });
-    expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(within(panel).getByText(SHOWN_STEM)).toBeInTheDocument();
     expect(within(panel).getByText(REVISION.explanation)).toBeInTheDocument();
     expect(within(panel).queryByRole('radio')).toBeNull();
@@ -264,7 +550,11 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     const panel = screen.getByRole('dialog');
     expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(await within(panel).findByRole('heading', { name: '3장 12번' })).toBeInTheDocument();
-    expect(await within(panel).findByText(SHOWN_STEM)).toBeInTheDocument();
+    // The stem is on screen already while the run and the session still load (a placeholder that
+    // the loaded body then replaces): a findByText match on it can be detached by the next render
+    // before the assertion runs. Wait for the loaded body (the 제출 button) first, then read it.
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    expect(within(panel).getByText(SHOWN_STEM)).toBeInTheDocument();
     expect(within(panel).getByRole('progressbar')).toHaveAttribute(
       'aria-valuetext',
       '2문제 중 1번째',
@@ -276,7 +566,8 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
 
     await user.click(within(panel).getByRole('radio', { name: '응결' }));
     await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
-    expect(await within(panel).findByRole('status')).toHaveTextContent('오답');
+    // The result line is the first status; 관련 본문 (RELSRC-01) adds its own below it.
+    expect((await within(panel).findAllByRole('status'))[0]).toHaveTextContent('오답');
     expect(client.submit).toHaveBeenCalledWith(session().id, { selected_option_ids: ['o2'] });
     expect(within(panel).getByRole('radio', { name: '증발' })).toHaveAccessibleDescription('정답');
     expect(within(panel).getByRole('radio', { name: '응결' })).toHaveAccessibleDescription(
@@ -284,6 +575,52 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
     expect(within(panel).getByRole('button', { name: '다음' })).toBeInTheDocument();
+  });
+
+  it('sequence(bank): UX9-RETRY-OPT toggles flip before the response, never busy, failures roll back', async () => {
+    const user = userEvent.setup();
+    const held: { patch: object; resolve: (value: unknown) => void }[] = [];
+    const setFlags = vi.fn(
+      (_qid: string, patch: object) => new Promise((resolve) => held.push({ patch, resolve })),
+    );
+    const onFlagsSaved = vi.fn();
+    const onFlagsFailed = vi.fn();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        onFlagsSaved={onFlagsSaved}
+        onFlagsFailed={onFlagsFailed}
+        client={fakeClient({ setFlags: setFlags as unknown as RunClient['setFlags'] })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
+    const retry = within(panel).getByRole('button', { name: '다시 풀기 해제' });
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(retry).not.toHaveAttribute('aria-disabled');
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }]);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: true,
+        data: { question_id: QID, is_favorite: false, needs_retry: true },
+      }),
+    );
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }, { is_favorite: true }]);
+    expect(onFlagsSaved).not.toHaveBeenCalled();
+    await act(async () => held[1]?.resolve({ ok: false, kind: 'unavailable', message: '실패' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(onFlagsFailed).toHaveBeenCalledWith('실패');
+    // The retry change was saved before the failure: the screen refreshes its heatmap.
+    expect(onFlagsSaved).toHaveBeenCalledWith(QID, { is_favorite: false, needs_retry: true });
   });
 
   it('sequence(mock): "문제 k" and no favorite / retry toggle', async () => {
@@ -445,5 +782,188 @@ describe('QVIEW-01-C06 call sites use QuestionViewer', () => {
     ]) {
       expect(src(file)).not.toMatch(/PracticePanel|RevisionView|<FloatingSidePanel/);
     }
+  });
+});
+
+describe('QVIEW-01-C06 질문하기 by mode (ASK-01 문제 쪽 진입점)', () => {
+  const ASK = /^이 문제로 AI에게 질문하기$/;
+  const launcher = (): AskLauncher & { open: ReturnType<typeof vi.fn> } => ({
+    open: vi.fn(async () => undefined),
+  });
+  const manageQuestion = {
+    id: QID,
+    workspace_id: WS,
+    question_type: 'MCQ',
+    publication_status: 'CONFIRMED',
+    chapter_id: null,
+    question_number: 1,
+    revision: REVISION,
+    revisions: [{ id: REVISION.id, version: 1, created_at: REVISION.created_at }],
+    sources: [],
+  } as never;
+  const manage = (footer?: () => ReactNode) => (
+    <QuestionViewer
+      mode="manage"
+      workspaceId={WS}
+      open
+      onClose={noop}
+      focus="answers"
+      load={{ status: 'ready', question: manageQuestion }}
+      onRetry={noop}
+      documents={[]}
+      {...(footer ? { footer } : {})}
+    />
+  );
+
+  it('manage: the 문제 상세 footer has 질문하기 before the opener actions, attaching `detail`', async () => {
+    const user = userEvent.setup();
+    const ask = launcher();
+    render(
+      <AskLauncherProvider launcher={ask}>
+        {manage(() => (
+          <button type="button">보관</button>
+        ))}
+      </AskLauncherProvider>,
+    );
+    const dialog = screen.getByRole('dialog', { name: '문제 상세' });
+    const button = within(dialog).getByRole('button', { name: ASK });
+    expect(button).toHaveTextContent('질문하기');
+    const opener = within(dialog).getByRole('button', { name: '보관' });
+    expect(button.compareDocumentPosition(opener) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(button);
+    expect(ask.open).toHaveBeenCalledWith(
+      { kind: 'question', view: 'detail', question_id: QID },
+      button,
+    );
+  });
+
+  it('manage without AI 질문 here (no launcher: feature off, archived, shared): no 질문하기', () => {
+    render(<AskLauncherProvider launcher={null}>{manage()}</AskLauncherProvider>);
+    const dialog = screen.getByRole('dialog', { name: '문제 상세' });
+    expect(within(dialog).queryByRole('button', { name: ASK })).toBeNull();
+  });
+
+  it('practice: no 질문하기 in the panel (header or anywhere)', async () => {
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="practice"
+          workspaceId={WS}
+          question={{
+            id: QID,
+            title: '3장 12번 문제',
+            chapterTitle: '3장 물의 순환',
+            questionType: 'MCQ',
+            preview: STEM,
+            isFavorite: false,
+            needsRetry: false,
+            lastGradedResult: null,
+            isPendingGrading: false,
+          }}
+          readOnly={false}
+          onClose={noop}
+          onFlagsChange={noop}
+          onViewed={noop}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
+    await within(panel).findByRole('radiogroup');
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
+  });
+
+  it('read-only: no 질문하기', () => {
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="read-only"
+          question={{ questionType: 'MCQ', revision: REVISION }}
+          title="1번 문제"
+          onClose={noop}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog', { name: '1번 문제' });
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
+  });
+
+  it('sequence(bank): no 질문하기', async () => {
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={WS}
+          state={{ step: 'solve', runId: RUN, position: 1 }}
+          archived={false}
+          onNavigate={noop}
+          onClose={noop}
+          client={fakeClient()}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog');
+    expect(await within(panel).findByRole('button', { name: SUBMIT_UI })).toBeInTheDocument();
+    expect(await within(panel).findByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
+  });
+
+  it('sequence(mock): the header 질문하기 attaches the position session and the chosen answer', async () => {
+    const user = userEvent.setup();
+    const ask = launcher();
+    render(
+      <AskLauncherProvider launcher={ask}>
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={WS}
+          source="mock"
+          state={{ step: 'solve', runId: RUN, position: 1 }}
+          archived={false}
+          onNavigate={noop}
+          onClose={noop}
+          client={fakeClient({ flags: undefined, setFlags: undefined })}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '응결' }));
+    const button = within(panel).getByRole('button', { name: ASK });
+    await user.click(button);
+    expect(ask.open).toHaveBeenCalledWith(
+      {
+        kind: 'mock_exam_question',
+        view: 'practice',
+        mock_exam_question_id: QID,
+        mock_practice_session_id: session().id,
+        selected_option_ids: ['o2'],
+      },
+      button,
+    );
+  });
+
+  it('sequence(mock): a question no longer in the mock exam has no 질문하기', async () => {
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={WS}
+          source="mock"
+          state={{ step: 'solve', runId: RUN, position: 1 }}
+          archived={false}
+          onNavigate={noop}
+          onClose={noop}
+          client={fakeClient({
+            flags: undefined,
+            setFlags: undefined,
+            getItem: vi.fn(async () => ({
+              ok: true as const,
+              data: item({ available: false, question_id: null, options: [], stem: null }),
+            })),
+          })}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog');
+    expect(await within(panel).findByText('이 문제는 더 이상 풀 수 없습니다.')).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
   });
 });

@@ -10,10 +10,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from book_core.llm.scenarios import ScenarioLLMClient
+from book_core.llm.mock_exam_scenarios import MockExamScenarioLLM
 from pydantic import ValidationError
 from quiz_worker import fork_job, question_import_job
-from quiz_worker.question_generation_job import build_generation_llm
+from quiz_worker.mock_exam_job import build_mock_exam_llm
 from quiz_worker.settings import WorkerSettings
 
 BASE = {
@@ -41,14 +41,14 @@ def test_failure_markers_are_inert_outside_app_env_test(env: str) -> None:
     settings = _settings(env)
     assert fork_job.deps_from_settings(settings).inject_failures is False
     assert question_import_job.deps_from_settings(settings).inject_failures is False
-    assert not isinstance(build_generation_llm(settings), ScenarioLLMClient)
+    assert not isinstance(build_mock_exam_llm(settings), MockExamScenarioLLM)
 
 
 def test_app_env_test_is_the_only_switch() -> None:
     settings = _settings("test")
     assert fork_job.deps_from_settings(settings).inject_failures is True
     assert question_import_job.deps_from_settings(settings).inject_failures is True
-    assert isinstance(build_generation_llm(settings), ScenarioLLMClient)
+    assert isinstance(build_mock_exam_llm(settings), MockExamScenarioLLM)
 
 
 @pytest.mark.parametrize("env", ["preview", "production"])

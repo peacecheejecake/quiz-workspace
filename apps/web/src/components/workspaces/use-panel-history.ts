@@ -13,7 +13,20 @@ import {
 /** The browser window as PanelHistory uses it (read lazily: Next patches `history` methods). */
 function browserWindow(): PanelHistoryWindow {
   return {
-    history: window.history,
+    history: {
+      get state(): unknown {
+        return window.history.state;
+      },
+      // The scroll restoration mode belongs to each entry and a pushed entry inherits it: the
+      // entries of an open/close are "manual", so traversing between them (Back, a close's
+      // rewind) never moves the page (useManualScrollWhile).
+      pushState: (data, unused, url) => {
+        manualScrollForPush();
+        window.history.pushState(data, unused, url);
+      },
+      replaceState: (data, unused, url) => window.history.replaceState(data, unused, url),
+      go: (delta) => window.history.go(delta),
+    },
     location: window.location,
     get navigation() {
       return 'navigation' in window ? window.navigation : undefined;
@@ -61,4 +74,66 @@ export function usePanelHistory(dialogs: DialogUrls): PanelHistory {
     history.stamp();
   });
   return history;
+}
+
+/** How long after the last dialog closed the browser's own scroll restoration stays off. */
+const SCROLL_SETTLE_MS = 1000;
+
+// Module state: a close's traversal can remount the home, so component state would lose it.
+/** The browser's own mode, saved by the first switch to manual; restored when nothing holds it. */
+let savedRestoration: ScrollRestoration | null = null;
+/** Open dialogs holding manual restoration (useManualScrollWhile). */
+let holders = 0;
+let restoreTimer: number | null = null;
+
+function toManual() {
+  if (restoreTimer !== null) window.clearTimeout(restoreTimer);
+  restoreTimer = null;
+  // Saved before the first switch: never "manual" itself (that would stay forever).
+  savedRestoration ??= window.history.scrollRestoration;
+  window.history.scrollRestoration = 'manual';
+}
+
+/** Puts the saved mode back a moment after nothing holds manual any more (the close's traversals). */
+function scheduleRestore() {
+  if (savedRestoration === null || holders > 0) return;
+  if (restoreTimer !== null) window.clearTimeout(restoreTimer);
+  restoreTimer = window.setTimeout(() => {
+    restoreTimer = null;
+    if (holders > 0) return;
+    if (savedRestoration !== null) window.history.scrollRestoration = savedRestoration;
+    savedRestoration = null;
+  }, SCROLL_SETTLE_MS);
+}
+
+/** Before a dialog push: the new entry inherits manual; restored if no dialog takes hold. */
+function manualScrollForPush() {
+  toManual();
+  scheduleRestore();
+}
+
+function holdManualScroll() {
+  holders += 1;
+  toManual();
+}
+
+function releaseManualScroll() {
+  holders = Math.max(0, holders - 1);
+  scheduleRestore();
+}
+
+/**
+ * Keeps the browser from moving the page while dialogs open and close through history
+ * (HOMEDLG-01-AC03: the home stays where it was). Closing a dialog traverses history (Back, or the
+ * close's rewind); WebKit then restores the scroll position it saved for the entry when it was
+ * written, which is stale, and jumped to the top. While a dialog is open — the page cannot scroll
+ * then (the modal lock) — and for a moment after the last one closed (the close's traversals),
+ * restoration is off.
+ */
+export function useManualScrollWhile(dialogsOpen: boolean): void {
+  useEffect(() => {
+    if (!dialogsOpen) return undefined;
+    holdManualScroll();
+    return releaseManualScroll;
+  }, [dialogsOpen]);
 }

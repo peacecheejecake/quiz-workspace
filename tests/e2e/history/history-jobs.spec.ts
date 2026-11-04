@@ -262,7 +262,8 @@ test(
     await expect(page).toHaveURL(/[?&]panel=history(&|$)/);
     const dialog = historyUi.dialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).not.toHaveAttribute('aria-modal', 'true');
+    // UX9 (HOMEDLG-01): a modal dialog.
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
     await expect(historyUi.list(page)).toBeVisible();
     await expect(historyUi.ofKind(page, 'attempt')).toHaveCount(1);
     await expect(historyUi.ofKind(page, 'activity').first()).toBeVisible();

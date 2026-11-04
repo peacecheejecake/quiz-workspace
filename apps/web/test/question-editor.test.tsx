@@ -54,6 +54,7 @@ function question(revisionId: string, stem: string): Question {
     origin: 'manual',
     chapter_id: null,
     chapter: null,
+    chapter_source: 'manual',
     question_number: null,
     revision: {
       id: revisionId,

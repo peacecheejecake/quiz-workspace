@@ -81,3 +81,32 @@ def test_answers_are_only_in_the_submit_result() -> None:
     assert {"correct_option_ids", "explanation", "rubric"} <= _reachable_properties(
         spec, schema, set()
     )
+
+
+PRACTICE_OPERATIONS = (
+    ("/api/v1/questions/{question_id}/practice-sessions", "post"),
+    ("/api/v1/practice-sessions/{session_id}", "get"),
+    ("/api/v1/practice-sessions/{session_id}/submit", "post"),
+    ("/api/v1/practice-sessions/{session_id}/self-grade", "post"),
+    ("/api/v1/practice-runs/{run_id}/items/{position}", "get"),
+    ("/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions", "post"),
+    ("/api/v1/mock-practice-sessions/{mock_practice_session_id}/submit", "post"),
+    ("/api/v1/mock-practice-sessions/{mock_practice_session_id}/self-grade", "post"),
+)
+HIGHLIGHT_KEYS = {"quote", "anchor", "anchor_current", "anchor_status"}
+
+
+def test_qview_01_c09_hilite_01_c07_practice_response_schemas_have_no_highlight_fields() -> None:
+    """QVIEW-01-C09 / HILITE-01-C07: highlights are loaded separately after submission; no
+    practice response (bank session, run item, mock exam session) can carry them."""
+    spec = json.loads(render_openapi())
+    for path, method in PRACTICE_OPERATIONS:
+        op = spec["paths"][path][method]
+        for code, response in op["responses"].items():
+            if not code.startswith("2"):
+                continue
+            for media in response.get("content", {}).values():
+                props = _reachable_properties(spec, media["schema"], set())
+                assert props, f"{method} {path} {code}: empty schema"
+                leaked = {p for p in props if "highlight" in p.lower()} | (props & HIGHLIGHT_KEYS)
+                assert not leaked, f"{method} {path} {code}: {leaked}"

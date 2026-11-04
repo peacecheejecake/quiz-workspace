@@ -642,7 +642,9 @@ export const mockUi = {
    * QuestionViewer `sequence(mock)` (QVIEW-01): the modal run panel. Only its range step is
    * titled "<이름> 풀기" (practiceTitle); a position's title names the question ("문제 k").
    */
-  practicePanel: (page: Page) => page.getByRole('dialog').and(page.locator('[aria-modal="true"]')),
+  // Portalled to <body>; since UX9 the home dialogs (portalled into <main>) are modal too.
+  practicePanel: (page: Page) =>
+    page.getByRole('dialog').and(page.locator('body > [role="dialog"][aria-modal="true"]')),
   practiceTitle: (panel: Locator, title: string) =>
     panel.getByRole('heading', { name: new RegExp(`${escape(title)} (풀기|practi[cs]e)`, 'i') }),
 };

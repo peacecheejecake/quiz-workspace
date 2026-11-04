@@ -107,8 +107,9 @@ test(
     await page.goto(overviewPath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(6);
     const dot = overviewUi.dot(page, 1);
-    // Touch targets: 32px cells on touch/mobile, markers ≤ 1/3 of their width apart (design-system.md §6).
-    expect(await dot.boundingBox()).toMatchObject({ width: 32, height: 32 });
+    // Touch targets: 24px cells on touch/mobile too (UX9-STROKE, WCAG 2.2 minimum), markers ≤ 1/3
+    // of their width apart (design-system.md §6).
+    expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
     const [a, b] = await Promise.all(
       [1, 2].map((n) =>
         overviewUi.marker(overviewUi.dot(page, n)).locator('rect, path').boundingBox(),

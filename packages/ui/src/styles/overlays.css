@@ -5,6 +5,16 @@
  * then mounts and unmounts at once.
  */
 
+/* Modal scroll lock (design-system §5.5, HOMEDLG-01-AC03): Radix's RemoveScroll hides the page's
+   overflow (the scrollbar disappears while a modal is open) and compensates the vanished
+   scrollbar with body margin/padding, which moved the page sideways. The app keeps the scroll
+   root's gutter (`html { scrollbar-gutter: stable }`), so the compensation is turned off: the
+   gutter keeps the scrollbar's room and opening or closing a modal moves nothing. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
 /* Backdrop shared by modal side panels, the mobile nav drawer and modal dialogs. */
 .qz-backdrop {
   position: fixed;
@@ -219,6 +229,51 @@
 
     &[data-state='closed'],
     &[data-side='start'][data-state='closed'] {
+      animation-name: qz-sheet-out;
+    }
+
+    > :is(.header, .body, .footer) {
+      padding-inline: var(--space-4);
+    }
+  }
+}
+
+/*
+ * Paired dialog (`paired`, design-system §5.6): opens at the start edge beside an open end-edge
+ * panel without covering it. Wide enough for both (>= --breakpoint-paired-panel = panel width +
+ * 3 margins/gaps + --paired-dialog-min-width) it takes the room left of the panel, between the
+ * dialog minimum and the panel width. Narrower it is the full-screen sheet of the mobile rules.
+ */
+.qz-panel[data-paired] {
+  width: clamp(
+    var(--paired-dialog-min-width),
+    calc(100vw - var(--floating-panel-width) - 3 * var(--space-4)),
+    var(--floating-panel-width)
+  );
+}
+
+@media (width < 868px) {
+  .qz-panel[data-paired][data-mobile-layout='full'] {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    /* The whole viewport, also over a classic scrollbar gutter (html keeps `scrollbar-gutter`). */
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--color-glass-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
+    &[data-state='open'] {
+      animation-name: qz-sheet-in;
+    }
+
+    &[data-state='closed'] {
       animation-name: qz-sheet-out;
     }
 
@@ -646,6 +701,19 @@
     &[aria-current]:not([aria-current='false']) {
       font-weight: var(--font-weight-semibold);
     }
+
+    /* Submenu triggers and radio items: the text grows, the chevron / check sit at the end. */
+    > .text {
+      flex: 1;
+    }
+
+    > .check {
+      display: inline-flex;
+    }
+
+    &[data-state='open'] {
+      background: var(--color-state-hover);
+    }
   }
 
   > .label,
@@ -676,4 +744,13 @@
       background: CanvasText;
     }
   }
+}
+
+/* PreviewTooltip: a rich preview (QSRC-01 region figure) in a glass popover, non-interactive. */
+.qz-preview-tooltip {
+  min-width: 0;
+  max-width: min(360px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(320px, calc(100dvh - 2 * var(--space-4)));
+  overflow: hidden;
+  pointer-events: auto;
 }

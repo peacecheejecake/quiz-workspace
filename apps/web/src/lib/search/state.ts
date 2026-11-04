@@ -1,9 +1,11 @@
 // SEARCH-01 address-bar state and Korean copy (pure, unit-tested). The submitted 본문 (content)
-// search lives in the workspace home URL (`?text=&mode=&document=&section=`, next to the home's
-// other keys) so returning from the PDF viewer with the browser's back button restores the same
-// results. `text` is the 본문 query (UX7-SEARCH; the home's `q` is the 문제 search) and `section`
-// the document chapter filter (the home's `chapter` is the heatmap's). Question papers are never
-// searched (UX7-SEARCH-2: the server leaves them out); a stale `papers` key is dropped.
+// search lives in the URL of the 본문 search page (`/workspaces/:id/search?text=&mode=&document=
+// &section=`, SEARCH-02 since UX9) so returning from the PDF viewer with the browser's back button
+// restores the same results. `text` is the 본문 query (UX7-SEARCH; the home's `q` is the 문제
+// search) and `section` the document chapter filter (the home's `chapter` is the heatmap's); a
+// `section` without its `document` (the old `/search?q=&chapter=` route) filters by that chapter
+// alone, as the API allows. Question papers are never searched (UX7-SEARCH-2: the server leaves
+// them out); a stale `papers` key is dropped.
 import {
   DEFAULT_MODE,
   SEARCH_MODES,
@@ -37,8 +39,7 @@ export function parseSearchParams(params: RawParams): SearchQuery {
     query,
     mode: isSearchMode(mode) ? mode : DEFAULT_MODE,
     documentId: validDocument,
-    // A chapter filter only makes sense inside its document.
-    chapterId: validDocument && chapterId && UUID.test(chapterId) ? chapterId : null,
+    chapterId: chapterId && UUID.test(chapterId) ? chapterId : null,
   };
 }
 
@@ -60,7 +61,7 @@ export function searchParamsFor(q: SearchQuery): string {
   if (q.query) out.set(CONTENT_QUERY_PARAM, q.query.slice(0, MAX_QUERY_CHARS));
   if (q.mode !== DEFAULT_MODE) out.set('mode', q.mode);
   if (q.documentId) out.set('document', q.documentId);
-  if (q.documentId && q.chapterId) out.set('section', q.chapterId);
+  if (q.chapterId) out.set('section', q.chapterId);
   return out.toString();
 }
 

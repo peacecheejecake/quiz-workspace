@@ -1,0 +1,80 @@
+{
+  "description": "Related passages evaluation (ASK-X, RELSRC-01 method A). Synthetic questions over the synthetic book-ko fixture (tests/fixtures/pdfs/book-ko.truth.json). Two more synthetic documents are derived from it at run time: `paper-ko` (a question paper: every text block is a question-style rewrite of the book's, which a search would find) and `mixed-ko` (a 교재+문제 document: filler text except `question_blocks`, whose text repeats the book's topics as questions). The related-sources computation never searches a question paper and never shows a mixed document's question part; a question's source reference into the question paper (an import) is dropped. `gold` are the book blocks a good list holds within the five rows; `own_sources` are the question's own source blocks, which come first.",
+  "book": "tests/fixtures/pdfs/book-ko.truth.json",
+  "question_blocks": ["ch1-s1-p3", "ch2-s2-p1"],
+  "cases": [
+    {
+      "id": "evaporation",
+      "stem": "햇빛이 물 표면을 데워 물 분자가 수증기가 되는 과정은?",
+      "options": ["증발", "응결", "강수", "침투"],
+      "correct": 1,
+      "own_sources": ["ch1-s1-p1"],
+      "gold": ["ch1-s1-p1"]
+    },
+    {
+      "id": "condensation",
+      "stem": "수증기가 식어 작은 물방울이 되는 과정은?",
+      "options": ["응결", "증발", "유출", "증산"],
+      "correct": 1,
+      "own_sources": ["ch1-s1-p2"],
+      "gold": ["ch1-s1-p2", "ch1-s1-p3"]
+    },
+    {
+      "id": "precipitation",
+      "stem": "구름 속 물방울이 합쳐져 땅으로 떨어지는 현상은?",
+      "options": ["강수", "응결", "침투", "증발"],
+      "correct": 1,
+      "own_sources": [],
+      "gold": ["ch1-s2-p1"]
+    },
+    {
+      "id": "runoff",
+      "stem": "도시에서 지표 위를 흐르는 물이 크게 늘어나는 현상은?",
+      "options": ["유출", "침투", "증산", "응결"],
+      "correct": 1,
+      "own_sources": ["ch1-s2-p2"],
+      "gold": ["ch1-s2-p2"]
+    },
+    {
+      "id": "flocculation",
+      "stem": "원수에 응집제를 넣고 저어 작은 입자를 뭉치는 단계는?",
+      "options": ["응집", "침전", "여과", "소독"],
+      "correct": 1,
+      "own_sources": [],
+      "gold": ["ch2-s1-p1"]
+    },
+    {
+      "id": "sedimentation",
+      "stem": "무거워진 플록이 침전지 바닥으로 가라앉는 단계는?",
+      "options": ["침전", "응집", "여과", "소독"],
+      "correct": 1,
+      "own_sources": ["ch2-s1-p2"],
+      "gold": ["ch2-s1-p2", "ch2-s1-p1"]
+    },
+    {
+      "id": "filtration",
+      "stem": "모래와 자갈을 쌓은 여과지로 작은 입자를 걸러 내는 단계는?",
+      "options": ["여과", "응집", "소독", "침전"],
+      "correct": 1,
+      "own_sources": [],
+      "gold": ["ch2-s2-p1"]
+    },
+    {
+      "id": "disinfection",
+      "stem": "염소 같은 소독제로 병원성 미생물을 줄이는 단계는?",
+      "options": ["소독", "응집", "침전", "여과"],
+      "correct": 1,
+      "own_sources": ["ch2-s2-p2"],
+      "gold": ["ch2-s2-p2"]
+    },
+    {
+      "id": "imported-source",
+      "stem": "지하수는 빗물이 어떻게 되어 생기는가?",
+      "options": ["흙 속으로 스며든다", "구름이 된다", "증발한다", "얼어붙는다"],
+      "correct": 1,
+      "own_sources": [],
+      "imported_sources": [{ "document": "paper-ko", "block": "ch1-s2-p2" }],
+      "gold": ["ch1-s2-p2"]
+    }
+  ]
+}

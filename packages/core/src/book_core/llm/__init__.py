@@ -1,6 +1,7 @@
 """Provider-agnostic LLM adapter with structured outputs (M4.3).
 
-``FakeLLMClient`` is the deterministic stand-in for tests and E2E. The real provider client
+``FakeLLMClient`` is the deterministic stand-in for tests and E2E. Plain-text streaming (ASK-B)
+is ``TextStreamClient.stream_text`` (``book_core.llm.streaming``). The real provider client
 (``AnthropicLLMClient`` in ``book_core.llm.anthropic_client``) needs the ``llm`` extra and is
 built only through ``create_llm_client(LLMConfig.from_env())`` when ``LLM_API_KEY`` is set; it is
 not imported here so installs without the extra never import the SDK.
@@ -24,11 +25,22 @@ from book_core.llm.config import (
     create_llm_client,
 )
 from book_core.llm.fake import FakeLLMClient, FakeLLMNotScriptedError, FakeLLMResponse
+from book_core.llm.streaming import (
+    FakeTextStreamClient,
+    TextDelta,
+    TextMessage,
+    TextStreamClient,
+    TextStreamEnd,
+    TextStreamEvent,
+    TextStreamRequest,
+    create_text_stream_client,
+)
 
 __all__ = [
     "FakeLLMClient",
     "FakeLLMNotScriptedError",
     "FakeLLMResponse",
+    "FakeTextStreamClient",
     "LLMCallInfo",
     "LLMClient",
     "LLMConfig",
@@ -40,6 +52,13 @@ __all__ = [
     "LLMRequest",
     "LLMResult",
     "LLMUsage",
+    "TextDelta",
+    "TextMessage",
+    "TextStreamClient",
+    "TextStreamEnd",
+    "TextStreamEvent",
+    "TextStreamRequest",
     "create_llm_client",
+    "create_text_stream_client",
     "parse_structured_output",
 ]

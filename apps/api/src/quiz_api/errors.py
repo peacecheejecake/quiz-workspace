@@ -88,6 +88,9 @@ class ProblemType(StrEnum):
     GENERATION_BUSY = "urn:quiz-workspace:problem:generation-busy"
     # 409: a random-pick batch found no CONFIRMED question matching its filters (no run made).
     NO_MATCHING_QUESTIONS = "urn:quiz-workspace:problem:no-matching-questions"
+    # 409: `needs_retry` can only be turned on for a question whose last graded result is correct
+    # (RETRY-CORRECT, questions.md §17); turning it off is always allowed.
+    RETRY_REQUIRES_CORRECT = "urn:quiz-workspace:problem:retry-requires-correct"
     # 409: the import's previous registration (QIMP-JOB) is still queued or running; follow it.
     IMPORT_REGISTRATION_RUNNING = "urn:quiz-workspace:problem:import-registration-running"
     # 409: a book (body text) cannot become a question paper while questions or import drafts are
@@ -108,6 +111,9 @@ class ProblemType(StrEnum):
     # 409: chapter notes are off in this environment (WORKER_CHAPTER_NOTES); stored notes stay
     # readable.
     NOTE_GENERATION_DISABLED = "urn:quiz-workspace:problem:note-generation-disabled"
+    # 422: a chapter redistribution target is not a chapter of the current revision of a live
+    # book of the workspace (a question paper's chapter, an old revision's, a deleted book's).
+    CHAPTER_INVALID = "urn:quiz-workspace:problem:chapter-invalid"
     # 409: a merge named questions whose content is not the same question (UX7-DEDUP).
     NOT_DUPLICATES = "urn:quiz-workspace:problem:not-duplicates"
     # 422: a range names a question that is not a live CONFIRMED question of the workspace (a
@@ -124,6 +130,65 @@ class ProblemType(StrEnum):
     # 409: AI variation types are off in this environment (WORKER_MOCK_EXAMS / no LLM);
     # 보기 섞기 still works and stored mock exams stay readable.
     MOCK_LLM_DISABLED = "urn:quiz-workspace:problem:mock-llm-disabled"
+    # 409: the highlight target cannot carry highlights: a note generation that did not succeed,
+    # a draft question or a question without an explanation (HILITE-01-C03).
+    HIGHLIGHT_TARGET_UNAVAILABLE = "urn:quiz-workspace:problem:highlight-target-unavailable"
+    # 422: the anchor is not a non-empty range inside one block of the target text, the quote is
+    # longer than 2,000 characters, or `replace_ids` are not the caller's overlapping highlights.
+    HIGHLIGHT_ANCHOR_INVALID = "urn:quiz-workspace:problem:highlight-anchor-invalid"
+    # 409: the caller already has 500 live highlights on this target.
+    HIGHLIGHT_LIMIT = "urn:quiz-workspace:problem:highlight-limit"
+    # 409: the highlight changed since it was read (`version`); reload it.
+    HIGHLIGHT_CHANGED = "urn:quiz-workspace:problem:highlight-changed"
+    # 409: restore of a highlight that is not deleted, was merged away or was deleted more than
+    # 10 minutes ago.
+    HIGHLIGHT_NOT_RESTORABLE = "urn:quiz-workspace:problem:highlight-not-restorable"
+    # 409: the range overlaps a live highlight of the caller (merge it with `replace_ids`).
+    HIGHLIGHT_OVERLAP = "urn:quiz-workspace:problem:highlight-overlap"
+
+    # ASK-01 (AI questions). 422: the question is longer than ASK_MAX_QUESTION_CHARS.
+    QUESTION_TOO_LONG = "urn:quiz-workspace:problem:question-too-long"
+    # 409: the conversation already holds ASK_MAX_TURNS questions; start a new one.
+    ASK_TURN_LIMIT = "urn:quiz-workspace:problem:ask-turn-limit"
+    # 409: an answer of this user is still being made (one at a time).
+    ASK_ANSWER_RUNNING = "urn:quiz-workspace:problem:ask-answer-running"
+    # 409: AI questions are off in this environment (WORKER_ASK_LLM / no LLM); conversations stay
+    # readable.
+    ASK_DISABLED = "urn:quiz-workspace:problem:ask-disabled"
+    # 409: the environment's monthly AI question token cap is used up.
+    ASK_BUDGET_EXCEEDED = "urn:quiz-workspace:problem:ask-budget-exceeded"
+    # 409: the question already has ASK_MAX_REGENERATIONS answer versions.
+    ASK_REGENERATE_LIMIT = "urn:quiz-workspace:problem:ask-regenerate-limit"
+    # 409: only the conversation's last question can be answered again.
+    ASK_NOT_LAST_ANSWER = "urn:quiz-workspace:problem:ask-not-last-answer"
+    # 409: `retry` is for a failed or stopped answer (use `regenerate` otherwise).
+    ASK_NOT_RETRYABLE = "urn:quiz-workspace:problem:ask-not-retryable"
+    # 429: the user's AI questions of today (Asia/Seoul) are used up.
+    ASK_DAILY_LIMIT = "urn:quiz-workspace:problem:ask-daily-limit"
+    # RELSRC-01 (related passages). 409: no submission proof (`practice_session_id` /
+    # `mock_practice_session_id` with a submission, or `view: detail` / `view: manage`).
+    RELATED_BEFORE_SUBMIT = "urn:quiz-workspace:problem:related-before-submit"
+    # 409: a DRAFT question has no related passages (ASK-SYNC (b)).
+    RELATED_DRAFT_UNAVAILABLE = "urn:quiz-workspace:problem:related-draft-unavailable"
+    # 503: the search index cannot be reached; nothing was stored.
+    RELATED_UNAVAILABLE = "urn:quiz-workspace:problem:related-unavailable"
+
+    # AIEXPL-01 (AI explanations). 409: no submitted attempt of the caller in the given practice
+    # session (or no session / view given); nothing is created or returned.
+    EXPLANATION_BEFORE_SUBMIT = "urn:quiz-workspace:problem:explanation-before-submit"
+    # 409: the question has no AI explanation area (a DRAFT question's detail view).
+    EXPLANATION_UNAVAILABLE = "urn:quiz-workspace:problem:explanation-unavailable"
+    # 409: AI explanations are off in this environment (WORKER_AI_EXPLANATIONS / no LLM);
+    # existing explanations stay readable.
+    EXPLANATION_DISABLED = "urn:quiz-workspace:problem:explanation-disabled"
+    # 409: this question revision was regenerated 3 times today (Asia/Seoul).
+    EXPLANATION_REGENERATE_LIMIT = "urn:quiz-workspace:problem:explanation-regenerate-limit"
+    # 429: the user's new AI explanations of today (Asia/Seoul) are used up.
+    EXPLANATION_DAILY_LIMIT = "urn:quiz-workspace:problem:explanation-daily-limit"
+    # 409: the environment's monthly AI explanation token cap is used up.
+    EXPLANATION_BUDGET_EXCEEDED = "urn:quiz-workspace:problem:explanation-budget-exceeded"
+    # 429 + Retry-After: too many new AI explanations per minute (AI_EXPLANATION_RATE_LIMIT_*).
+    RATE_LIMITED = "urn:quiz-workspace:problem:rate-limited"
 
 
 class ProblemException(StarletteHTTPException):
@@ -135,9 +200,11 @@ class ProblemException(StarletteHTTPException):
         problem_type: ProblemType,
         detail: str | None = None,
         headers: dict[str, str] | None = None,
+        question_ids: list[str] | None = None,
     ) -> None:
         super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.problem_type = problem_type
+        self.question_ids = question_ids
 
 
 class ValidationIssue(BaseModel):
@@ -155,6 +222,11 @@ class Problem(BaseModel):
     request_id: str | None = None
     errors: list[ValidationIssue] | None = Field(
         default=None, description="Field-level issues (422 only)."
+    )
+    question_ids: list[str] | None = Field(
+        default=None,
+        description="409 `chapter-changed` of a chapter assignment: the questions whose chapter "
+        "is no longer the expected one.",
     )
 
 
@@ -193,6 +265,7 @@ def problem_response(
     detail: str | None = None,
     errors: list[ValidationIssue] | None = None,
     headers: dict[str, str] | None = None,
+    question_ids: list[str] | None = None,
 ) -> JSONResponse:
     problem = Problem(
         type=problem_type,
@@ -202,6 +275,7 @@ def problem_response(
         instance=request.url.path,
         request_id=getattr(request.state, "request_id", None),
         errors=errors,
+        question_ids=question_ids,
     )
     response_headers = dict(headers or {})
     if problem.request_id:
@@ -224,7 +298,12 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
         headers = {"WWW-Authenticate": "Bearer", **(headers or {})}
     problem_type = getattr(exc, "problem_type", "about:blank")
     return problem_response(
-        request, exc.status_code, problem_type=problem_type, detail=detail, headers=headers
+        request,
+        exc.status_code,
+        problem_type=problem_type,
+        detail=detail,
+        headers=headers,
+        question_ids=getattr(exc, "question_ids", None),
     )
 
 

@@ -77,6 +77,15 @@ export async function expectAccessible(
   options: ScanOptions = {},
 ): Promise<void> {
   const findings: Finding[] = [];
+  // A soft navigation (the sign-in redirect, a `?panel=` push) first commits the route's
+  // prefetched head, which for these dynamic pages is partial and has no <title>; the full head
+  // follows when the navigation's dynamic response arrives (Next's App Router `Head`,
+  // `useDeferredValue`; blocking metadata via `htmlLimitedBots` does not change it). Measured gaps
+  // were 4–25 ms locally, and a scan in one fails axe `document-title`. Wait for the title; a page
+  // that never gets one still fails here.
+  await expect
+    .poll(() => page.title(), { message: `"${state}" has a document title` })
+    .not.toBe('');
   for (const scheme of options.schemes ?? COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     // Two frames so restyled colors (no transitions under reduced motion) are what axe reads.

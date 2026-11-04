@@ -1,6 +1,7 @@
-"""Source question, passage and evidence helpers shared by the jobs that build questions from
-CONFIRMED questions: `question.generate` (QGEN, M6.2) and `mock_exam.generate` (MOCK-B).
+"""Source question, passage and evidence helpers for building questions from CONFIRMED
+questions (`mock_exam.generate`, MOCK-B; first written for the retired `question.generate`).
 
+- `SourceQuestionRow` / `SourceRow` / `QuestionContentRow`: the rows the job stores load;
 - `source_question`: the core view of a pinned source revision (with its stored sources as
   provenance evidence);
 - `source_pages` / `build_passages`: the published blocks of the pages a source cites, one
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from book_core.contracts import (
@@ -33,10 +35,48 @@ from book_core.search.excerpt import ExcerptConfig, ExcerptError, ExcerptResolve
 from pydantic import ValidationError
 
 from quiz_worker.document_store import DocumentStore
-from quiz_worker.question_generation_store import SourceQuestionRow
 
 # One passage is a section's text on the source pages; generous so a page is rarely cut.
 PASSAGE_MAX_CHARS = 6000
+
+
+@dataclass(frozen=True)
+class SourceRow:
+    """One `question_sources` row of the source question."""
+
+    document_id: uuid.UUID | None
+    document_revision_id: uuid.UUID | None
+    page_start: int | None
+    page_end: int | None
+    block_ids: tuple[str, ...]
+    locations: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class SourceQuestionRow:
+    """The pinned source revision of a live question."""
+
+    question_id: uuid.UUID
+    revision_id: uuid.UUID
+    question_type: str
+    stem: str
+    options: list[dict[str, str]]
+    correct_option_ids: list[str] | None
+    accepted_answers: list[str] | None
+    is_multi_answer: bool
+    explanation: str | None
+    sources: tuple[SourceRow, ...]
+
+
+@dataclass(frozen=True)
+class QuestionContentRow:
+    """The active revision of a live question (for duplicate fingerprints)."""
+
+    question_type: str
+    stem: str
+    options: list[dict[str, str]]
+    correct_option_ids: list[str] | None
+    accepted_answers: list[str] | None
 
 
 def source_question(row: SourceQuestionRow) -> SourceQuestion:

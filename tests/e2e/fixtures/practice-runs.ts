@@ -500,7 +500,9 @@ export const runUi = {
       .questionMenu(page)
       .getByRole('menuitem', { name: /^(문제 풀기|practice questions?|start practice)$/i }),
   /** The modal QuestionViewer panel of a run, whatever its step's title. */
-  panel: (page: Page) => page.getByRole('dialog').and(page.locator('[aria-modal="true"]')),
+  // Portalled to <body>; since UX9 the home dialogs (portalled into <main>) are modal too.
+  panel: (page: Page) =>
+    page.getByRole('dialog').and(page.locator('body > [role="dialog"][aria-modal="true"]')),
   /** The range step's panel title. */
   pickerTitle: (panel: Locator) =>
     panel.getByRole('heading', { name: /^(문제 풀기|practice questions?)$/i }),

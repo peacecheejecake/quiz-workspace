@@ -37,7 +37,6 @@ export function MarkerShape({
           d="M12 2.5 15.1 8.5 21.6 9.45 16.8 14.1 17.95 20.65 12 17.5 6.05 20.65 7.2 14.1 2.4 9.45 8.9 8.5Z"
           fill="currentColor"
           stroke="currentColor"
-          strokeWidth="1.1"
           strokeLinejoin="round"
           strokeLinecap="round"
         />
@@ -50,8 +49,8 @@ export function MarkerShape({
 
 /**
  * Status marker (decorative, `aria-hidden`): fill = `--question-status-<status>` via
- * `data-status`, plus a darker/lighter outline of the same hue so light markers (unseen, retry)
- * stay ≥ 3:1 against the surface. Meaning is always also given as text (label, legend, tooltip).
+ * `data-status`, with no border (HEATMAP-PALETTE). Light fills can be under 3:1 against the
+ * surface, so meaning is always also given as text (label, filter, tooltip).
  */
 export function QuestionMarker({ testId = 'question-marker', ...props }: QuestionMarkerProps) {
   return <MarkerShape testId={testId} {...props} />;

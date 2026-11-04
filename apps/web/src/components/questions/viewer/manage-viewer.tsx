@@ -5,11 +5,15 @@
 // it — type, status, version, the active revision with its correct options, accepted answers,
 // rubric and explanation, the source links into the PDF viewer and the revision history with a
 // preview of an older revision. No submit UI and nothing is recorded; the opener's own actions go
-// in `footer`. The opener reads the question (QuestionDetailDialog): its answers are never cached
-// here.
+// in `footer`, after `질문하기` (ASK-01 "문제 쪽 진입점": the question attached as `detail`, always
+// `full` — the dialog shows its answers already; only where the home's AI 질문 is available). The
+// opener reads the question (QuestionDetailDialog): its answers are never cached here.
 import { Badge, Button, ModalDialog } from '@quiz/ui';
 import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
+import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { getQuestionRevisionAction, type QuestionRevision } from '@/lib/questions/actions';
 import {
   PUBLICATION_STATUS_LABELS,
@@ -18,6 +22,7 @@ import {
 } from '@/lib/questions/form';
 import { documentTitle, formatDateTime, pageText, sourceHref } from '../labels';
 import { QuestionBody } from './question-body';
+import { QuestionSourcePreview } from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 /** Which part the opener asked for: focus goes to its heading. */
@@ -43,6 +48,8 @@ export interface ManageViewerProps {
   readonly documents: readonly { readonly id: string; readonly title: string }[];
   /** Opener actions for the loaded question (the 보관·초안 문제 dialog's editor actions). */
   readonly footer?: (question: QuestionDetail) => ReactNode;
+  /** Focus this highlight's mark in the explanation (`내 하이라이트` › `위치로 이동`). */
+  readonly focusHighlight?: string | null;
 }
 
 export function ManageViewer({
@@ -56,9 +63,11 @@ export function ManageViewer({
   onRetry,
   documents,
   footer,
+  focusHighlight = null,
 }: ManageViewerProps) {
   const historyRef = useRef<HTMLHeadingElement>(null);
   const question = load.status === 'ready' ? load.question : null;
+  const asks = useAskLauncher() !== null;
   return (
     <ModalDialog
       open={open}
@@ -68,6 +77,7 @@ export function ManageViewer({
       title="문제 상세"
       description={description}
       onOpenAutoFocus={(event) => {
+        // A highlight to go to takes focus once it is drawn (ExplanationText).
         if (focus !== 'history') return;
         event.preventDefault();
         historyRef.current?.focus();
@@ -78,7 +88,16 @@ export function ManageViewer({
           returnFocus.focus();
         }
       }}
-      footer={question && footer ? footer(question) : undefined}
+      footer={
+        question && (asks || footer) ? (
+          <>
+            <AskQuestionButton
+              attachment={{ kind: 'question', view: 'detail', question_id: question.id }}
+            />
+            {footer?.(question)}
+          </>
+        ) : undefined
+      }
     >
       <div className={styles.detail}>
         {load.status === 'error' ? (
@@ -95,12 +114,48 @@ export function ManageViewer({
               </Badge>
               <span>버전 {question.revision.version}</span>
             </div>
+            {question.publication_status !== 'DRAFT' ? (
+              // QSRC-01 `manage`: a registered question's imported source (a draft has none).
+              <QuestionSourcePreview target={{ kind: 'question', id: question.id }} aboveModals />
+            ) : null}
             <QuestionBody
               kind="revision"
               revision={question.revision}
               type={question.question_type}
               heading="문제"
+              highlighting={
+                // HILITE-01: the reader's highlights of the current explanation (not of drafts).
+                question.publication_status !== 'DRAFT'
+                  ? {
+                      questionId: question.id,
+                      revisionId: question.revision.id,
+                      chapterTitle: question.chapter?.title ?? null,
+                      focusId: focusHighlight,
+                    }
+                  : null
+              }
             />
+            {question.publication_status !== 'DRAFT' ? (
+              // AIEXPL-01 문제 상세: the answers are on screen already, so no submission is needed
+              // (`view: detail`, the current revision); a draft has none (ASK-SYNC (b)).
+              <AiExplanation
+                workspaceId={workspaceId}
+                target={{ kind: 'question', id: question.id }}
+                gate={{ view: 'detail' }}
+                revisionId={question.revision.id}
+                options={question.revision.options}
+                askAttachment={{ kind: 'question', view: 'detail', question_id: question.id }}
+              />
+            ) : null}
+            {question.publication_status !== 'DRAFT' ? (
+              // RELSRC-01 문제 상세: the same gate as the AI 해설 above; a draft has none (ASK-SYNC (b)).
+              <RelatedSources
+                workspaceId={workspaceId}
+                target={{ kind: 'question', id: question.id }}
+                gate={{ view: 'detail' }}
+                revisionId={question.revision.id}
+              />
+            ) : null}
           </>
         ) : (
           <p className={styles.text} role="status">

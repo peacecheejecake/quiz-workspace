@@ -1,13 +1,17 @@
-// SC 1.4.11 for heatmap markers: the light unseen/retry fills are < 3:1 against the surface
-// (P0.3b), so the marker outline must reach 3:1 on every background the heatmap sits on.
+// HEATMAP-PALETTE: markers have no border, so the status fill is the only visual cue. Light
+// unseen/viewed/retry fills are under 3:1 against the surface by the user's palette choice; the
+// meaning is always also given as text (label, filter, tooltip). This test pins that no outline
+// comes back, and that fills stay distinguishable from each other and the surface.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { questionStatuses, themeNames, themedTokens } from '@quiz/design-tokens';
+import { questionStatuses, staticTokens, themeNames, themedTokens } from '@quiz/design-tokens';
 import { describe, expect, it } from 'vitest';
 
 const CSS = readFileSync(resolve(import.meta.dirname, '../src/styles/questions.css'), 'utf8');
-const OUTLINE =
-  /\.qz-question-marker > \.shape\s*\{[^}]*stroke:\s*color-mix\(in srgb, currentColor (\d+)%, var\(--(color-[a-z-]+)\)\)/;
+const TSX = readFileSync(
+  resolve(import.meta.dirname, '../src/questions/QuestionMarker.tsx'),
+  'utf8',
+);
 
 function channels(hex: string): number[] {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -28,28 +32,32 @@ function contrast(a: number[], b: number[]): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** `color-mix(in srgb, a p%, b)` on 8-bit channels. */
-function mix(a: number[], b: number[], p: number): number[] {
-  return a.map((v, i) => Math.round(v * p + (b[i] ?? 0) * (1 - p)));
-}
-
-const [, percent = '0', mixWith = ''] = OUTLINE.exec(CSS) ?? [];
-const BACKGROUNDS = ['color-surface', 'color-canvas', 'color-surface-muted'] as const;
-
-describe('question marker outline contrast', () => {
-  it('questions.css declares the outline as a color-mix of the status color', () => {
-    expect(mixWith).toBe('color-text-primary');
-    expect(Number(percent)).toBeGreaterThan(0);
+describe('question marker has no border (HEATMAP-PALETTE)', () => {
+  it('questions.css draws no stroke on the square or a mixed outline color', () => {
+    expect(CSS).not.toMatch(/heatmap-marker-stroke-mix/);
+    expect(CSS).not.toMatch(/color-mix\([^)]*currentColor/);
+    // Only the star may set stroke properties, and then only its width (color stays currentColor).
+    const rules = [...CSS.matchAll(/\.qz-question-marker[^{]*>\s*\.shape\s*\{([^}]*)\}/g)];
+    for (const [, body = ''] of rules) expect(body).not.toMatch(/(^|[\s;])stroke:/);
+    expect(CSS).toMatch(/\[data-shape='star'\]\s*>\s*\.shape/);
   });
 
-  const cases = themeNames.flatMap((theme) =>
-    questionStatuses.flatMap((status) => BACKGROUNDS.map((bg) => [theme, status, bg] as const)),
+  it('the square rect has no stroke and the star stroke is the fill color', () => {
+    expect(/<rect[^>]*stroke/.test(TSX)).toBe(false);
+    expect(TSX).toMatch(/stroke="currentColor"/);
+    expect(staticTokens['heatmap-marker-stroke-width']).toBe('0.5px');
+    expect(Object.keys(themedTokens.light)).not.toContain('heatmap-marker-stroke-mix');
+  });
+
+  it.each(themeNames)(
+    '%s: every status fill differs from the surface and from the others',
+    (theme) => {
+      const t = themedTokens[theme] as Record<string, string>;
+      const surface = channels(t['color-surface'] ?? '');
+      const fills = questionStatuses.map((s) => channels(t[`question-status-${s}`] ?? ''));
+      for (const fill of fills) expect(contrast(fill, surface)).toBeGreaterThanOrEqual(1.1);
+      for (const [i, a] of fills.entries())
+        for (const b of fills.slice(i + 1)) expect(contrast(a, b)).toBeGreaterThan(1);
+    },
   );
-
-  it.each(cases)('%s %s outline vs %s ≥ 3:1', (theme, status, bg) => {
-    const t = themedTokens[theme] as Record<string, string>;
-    const fill = channels(t[`question-status-${status}`] ?? '');
-    const outline = mix(fill, channels(t[mixWith] ?? ''), Number(percent) / 100);
-    expect(contrast(outline, channels(t[bg] ?? ''))).toBeGreaterThanOrEqual(3);
-  });
 });

@@ -46,6 +46,7 @@ import {
   seedUnpublishedQuestions,
   UNPUBLISHED_STEMS,
 } from '../fixtures/sharing.ts';
+import { isBlocked } from '../fixtures/ux9-pages.ts';
 
 test.use(NO_VISUAL_ARTIFACTS);
 test.describe.configure({ timeout: JOB_TIMEOUT_MS + 90_000 });
@@ -159,14 +160,38 @@ test(
       ...mcqInput('E2E 공유 미리보기 문제', ['가', '나', '다', '라'], 1),
       explanation: 'E2E 미리보기 해설',
     });
+    const other = await createQuestion(owner, ws.id, {
+      ...mcqInput('E2E 공유 미리보기 둘째 문제', ['마', '바'], 1),
+      explanation: 'E2E 둘째 해설',
+    });
     seedOwnerStudyState(owner.user.id, ws.id, q.id);
     const before = privateRowCounts(ws.id);
 
     await openShare(page, link.id, link.secret);
+    await expect(sharedUi.forbiddenControls(page)).toHaveCount(0);
+    const items = sharedUi.questions(page).getByRole('listitem');
+    await expect(items).toHaveCount(2);
+    // The list's order decides what 이전 문제 / 다음 문제 show.
+    const order = (await items.allInnerTexts()).map((text) =>
+      text.includes(other.revision.stem) ? other : q,
+    );
     await sharedUi.question(page, q.revision.stem).click();
     const panel = sharedUi.questionPanel(page);
     await expect(panel).toBeVisible();
-    await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    // UX9 (HOMEDLG-01, WS-VIEW-01, user decision 2026-11-02): the shared panels are modal — the
+    // list behind them is inert — and move along the list with 이전 문제 / 다음 문제 (Alt+↑/↓).
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+    const list = page.getByRole('list', { name: /^(문제|questions?)/i, includeHidden: true });
+    expect(await isBlocked(list), 'the shared list is inert').toBe(true);
+    const previous = panel.getByRole('button', { name: /^(이전 문제|previous question)$/i });
+    const next = panel.getByRole('button', { name: /^(다음 문제|next question)$/i });
+    const qFirst = order[0] === q;
+    await expect(qFirst ? previous : next).toBeDisabled();
+    await (qFirst ? next : previous).click();
+    await expect(panel).toContainText(other.revision.stem);
+    await expect(panel).toContainText('E2E 둘째 해설');
+    await page.keyboard.press(qFirst ? 'Alt+ArrowUp' : 'Alt+ArrowDown');
+    await expect(panel).toContainText(q.revision.stem);
     await expect(panel).toContainText('나');
     await expect(panel).toContainText('E2E 미리보기 해설');
     await expect(panel).toContainText(/정답|answer/i);
@@ -176,6 +201,10 @@ test(
 
     // Nothing was recorded for anyone, and every write is refused for a share session.
     expect(privateRowCounts(ws.id)).toEqual(before);
+    // Escape closes it; focus returns to the list's button of the question last shown.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(sharedUi.question(page, q.revision.stem).getByRole('button')).toBeFocused();
     const session = await ShareSession.open(link.id, link.secret);
     for (const [method, path] of [
       ['PATCH', `/questions/${q.id}`],

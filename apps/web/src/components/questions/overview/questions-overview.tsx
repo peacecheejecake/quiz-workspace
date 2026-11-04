@@ -59,7 +59,11 @@ import {
   QUESTION_PARAM,
   type OverviewFilters,
 } from '@/lib/questions/overview-filters';
-import { lookupOverviewQuestionAction, setMyStateAction } from '@/lib/questions/practice-actions';
+import {
+  lookupOverviewQuestionAction,
+  setMyStateAction,
+  type MyState,
+} from '@/lib/questions/practice-actions';
 import { parseRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
@@ -73,6 +77,7 @@ import {
   type Invalidation,
   type PracticeQuestion,
 } from '../viewer/question-viewer';
+import { useFlagSync } from '../viewer/use-flag-sync';
 import {
   applyOverrides,
   flagsPatch,
@@ -123,6 +128,16 @@ export interface QuestionsOverviewProps {
   readonly onQuestionChange?: (questionId: string | null) => void;
   /** `?panel=question-create` (owned by the home): the 문제 등록 editor is open. */
   readonly createOpen?: boolean;
+  /**
+   * The home's dialogs listed before the practice or run panel are still opening (HOMEDLG-01: a
+   * deep link's modal layers mount one at a time, in URL order): keep those panels closed meanwhile.
+   */
+  readonly holdPanels?: boolean;
+  /**
+   * The home's dialog container (inside <main>): the 문제 등록 editor is portalled there with the
+   * home's other modal dialogs, so a dialog stacked over it stays exposed (HOMEDLG-01).
+   */
+  readonly dialogContainer?: HTMLElement | null;
   readonly onCreateOpenChange?: (open: boolean) => void;
   /** The workspace's documents, for the 문제 상세 dialog's source titles (UX7-BANK-2). */
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
@@ -191,6 +206,8 @@ export function focusAfterPanel(
   return target;
 }
 
+type TouchField = 'is_favorite' | 'needs_retry' | 'grading';
+
 export function QuestionsOverview({
   workspaceId,
   readOnly,
@@ -207,6 +224,8 @@ export function QuestionsOverview({
   practiceReturnFocusRef,
   onQuestionChange,
   createOpen = false,
+  holdPanels = false,
+  dialogContainer,
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
   onQuestionsChanged,
@@ -239,6 +258,16 @@ export function QuestionsOverview({
     gradings.current.clear();
   }, [serverItems]);
   const mutationSeq = useRef(new Map<string, number>());
+  // Per field of a question, when this screen last changed it (a press, a rollback, a submission):
+  // a state read from the server that started earlier must not overwrite it (rereadState).
+  const fieldClock = useRef(0);
+  const fieldTouched = useRef(new Map<string, Partial<Record<TouchField, number>>>());
+  function touch(questionId: string, ...fields: TouchField[]) {
+    fieldClock.current += 1;
+    const entry = fieldTouched.current.get(questionId) ?? {};
+    for (const field of fields) entry[field] = fieldClock.current;
+    fieldTouched.current.set(questionId, entry);
+  }
   const overridesRef = useRef(overrides);
   useLayoutEffect(() => {
     overridesRef.current = overrides;
@@ -324,20 +353,18 @@ export function QuestionsOverview({
 
   const panelQuestion = useMemo<PracticeQuestion | null>(() => {
     if (!openPlaced) return null;
-    // The panel toggles show the CONFIRMED study state (server item + settled changes), so their
-    // label flips once the change is saved; the dot alone is optimistic. While a change is in
-    // flight the toggles are busy. Outside the list the server overview can never catch up, so
-    // a settled change always applies there.
+    // The panel toggles show the same study state as the dot (UX9-RETRY-OPT): a change in flight
+    // at once, a settled one until the server overview moves on. Outside the list the server
+    // overview can never catch up, so a settled change always applies there.
     const id = openPlaced.item.question_id;
     const override = overrides.get(id);
-    const pending = override?.settledOn === null;
     const serverItem = found ? serverItems.find((i) => i.question_id === id) : undefined;
     const base = serverItem ?? openPlaced.item;
-    const settled =
-      override && !pending && (!serverItem || override.settledOn === serverItems)
+    const live =
+      override && (override.settledOn === null || !serverItem || override.settledOn === serverItems)
         ? override.patch
         : undefined;
-    const item = { ...base, ...settled };
+    const item = { ...base, ...live };
     return {
       id: item.question_id,
       title: placedTitle(openPlaced),
@@ -346,7 +373,8 @@ export function QuestionsOverview({
       preview: item.preview,
       isFavorite: item.is_favorite,
       needsRetry: item.needs_retry,
-      savingFlags: pending,
+      lastGradedResult: item.last_graded_result,
+      isPendingGrading: item.is_pending_grading,
     };
   }, [openPlaced, found, overrides, serverItems]);
 
@@ -410,44 +438,133 @@ export function QuestionsOverview({
       : undefined;
   }
 
-  async function changeFlags(
+  // UX9-RETRY-OPT: the toggles and the dot show a press at once; my-state requests of a question
+  // run one at a time (presses in between are coalesced), and a failure rolls back only the
+  // fields it carried. A question being saved is remembered by id, so its save settles (and a
+  // failure rolls back) even once it is no longer open or listed (a deep link outside the
+  // filters, then another question).
+  const savingItems = useRef(new Map<string, OverviewItem>());
+  const flagSync = useFlagSync<MyState>(
+    (questionId, patch) => setMyStateAction(workspaceId, questionId, patch),
+    (questionId, event) => {
+      const item = currentItem(questionId) ?? savingItems.current.get(questionId);
+      if (event.type === 'failed') {
+        toast({ tone: 'error', title: event.message });
+        // The rollback changes only the fields whose shown value it restores.
+        touch(
+          questionId,
+          ...(['is_favorite', 'needs_retry'] as const).filter(
+            (field) => !item || item[field] !== event.flags[field],
+          ),
+        );
+      }
+      // A stale screen offered `다시 풀기`: read the question's state again (hides the toggle).
+      if (event.type === 'failed' && event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) {
+        void rereadState(questionId);
+      }
+      if (!item) return;
+      const saved =
+        event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
+      if (saved) staleOverview.current = true;
+      const pending = event.type === 'change' || (event.type === 'failed' && event.pending);
+      if (pending || !saved) {
+        const patch: StudyPatch = {
+          ...event.flags,
+          last_graded_result: item.last_graded_result,
+          is_pending_grading: item.is_pending_grading,
+          status: optimisticStatus(item, event.flags),
+        };
+        putOverride(questionId, nextSeq(questionId), {
+          patch,
+          settledOn: pending ? null : latestItems.current,
+        });
+        if (pending) savingItems.current.set(questionId, { ...item, ...patch });
+        else savingItems.current.delete(questionId);
+        return;
+      }
+      savingItems.current.delete(questionId);
+      // A submission settled while a request was in flight wins over the response's grading.
+      const grading = gradings.current.get(questionId) ?? {
+        last_graded_result: saved.last_graded_result,
+        is_pending_grading: item.is_pending_grading,
+      };
+      putOverride(questionId, nextSeq(questionId), {
+        patch: flagsPatch(saved, grading),
+        settledOn: latestItems.current,
+      });
+    },
+  );
+
+  /**
+   * RETRY-CORRECT: the server refused `다시 풀기`; show the question's real state. Per field
+   * (favorite, retry flag, grading) the server's value is taken only if this screen did not
+   * change that field after the lookup started; a local incorrect grading also means no retry.
+   */
+  async function rereadState(questionId: string) {
+    // Let the failure handler that called this finish its own rollback first, then stamp.
+    await Promise.resolve();
+    const stamp = fieldClock.current;
+    const found = await lookupOverviewQuestionAction(workspaceId, questionId);
+    if (!found.ok || !found.data) return;
+    const { item } = found.data;
+    staleOverview.current = true;
+    const touched = fieldTouched.current.get(questionId);
+    const changed = (field: TouchField) => (touched?.[field] ?? 0) > stamp;
+    const local = overridesRef.current.get(questionId);
+    const grading: Grading = changed('grading')
+      ? (gradings.current.get(questionId) ?? {
+          last_graded_result: local?.patch.last_graded_result ?? item.last_graded_result,
+          is_pending_grading: local?.patch.is_pending_grading ?? item.is_pending_grading,
+        })
+      : {
+          last_graded_result: item.last_graded_result,
+          is_pending_grading: item.is_pending_grading,
+        };
+    const needsRetry =
+      changed('grading') && grading.last_graded_result === 'incorrect'
+        ? false
+        : changed('needs_retry')
+          ? (local?.patch.needs_retry ?? item.needs_retry)
+          : item.needs_retry;
+    const patch = flagsPatch(
+      {
+        // A submission made meanwhile means the question was opened, whatever the lookup saw.
+        status: item.status === 'unseen' && changed('grading') ? 'viewed' : item.status,
+        is_favorite: changed('is_favorite')
+          ? (local?.patch.is_favorite ?? item.is_favorite)
+          : item.is_favorite,
+        needs_retry: needsRetry,
+        last_graded_result: grading.last_graded_result,
+      },
+      grading,
+    );
+    if (changed('grading') || changed('is_favorite') || changed('needs_retry')) {
+      // Newer local changes own the sequence (an in-flight save still settles it).
+      putOverride(questionId, mutationSeq.current.get(questionId) ?? 0, {
+        patch,
+        // null = a save is still in flight: keep it so a refresh does not drop the override
+        settledOn: local ? local.settledOn : latestItems.current,
+      });
+    } else {
+      putOverride(questionId, nextSeq(questionId), { patch, settledOn: latestItems.current });
+    }
+  }
+
+  function changeFlags(
     questionId: string,
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) {
-    const item = currentItem(questionId);
+    const item = currentItem(questionId) ?? savingItems.current.get(questionId);
     if (!item) return;
-    const seq = nextSeq(questionId);
-    const optimistic: StudyPatch = {
-      is_favorite: item.is_favorite,
-      needs_retry: item.needs_retry,
-      last_graded_result: item.last_graded_result,
-      is_pending_grading: item.is_pending_grading,
-      ...flags,
-      status: optimisticStatus(item, flags),
-    };
-    putOverride(questionId, seq, { patch: optimistic, settledOn: null });
-    let result: Awaited<ReturnType<typeof setMyStateAction>>;
-    try {
-      result = await setMyStateAction(workspaceId, questionId, flags);
-    } catch {
-      // The request itself failed (network): roll this change back.
-      result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
-    }
-    if (!result.ok) {
-      putOverride(questionId, seq, null);
-      toast({ tone: 'error', title: result.message });
-      return;
-    }
-    staleOverview.current = true;
-    // A submission settled while this request was in flight wins over the response's grading.
-    const grading = gradings.current.get(questionId) ?? {
-      last_graded_result: result.data.last_graded_result,
-      is_pending_grading: item.is_pending_grading,
-    };
-    putOverride(questionId, seq, {
-      patch: flagsPatch(result.data, grading),
-      settledOn: latestItems.current,
-    });
+    touch(
+      questionId,
+      ...(['is_favorite', 'needs_retry'] as const).filter((field) => flags[field] !== undefined),
+    );
+    flagSync.toggle(
+      questionId,
+      { is_favorite: item.is_favorite, needs_retry: item.needs_retry },
+      flags,
+    );
   }
 
   const markViewed = useCallback(
@@ -485,6 +602,7 @@ export function QuestionsOverview({
         : undefined);
     if (!item) return;
     staleOverview.current = true;
+    touch(questionId, 'grading', ...(result === 'incorrect' ? (['needs_retry'] as const) : []));
     const graded = gradedPatch(item, result);
     gradings.current.set(questionId, {
       last_graded_result: graded.last_graded_result ?? null,
@@ -759,14 +877,14 @@ export function QuestionsOverview({
       <QuestionViewer
         mode="practice"
         workspaceId={workspaceId}
-        question={panelQuestion}
+        question={holdPanels ? null : panelQuestion}
         readOnly={readOnly === 'archived'}
         screenId={panelScreenId}
         neighbors={panelNeighbors}
         onNavigate={(questionId) => setQuestionParam(questionId)}
         onClose={() => setQuestionParam(null)}
         onGraded={markGraded}
-        onFlagsChange={(questionId, flags) => void changeFlags(questionId, flags)}
+        onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={
@@ -815,7 +933,7 @@ export function QuestionsOverview({
         <QuestionViewer
           mode="sequence"
           workspaceId={workspaceId}
-          state={runState}
+          state={holdPanels ? null : runState}
           archived={readOnly === 'archived'}
           onNavigate={onRunNavigate}
           onClose={onRunClose}
@@ -835,6 +953,7 @@ export function QuestionsOverview({
           onFlagsSaved={() => {
             staleOverview.current = true;
           }}
+          onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
           headerExtra={(q) => (
             <QuestionManageMenu
@@ -871,6 +990,10 @@ export function QuestionsOverview({
       {canAuthor ? (
         <>
           <HomeQuestionEditor
+            // 문제 등록 is a home dialog: with the home's other dialogs, so one stacked over it stays
+            // exposed (HOMEDLG-01-AC02). 문제 편집 opens from the practice panel (portalled to
+            // <body>): the home's container is hidden behind that panel, so it portals to <body>.
+            container={editorTarget?.mode === 'create' ? dialogContainer : undefined}
             workspaceId={workspaceId}
             target={editorTarget}
             session={editorSession}

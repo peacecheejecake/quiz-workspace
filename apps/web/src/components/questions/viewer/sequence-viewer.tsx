@@ -17,7 +17,8 @@
 // The URL is the screen's (`?practice=…`, practice-runs.ts): `시작`, `결과 보기` and `처음부터 다시`
 // replace the history entry, moving between positions pushes one (QOV-01-AC14). Closing (Escape,
 // 닫기) asks nothing: every submission is saved already. `bank` runs carry the study toggles and the
-// screen's 문제 관리 / 문제 정보 menu (`headerExtra`); `mock` runs carry neither.
+// screen's 문제 관리 / 문제 정보 menu (`headerExtra`); `mock` runs carry neither, but
+// `질문하기` (ASK-01, the question attached with its session).
 import { Button, Checkbox, FloatingSidePanel, ProgressBar, questionTypeLabels } from '@quiz/ui';
 import {
   useEffect,
@@ -29,6 +30,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { AskQuestionButton } from '@/components/ask/ask-launcher';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
+import type { AskAttachmentInput } from '@/lib/ask/client';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   lookupOverviewQuestionAction,
@@ -70,8 +75,14 @@ import {
   type PracticeAnswer,
 } from './practice-model';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
-import { QuestionBody, type AnswerQuestion, type RevealedAnswers } from './question-body';
+import {
+  QuestionBody,
+  QuestionStem,
+  type AnswerQuestion,
+  type RevealedAnswers,
+} from './question-body';
 import { QuestionRangePicker } from './question-range-picker';
+import { QuestionSourcePreview } from './question-source-preview';
 import {
   EMPTY_RANGE_FILTERS,
   allIds,
@@ -82,6 +93,7 @@ import {
   type RangeGroup,
 } from './range-model';
 import styles from './question-viewer.module.css';
+import { useFlagSync } from './use-flag-sync';
 
 /** The question a run position shows, for the screen's header menu. */
 export interface RunQuestionInfo {
@@ -94,6 +106,13 @@ export interface RunQuestionInfo {
 export interface StudyFlags {
   readonly is_favorite: boolean;
   readonly needs_retry: boolean;
+}
+
+/** `다시 풀기` is offered only while the last graded result is correct (RETRY-CORRECT). */
+export interface StudyGrading {
+  readonly last_graded_result?: 'correct' | 'incorrect' | null;
+  /** The latest submission waits for self-grading: `다시 풀기` stays hidden until it is graded. */
+  readonly is_pending_grading?: boolean;
 }
 
 /**
@@ -117,8 +136,8 @@ export interface RunClient {
   selfGrade(sessionId: string, grade: GradeResult): Promise<StudyActionResult<SelfGradeResult>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
-  /** The caller's favorite / retry flags of a bank question (null: unknown). */
-  flags?(questionId: string): Promise<StudyFlags | null>;
+  /** The caller's favorite / retry flags and last graded result of a bank question (null: unknown). */
+  flags?(questionId: string): Promise<(StudyFlags & StudyGrading) | null>;
   setFlags?(questionId: string, flags: Partial<StudyFlags>): Promise<StudyActionResult<MyState>>;
 }
 
@@ -139,7 +158,12 @@ export function bankRunClient(workspaceId: string): RunClient {
     flags: async (questionId) => {
       const found = await lookupOverviewQuestionAction(workspaceId, questionId);
       if (!found.ok || !found.data) return null;
-      return { is_favorite: found.data.item.is_favorite, needs_retry: found.data.item.needs_retry };
+      return {
+        is_favorite: found.data.item.is_favorite,
+        needs_retry: found.data.item.needs_retry,
+        last_graded_result: found.data.item.last_graded_result,
+        is_pending_grading: found.data.item.is_pending_grading,
+      };
     },
     setFlags: (questionId, flags) => setMyStateAction(workspaceId, questionId, flags),
   };
@@ -163,6 +187,8 @@ export interface SequenceViewerProps {
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
   /** A position's favorite / retry flags were saved (bank). */
   readonly onFlagsSaved?: (questionId: string, flags: StudyFlags) => void;
+  /** Saving a position's favorite / retry flags failed (bank): the toggles rolled back. */
+  readonly onFlagsFailed?: (message: string) => void;
   /** Header controls after the study toggles (bank: the screen's 문제 관리 / 문제 정보 menu). */
   readonly headerExtra?: (question: RunQuestionInfo) => ReactNode;
   /** A question edited, archived or deleted meanwhile: its position is read again. */
@@ -259,6 +285,7 @@ export function SequenceViewer({
   onViewed,
   onGraded,
   onFlagsSaved,
+  onFlagsFailed,
   headerExtra,
   invalidated = null,
   client: givenClient,
@@ -303,6 +330,7 @@ export function SequenceViewer({
     onStarted: (runId) => onNavigate({ step: 'solve', runId, position: 1 }, 'replace'),
   });
   const solve = useSolveStep({
+    workspaceId,
     view: view?.step === 'solve' ? view : null,
     runVersion,
     open,
@@ -313,6 +341,7 @@ export function SequenceViewer({
     onViewed,
     onGraded,
     onFlagsSaved,
+    onFlagsFailed,
     onNavigate,
   });
   const results = useResultsStep({
@@ -337,14 +366,18 @@ export function SequenceViewer({
     body = solve.body;
     footer = solve.footer;
     const info = solve.question;
-    if (info && source === 'bank') {
+    if (solve.attachment) {
+      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기` (hint before its submission,
+      // full after — the server decides from the session). The bank's run has none.
+      header = <AskQuestionButton attachment={solve.attachment} />;
+    } else if (info && source === 'bank') {
       header = (
         <>
           {!archived && solve.flags ? (
             <StudyToggles
               favorite={solve.flags.is_favorite}
               retry={solve.flags.needs_retry}
-              saving={solve.flags.saving}
+              retryAvailable={solve.lastGraded === 'correct' && !solve.pendingGrading}
               onChange={solve.changeFlags}
             />
           ) : null}
@@ -555,10 +588,6 @@ function freshWork(workId: string | null): WorkState {
   return { workId, answer: EMPTY_ANSWER, busy: null, outcome: null, selfGrade: null, error: null };
 }
 
-interface FlagState extends StudyFlags {
-  readonly saving: boolean;
-}
-
 function attemptAnswer(item: RunItem): PracticeAnswer {
   const submitted = item.attempt?.submitted_answer;
   return {
@@ -577,6 +606,7 @@ function itemQuestion(item: RunItem): AnswerQuestion {
 }
 
 function useSolveStep({
+  workspaceId,
   view,
   runVersion,
   open,
@@ -587,8 +617,10 @@ function useSolveStep({
   onViewed,
   onGraded,
   onFlagsSaved,
+  onFlagsFailed,
   onNavigate,
 }: {
+  readonly workspaceId: string;
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
   /** Bumped when the run may have changed elsewhere (finished by its results step). */
   readonly runVersion: number;
@@ -600,6 +632,7 @@ function useSolveStep({
   readonly onViewed: ((questionId: string) => void) | undefined;
   readonly onGraded: ((questionId: string, result: AttemptResult) => void) | undefined;
   readonly onFlagsSaved: ((questionId: string, flags: StudyFlags) => void) | undefined;
+  readonly onFlagsFailed: ((message: string) => void) | undefined;
   readonly onNavigate: (state: RunUrlState, how: 'push' | 'replace') => void;
 }) {
   const active = open && view !== null;
@@ -687,52 +720,117 @@ function useSolveStep({
   }
 
   // Study flags of the question on screen (bank): read with the position, saved through my-state.
-  const [flags, setFlags] = useState<{ questionId: string; flags: FlagState } | null>(null);
+  // UX9-RETRY-OPT: a press shows at once and is saved in the background (FlagSync, serialized per
+  // question); a failure rolls its fields back and is reported.
+  const [flags, setFlags] = useState<{ questionId: string; flags: StudyFlags } | null>(null);
+  // Re-reads only the study flags / eligibility (a refused `다시 풀기`), never the position: the
+  // answer being typed and the open session stay.
+  const [flagsSeq, setFlagsSeq] = useState(0);
+  // Counts gradings made in this panel: a lookup started before one must not undo it.
+  const gradeGen = useRef(0);
+  const flagSync = useFlagSync<MyState>(
+    (qid, patch) =>
+      client.setFlags
+        ? client.setFlags(qid, patch)
+        : Promise.resolve({ ok: false, message: QUESTION_FAILURE_MESSAGES.unavailable }),
+    (qid, event) => {
+      const saved =
+        event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
+      if (saved) {
+        onFlagsSaved?.(qid, { is_favorite: saved.is_favorite, needs_retry: saved.needs_retry });
+      }
+      if (event.type === 'failed') {
+        onFlagsFailed?.(event.message);
+        // A stale panel offered `다시 풀기`: read the question's state again (hides the toggle).
+        if (event.message === QUESTION_FAILURE_MESSAGES.retryNotAllowed) setFlagsSeq((n) => n + 1);
+      }
+      setFlags((prev) =>
+        prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
+      );
+    },
+  );
+  // The last graded result of the question on screen: read with the flags, replaced by a result
+  // graded here. An incorrect one also turns the flag off (the server does).
+  const [lastGraded, setLastGraded] = useState<{
+    questionId: string;
+    result: 'correct' | 'incorrect' | null;
+    /** The latest submission is not graded yet (the previous result stays). */
+    pending: boolean;
+    /** Graded in this panel (true) or read from the server (false). */
+    local: boolean;
+    /** `gradeGen` when it was graded here; a lookup started at or after it is newer. */
+    gen: number;
+  } | null>(null);
+  function gradedHere(qid: string, result: 'correct' | 'incorrect') {
+    gradeGen.current += 1;
+    setLastGraded({ questionId: qid, result, pending: false, local: true, gen: gradeGen.current });
+    if (result === 'incorrect') {
+      setFlags((prev) =>
+        prev?.questionId === qid
+          ? { questionId: qid, flags: { ...prev.flags, needs_retry: false } }
+          : prev,
+      );
+    }
+  }
+  function pendingHere(qid: string) {
+    gradeGen.current += 1;
+    const gen = gradeGen.current;
+    setLastGraded((prev) => ({
+      questionId: qid,
+      result: prev?.questionId === qid ? prev.result : null,
+      pending: true,
+      local: true,
+      gen,
+    }));
+  }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
-  const flagsLoad = useKeyedLoad(flagsWanted ? `${flagsWanted}:${itemSeq}` : null, async () => {
-    const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
-    return found
-      ? { ok: true as const, data: found }
-      : { ok: false as const, kind: 'unavailable' as const, message: '' };
-  });
+  const flagsLoad = useKeyedLoad(
+    flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}` : null,
+    async () => {
+      const started = gradeGen.current;
+      const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
+      return found
+        ? { ok: true as const, data: { ...found, started } }
+        : { ok: false as const, kind: 'unavailable' as const, message: '' };
+    },
+  );
   const [seenFlags, setSeenFlags] = useState(flagsLoad);
   if (flagsLoad !== seenFlags) {
     setSeenFlags(flagsLoad);
     if (flagsLoad?.status === 'ready' && flagsWanted) {
-      setFlags({ questionId: flagsWanted, flags: { ...flagsLoad.data, saving: false } });
+      // A change still being saved wins over a read made before it.
+      const active = flagSync.active(flagsWanted) ?? flagsLoad.data;
+      // A grading made here is newer than a lookup that started before it (a delayed first
+      // response must not bring back an older result): it wins over that lookup's. A lookup
+      // started after it (the refresh of a refused `다시 풀기`) is the server's newer truth.
+      const local =
+        lastGraded?.questionId === flagsWanted &&
+        lastGraded.local &&
+        lastGraded.gen > flagsLoad.data.started
+          ? lastGraded
+          : null;
+      setFlags({
+        questionId: flagsWanted,
+        flags: {
+          is_favorite: active.is_favorite,
+          needs_retry: local?.result === 'incorrect' ? false : active.needs_retry,
+        },
+      });
+      setLastGraded(
+        local ?? {
+          questionId: flagsWanted,
+          result: flagsLoad.data.last_graded_result ?? null,
+          pending: flagsLoad.data.is_pending_grading ?? false,
+          local: false,
+          gen: 0,
+        },
+      );
     }
   }
   const shownFlags = flags && flags.questionId === questionId ? flags.flags : null;
-  async function changeFlags(patch: Partial<StudyFlags>) {
-    if (!questionId || !shownFlags || shownFlags.saving || !client.setFlags) return;
-    const qid = questionId;
-    setFlags({ questionId: qid, flags: { ...shownFlags, saving: true } });
-    let result: StudyActionResult<MyState>;
-    try {
-      result = await client.setFlags(qid, patch);
-    } catch {
-      result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
-    }
-    if (result.ok) {
-      onFlagsSaved?.(qid, {
-        is_favorite: result.data.is_favorite,
-        needs_retry: result.data.needs_retry,
-      });
-    }
-    setFlags((prev) =>
-      prev?.questionId !== qid
-        ? prev
-        : {
-            questionId: qid,
-            flags: result.ok
-              ? {
-                  is_favorite: result.data.is_favorite,
-                  needs_retry: result.data.needs_retry,
-                  saving: false,
-                }
-              : { ...prev.flags, saving: false },
-          },
-    );
+  function changeFlags(patch: Partial<StudyFlags>) {
+    if (!questionId || !shownFlags || !client.setFlags) return;
+    flagSync.toggle(questionId, shownFlags, patch);
   }
 
   const formId = useId();
@@ -756,6 +854,8 @@ function useSolveStep({
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
     if (result.ok) {
+      if (result.data.result === 'pending') pendingHere(qid);
+      else gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
     } else if (runId) {
       // The answer may have been recorded and only the response lost (or another tab submitted
@@ -799,6 +899,7 @@ function useSolveStep({
     } catch {
       // network failure: keep the pending result and let the user try again
     }
+    if (ok) gradedHere(qid, grade);
     if (ok) onGraded?.(qid, grade);
     updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
@@ -812,6 +913,7 @@ function useSolveStep({
       body: null,
       footer: undefined,
       question: null,
+      attachment: null,
       flags: null,
       changeFlags: () => undefined,
     };
@@ -852,6 +954,52 @@ function useSolveStep({
       </div>
     ) : null;
 
+  // AIEXPL-01: under a submitted position's result (also one reopened read-only through 이전 or
+  // the results list), with that position's submitted session; never before a submission.
+  const answeredSessionId = answered ? (session?.id ?? item?.practice_session_id ?? null) : null;
+  const explained = item?.question_id ?? null;
+  const explanation =
+    answeredSessionId && explained && shownQuestion ? (
+      <AiExplanation
+        workspaceId={workspaceId}
+        target={{ kind: source === 'mock' ? 'mock' : 'question', id: explained }}
+        gate={
+          source === 'mock'
+            ? { mock_practice_session_id: answeredSessionId }
+            : { practice_session_id: answeredSessionId }
+        }
+        options={shownQuestion.options}
+        askAttachment={
+          source === 'mock'
+            ? {
+                kind: 'mock_exam_question',
+                view: 'practice',
+                mock_exam_question_id: explained,
+                mock_practice_session_id: answeredSessionId,
+              }
+            : {
+                kind: 'question',
+                view: 'practice',
+                question_id: explained,
+                practice_session_id: answeredSessionId,
+              }
+        }
+      />
+    ) : null;
+  // RELSRC-01: under the AI 해설, with the same submitted session (never before a submission).
+  const related =
+    answeredSessionId && explained && shownQuestion ? (
+      <RelatedSources
+        workspaceId={workspaceId}
+        target={{ kind: source === 'mock' ? 'mock' : 'question', id: explained }}
+        gate={
+          source === 'mock'
+            ? { mock_practice_session_id: answeredSessionId }
+            : { practice_session_id: answeredSessionId }
+        }
+      />
+    ) : null;
+
   let content: ReactNode;
   if (runLoad?.status === 'error' || itemLoad?.status === 'error') {
     const failure = runLoad?.status === 'error' ? runLoad : itemLoad;
@@ -882,7 +1030,7 @@ function useSolveStep({
   } else if (!shownQuestion || (sessionWanted && !session && sessionLoad?.status !== 'error')) {
     content = (
       <div aria-busy="true">
-        <p className={styles.stem}>{displayStem(item.stem ?? '')}</p>
+        <QuestionStem stem={item.stem ?? ''} />
         <p className={styles.loading}>문제를 불러오는 중입니다…</p>
       </div>
     );
@@ -900,6 +1048,12 @@ function useSolveStep({
             <p>{sessionLoad.message}</p>
             <Button onClick={() => setSessionRetry((n) => n + 1)}>다시 시도</Button>
           </div>
+        ) : null}
+        {item.question_id ? (
+          // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
+          <QuestionSourcePreview
+            target={{ kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }}
+          />
         ) : null}
         <form
           id={formId}
@@ -921,8 +1075,19 @@ function useSolveStep({
             selfGrade={work.selfGrade}
             error={work.error}
             resultRef={resultRef}
+            highlighting={
+              source === 'bank' && item.question_id
+                ? {
+                    questionId: item.question_id,
+                    revisionId: session?.question_revision_id ?? null,
+                    chapterTitle: item.chapter_title ?? null,
+                  }
+                : null
+            }
           />
         </form>
+        {explanation}
+        {related}
       </>
     );
   }
@@ -982,6 +1147,19 @@ function useSolveStep({
           chapterTitle: item.chapter_title ?? '챕터 없음',
         }
       : null;
+  // The mock exam position's practice session (open, or the submitted one), with the answer chosen
+  // so far; a question no longer in the mock exam (or a deleted mock exam) has none.
+  const mockSessionId = session?.id ?? item?.practice_session_id ?? null;
+  const attachment: AskAttachmentInput | null =
+    source === 'mock' && question && mockSessionId
+      ? {
+          kind: 'mock_exam_question',
+          view: 'practice',
+          mock_exam_question_id: question.questionId,
+          mock_practice_session_id: mockSessionId,
+          selected_option_ids: answered ? [] : answer.selected.slice(0, 50),
+        }
+      : null;
   return {
     title,
     description: question
@@ -995,8 +1173,11 @@ function useSolveStep({
     ),
     footer,
     question,
+    attachment,
     flags: shownFlags,
-    changeFlags: (patch: Partial<StudyFlags>) => void changeFlags(patch),
+    lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
+    pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,
+    changeFlags,
   };
 }
 

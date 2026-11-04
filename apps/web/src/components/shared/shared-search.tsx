@@ -127,6 +127,8 @@ export function SharedSearch({ shareId, client, onUnavailable }: SharedSearchPro
       <DocumentExcerptPanel
         client={NO_BLOCK_READS}
         item={selected}
+        items={items}
+        onSelect={setSelected}
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
         onJump={(item, target) => {

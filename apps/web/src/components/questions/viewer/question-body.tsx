@@ -11,8 +11,9 @@
 import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
 import type { Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
-import { displayStem } from '@/lib/questions/display-stem';
+import { displayStem, stemParagraphs } from '@/lib/questions/display-stem';
 import type { Question } from '@/lib/questions/form';
+import { ExplanationText, type ExplanationHighlighting } from './explanation-text';
 import {
   ANSWER_TEXT_MAX,
   finalResult,
@@ -55,6 +56,20 @@ export function QuestionBody(props: QuestionBodyProps) {
   return props.kind === 'answer' ? <AnswerBody {...props} /> : <RevisionBody {...props} />;
 }
 
+/**
+ * The displayed stem (UX9-QTYPE): one paragraph per blank-line-separated block, so the gap between
+ * paragraphs is a spacing token rather than a full empty line.
+ */
+export function QuestionStem({ stem }: { readonly stem: string }) {
+  return (
+    <div className={styles.stem}>
+      {stemParagraphs(displayStem(stem)).map((paragraph, i) => (
+        <p key={i}>{paragraph}</p>
+      ))}
+    </div>
+  );
+}
+
 interface AnswerBodyProps {
   readonly stem: string;
   readonly question: AnswerQuestion;
@@ -67,6 +82,8 @@ interface AnswerBodyProps {
   readonly selfGrade: GradeResult | null;
   readonly error?: string | null;
   readonly resultRef?: Ref<HTMLParagraphElement>;
+  /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
+  readonly highlighting?: ExplanationHighlighting | null;
 }
 
 function AnswerBody({
@@ -79,10 +96,11 @@ function AnswerBody({
   selfGrade,
   error = null,
   resultRef,
+  highlighting = null,
 }: AnswerBodyProps) {
   return (
     <>
-      <p className={styles.stem}>{displayStem(stem)}</p>
+      <QuestionStem stem={stem} />
       <AnswerField
         question={question}
         answer={answer}
@@ -105,7 +123,7 @@ function AnswerBody({
           {error}
         </p>
       ) : null}
-      {outcome ? <Reveal outcome={outcome} /> : null}
+      {outcome ? <Reveal outcome={outcome} highlighting={highlighting} /> : null}
     </>
   );
 }
@@ -154,6 +172,7 @@ function AnswerField({
         // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
         label="보기"
         hideLabel
+        className={styles.optionGroup}
         orientation="vertical"
         disabled={disabled}
         value={answer.selected[0] ?? ''}
@@ -220,7 +239,13 @@ function OptionLabel({ index, text }: { readonly index: number; readonly text: s
 }
 
 /** Answers revealed by the submit result (never before submission). */
-function Reveal({ outcome }: { readonly outcome: RevealedAnswers }) {
+function Reveal({
+  outcome,
+  highlighting,
+}: {
+  readonly outcome: RevealedAnswers;
+  readonly highlighting: ExplanationHighlighting | null;
+}) {
   const accepted = outcome.accepted_answers ?? [];
   return (
     <div className={styles.reveal}>
@@ -239,7 +264,11 @@ function Reveal({ outcome }: { readonly outcome: RevealedAnswers }) {
       {outcome.explanation ? (
         <section aria-label="해설">
           <h3 className={styles.revealTitle}>해설</h3>
-          <p className={styles.revealText}>{outcome.explanation}</p>
+          <ExplanationText
+            text={outcome.explanation}
+            className={styles.revealText}
+            highlighting={highlighting}
+          />
         </section>
       ) : null}
     </div>
@@ -250,16 +279,18 @@ interface RevisionBodyProps {
   readonly revision: QuestionRevision;
   readonly type: QuestionType;
   readonly heading: string;
+  /** The explanation takes the reader's highlights (문제 상세 of a bank question, HILITE-01). */
+  readonly highlighting?: ExplanationHighlighting | null;
 }
 
 /** A revision with its answers (manage, read-only): not a grading result, so no result border. */
-function RevisionBody({ revision, type, heading }: RevisionBodyProps) {
+function RevisionBody({ revision, type, heading, highlighting = null }: RevisionBodyProps) {
   const correct = new Set(revision.correct_option_ids ?? []);
   return (
     <>
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
-        <p className={styles.detailText}>{displayStem(revision.stem)}</p>
+        <QuestionStem stem={revision.stem} />
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>
@@ -306,7 +337,11 @@ function RevisionBody({ revision, type, heading }: RevisionBodyProps) {
       {revision.explanation ? (
         <section className={styles.detailSection}>
           <h3 className={styles.detailHeading}>해설</h3>
-          <p className={styles.detailText}>{revision.explanation}</p>
+          <ExplanationText
+            text={revision.explanation}
+            className={styles.detailText}
+            highlighting={highlighting}
+          />
         </section>
       ) : null}
     </>

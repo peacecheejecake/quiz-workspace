@@ -190,7 +190,8 @@ test(
         url.searchParams.getAll('panel').includes('document-summary') &&
         url.searchParams.get('document') === doc.documentId,
     );
-    await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+    // UX9 (HOMEDLG-01): modal, stacked over 문서 관리 when opened from its row.
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
     await expect(summaryUi.empty(panel)).toBeVisible();
     await expect(summaryUi.sendNotice(panel)).toBeVisible();
 
@@ -569,7 +570,7 @@ test(
 );
 
 test(
-  'DOCSUM-01-AC07 only ready books offer 요약; DOC-02 links to the panel; foreign ids are not found; history stacks above',
+  'DOCSUM-01-AC07 only ready books offer 요약; DOC-02 links to the panel; foreign ids are not found; 이력 lists the run once the panel closes',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('docsum01-ac07');
@@ -617,13 +618,13 @@ test(
     const panel = summaryUi.panel(page);
     await expect(summaryUi.overallHeading(panel)).toBeVisible();
 
-    // The history dialog opened later stacks above the panel and lists 요약 만들기 + the job.
+    // UX9 (HOMEDLG-01): the panel is modal, the header behind it inert — the history dialog opens
+    // once it is closed, and lists 요약 만들기 + the job.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
     await homeUi.historyButton(page).click();
     const history = historyUi.dialog(page);
     await expect(history).toBeVisible();
-    await expect(panel).toBeVisible();
-    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
-    expect(await z(history)).toBeGreaterThan(await z(panel));
     const enabled = historyUi
       .ofKind(page, 'activity')
       .filter({ hasText: /요약 만들기|summary enabled/i });
@@ -726,6 +727,9 @@ test(
       expect.arrayContaining(['document.summary_auto_disabled', 'document.summary_enabled']),
     );
     expect(events.filter((e) => e === 'document.summary_enabled')).toHaveLength(2);
+    // UX9 (HOMEDLG-01): the modal panel is closed before the header's 이력.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
     await homeUi.historyButton(page).click();
     const disabledRow = historyUi
       .ofKind(page, 'activity')

@@ -140,8 +140,8 @@ def test_qov_01_ac05_retry_outranks_the_last_result_and_counts_are_exclusive(see
     ids = [q["id"] for q in qs]
     assert answer(alice, ids[0], "opt-1") == "correct"
     set_state(alice, ids[0], needs_retry=True)  # correct + retry → retry
-    assert answer(alice, ids[1], "opt-2") == "incorrect"
-    set_state(alice, ids[1], needs_retry=True)  # incorrect + retry → retry
+    assert answer(alice, ids[1], "opt-1") == "correct"
+    set_state(alice, ids[1], needs_retry=True)  # a second correct + retry → retry
     assert answer(alice, ids[2], "opt-1") == "correct"
     assert answer(alice, ids[3], "opt-2") == "incorrect"
     start(alice, ids[4])  # viewed

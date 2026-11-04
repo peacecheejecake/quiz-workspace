@@ -30,6 +30,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 - **다시 만들기 (사용자 결정 2026-11-01):** 설정(변형 유형·문항 수·난이도·범위)을 바꾸거나 그대로 `다시 만들기`하면 새 회차(generation)로 문제를 모두 새로 만들고, 성공하면 모의고사의 문제 목록을 새 회차로 **바꾼다**. 이전 회차 문제와 그 풀이 기록은 지우지 않고(풀이 기록 불변) 화면에서 숨긴다(v1에 이전 회차 열람 없음). 새 회차가 실패하면 이전 문제가 그대로 남는다. 사람이 편집한 문제도 다시 만들면 바뀐다(확인 dialog에서 알림).
 - **공유 범위 (사용자 결정 2026-11-01):** 모의고사는 Workspace 단위다 — 모든 구성원이 목록을 보고 풀 수 있고(풀이 기록은 사람마다), 편집 권한자가 만들고 고친다. 공유 링크 게스트에게는 보이지 않고 Fork에 복제되지 않는다(v1; [공유 명세 §9](../workspace-sharing.md)).
 - **환경별 사용 여부:** LLM 변형 유형은 worker 설정 `WORKER_MOCK_EXAMS`와 LLM 설정이 있을 때만 고를 수 있다. 꺼진 환경에서도 `보기 섞기`만 고른 모의고사는 만들 수 있고(LLM 없음) 저장된 모의고사는 풀 수 있다 (사용자 결정 2026-11-01).
+- **AI 질문·AI 해설·관련 본문 (ASK-SPEC 사용자 결정 2026-11-01 (27)·(30); ASK-SYNC 2026-11-02 — 구현 ASK-B·ASK-Q·EXPL-B·EXPL-W·RELSRC-B·RELSRC-W):** 모의고사 문제의 `질문하기`는 풀이(QuestionViewer `sequence(mock)`) header — 제출 전 `hint`, 제출 후 `full` — 와 편집 권한의 문제 관리(`manage(mock)`) header에 있다([ASK-01](ask-llm.md) AC12·C10). 제출 결과 아래에는 `AI 해설`([AIEXPL-01](ai-explanations.md) AC07·C09)과 "관련 본문"([RELSRC-01](related-sources.md) AC06·C07)이 등록 문제와 같은 자리에 나오고, 편집 권한의 문제 관리(`manage(mock)`)에서는 제출 없이 해설 아래에 나온다(사용자 결정 2026-11-02, ASK-SYNC (a)). 셋 다 `mock_exam_question_revisions` 행을 기준으로 하고(해설·관련 본문 캐시는 `mock_exam_question_ai_explanations`·`mock_exam_question_related_sources`, 원본 등록 문제와 공유하지 않음), 근거 구절은 그 revision의 `evidence` 중 현재 발행 `book` 블록만 쓴다. 질문·해설·관련 본문은 `mock_exam_attempts`와 이 화면의 진행·결과를 바꾸지 않는다. 이 화면의 기존 AC는 바뀌지 않는다.
 
 ## 재사용과 폐지 (QGEN-01 생성 엔진)
 
@@ -38,9 +39,9 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 | `book_core.generation`(`VariantGenerator`, `prompts`, `validation`의 형식·정답 개수·정오 반전 정답 불일치·중복 fingerprint·출처 근거 검증) | `validation`·`models`는 **재사용**(바꾸지 않음). `prompts`·`VariantGenerator`의 원본 하나 단위 호출 대신 모의고사는 여러 원본을 한 호출로 만드는 묶음 prompt(`book_core.mock_exam`, 아래 "LLM 호출 묶기")를 쓰고, 응답 항목마다 같은 검증 함수를 부른다. 검증 결과에 `error` issue가 하나라도 있으면 저장하지 않는다 — QGEN이 후보를 버리던 코드(`is_rejection`)만이 아니라 승인을 막던 모든 `error`(예: `inverted_answer_mismatch`)가 저장을 막는다(MOCK-B, MOCK.0 발견). 사람의 승인 대신 이 검증이 저장 조건이다. |
 | `OPTION_SHUFFLE` 결정적 shuffle(M5.2) | **재사용**: 모의고사 문제는 원본 revision의 발문·보기·정답·해설을 복사하고 보기 순서를 seed로 섞어 저장한다(풀이 때 보기 섞기는 QVIEW-01 세션 규칙 그대로). |
 | fake LLM adapter·`tests/fixtures/llm/generation-scenarios.json` | **재사용**(E2E·계약 test). fake adapter가 묶음 응답(원본 여러 개 → 항목 여러 개)을 돌려주고 호출 수를 기록하도록 넓히고, 모의고사용 시나리오(정상 묶음·항목 하나만 정오 반전 복수 정답·해석할 수 없는 묶음·출력 예산에서 잘린 묶음·전부 실패·두 번째 생성 실패)를 같은 파일에 추가한다. |
-| worker `question.generate` job의 원본 읽기·근거 passage 검색·근거 좁히기(`source_question`, `build_passages`, `narrow_evidence`) | **재사용**: 공용 모듈로 옮겨 새 job `mock_exam.generate`가 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺀다. |
+| worker `question.generate` job의 원본 읽기·근거 passage 검색·근거 좁히기(`source_question`, `build_passages`, `narrow_evidence`) | **재사용**: 공용 모듈 `quiz_worker.question_sources`로 옮겨 새 job `mock_exam.generate`가 쓴다. `question.generate` job 등록은 QGEN-RM에서 뺐고, job module·run store는 UX8-QGEN-DEAD에서 지웠다. |
 | `question_generation_runs`·생성 `question_drafts`·`question_lineage` 테이블과 기존 행 | **보존**(additive-first; 삭제 migration 없음). 새 행은 생기지 않는다. 승인되지 않은 기존 생성 초안은 검토 화면이 없어져 볼 수 없게 된다 — 보존만 하고 지우지 않는다(사용자 결정 2026-11-01). 이미 등록된 변형 문제와 lineage는 그대로 확정 문제다. |
-| API `POST /questions/{id}/generations`, `/question-generations/*`, `/workspaces/{id}/question-generation-batches*` | **폐지**(QGEN-RM에서 router 제거 → 404). OpenAPI·api-client 재생성. |
+| API `POST /questions/{id}/generations`, `/question-generations/*`, `/workspaces/{id}/question-generation-batches*` | **폐지**(QGEN-RM에서 router 제거 → 404). OpenAPI·api-client 재생성. 생성 초안 재검증(`question_generation_review`)·API repository·묶음 rate limit 설정(`QUESTION_GENERATION_BATCH_RATE_LIMIT_PER_MINUTE`)은 UX8-QGEN-DEAD에서 지웠고, `PATCH /question-drafts/{id}`는 import 초안만 받는다(생성 초안 404). |
 | 화면: `문제` 메뉴 `변형 출제`, "문제 생성" dialog(`?panel=generate`), 검토 페이지·묶음 결과 페이지(`/questions/generate?…`), 문제 상세의 `변형 출제` | **폐지** (QGEN-RM 2026-11-02). 이전 URL은 홈으로 redirect(`?panel=generate` → `?panel=mock-exams`, `/questions/generate?…` → `?panel=mock-exams`). |
 | 이력의 `question_generation.*` 활동·"문제 생성" 작업 label | **보존**(과거 기록 표시용). |
 
@@ -94,7 +95,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 ## 접근성
 
-- non-modal dialog: 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `문제` 메뉴 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
+- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `문제` 메뉴 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
 - 상태 badge·"확인 필요"·"편집됨"은 글자로 전달한다(색만으로 전달하지 않음). 생성 진행은 `ProgressBar` 값 글자 + 완료·실패 때 `aria-live="polite"` 알림.
 - 행 메뉴는 Radix DropdownMenu(접근성 이름 "<이름> 메뉴"), 아이콘 버튼은 접근성 이름을 가진다. `QuestionRangePicker` 접근성은 QVIEW-01과 같다.
 - 375px에서 가로 스크롤 없음, 버튼 문구는 줄바꿈하지 않고 버튼 단위로 넘어간다.
@@ -106,7 +107,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 - **Given:** 확정 문제가 있고 모의고사가 없는 Workspace 홈(편집 권한, 그리고 보기 권한)
 - **When:** header `문제` 메뉴를 열어 `모의고사`를 고른다
-- **Then:** 메뉴에 `변형 출제` 항목은 없고 `모의고사`가 있다. non-modal dialog "모의고사"(`?panel=mock-exams`)가 데이터 응답 전에 열려 skeleton 뒤 빈 상태 "아직 모의고사가 없습니다."를 보인다. 편집 권한자에게는 목록 위에 `추가` 버튼이 하나 있고 보기 권한자에게는 없다. 이전 URL `?panel=generate`는 `?panel=mock-exams`로 바뀐다. dialog는 다른 홈 dialog(문서 관리)와 함께 열리고 나중에 연 것이 위에 온다.
+- **Then:** 메뉴에 `변형 출제` 항목은 없고 `모의고사`가 있다. non-modal dialog "모의고사"(`?panel=mock-exams`)(UX9-SPEC 사용자 결정 2026-11-02 D3: modal — [HOMEDLG-01](home-dialogs.md); test는 UX9-MODAL이 고침)가 데이터 응답 전에 열려 skeleton 뒤 빈 상태 "아직 모의고사가 없습니다."를 보인다. 편집 권한자에게는 목록 위에 `추가` 버튼이 하나 있고 보기 권한자에게는 없다. 이전 URL `?panel=generate`는 `?panel=mock-exams`로 바뀐다. dialog는 다른 홈 dialog(문서 관리)와 함께 열리고 나중에 연 것이 위에 온다.
 
 ### MOCK-01-AC02
 

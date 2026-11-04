@@ -48,6 +48,8 @@ EXPECTED_MATRIX: dict[Action, tuple[set[Role], bool, bool, LockMode]] = {
     Action.MEMBERS_MANAGE: ({OWN}, True, False, LockMode.UPDATE),
     Action.SHARE_CREATE: ({OWN}, True, False, LockMode.SHARE),
     Action.SHARE_MANAGE: ({OWN}, True, True, LockMode.SHARE),
+    # UX9-HL-B: personal highlights, also in archived workspaces (HILITE-01-C01).
+    Action.HIGHLIGHT: ({OWN, EDT, VWR}, True, True, LockMode.SHARE),
 }
 
 
@@ -67,7 +69,7 @@ def test_matrix_invariants() -> None:
             assert policy.lock is not LockMode.NONE, f"writes lock the rows they check ({action})"
     viewer = {a for a, p in PERMISSIONS.items() if p.allows(Role.VIEWER)}
     editor = {a for a, p in PERMISSIONS.items() if p.allows(Role.EDITOR)}
-    assert viewer == {Action.READ, Action.PRACTICE}
+    assert viewer == {Action.READ, Action.PRACTICE, Action.HIGHLIGHT}
     assert editor == viewer | {Action.DOCUMENT_EDIT, Action.QUESTION_EDIT}
     with pytest.raises(TypeError):
         PERMISSIONS[Action.READ] = PERMISSIONS[Action.PRACTICE]  # type: ignore[index]

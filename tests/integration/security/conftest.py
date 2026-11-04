@@ -118,6 +118,11 @@ def random_ids() -> dict[str, str]:
         "mock_exam_id",
         "mock_exam_question_id",
         "mock_practice_session_id",
+        "highlight_id",
+        "conversation_id",
+        "message_id",
+        "explanation_id",
+        "mock_explanation_id",
     )
     out = {k: str(uuid.uuid4()) for k in keys}
     out["block_id"] = f"b-{uuid.uuid4().hex[:12]}"
@@ -197,6 +202,20 @@ def build_world(seed: Any, label: str) -> World:
         "select import_run_id::text from public.question_drafts where id = %s", (draft_id,)
     )
     import_id = str(rows[0][0])
+    # QSRC-API: an import-provenance region on the question (and so on its 보기 섞기 mock
+    # question), so the source-region reads have a 2xx to protect.
+    seed._admin(
+        "insert into public.question_sources (workspace_id, question_id, document_id, "
+        "document_revision_id, page_start, page_end, locations, import_run_id) "
+        "select q.workspace_id, q.id, d.id, d.active_revision_id, 1, 1, %s::jsonb, %s "
+        "from public.questions q join public.documents d on d.id = %s where q.id = %s",
+        (
+            json.dumps([{"page": 1, "bbox": {"x0": 10.0, "y0": 20.0, "x1": 200.0, "y1": 80.0}}]),
+            import_id,
+            doc_id,
+            qid,
+        ),
+    )
     # The shared S0 seed stores a bare payload; give the draft a complete QuestionDraft so the
     # draft routes can render it.
     payload = QuestionDraft(
@@ -241,6 +260,55 @@ def build_world(seed: Any, label: str) -> World:
         "POST", f"/mock-exam-questions/{mock_question_id}/practice-sessions", None, (201,)
     )
 
+    # UX9-HL-B: the owner's highlight of the question's explanation (personal: other
+    # members get the unknown-id 404).
+    highlight = owner.ok(
+        "POST",
+        "/my-highlights",
+        {
+            "target": {"kind": "explanation", "question_id": qid},
+            "anchor": {"block": "p0", "start": 0, "end": 1},
+            "color": "yellow",
+        },
+        (201,),
+    )
+
+    # ASK-B: the owner's conversation with one finished answer (direct seed: asking needs the
+    # feature on, which this stack leaves off; the routes check ownership before the switch).
+    conversation = owner.ok("POST", f"/workspaces/{wid}/ask/conversations", {}, (201,))
+    question_message, answer_message = (str(uuid.uuid4()) for _ in range(2))
+    seed._admin(
+        "insert into public.ask_messages (id, conversation_id, workspace_id, user_id, role, "
+        "status, text) values (%s, %s, %s, %s, 'user', 'succeeded', 'S4 질문')",
+        (question_message, conversation["id"], wid, owner.user.id),
+    )
+    seed._admin(
+        "insert into public.ask_messages (id, conversation_id, workspace_id, user_id, role, "
+        "status, question_message_id, text, finished_at) values (%s, %s, %s, %s, 'assistant', "
+        "'succeeded', %s, 'S4 답', now())",
+        (answer_message, conversation["id"], wid, owner.user.id, question_message),
+    )
+
+    # EXPL-B: a finished AI explanation of the question and of the mock exam question (direct
+    # seed: making one needs the feature on, which this stack leaves off).
+    explanation_id, mock_explanation_id = (str(uuid.uuid4()) for _ in range(2))
+    body = json.dumps(
+        {"correct_option_ids": [], "summary_md": "S4 AI 해설", "options": [], "concepts_md": ""}
+    )
+    seed._admin(
+        "insert into public.question_ai_explanations (id, workspace_id, question_id, "
+        "question_revision_id, status, prompt_version, model, body, finished_at) values "
+        "(%s, %s, %s, %s, 'succeeded', 's4/v1', 's4', %s::jsonb, now())",
+        (explanation_id, wid, qid, question["revision"]["id"], body),
+    )
+    seed._admin(
+        "insert into public.mock_exam_question_ai_explanations (id, workspace_id, "
+        "mock_exam_question_id, mock_exam_question_revision_id, status, prompt_version, model, "
+        "body, finished_at) select %s, workspace_id, id, active_revision_id, 'succeeded', "
+        "'s4/v1', 's4', %s::jsonb, now() from public.mock_exam_questions where id = %s",
+        (mock_explanation_id, body, mock_question_id),
+    )
+
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
     twin = owner.create_workspace(f"S4 {label} twin")
     tid = str(twin["id"])
@@ -274,6 +342,11 @@ def build_world(seed: Any, label: str) -> World:
         "mock_exam_id": mock_exam_id,
         "mock_exam_question_id": mock_question_id,
         "mock_practice_session_id": str(mock_session["id"]),
+        "highlight_id": str(highlight["id"]),
+        "conversation_id": str(conversation["id"]),
+        "message_id": answer_message,
+        "explanation_id": explanation_id,
+        "mock_explanation_id": mock_explanation_id,
     }
     twin_ids = {
         "workspace_id": tid,

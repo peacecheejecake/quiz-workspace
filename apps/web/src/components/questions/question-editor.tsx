@@ -15,6 +15,7 @@ import {
   ModalDialog,
   Select,
   useToast,
+  useUnsavedChanges,
 } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
@@ -62,6 +63,8 @@ export interface QuestionEditorProps {
   readonly documents: readonly DocumentOption[];
   /** A save succeeded (also for a session that is no longer on screen). */
   readonly onSaved: (question: Question, mode: 'create' | 'edit') => void;
+  /** Where the dialog is portalled (the home's dialog container, HOMEDLG-01). */
+  readonly container?: HTMLElement | null;
 }
 
 const NO_CHAPTER = '__none__';
@@ -81,6 +84,7 @@ export function QuestionEditor({
   chapters,
   documents,
   onSaved,
+  container,
 }: QuestionEditorProps) {
   const { toast } = useToast();
   const sessionRef = useRef(session);
@@ -142,6 +146,7 @@ export function QuestionEditor({
   const title = target?.mode === 'edit' ? '문제 편집' : '문제 등록';
   return (
     <ModalDialog
+      container={container}
       open={target !== null}
       onOpenChange={(next) => {
         if (!next) onClose();
@@ -195,6 +200,9 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
   const [values, setValues] = useState<QuestionFormValues>(() =>
     editing ? formFromQuestion(editing) : emptyForm(),
   );
+  const [opening] = useState(() => JSON.stringify(values));
+  // HOMEDLG-01: a changed form keeps the dialog open on a backdrop click.
+  useUnsavedChanges(JSON.stringify(values) !== opening);
   const [baseRevisionId, setBaseRevisionId] = useState(editing?.revision.id ?? null);
   const [baseSources, setBaseSources] = useState(() => (editing ? sourceSnapshot(editing) : []));
   const [currentChapter, setCurrentChapter] = useState(editing?.chapter ?? null);

@@ -67,6 +67,7 @@ from book_core.search import (
     SearchLimits,
     prepare_query,
 )
+from book_core.search.related import is_searchable_document
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from qdrant_client.http.exceptions import ApiException
@@ -94,7 +95,6 @@ MAX_RESULTS = 50
 DEFAULT_RESULTS = 10
 # First-stage candidates per list: the architecture defaults (30), more when more results are asked.
 MIN_CANDIDATES = 30
-QUESTION_PAPER = "question_paper"
 
 LanguageCode = Annotated[
     str,
@@ -285,7 +285,7 @@ def build_scope(
     searchable = {
         d.id: d
         for d in repo.searchable_documents(workspace_id)
-        if d.document_type != QUESTION_PAPER
+        if is_searchable_document(d.document_type)
     }
     selected: dict[uuid.UUID, SearchableDocument]
     if body.document_ids:

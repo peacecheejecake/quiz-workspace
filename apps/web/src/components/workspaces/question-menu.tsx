@@ -27,6 +27,8 @@ interface QuestionMenuAction {
   readonly requiresEdit: boolean;
   /** Starts a new group (a separator above it). */
   readonly separated?: boolean;
+  /** Its own reason to be disabled (shown as text under it and describing it), if any. */
+  readonly ownReason?: string | null;
   readonly onSelect: () => void;
 }
 
@@ -42,7 +44,8 @@ interface QuestionMenuAction {
  * onCloseAutoFocus, which Radix fires from a timer after the menu unmounts), so the dialog it
  * opens records the trigger as its opener and closing the dialog brings focus back there.
  * 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16: `?panel=question-duplicates`) merges questions, so it is
- * editor-only like 직접 추가.
+ * editor-only like 직접 추가; so is 챕터 재분배 (CHREDIST-01: `?panel=chapter-redistribution`), which
+ * moves questions between chapters, after it in the same group.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
  * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
@@ -50,23 +53,34 @@ interface QuestionMenuAction {
  * 보관·초안 문제 in the same group (MOCK-SYNC).
  * 모의고사 (MOCK-01: the 모의고사 dialog, `?panel=mock-exams`) lists and practises mock exams, which
  * every member may do, so it is enabled too and sits between 보관·초안 문제 and 문제 풀기 (MOCK-SYNC).
+ * AI 질문 (ASK-01 "`문제` 메뉴 항목": the AI 질문 panel, `?panel=ask`) is for every member and comes
+ * last; unlike the items before it, it has its own disabled state — the feature is off in this
+ * environment or the workspace is archived — with its own reason text under it (`askUnavailable`).
  */
 export function QuestionMenu({
   readOnly,
   onCreate,
   onDuplicates,
+  onRedistribute,
   onInactive,
   onMockExams,
   onPractice,
+  onAsk,
+  askUnavailable = null,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onDuplicates: () => void;
+  readonly onRedistribute: () => void;
   readonly onInactive: () => void;
   readonly onMockExams: () => void;
   readonly onPractice: () => void;
+  readonly onAsk: () => void;
+  /** Why AI 질문 cannot take new questions here (null: it can). */
+  readonly askUnavailable?: string | null;
 }) {
   const reasonId = useId();
+  const ownReasonId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pending = useRef<(() => void) | null>(null);
   const afterClose = (action: () => void) => () => {
@@ -75,6 +89,7 @@ export function QuestionMenu({
   const actions: readonly QuestionMenuAction[] = [
     { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
     { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
+    { key: 'redistribute', label: '챕터 재분배', requiresEdit: true, onSelect: onRedistribute },
     {
       key: 'inactive',
       label: '보관·초안 문제',
@@ -84,6 +99,13 @@ export function QuestionMenu({
     },
     { key: 'mock-exams', label: '모의고사', requiresEdit: false, onSelect: onMockExams },
     { key: 'practice', label: '문제 풀기', requiresEdit: false, onSelect: onPractice },
+    {
+      key: 'ask',
+      label: 'AI 질문',
+      requiresEdit: false,
+      ownReason: askUnavailable,
+      onSelect: onAsk,
+    },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;
   const anyDisabled = reason !== null && actions.some((a) => a.requiresEdit);
@@ -104,23 +126,26 @@ export function QuestionMenu({
           pending.current = null;
           if (!action) return;
           event.preventDefault();
-          triggerRef.current?.focus();
+          // The dialog it opens never moves the page (HOMEDLG-01-AC03), nor does this focus.
+          triggerRef.current?.focus({ preventScroll: true });
           action();
         }}
       >
         {anyDisabled ? <DropdownMenuLabel id={reasonId}>{reason}</DropdownMenuLabel> : null}
         {actions.map((action) => {
-          const disabled = action.requiresEdit && reason !== null;
+          const own = action.ownReason ?? null;
+          const disabled = (action.requiresEdit && reason !== null) || own !== null;
           return (
             <Fragment key={action.key}>
               {action.separated ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={disabled}
-                aria-describedby={disabled ? reasonId : undefined}
+                aria-describedby={own !== null ? ownReasonId : disabled ? reasonId : undefined}
                 onSelect={afterClose(action.onSelect)}
               >
                 {action.label}
               </DropdownMenuItem>
+              {own !== null ? <DropdownMenuLabel id={ownReasonId}>{own}</DropdownMenuLabel> : null}
             </Fragment>
           );
         })}

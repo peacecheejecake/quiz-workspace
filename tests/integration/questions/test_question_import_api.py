@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -204,6 +205,57 @@ def test_review_edits_answers_approves_and_freezes_published_drafts(seed: Any) -
 
     after = seed.draft_for(alice.drafts(run["id"]), 3)
     seed.problem(_patch(alice, after, stem="바꾼 문제"), 409, DRAFT_PUBLISHED)
+
+
+def test_generation_drafts_of_the_retired_qgen_are_no_longer_patchable(seed: Any) -> None:
+    """UX8-QGEN-DEAD: the review of generation drafts went with 변형 출제 (QGEN-RM); their rows
+    stay, but PATCH /question-drafts/{id} answers 404 for them and leaves the row as it was."""
+    alice = seed.client("qgen-dead-draft")
+    ws = alice.create_workspace()
+    run, drafts = alice.import_paper(ws["id"])
+    q2, q3 = seed.draft_for(drafts, 2), seed.draft_for(drafts, 3)
+    published = alice.ok_response(alice.publish(run["id"], [q2["id"]]), "POST", "p", (200,))
+    source = alice.get_question(published["items"][0]["question_id"])
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        row = conn.execute(
+            "with gen as (insert into public.question_generation_runs (workspace_id, created_by, "
+            "  source_question_id, source_question_revision_id, variation_types, status, "
+            "  finished_at) "
+            "  values (%s, %s, %s, %s, array['PARAPHRASE'], 'succeeded', now()) returning id) "
+            "insert into public.question_drafts (workspace_id, source_type, generation_run_id, "
+            "  position, question_type, payload) "
+            "select %s, 'generation', gen.id, 0, 'MCQ', d.payload "
+            "  from gen, public.question_drafts d where d.id = %s "
+            "returning id::text, updated_at",
+            (
+                ws["id"],
+                alice.user.id,
+                source["id"],
+                source["revision"]["id"],
+                ws["id"],
+                q3["id"],
+            ),
+        ).fetchone()
+    assert row is not None
+    draft_id, updated_at = row
+    # The draft's current version (api draft_version), so only the route's refusal can stop it.
+    version = format(
+        (updated_at - datetime(1970, 1, 1, tzinfo=UTC)) // timedelta(microseconds=1), "x"
+    )
+    generated = {"id": draft_id, "version": version}
+    seed.problem(_patch(alice, generated, review_status="approved"), 404)
+    seed.problem(_patch(alice, generated, stem="바꾼 문제"), 404)
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        after = conn.execute(
+            "select review_status, updated_at from public.question_drafts where id = %s",
+            (draft_id,),
+        ).fetchone()
+    assert after == ("pending", updated_at)
+    # Import drafts are still reviewed through the same route.
+    rejected = alice.ok_response(
+        _patch(alice, q3, review_status="rejected"), "PATCH", "reject", (200,)
+    )
+    assert rejected["review_status"] == "rejected"
 
 
 def test_rejected_drafts_stay_out_and_multi_answer_is_kept(seed: Any) -> None:

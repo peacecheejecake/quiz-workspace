@@ -13,7 +13,7 @@ Pipeline, serialised per mock exam by an advisory lock:
    types need the feature (`WORKER_MOCK_EXAMS`) and an LLM (`mock_llm_disabled`);
 2. mark it running and create the per-item checkpoints once (`mock_exam_generation_items`);
 3. `OPTION_SHUFFLE` items: the pinned revision copied with a seeded option order (no LLM);
-4. AI items: each source's cited-page passages (shared helpers of `question.generate`), packed
+4. AI items: each source's cited-page passages (`quiz_worker.question_sources`), packed
    into as few calls as the budgets allow (`book_core.mock_exam.pack_batches`); oversized
    sources are narrowed or skipped `source_too_large`. Batches run up to
    `MOCK_EXAM_GENERATION_CONCURRENCY` at a time; each answered batch is validated item by item

@@ -83,9 +83,10 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // 15 v1.1 colors + 6 v1.1.1 additions (border-strong, on-accent, danger/success/warning, scrim)
     // + 4 v1.2 additions (glass-solid, state-hover/pressed/selected)
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
-    // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border).
-    expect(Object.keys(docLight)).toHaveLength(32);
-    expect(Object.keys(docDark)).toHaveLength(32);
+    // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
+    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
+    expect(Object.keys(docLight)).toHaveLength(37);
+    expect(Object.keys(docDark)).toHaveLength(37);
     // 32 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
     // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
     expect(Object.keys(docRoot)).toHaveLength(74);
@@ -123,6 +124,15 @@ describe('generated tokens.css', () => {
     expect(explicitLight).toEqual(themedLight);
   });
 
+  // HEATMAP-PALETTE (2026-11-04): the light palette is the user's exact choice.
+  it('light question status tokens are the HEATMAP-PALETTE values', () => {
+    expect(themedTokens.light['question-status-incorrect']).toBe('#FF6060');
+    expect(themedTokens.light['question-status-correct']).toBe('#00AB7B');
+    expect(themedTokens.light['question-status-retry']).toBe('#F6CF35');
+    expect(themedTokens.light['question-status-viewed']).toBe('#ACB6C2');
+    expect(themedTokens.light['question-status-unseen']).toBe('#E7ECF0');
+  });
+
   it.each(['light', 'dark'] as const)('every question status token exists in %s', (theme) => {
     const decls = theme === 'light' ? genLight : genDark;
     expect(questionStatuses).toEqual(EXPECTED_STATUSES);
@@ -152,12 +162,21 @@ describe('generated TS module', () => {
   });
 
   it('exposes breakpoints and media queries derived from the breakpoint tokens', () => {
-    expect(breakpoints).toEqual({ md: 768, lg: 1024 });
+    expect(breakpoints).toEqual({ md: 768, lg: 1024, pairedPanel: 868 });
     expect(mediaQueries).toEqual({
       mobile: '(width < 768px)',
       tabletUp: '(width >= 768px)',
       desktop: '(width >= 1024px)',
+      pairedSheet: '(width < 868px)',
     });
+  });
+
+  it('the paired-dialog breakpoint fits panel + gaps + dialog minimum (design-system §5.6)', () => {
+    const px = (name: keyof typeof staticTokens) => Number.parseInt(staticTokens[name], 10);
+    // panel + right margin 16 + gap 16 + dialog minimum + left margin 16
+    expect(breakpoints.pairedPanel).toBe(
+      px('floating-panel-width') + 3 * 16 + px('paired-dialog-min-width'),
+    );
   });
 });
 
@@ -199,7 +218,7 @@ describe('density (design-system.md §4, v1.2.2)', () => {
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
     expect(staticTokens['heatmap-cell']).toBe('24px');
-    expect(staticTokens['heatmap-cell-touch']).toBe('32px');
+    expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
     expect(staticTokens['heatmap-dot']).toBe('16px');
     expect(staticTokens['heatmap-gap']).toBe('0px');
   });

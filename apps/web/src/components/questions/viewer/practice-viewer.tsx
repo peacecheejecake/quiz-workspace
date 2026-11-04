@@ -41,8 +41,9 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
-import { displayStem } from '@/lib/questions/display-stem';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
   canSubmit,
@@ -53,7 +54,8 @@ import {
   type Neighbors,
   type PracticeAnswer,
 } from './practice-model';
-import { QuestionBody } from './question-body';
+import { QuestionBody, QuestionStem } from './question-body';
+import { QuestionSourcePreview } from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
@@ -65,9 +67,12 @@ export interface PracticeQuestion {
   /** Overview preview (first lines of the stem), shown until the session arrives. */
   readonly preview: string;
   readonly isFavorite: boolean;
+  /** The flags to show: a change being saved shows at once (UX9-RETRY-OPT, optimistic). */
   readonly needsRetry: boolean;
-  /** A favorite/retry change is being saved: the toggles show the saved state and wait. */
-  readonly savingFlags?: boolean;
+  /** The last graded result: `다시 풀기` is offered only after a correct one (RETRY-CORRECT). */
+  readonly lastGradedResult: 'correct' | 'incorrect' | null;
+  /** The latest submission waits for self-grading: the toggle stays hidden until it is graded. */
+  readonly isPendingGrading: boolean;
 }
 
 export interface PracticeViewerProps {
@@ -379,7 +384,7 @@ export function PracticeViewer({
             <StudyToggles
               favorite={view.isFavorite}
               retry={view.needsRetry}
-              saving={view.savingFlags === true}
+              retryAvailable={view.lastGradedResult === 'correct' && !view.isPendingGrading}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}
@@ -392,36 +397,68 @@ export function PracticeViewer({
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
+          {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
+          <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
           {readOnly ? (
             <>
               <p className={styles.notice}>
                 보관된 Workspace는 읽기 전용입니다. 문제를 풀거나 학습 상태를 바꿀 수 없습니다.
               </p>
-              <p className={styles.stem}>{displayStem(view.preview)}</p>
+              <QuestionStem stem={view.preview} />
             </>
           ) : ready ? (
-            <form
-              id={formId}
-              className={styles.form}
-              onSubmit={(e) => void submit(e)}
-              aria-busy={work.busy !== null || undefined}
-              noValidate
-            >
-              <QuestionBody
-                kind="answer"
-                stem={ready.stem}
-                question={ready}
-                answer={work.answer}
-                disabled={locked}
-                onAnswerChange={(answer) => {
-                  if (workId) updateWork(workId, () => ({ answer }));
-                }}
-                outcome={outcome}
-                selfGrade={work.selfGrade}
-                error={work.error}
-                resultRef={resultRef}
-              />
-            </form>
+            <>
+              <form
+                id={formId}
+                className={styles.form}
+                onSubmit={(e) => void submit(e)}
+                aria-busy={work.busy !== null || undefined}
+                noValidate
+              >
+                <QuestionBody
+                  kind="answer"
+                  stem={ready.stem}
+                  question={ready}
+                  answer={work.answer}
+                  disabled={locked}
+                  onAnswerChange={(answer) => {
+                    if (workId) updateWork(workId, () => ({ answer }));
+                  }}
+                  outcome={outcome}
+                  selfGrade={work.selfGrade}
+                  error={work.error}
+                  resultRef={resultRef}
+                  highlighting={{
+                    questionId: view.id,
+                    revisionId: ready.question_revision_id,
+                    chapterTitle: view.chapterTitle,
+                  }}
+                />
+              </form>
+              {outcome ? (
+                // AIEXPL-01: only once this session was submitted (nothing is read before).
+                <AiExplanation
+                  workspaceId={workspaceId}
+                  target={{ kind: 'question', id: ready.question_id }}
+                  gate={{ practice_session_id: ready.id }}
+                  options={ready.options}
+                  askAttachment={{
+                    kind: 'question',
+                    view: 'practice',
+                    question_id: ready.question_id,
+                    practice_session_id: ready.id,
+                  }}
+                />
+              ) : null}
+              {outcome ? (
+                // RELSRC-01: under the AI 해설, also only once this session was submitted.
+                <RelatedSources
+                  workspaceId={workspaceId}
+                  target={{ kind: 'question', id: ready.question_id }}
+                  gate={{ practice_session_id: ready.id }}
+                />
+              ) : null}
+            </>
           ) : state.status === 'error' ? (
             <div role="alert" className={styles.error}>
               <p>{state.message}</p>
@@ -431,7 +468,7 @@ export function PracticeViewer({
             </div>
           ) : (
             <div aria-busy="true">
-              <p className={styles.stem}>{displayStem(view.preview)}</p>
+              <QuestionStem stem={view.preview} />
               <p className={styles.loading}>문제를 불러오는 중입니다…</p>
             </div>
           )}
@@ -441,35 +478,35 @@ export function PracticeViewer({
   );
 }
 
-/** Favorite / retry toggles of a bank question (practice, sequence(bank)). */
+/**
+ * Favorite / retry toggles of a bank question (practice, sequence(bank)). UX9-RETRY-OPT: they are
+ * never busy — the caller shows each press at once and saves it in the background (FlagSync), so
+ * pressing one never changes the other. RETRY-CORRECT: `다시 풀기` is not rendered at all unless
+ * `retryAvailable` (the last graded result is correct), even when the flag is still on.
+ */
 export function StudyToggles({
   favorite,
   retry,
-  saving,
+  retryAvailable,
   onChange,
 }: {
   readonly favorite: boolean;
   readonly retry: boolean;
-  /** A change is being saved: the toggles show the saved state and wait. */
-  readonly saving: boolean;
+  readonly retryAvailable: boolean;
   readonly onChange: (flags: { is_favorite?: boolean; needs_retry?: boolean }) => void;
 }) {
   return (
     <>
       <FavoriteToggle
         pressed={favorite}
-        aria-disabled={saving || undefined}
-        onPressedChange={(pressed) => {
-          if (!saving) onChange({ is_favorite: pressed });
-        }}
+        onPressedChange={(pressed) => onChange({ is_favorite: pressed })}
       />
-      <RetryToggle
-        pressed={retry}
-        aria-disabled={saving || undefined}
-        onPressedChange={(pressed) => {
-          if (!saving) onChange({ needs_retry: pressed });
-        }}
-      />
+      {retryAvailable ? (
+        <RetryToggle
+          pressed={retry}
+          onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
+        />
+      ) : null}
     </>
   );
 }

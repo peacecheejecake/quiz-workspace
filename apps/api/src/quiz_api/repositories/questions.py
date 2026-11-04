@@ -37,6 +37,7 @@ from quiz_api.repositories.tables import (
     activity_events,
     chapters,
     documents,
+    question_chapter_changes,
     question_lineage,
     question_revisions,
     question_sources,
@@ -45,6 +46,11 @@ from quiz_api.repositories.tables import (
 
 # Sort key for questions without a display number (int4 max): they follow numbered ones.
 UNNUMBERED = 2147483647
+
+# UX9 (docs/questions.md §14.1): how a question's chapter was decided.
+ChapterSource = Literal["manual", "auto"]
+# Why a chapter changed (`question_chapter_changes.source`).
+ChapterChangeSource = Literal["manual", "recommendation", "edit", "import"]
 
 ActivityEventType = Literal[
     "question.created",
@@ -110,6 +116,7 @@ class QuestionRecord:
     updated_at: datetime
     revision: RevisionRecord
     sources: list[SourceRecord]
+    chapter_source: ChapterSource = "manual"
 
     def content(self) -> QuestionContent:
         rev = self.revision
@@ -185,6 +192,7 @@ _QUESTION_COLUMNS = (
     questions.c.publication_status,
     questions.c.origin,
     questions.c.chapter_id,
+    questions.c.chapter_source,
     questions.c.question_number,
     questions.c.sort_order,
     questions.c.created_at,
@@ -254,6 +262,7 @@ def _question(row: Any, sources: list[SourceRecord]) -> QuestionRecord:
         updated_at=row.updated_at,
         revision=_revision(row),
         sources=sources,
+        chapter_source=cast(ChapterSource, row.chapter_source),
     )
 
 
@@ -613,6 +622,10 @@ class QuestionRepository:
                 question_number=question_number,
                 publication_status="DRAFT",
                 created_by=actor_id,
+                # `manual` (column default); an import registration becomes `auto` through the
+                # question_drafts_register_chapter trigger when its draft is linked.
+                chapter_set_by=actor_id,
+                chapter_set_at=func.now(),
             )
         )
         revision_id = self._insert_revision(workspace_id, question_id, 1, content, actor_id)
@@ -656,6 +669,50 @@ class QuestionRepository:
             self._session.execute(
                 update(questions).where(questions.c.id == question_id).values(**values)
             )
+
+    def set_chapter(
+        self,
+        workspace_id: uuid.UUID,
+        moves: Sequence[tuple[uuid.UUID, uuid.UUID | None, uuid.UUID | None]],
+        *,
+        chapter_source: ChapterSource,
+        change_source: ChapterChangeSource,
+        actor_id: uuid.UUID,
+    ) -> None:
+        """Move questions to chapters (`moves`: question id, from chapter, to chapter): the
+        chapter, its source and setter, and one history row each. No revision is written (the
+        chapter is not part of the content, docs/questions.md §14.1). The caller holds the
+        documents and then the question rows locked (`lock_documents`, FOR UPDATE)."""
+        if not moves:
+            return
+        by_target: dict[uuid.UUID | None, list[uuid.UUID]] = {}
+        for question_id, _, to_chapter in moves:
+            by_target.setdefault(to_chapter, []).append(question_id)
+        for to_chapter, ids in by_target.items():
+            self._session.execute(
+                update(questions)
+                .where(questions.c.workspace_id == workspace_id, questions.c.id.in_(ids))
+                .values(
+                    chapter_id=to_chapter,
+                    chapter_source=chapter_source,
+                    chapter_set_by=actor_id,
+                    chapter_set_at=func.now(),
+                )
+            )
+        self._session.execute(
+            insert(question_chapter_changes),
+            [
+                {
+                    "workspace_id": workspace_id,
+                    "question_id": question_id,
+                    "from_chapter_id": from_chapter,
+                    "to_chapter_id": to_chapter,
+                    "source": change_source,
+                    "changed_by": actor_id,
+                }
+                for question_id, from_chapter, to_chapter in moves
+            ],
+        )
 
     def touch(self, question_id: uuid.UUID) -> None:
         """Bump `updated_at` (trigger) when only child rows changed."""

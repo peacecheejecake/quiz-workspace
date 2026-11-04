@@ -86,6 +86,17 @@ const overview: QuestionOverview = {
   })),
 };
 
+/** Question 1 was answered correctly: the only state where `다시 풀기` is offered (RETRY-01). */
+const correctOverview: QuestionOverview = {
+  ...overview,
+  counts: { ...overview.counts, unseen: 2, correct: 1 },
+  items: overview.items.map((item, i) =>
+    i === 0
+      ? { ...item, status: 'correct' as const, last_graded_result: 'correct' as const }
+      : item,
+  ),
+};
+
 function session(n: number) {
   return {
     ok: true,
@@ -548,11 +559,11 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
         status: 'retry',
         is_favorite: false,
         needs_retry: true,
-        last_graded_result: null,
+        last_graded_result: 'correct',
       },
     });
     submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o1'] }));
-    render(<Screen />);
+    render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
@@ -1112,3 +1123,371 @@ describe(
     });
   },
 );
+
+interface Ctx {
+  user: ReturnType<typeof userEvent.setup>;
+  panel: HTMLElement;
+  held: { resolve: (value: unknown) => void }[];
+}
+
+describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice panel', () => {
+  interface Flags {
+    is_favorite: boolean;
+    needs_retry: boolean;
+  }
+  interface Held {
+    patch: Partial<Flags>;
+    resolve: (value: unknown) => void;
+  }
+  let held: Held[] = [];
+  beforeEach(() => {
+    held = [];
+    setMyStateAction.mockImplementation(
+      (_ws: string, _qid: string, patch: Partial<Flags>) =>
+        new Promise((resolve) => held.push({ patch, resolve })),
+    );
+  });
+  const myStateOf = (flags: Flags) => ({
+    ok: true,
+    data: {
+      question_id: id(1),
+      status: flags.needs_retry ? 'retry' : 'correct',
+      last_graded_result: 'correct',
+      ...flags,
+    },
+  });
+  const answer = (i: number, flags: Flags) => act(async () => held[i]?.resolve(myStateOf(flags)));
+  const toggles = (panel: HTMLElement) => {
+    const found = within(panel)
+      .getAllByRole('button')
+      .filter((b) => b.classList.contains('qz-study-toggle'));
+    return { favorite: found[0] as HTMLElement, retry: found[1] as HTMLElement };
+  };
+  const snapshot = (el: Element) =>
+    ['aria-label', 'data-state', 'aria-disabled', 'disabled', 'title']
+      .map((a) => `${a}=${el.getAttribute(a)}`)
+      .join(' ');
+  // The heatmap is hidden from the accessibility tree while the modal panel is open.
+  const markerShape = () =>
+    document
+      .querySelector(`[data-question-id="${id(1)}"] [data-testid="question-marker"]`)
+      ?.getAttribute('data-shape');
+  async function openPanel() {
+    const user = userEvent.setup();
+    render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    return { user, panel };
+  }
+
+  it('the retry toggle and the dot flip before the server answers, without a busy state', async () => {
+    const { user, panel } = await openPanel();
+    await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
+    const retry = within(panel).getByRole('button', { name: '다시 풀기 해제' });
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(retry).not.toHaveAttribute('aria-disabled');
+    expect(held).toHaveLength(1);
+    expect(dotStatus(1)).toBe('retry');
+    await answer(0, { is_favorite: false, needs_retry: true });
+    expect(within(panel).getByRole('button', { name: '다시 풀기 해제' })).toBe(retry);
+    expect(dotStatus(1)).toBe('retry');
+  });
+
+  it('toggling favorite never changes the retry toggle, before or after the response', async () => {
+    const { user, panel } = await openPanel();
+    await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
+    await answer(0, { is_favorite: false, needs_retry: true });
+    const retry = within(panel).getByRole('button', { name: '다시 풀기 해제' });
+    const before = snapshot(retry);
+    const seen = new Set<string>();
+    const observer = new MutationObserver(() => {
+      const now = within(panel).queryByRole('button', { name: /다시 풀기/ });
+      seen.add(now === retry ? snapshot(retry) : 'remounted');
+    });
+    observer.observe(panel, { subtree: true, attributes: true, childList: true });
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    expect(snapshot(retry)).toBe(before);
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    await answer(1, { is_favorite: true, needs_retry: true });
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    observer.disconnect();
+    expect(snapshot(retry)).toBe(before);
+    expect([...seen].filter((s) => s !== before)).toEqual([]);
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }, { is_favorite: true }]);
+  });
+
+  it('rapid presses end in the last intent: one request at a time, coalesced', async () => {
+    const { user, panel } = await openPanel();
+    const { retry } = toggles(panel);
+    await user.click(retry); // on (sent)
+    await user.click(retry); // off
+    await user.click(retry); // on
+    await user.click(retry); // off
+    expect(retry).toHaveAttribute('data-state', 'off');
+    expect(held).toHaveLength(1);
+    // The first response (on) is older than the last intent (off): the toggle keeps the intent
+    // and the difference goes in the next request.
+    await answer(0, { is_favorite: false, needs_retry: true });
+    expect(retry).toHaveAttribute('data-state', 'off');
+    expect(dotStatus(1)).not.toBe('retry');
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }, { needs_retry: false }]);
+    await answer(1, { is_favorite: false, needs_retry: false });
+    expect(retry).toHaveAttribute('data-state', 'off');
+    expect(held).toHaveLength(2);
+  });
+
+  it('presses on both toggles while one request is in flight go in one next request', async () => {
+    const { user, panel } = await openPanel();
+    const { favorite, retry } = toggles(panel);
+    await user.click(favorite);
+    await user.click(retry);
+    await user.click(favorite);
+    await user.click(favorite);
+    expect(held).toHaveLength(1);
+    await answer(0, { is_favorite: true, needs_retry: false });
+    expect(held.map((h) => h.patch)).toEqual([{ is_favorite: true }, { needs_retry: true }]);
+    await answer(1, { is_favorite: true, needs_retry: true });
+    expect(favorite).toHaveAttribute('data-state', 'on');
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(markerShape()).toBe('star');
+    expect(dotStatus(1)).toBe('retry');
+  });
+
+  it('a failed request rolls only its own field back and reports it; the other press is saved', async () => {
+    const { user, panel } = await openPanel();
+    const { favorite, retry } = toggles(panel);
+    await user.click(retry);
+    await user.click(favorite);
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(favorite).toHaveAttribute('data-state', 'on');
+    await act(async () =>
+      held[0]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+    expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+    expect(retry).toHaveAttribute('data-state', 'off');
+    expect(favorite).toHaveAttribute('data-state', 'on');
+    expect(held.map((h) => h.patch)).toEqual([{ needs_retry: true }, { is_favorite: true }]);
+    await answer(1, { is_favorite: true, needs_retry: false });
+    expect(favorite).toHaveAttribute('data-state', 'on');
+    expect(retry).toHaveAttribute('data-state', 'off');
+    expect(markerShape()).toBe('star');
+    expect(dotStatus(1)).not.toBe('retry');
+  });
+
+  it('RETRY-01-C04 a refused retry (409) shows the dedicated message and hides the toggle', async () => {
+    lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: outsidePlaced(1) });
+    const { user, panel } = await openPanel();
+    await user.click(toggles(panel).retry);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: false,
+        kind: 'retryNotAllowed',
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      }),
+    );
+    expect(
+      await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+    );
+    expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(1));
+    expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
+  });
+
+  // RETRY-01-C04: a refused retry (409) re-reads the question while the user keeps working. Per
+  // field (favorite, retry flag, grading) the server's answer counts only if this screen did not
+  // change the field after the lookup started; the toggle follows the merged state.
+  describe.each([
+    {
+      name: 'nothing changed meanwhile: the server wins and the toggle is hidden',
+      meanwhile: async () => undefined,
+      expectState: async (panel: HTMLElement) => {
+        expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
+        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+      },
+    },
+    {
+      name: 'a favorite pressed meanwhile stays on, the toggle is hidden',
+      meanwhile: async ({
+        user,
+        panel,
+      }: {
+        user: ReturnType<typeof userEvent.setup>;
+        panel: HTMLElement;
+      }) => {
+        await user.click(toggles(panel).favorite);
+      },
+      expectState: async (panel: HTMLElement) => {
+        expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute(
+          'data-state',
+          'on',
+        );
+        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+      },
+    },
+    {
+      name: 'a correct answer and a saved retry ON meanwhile stay on',
+      meanwhile: async ({ user, panel, held }: Ctx) => {
+        submitPracticeAction.mockResolvedValue(
+          submitted('correct', { correct_option_ids: ['o1'] }),
+        );
+        await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
+        await user.click(within(panel).getByRole('button', { name: '제출' }));
+        await within(panel).findByText('정답입니다.');
+        await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
+        await act(async () =>
+          held[1]?.resolve({
+            ok: true,
+            data: {
+              question_id: id(1),
+              status: 'retry',
+              is_favorite: false,
+              needs_retry: true,
+              last_graded_result: 'correct',
+            },
+          }),
+        );
+      },
+      expectState: async (panel: HTMLElement) => {
+        expect(within(panel).getByRole('button', { name: '다시 풀기 해제' })).toHaveAttribute(
+          'data-state',
+          'on',
+        );
+        expect(dotStatus(1)).toBe('retry');
+      },
+    },
+    {
+      name: 'an incorrect answer meanwhile: no retry flag, the toggle is hidden',
+      meanwhile: async ({ user, panel }: Ctx) => {
+        submitPracticeAction.mockResolvedValue(
+          submitted('incorrect', { correct_option_ids: ['o2'] }),
+        );
+        await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
+        await user.click(within(panel).getByRole('button', { name: '제출' }));
+        await within(panel).findByText('오답입니다.');
+      },
+      expectState: async (panel: HTMLElement) => {
+        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+        expect(dotStatus(1)).toBe('incorrect');
+      },
+    },
+  ])('RETRY-01-C04 re-read after a refused retry', ({ name, meanwhile, expectState }) => {
+    it(name, async () => {
+      let release!: (value: unknown) => void;
+      lookupOverviewQuestionAction.mockImplementation(
+        () => new Promise((resolve) => (release = resolve)),
+      );
+      const opened = await openPanel();
+      await opened.user.click(toggles(opened.panel).retry);
+      await act(async () =>
+        held[0]?.resolve({
+          ok: false,
+          kind: 'retryNotAllowed',
+          message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+        }),
+      );
+      await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.');
+      // The server's answer (never graded, no flags) arrives after whatever happened meanwhile.
+      await meanwhile({ ...opened, held });
+      await act(async () => release({ ok: true, data: outsidePlaced(1) }));
+      await waitFor(async () => expectState(opened.panel));
+    });
+  });
+
+  async function refuseRetry(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement) {
+    await user.click(toggles(panel).retry);
+    await act(async () =>
+      held[0]?.resolve({
+        ok: false,
+        kind: 'retryNotAllowed',
+        message: '정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.',
+      }),
+    );
+    await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.');
+  }
+
+  it('RETRY-01-C04 a favorite still being saved survives an overview refresh after the re-read', async () => {
+    let release!: (value: unknown) => void;
+    lookupOverviewQuestionAction.mockImplementation(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const user = userEvent.setup();
+    const { rerender } = render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await refuseRetry(user, panel);
+    await user.click(toggles(panel).favorite); // held[1]: the save is in flight
+    await act(async () => release({ ok: true, data: outsidePlaced(1) }));
+    // A newer server overview arrives (it does not know the favorite yet) before the save ends.
+    rerender(
+      <Screen
+        data={{ ...correctOverview, items: [...correctOverview.items] }}
+        filters={EMPTY_OVERVIEW_FILTERS}
+      />,
+    );
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toHaveAttribute(
+      'data-state',
+      'on',
+    );
+  });
+
+  it('RETRY-01-C04 a failed favorite save does not stamp the retry flag of the re-read', async () => {
+    let release!: (value: unknown) => void;
+    lookupOverviewQuestionAction.mockImplementation(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const { user, panel } = await openPanel();
+    await refuseRetry(user, panel);
+    await user.click(toggles(panel).favorite);
+    await act(async () =>
+      held[1]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+    // The server has the retry flag on (set long ago): the favorite failure did not touch it.
+    const server = outsidePlaced(1);
+    await act(async () =>
+      release({
+        ok: true,
+        data: { ...server, item: { ...server.item, status: 'retry', needs_retry: true } },
+      }),
+    );
+    await waitFor(() => expect(dotStatus(1)).toBe('retry'));
+    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+  });
+
+  it('a rejected request after a saved change keeps the saved change', async () => {
+    const { user, panel } = await openPanel();
+    const { favorite, retry } = toggles(panel);
+    await user.click(retry);
+    await answer(0, { is_favorite: false, needs_retry: true });
+    await user.click(favorite);
+    await act(async () => held[1]?.resolve(Promise.reject(new TypeError('Failed to fetch'))));
+    expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+    expect(favorite).toHaveAttribute('data-state', 'off');
+    expect(retry).toHaveAttribute('data-state', 'on');
+    expect(dotStatus(1)).toBe('retry');
+  });
+
+  it('a save of a deep-linked question outside the list settles after another question opened', async () => {
+    const user = userEvent.setup();
+    const navigate = (search: string) =>
+      act(async () => {
+        realPushState(null, '', `${PATH}${search}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
+    render(<Screen data={only(1, 3)} requested={outsidePlaced(2)} />);
+    let panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
+    await navigate(`?favorite=true&question=${id(1)}`);
+    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await act(async () =>
+      held[0]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+    expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+    await navigate(`?favorite=true&question=${id(2)}`);
+    panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
+  });
+});

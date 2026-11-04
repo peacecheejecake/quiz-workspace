@@ -11,7 +11,16 @@
 // again. Nothing here shows answers: the scan has none. The merge goes in requests within the
 // API's limits (mergeBatches, Codex P2); if one fails, the rest of the plan (same keeps) stays
 // and `이어서 정리` resumes it — every request is idempotent — or `다시 검사` starts over.
-import { Badge, Button, Checkbox, ConfirmDialog, EmptyState, RadioGroup, useToast } from '@quiz/ui';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  RadioGroup,
+  useToast,
+  useUnsavedChanges,
+} from '@quiz/ui';
 import { useEffect, useId, useRef, useState } from 'react';
 import { mergeDuplicatesAction, scanDuplicatesAction } from '@/lib/questions/actions';
 import {
@@ -179,6 +188,15 @@ export function QuestionDuplicates({
 
   const groups = scan.status === 'ready' ? scan.groups : [];
   const count = archivedCount(groups, choices);
+  // HOMEDLG-01: a changed 남길 문제 or 정리 choice is unsaved input (the backdrop keeps it).
+  useUnsavedChanges(
+    groups.some((g) => {
+      const choice = choices.get(g.fingerprint);
+      return (
+        choice !== undefined && (choice.keep !== g.suggested_keep_question_id || !choice.include)
+      );
+    }),
+  );
 
   function choose(group: DuplicateGroup, patch: { keep?: string; include?: boolean }) {
     setChoices((prev) => {

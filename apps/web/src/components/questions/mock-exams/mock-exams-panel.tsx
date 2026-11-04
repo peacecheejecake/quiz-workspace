@@ -1,7 +1,7 @@
 'use client';
 
-// MOCK-01 모의고사 (docs/screens/mock-exams.md): the workspace home's non-modal floating dialog
-// (`?panel=mock-exams`, the DOC-01 list dialog pattern), opened from `문제 › 모의고사` by every
+// MOCK-01 모의고사 (docs/screens/mock-exams.md): the workspace home's modal floating dialog
+// (UX9, HOMEDLG-01; `?panel=mock-exams`, the DOC-01 list dialog pattern), opened from `문제 › 모의고사` by every
 // member. It opens at once with a skeleton (aria-busy) and shows one of three views in place,
 // each with a heading that takes focus:
 //   list    "모의고사 n개" + `추가` (editors of an active workspace), one row per mock exam (name →
@@ -50,6 +50,7 @@ import {
   type MockExam,
   type MockExamList,
 } from './mock-exam-model';
+import { formatDateTime } from '../labels';
 import { RenameField } from './rename-field';
 import styles from './mock-exams.module.css';
 
@@ -61,7 +62,6 @@ type Load<T> =
 export interface MockExamsPanelProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly raiseKey?: number;
   readonly container: HTMLElement | null;
   readonly workspaceId: string;
   /** Owner or editor of an active workspace (FastAPI re-checks every write). */
@@ -78,7 +78,6 @@ export interface MockExamsPanelProps {
 export function MockExamsPanel({
   open,
   onOpenChange,
-  raiseKey,
   container,
   workspaceId,
   canEdit,
@@ -353,8 +352,6 @@ export function MockExamsPanel({
     <FloatingSidePanel
       open={open}
       onOpenChange={onOpenChange}
-      raiseKey={raiseKey}
-      modal={false}
       container={container}
       title="모의고사"
       titleRef={titleRef}
@@ -534,7 +531,10 @@ function ListRow({
           )}
           <Badge tone={STATUS_TONES[exam.status]}>{STATUS_LABELS[exam.status]}</Badge>
         </div>
-        <p className={styles.meta}>{metaText(exam)}</p>
+        <p className={styles.meta}>
+          {metaText(exam)} ·{' '}
+          <time dateTime={exam.created_at}>{formatDateTime(exam.created_at)}</time>
+        </p>
         {generating ? (
           <ProgressBar
             label="문제 생성 진행률"

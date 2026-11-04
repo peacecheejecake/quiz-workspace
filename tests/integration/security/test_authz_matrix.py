@@ -55,6 +55,18 @@ OWNER_READ = Rule(OWNERS, writes=False)
 # QVIEW-B practice runs: personal, so creating and finishing one is allowed when archived.
 RUN_CREATE = Rule(ALL, writes=True, archived_ok=True)
 OWN_RUN_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# UX9-HL-B highlights: personal and the one write an archived workspace allows
+# (HILITE-01-C01).
+HIGHLIGHT_CREATE = Rule(ALL, writes=True, archived_ok=True)
+OWN_HIGHLIGHT = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# ASK-B AI question conversations: the creator's only; deleting, detaching, stopping and feedback
+# are allowed on an archived workspace (ASK-01-C01).
+OWN_ARCHIVED_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
+# EXPL-B AI explanations: reading the 모의고사 문제 관리 view (`view=manage`) is for editors;
+# creating is any member's write but not executed here (an equal, separate object from
+# PRACTICE: the feature is off on this stack, so an executed call would be 409).
+EDIT_READ = Rule(EDITORS, writes=False)
+EXPLAIN_CREATE = Rule(ALL, writes=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -117,6 +129,10 @@ RULES: dict[str, Rule | str] = {
     # UX7-DEDUP: the scan only serves the merge, so both are question edits (archived 403).
     "listQuestionDuplicates": EDIT,
     "mergeQuestionDuplicates": EDIT,
+    # UX9-REDIST-B: the list and preview only serve the move, so all three are question edits.
+    "listChapterRedistributionQuestions": EDIT,
+    "previewChapterRedistribution": EDIT,
+    "assignQuestionChapters": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
@@ -128,6 +144,8 @@ RULES: dict[str, Rule | str] = {
     "listChapterNotes": READ,
     "getChapterNote": READ,
     "createChapterNote": EDIT,
+    # footnote previews (CHNOTE-02-C01)
+    "getQuestionPreview": READ,
     # mock exams (MOCK-01-C05)
     "listMockExams": READ,
     "createMockExam": EDIT,
@@ -141,7 +159,46 @@ RULES: dict[str, Rule | str] = {
     # MOCK-P mock exam practice: personal like bank practice
     "startMockPracticeSession": PRACTICE,
     "submitMockPracticeSession": OWN_WRITE,
+    # ASK-B AI questions (ASK-01-C01): members create, the creator alone reaches a conversation
+    "getAskState": READ,
+    "listAskConversations": READ,
+    "createAskConversation": PRACTICE,
+    "getAskConversation": OWN_READ,
+    "deleteAskConversation": OWN_ARCHIVED_WRITE,
+    "detachAskQuestion": OWN_ARCHIVED_WRITE,
+    "askQuestion": OWN_WRITE,
+    "getAskMessage": OWN_READ,
+    "streamAskAnswer": OWN_READ,
+    "cancelAskAnswer": OWN_ARCHIVED_WRITE,
+    "retryAskAnswer": OWN_WRITE,
+    "regenerateAskAnswer": OWN_WRITE,
+    "setAskFeedback": OWN_ARCHIVED_WRITE,
+    # EXPL-B AI explanations (AIEXPL-01-C01/C02/C09), called with `view=detail` / `view=manage`
+    "getQuestionAiExplanation": READ,
+    "createQuestionAiExplanation": EXPLAIN_CREATE,
+    "regenerateQuestionAiExplanation": EDIT,
+    "streamQuestionAiExplanation": READ,
+    "getMockExamQuestionAiExplanation": EDIT_READ,
+    "createMockExamQuestionAiExplanation": EDIT,
+    "regenerateMockExamQuestionAiExplanation": EDIT,
+    "streamMockExamQuestionAiExplanation": EDIT_READ,
     "selfGradeMockPracticeSession": OWN_WRITE,
+    # UX9-HL-B personal highlights (reads are the caller's rows only; HILITE-01-C01)
+    "listChapterHighlights": READ,
+    "listChapterlessHighlights": READ,
+    "listQuestionHighlights": READ,
+    "createHighlight": HIGHLIGHT_CREATE,
+    "updateHighlight": OWN_HIGHLIGHT,
+    "deleteHighlight": OWN_HIGHLIGHT,
+    "restoreHighlight": OWN_HIGHLIGHT,
+    # RELSRC-B related passages, called with the proof in QUERY below: `view=detail` is a read of
+    # any member (computed, not stored, when archived); `view=manage` needs edit rights and an
+    # active workspace (403 workspace-archived), like an edit.
+    "getQuestionRelatedSources": READ,
+    # QSRC-01-C03: any member, viewer included
+    "getQuestionSourceRegion": READ,
+    "getMockExamQuestionSourceRegion": READ,
+    "getMockExamQuestionRelatedSources": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
     "listWorkspaceActivities": READ,
@@ -168,9 +225,12 @@ RULES: dict[str, Rule | str] = {
     "startWorkspaceFork": SHARED,
     "listSharedQuestions": SHARED,
     "getSharedQuestion": SHARED,
+    "getSharedQuestionRelatedSources": SHARED,
     "searchSharedWorkspace": SHARED,
     "listSharedChapterNotes": SHARED,
     "getSharedChapterNote": SHARED,
+    "getSharedQuestionPreview": SHARED,
+    "getSharedQuestionAiExplanation": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
@@ -227,6 +287,17 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
                 }
             ]
         },
+        "previewChapterRedistribution": {"all": True},
+        "assignQuestionChapters": {
+            "source": "manual",
+            "items": [
+                {
+                    "question_id": ids["question_id"],
+                    "chapter_id": None,
+                    "expected_chapter_id": None,
+                }
+            ],
+        },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},
         "searchWorkspace": {"query": "S4"},
@@ -253,8 +324,35 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "submitMockPracticeSession": {"selected_option_ids": ["opt-1"]},
         "selfGradeMockPracticeSession": {"result": "correct"},
         "updateShareLink": {"allow_fork": False},
+        "createHighlight": {
+            "target": {"kind": "explanation", "question_id": ids["question_id"]},
+            "anchor": {"block": "p0", "start": 0, "end": 1},
+            "color": "yellow",
+        },
+        "updateHighlight": {"color": "blue", "version": 1},
+        "createAskConversation": {},
+        "askQuestion": {"question": "S4 질문"},
+        "setAskFeedback": {"reason": "other"},
+        "createQuestionAiExplanation": {"view": "detail"},
+        "regenerateQuestionAiExplanation": {"view": "detail"},
+        "createMockExamQuestionAiExplanation": {"view": "manage"},
+        "regenerateMockExamQuestionAiExplanation": {"view": "manage"},
     }
     return bodies.get(op_id)
+
+
+# Query strings an operation needs so that authorization (not a missing proof or a missing
+# required parameter, 422) decides.
+QUERY: dict[str, str] = {
+    "listChapterlessHighlights": "?chapter=none",
+    "getQuestionRelatedSources": "?view=detail",
+    "getMockExamQuestionRelatedSources": "?view=manage",
+    # EXPL-B: the AI explanation reads carry their gate in the query string (AIEXPL-01-C01).
+    "getQuestionAiExplanation": "?view=detail",
+    "streamQuestionAiExplanation": "?view=detail",
+    "getMockExamQuestionAiExplanation": "?view=manage",
+    "streamMockExamQuestionAiExplanation": "?view=manage",
+}
 
 
 def _op(s4: Any, op_id: str) -> Any:
@@ -277,7 +375,10 @@ def call(
         headers["Cookie"] = cookie
     body = body_for(op.operation_id, ids)
     res: httpx.Response = http.request(
-        op.method, f"{s4.API}{op.url(ids)}", json=body, headers=headers
+        op.method,
+        f"{s4.API}{op.url(ids)}{QUERY.get(op.operation_id, '')}",
+        json=body,
+        headers=headers,
     )
     http.cookies.clear()
     return res
@@ -609,7 +710,7 @@ def test_practice_routes_never_reveal_answers_before_submission(world: Any) -> N
             learner.call("GET", f"/workspaces/{wid}/attempts"),
             learner.call("GET", f"/questions/{qid}/attempts"),
             learner.call("GET", f"/workspaces/{wid}/activities"),
-            learner.call("PATCH", f"/questions/{qid}/my-state", {"needs_retry": True}),
+            learner.call("PATCH", f"/questions/{qid}/my-state", {"is_favorite": True}),
             # MOCK-P: the mock exam copy of the question (보기 섞기 keeps its explanation).
             learner.call(
                 "POST",

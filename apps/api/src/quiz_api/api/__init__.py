@@ -8,12 +8,16 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from quiz_api.api import (
+    ai_explanations,
+    ask,
     chapter_notes,
+    chapter_redistribution,
     document_export,
     document_revisions,
     document_summaries,
     documents,
     forks,
+    highlights,
     history,
     jobs,
     me,
@@ -24,11 +28,15 @@ from quiz_api.api import (
     question_duplicates,
     question_imports,
     question_overview,
+    question_previews,
     questions,
+    related_sources,
     search,
     share_links,
     shared,
+    shared_ai_explanations,
     shared_chapter_notes,
+    source_region,
     workspaces,
 )
 from quiz_api.errors import problem_responses
@@ -47,6 +55,7 @@ api_router.include_router(search.router)
 api_router.include_router(questions.router)
 api_router.include_router(question_overview.router)
 api_router.include_router(question_duplicates.router)
+api_router.include_router(chapter_redistribution.router)
 api_router.include_router(question_imports.router)
 api_router.include_router(practice.router)
 api_router.include_router(practice_runs.router)
@@ -57,5 +66,14 @@ api_router.include_router(jobs.router)
 api_router.include_router(history.router)
 api_router.include_router(chapter_notes.router)
 api_router.include_router(shared_chapter_notes.router)
+api_router.include_router(question_previews.router)
+api_router.include_router(question_previews.shared_router)
 api_router.include_router(mock_exams.router)
 api_router.include_router(mock_practice.router)
+api_router.include_router(highlights.router)
+api_router.include_router(ask.router)
+api_router.include_router(related_sources.router)
+api_router.include_router(related_sources.shared_router)
+api_router.include_router(source_region.router)
+api_router.include_router(ai_explanations.router)
+api_router.include_router(shared_ai_explanations.router)

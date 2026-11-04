@@ -14,7 +14,12 @@ export {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from './primitives/DropdownMenu';
 export type {
@@ -79,7 +84,14 @@ export type {
 export { Textarea } from './primitives/Textarea';
 export type { TextareaProps } from './primitives/Textarea';
 export { Tooltip } from './primitives/Tooltip';
-export { TOOLTIP_DELAY_MS, TOOLTIP_DESCRIPTION_DELAY_MS } from './primitives/tooltip-delay';
+export { PreviewTooltip } from './primitives/PreviewTooltip';
+export type { PreviewTooltipMode, PreviewTooltipProps } from './primitives/PreviewTooltip';
+export {
+  PREVIEW_CLOSE_MS,
+  PREVIEW_LONG_PRESS_MS,
+  TOOLTIP_DELAY_MS,
+  TOOLTIP_DESCRIPTION_DELAY_MS,
+} from './primitives/tooltip-delay';
 export type { TooltipProps } from './primitives/Tooltip';
 
 export { EmptyState } from './feedback/EmptyState';
@@ -103,9 +115,11 @@ export type { AppShellProps } from './layout/AppShell';
 export { ConfirmDialog } from './layout/ConfirmDialog';
 export type { ConfirmDialogProps } from './layout/ConfirmDialog';
 export { FloatingSidePanel } from './layout/FloatingSidePanel';
-export type { FloatingSidePanelProps } from './layout/FloatingSidePanel';
+export type { FloatingSidePanelProps, PanelSteps } from './layout/FloatingSidePanel';
+export { usePairedSheet } from './layout/paired-sheet';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';
 export { ownEscapeProps } from './internal/own-escape';
+export { useUnsavedChanges } from './internal/dirty';
 export type { ModalDialogProps } from './layout/ModalDialog';
 export { PageHeader } from './layout/PageHeader';
 export type { PageHeaderProps } from './layout/PageHeader';
@@ -147,3 +161,52 @@ export type { StatusSummaryProps } from './questions/StatusSummary';
 export { FavoriteToggle, RetryToggle } from './questions/StudyToggles';
 export type { StudyToggleProps } from './questions/StudyToggles';
 export { RetryIcon, StarIcon } from './questions/icons';
+
+export {
+  HighlightableText,
+  SearchMatchText,
+  TOUCH_SELECTION_REST_MS,
+} from './reading/HighlightableText';
+export type {
+  HighlightableTextProps,
+  HighlightBlockElement,
+  RenderHighlightBlock,
+} from './reading/HighlightableText';
+export { HIGHLIGHT_MENU_TEXT, HighlightMenu } from './reading/HighlightMenu';
+export type { HighlightMenuProps } from './reading/HighlightMenu';
+export {
+  POINTER_FLOATING_CLOSE_MS,
+  PointerAnchoredFloating,
+} from './reading/PointerAnchoredFloating';
+export type {
+  PointerAnchoredFloatingProps,
+  PointerFloatingMode,
+} from './reading/PointerAnchoredFloating';
+export { SEARCH_DEBOUNCE_MS, SEARCH_FIELD_TEXT, SearchField } from './reading/SearchField';
+export type { SearchFieldProps } from './reading/SearchField';
+export {
+  HIGHLIGHT_COLORS,
+  colorAction,
+  drawableHighlights,
+  exactHighlight,
+  highlightColorLabels,
+  overlappingHighlights,
+} from './reading/model';
+export type {
+  HighlightAction,
+  HighlightColor,
+  HighlightSelection,
+  SelectionSource,
+  TextBlock,
+  TextEmphasis,
+  TextHighlight,
+  TextMatch,
+  TextRange,
+} from './reading/model';
+export {
+  FIND_IN_NOTE_LIMIT,
+  findInNote,
+  foldForSearch,
+  matchCountLabel,
+} from './reading/find-in-note';
+export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';

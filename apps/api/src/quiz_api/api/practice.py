@@ -25,7 +25,8 @@ answers) are `pending` until the user's self-grade, which appends a new attempt 
 pending one (`grades_attempt_id`); attempts are never changed.
 
 Study state: a graded result (auto or self) sets `last_graded_result`; a pending one does not.
-Grading never clears `needs_retry` (questions.md §2.1); only my-state does. A favorite/retry
+Only an incorrect grading clears `needs_retry` (DB trigger, questions.md §17); a correct or
+pending one never does, and my-state turns it on only after a correct result. A favorite/retry
 change is recorded as an actor-private activity event (repositories/practice.py).
 
 Authorization: practice is the caller's own write (`Action.PRACTICE`, every role, rejected in an
@@ -220,7 +221,11 @@ class MyStateUpdate(BaseModel):
 
     is_favorite: _Flag = None
     needs_retry: _Flag = Field(
-        default=None, description="Never cleared by a correct answer; only by the user."
+        default=None,
+        description=(
+            "Never cleared by a correct answer, only by the user or by a later incorrect grading. "
+            "Turning it on needs a correct last graded result (409 `retry-requires-correct`)."
+        ),
     )
 
     @field_validator("is_favorite", "needs_retry", mode="before")
@@ -719,13 +724,20 @@ def self_grade_practice_session(
     )
 
 
-@router.patch("/questions/{question_id}/my-state", operation_id="updateMyQuestionState")
+@router.patch(
+    "/questions/{question_id}/my-state",
+    operation_id="updateMyQuestionState",
+    responses=problem_responses(409),
+)
 def update_my_state(
     access: PracticeQuestion, body: MyStateUpdate, practice: PracticeRepo
 ) -> MyState:
-    """Toggle the caller's favorite / retry flags (independent of each other and of results).
+    """Toggle the caller's favorite / retry flags (independent of each other).
     The state answered is folded with the merged duplicates' (UX7-DEDUP): a flag set on any of
-    them is set, and turning one off turns it off on all of them."""
+    them is set, and turning one off turns it off on all of them. RETRY-CORRECT: `needs_retry`
+    can only be turned on while the last graded result is correct and the latest submission is not
+    waiting for grading (409 `retry-requires-correct`, nothing written); turning it off is
+    always allowed."""
     flags = {
         k: v
         for k, v in body.model_dump(include={"is_favorite", "needs_retry"}).items()
@@ -738,6 +750,19 @@ def update_my_state(
     ws = access.workspace
     before = practice.lock_state(ws.workspace_id, access.resource_id, ws.user_id)
     changed = {k: v for k, v in flags.items() if getattr(before, k) != v}
+    # The request is judged, not the diff: a legacy flag already on does not let it through.
+    if flags.get("needs_retry") is True and (
+        before.last_graded_result != "correct"
+        or practice.latest_submission_pending(access.resource_id, ws.user_id)
+    ):
+        raise ProblemException(
+            409,
+            ProblemType.RETRY_REQUIRES_CORRECT,
+            detail=(
+                "Only a question whose last graded result is correct, with no submission "
+                "waiting for grading, can be marked for retry."
+            ),
+        )
     if changed:
         practice.set_flags(ws.workspace_id, access.resource_id, ws.user_id, changed)
         practice.record_activity(

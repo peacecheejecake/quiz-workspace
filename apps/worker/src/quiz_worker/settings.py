@@ -209,8 +209,8 @@ class WorkerSettings(BaseSettings):
     # question text to the provider, docs/deployment.md §6). Never used in APP_ENV=test.
     question_import_llm: bool = Field(default=False, validation_alias="WORKER_QUESTION_IMPORT_LLM")
 
-    # -- question.generate (M6.2) ---------------------------------------------------------------
-    # APP_ENV=test only: scripted LLM outputs (book_core ScenarioLLMClient); defaults to the
+    # -- scripted LLM (APP_ENV=test) -------------------------------------------------------------
+    # APP_ENV=test only: scripted LLM outputs (chapter notes, mock exams); defaults to the
     # repository's tests/fixtures/llm/generation-scenarios.json. Ignored elsewhere (the provider
     # comes from LLM_API_KEY / LLM_MODEL).
     llm_scenario_file: str | None = Field(default=None, validation_alias="WORKER_LLM_SCENARIO_FILE")
@@ -273,6 +273,49 @@ class WorkerSettings(BaseSettings):
     )
     mock_exam_fault_dir: str | None = Field(
         default=None, validation_alias="WORKER_MOCK_EXAM_FAULT_DIR"
+    )
+
+    # -- ask.answer / ask.purge (ASK-B) ---------------------------------------------------------
+    # AI questions send the question, the attached question and the evidence passages to the LLM
+    # provider (needs LLM_API_KEY / LLM_MODEL outside APP_ENV=test). Off by default; the API reads
+    # the same variable (409 ask-disabled). ⛔ staging/production need approval.
+    ask_llm: bool = Field(default=False, validation_alias="WORKER_ASK_LLM")
+    # Which queue this process consumes: `default` (quiz.jobs, with the embedded beat) or
+    # `interactive` (ask.answer only, ASK_WORKER_CONCURRENCY processes, no beat) — run one of each
+    # so a long document job never delays an answer.
+    queue: str = Field(
+        default="default", pattern=r"^(default|interactive)$", validation_alias="WORKER_QUEUE"
+    )
+    ask_worker_concurrency: int = Field(
+        default=2, ge=1, le=32, validation_alias="ASK_WORKER_CONCURRENCY"
+    )
+    ask_history_turns: int = Field(default=3, ge=0, le=20, validation_alias="ASK_HISTORY_TURNS")
+    ask_max_output_tokens: int = Field(
+        default=2000, ge=100, le=64_000, validation_alias="ASK_MAX_OUTPUT_TOKENS"
+    )
+    ask_llm_effort: str | None = Field(
+        default="low",
+        pattern=r"^(low|medium|high|xhigh|max)$",
+        validation_alias="ASK_LLM_EFFORT",
+    )
+    ask_retention_days: int = Field(
+        default=90, ge=1, le=3650, validation_alias="ASK_RETENTION_DAYS"
+    )
+    # Provider retries of an answer before its first delta (book_core LLMConfig's variable).
+    llm_max_retries: int = Field(default=2, ge=0, le=10, validation_alias="LLM_MAX_RETRIES")
+    # APP_ENV=test only: the fake answerer's call record and hold barrier directories (default:
+    # <system temp dir>/quiz-e2e-ask-fake-log, …-hold; AI explanations use subdirectories).
+    ask_fake_log_dir: str | None = Field(default=None, validation_alias="WORKER_ASK_FAKE_LOG_DIR")
+    ask_hold_dir: str | None = Field(default=None, validation_alias="WORKER_ASK_HOLD_DIR")
+
+    # -- question.ai_explain (EXPL-B) --------------------------------------------------------------
+    # AI explanations send the question (with its answer), its source passages and the evidence
+    # to the LLM provider (needs LLM_API_KEY / LLM_MODEL outside APP_ENV=test). Off by default,
+    # separate from WORKER_ASK_LLM; the API reads the same variable (409 explanation-disabled).
+    # ⛔ staging/production need approval. Jobs run on the `interactive` queue.
+    ai_explanations: bool = Field(default=False, validation_alias="WORKER_AI_EXPLANATIONS")
+    ai_explanation_max_output_tokens: int = Field(
+        default=1500, ge=100, le=64_000, validation_alias="AI_EXPLANATION_MAX_OUTPUT_TOKENS"
     )
 
     @model_validator(mode="after")

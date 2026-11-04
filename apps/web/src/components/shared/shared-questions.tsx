@@ -1,13 +1,16 @@
 'use client';
 
 // WS-VIEW-01 published questions: one list item per CONFIRMED question; a click opens the
-// read-only preview (QuestionViewer `read-only`, QVIEW-01 call site 6) in a non-modal
-// FloatingSidePanel with the options, the correct answer, the explanation and the source pages.
+// read-only preview (QuestionViewer `read-only`, QVIEW-01 call site 6) in a modal FloatingSidePanel
+// (UX9, HOMEDLG-01: the list behind it is inert; `이전 문제`/`다음 문제` move along it) with the
+// options, the correct answer, the explanation and the source pages.
 // There is no answer input, favourite, retry or edit control, and opening a question records
 // nothing (the shared API has no write route at all).
-import { Button } from '@quiz/ui';
+import { Button, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { SharedAiExplanation } from '@/components/questions/ai-explanation/shared-ai-explanation';
+import { SharedRelatedSources } from '@/components/questions/related-sources/shared-related-sources';
 import { NO_CHAPTER_TITLE, pageText } from '@/components/questions/labels';
 import { QuestionViewer } from '@/components/questions/viewer/question-viewer';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
@@ -84,7 +87,13 @@ export function SharedQuestions({
   };
 
   const items = list.status === 'ready' ? list.items : [];
-  const open = items.find((q) => q.id === openId) ?? null;
+  const at = items.findIndex((q) => q.id === openId);
+  const open = items[at] ?? null;
+  const previous = at > 0 ? items[at - 1] : undefined;
+  const next = at >= 0 ? items[at + 1] : undefined;
+  // The question last shown: focus returns to its list button once the panel has closed.
+  const [shown, setShown] = useState<string | null>(null);
+  if (openId !== null && openId !== shown) setShown(openId);
 
   return (
     <section className={styles.card} aria-labelledby="shared-questions-title">
@@ -121,6 +130,7 @@ export function SharedQuestions({
                 type="button"
                 className={`${styles.questionButton} qz-focus-ring`}
                 aria-haspopup="dialog"
+                data-shared-question={q.id}
                 aria-current={q.id === openId || undefined}
                 onClick={() => setOpenId(q.id)}
               >
@@ -148,6 +158,21 @@ export function SharedQuestions({
         question={open}
         documents={documents}
         onClose={() => setOpenId(null)}
+        steps={{
+          previousLabel: '이전 문제',
+          nextLabel: '다음 문제',
+          onPrevious: previous ? () => setOpenId(previous.id) : undefined,
+          onNext: next ? () => setOpenId(next.id) : undefined,
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!shown) return;
+          const button = document.querySelector<HTMLElement>(
+            `button[data-shared-question="${CSS.escape(shown)}"]`,
+          );
+          if (!button) return;
+          event.preventDefault();
+          button.focus();
+        }}
       />
     </section>
   );
@@ -159,11 +184,16 @@ export function SharedQuestionPanel({
   question,
   documents,
   onClose,
+  steps,
+  onCloseAutoFocus,
 }: {
   readonly shareId: string;
   readonly question: SharedQuestion | null;
   readonly documents: readonly SharedDocumentSummary[];
   readonly onClose: () => void;
+  /** The list's 이전 문제 / 다음 문제 (a footnote's panel has none). */
+  readonly steps?: PanelSteps;
+  readonly onCloseAutoFocus?: FloatingSidePanelProps['onCloseAutoFocus'];
 }) {
   return (
     <QuestionViewer
@@ -178,38 +208,50 @@ export function SharedQuestionPanel({
           }
         : {})}
       onClose={onClose}
+      {...(steps ? { steps } : {})}
+      {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
       className={styles.panelBody}
       sources={
         question ? (
-          <section className={styles.panelSection} aria-labelledby="shared-question-sources">
-            <h3 id="shared-question-sources" className={styles.panelHeading}>
-              출처
-            </h3>
-            {question.sources.length === 0 ? (
-              <p className={styles.note}>연결된 출처가 없습니다.</p>
-            ) : (
-              <ul className={styles.sourceList}>
-                {question.sources.map((source, i) => {
-                  const doc = documents.find((d) => d.id === source.document_id);
-                  const text = `${doc?.title ?? '출처 문서'} ${pageText(source) ?? ''}`.trim();
-                  return (
-                    <li key={`${source.document_id ?? 'none'}-${i}`}>
-                      {doc ? (
-                        <Link
-                          href={sharedDocumentHref(shareId, doc.id, { page: source.page_start })}
-                          className={`${styles.sourceLink} qz-focus-ring`}
-                        >
-                          {text}
-                        </Link>
-                      ) : (
-                        text
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <>
+            {/* AIEXPL-01: an AI explanation a member already made (read-only), under the answers. */}
+            <SharedAiExplanation
+              shareId={shareId}
+              questionId={question.id}
+              options={question.revision.options}
+            />
+            {/* RELSRC-01: the stored 관련 본문 list (read-only), under the AI 해설. */}
+            <SharedRelatedSources shareId={shareId} questionId={question.id} />
+            <section className={styles.panelSection} aria-labelledby="shared-question-sources">
+              <h3 id="shared-question-sources" className={styles.panelHeading}>
+                출처
+              </h3>
+              {question.sources.length === 0 ? (
+                <p className={styles.note}>연결된 출처가 없습니다.</p>
+              ) : (
+                <ul className={styles.sourceList}>
+                  {question.sources.map((source, i) => {
+                    const doc = documents.find((d) => d.id === source.document_id);
+                    const text = `${doc?.title ?? '출처 문서'} ${pageText(source) ?? ''}`.trim();
+                    return (
+                      <li key={`${source.document_id ?? 'none'}-${i}`}>
+                        {doc ? (
+                          <Link
+                            href={sharedDocumentHref(shareId, doc.id, { page: source.page_start })}
+                            className={`${styles.sourceLink} qz-focus-ring`}
+                          >
+                            {text}
+                          </Link>
+                        ) : (
+                          text
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </>
         ) : null
       }
     />

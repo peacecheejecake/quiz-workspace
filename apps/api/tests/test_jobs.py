@@ -79,3 +79,36 @@ def test_publisher_needs_a_broker() -> None:
     )
     assert isinstance(publisher, CeleryJobPublisher)
     publisher.close()
+
+
+def test_ask_answer_goes_to_the_interactive_queue_like_the_worker_routes_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ASK-01-C09: `ask.answer` is published to (and routed by the worker to) `interactive`."""
+    from quiz_api.jobs import INTERACTIVE_QUEUE, queue_for
+
+    assert queue_for("ask.answer") == INTERACTIVE_QUEUE == celery_app.INTERACTIVE_QUEUE
+    assert queue_for("document.parse") == DEFAULT_QUEUE
+    assert queue_for("question.ai_explain") == INTERACTIVE_QUEUE  # EXPL-B
+    for job_type in ("ask.answer", "question.ai_explain", "document.parse", "mock_exam.generate"):
+        assert queue_for(job_type) == celery_app.queue_for(job_type)
+    publisher = CeleryJobPublisher("memory://")
+    sent: dict[str, Any] = {}
+
+    def fake_send_task(name: str, **options: Any) -> None:
+        sent.update(options, name=name)
+
+    monkeypatch.setattr(publisher._app, "send_task", fake_send_task)
+    publisher.publish(
+        JobMessage(
+            job_id=uuid.uuid4(),
+            job_type="ask.answer",
+            schema_version=1,
+            workspace_id=uuid.uuid4(),
+            created_by=uuid.uuid4(),
+            idempotency_key=None,
+            payload={"message_id": str(uuid.uuid4())},
+        )
+    )
+    assert sent["queue"] == "interactive"
+    publisher.close()

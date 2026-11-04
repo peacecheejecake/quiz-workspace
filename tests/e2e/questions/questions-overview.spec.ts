@@ -65,6 +65,7 @@ import {
   type Problem,
   type Question,
 } from '../fixtures/test.ts';
+import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -216,6 +217,10 @@ test(
     await expect(panel).toBeVisible();
     await panelUi.favoriteOn(panel).click();
     await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, q(s, 2).id)).is_favorite)
+      .toBe(true);
     await panelUi.close(panel).click();
     await expect(panel).toBeHidden();
 
@@ -329,6 +334,10 @@ test(
     const panel = panelUi.numbered(page, 1);
     await panelUi.retryOff(panel).click();
     await expect(panelUi.retryOn(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, question.id)).needs_retry)
+      .toBe(false);
     await panelUi.close(panel).click();
     await expect(panel).toBeHidden();
 
@@ -344,6 +353,132 @@ test(
     // The retry flag never touched the grading history.
     const attempts = await listAttempts(s.owner, question.id);
     expect(attempts.map((a) => a.result)).toEqual(['correct']);
+  },
+);
+
+test(
+  'QOV-01-AC05 the retry toggle flips before the server answers and toggling favorite never changes it (UX9-RETRY-OPT)',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'qov01-ac05-opt', 2);
+    const question = q(s, 1);
+    await answerCorrectly(s.owner, question);
+    await openOverview(page, s);
+    // Heatmap dots are hidden from the accessibility tree under the modal panel: read by id (the
+    // visible one: a streamed render can briefly leave a hidden copy in the document).
+    const dotById = page.locator(`[data-question-id="${question.id}"]:visible`);
+    await expect(dotById).toHaveAttribute('data-status', 'correct');
+
+    // Hold every my-state save (the panel's setMyStateAction server action) until released; the
+    // request then goes to the real server unchanged.
+    const held: { release: (how: 'send' | 'abort') => void; done: Promise<void> }[] = [];
+    await page.route(
+      (url) => url.pathname.startsWith('/workspaces/'),
+      async (route) => {
+        const request = route.request();
+        const body = request.method() === 'POST' ? (request.postData() ?? '') : '';
+        if (!request.headers()['next-action'] || !/"(needs_retry|is_favorite)"/.test(body)) {
+          return route.fallback();
+        }
+        let release!: (how: 'send' | 'abort') => void;
+        let finish!: () => void;
+        const how = new Promise<'send' | 'abort'>((resolve) => (release = resolve));
+        held.push({ release, done: new Promise<void>((resolve) => (finish = resolve)) });
+        try {
+          if ((await how) === 'abort') await route.abort('failed');
+          else await route.fulfill({ response: await route.fetch() });
+        } finally {
+          finish();
+        }
+      },
+    );
+
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panel).toBeVisible();
+    await panelUi.retryOn(panel).click();
+    // Flipped while the request is still held: name, state, not busy, and the dot follows.
+    await expect.poll(() => held.length).toBe(1);
+    const retry = panelUi.retryOff(panel);
+    await expect(retry).toBeVisible();
+    await expect(retry).toHaveAttribute('data-state', 'on');
+    await expect(retry).not.toHaveAttribute('aria-disabled');
+    await expect(dotById).toHaveAttribute('data-status', 'retry');
+    held[0]?.release('send');
+    await held[0]?.done;
+    await expect(retry).toHaveAttribute('data-state', 'on');
+
+    // Sample the retry toggle on every mutation and every frame while favorite is toggled.
+    await panel.evaluate((root) => {
+      const w = window as unknown as { __retrySamples: string[]; __stopRetry: () => void };
+      const first = root.querySelector('[aria-label^="다시 풀기"]');
+      const sample = () => {
+        const el = root.querySelector('[aria-label^="다시 풀기"]');
+        w.__retrySamples.push(
+          el === first && el
+            ? ['aria-label', 'data-state', 'aria-disabled', 'disabled']
+                .map((a) => `${a}=${el.getAttribute(a)}`)
+                .concat(`icon=${el.querySelector('svg')?.outerHTML.length ?? 0}`)
+                .join(' ')
+            : 'replaced',
+        );
+      };
+      w.__retrySamples = [];
+      const observer = new MutationObserver(sample);
+      observer.observe(root, { subtree: true, attributes: true, childList: true });
+      let frame = requestAnimationFrame(function tick() {
+        sample();
+        frame = requestAnimationFrame(tick);
+      });
+      w.__stopRetry = () => {
+        observer.disconnect();
+        cancelAnimationFrame(frame);
+      };
+    });
+    await panelUi.favoriteOn(panel).click();
+    await expect.poll(() => held.length).toBe(2);
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    await expect(overviewUi.marker(dotById)).toHaveAttribute('data-shape', 'star');
+    held[1]?.release('send');
+    await held[1]?.done;
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    // A few more committed frames after the response.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 200))),
+        ),
+    );
+    const samples = await page.evaluate(() => {
+      const w = window as unknown as { __retrySamples: string[]; __stopRetry: () => void };
+      w.__stopRetry();
+      return w.__retrySamples;
+    });
+    expect(samples.length).toBeGreaterThan(5);
+    expect(new Set(samples).size, samples.join('\n')).toBe(1);
+    expect(samples[0]).toMatch(/aria-label=다시 풀기 해제 data-state=on aria-disabled=null/);
+
+    // A failed save rolls back only its own toggle and is reported.
+    await panelUi.favoriteOff(panel).click();
+    await expect.poll(() => held.length).toBe(3);
+    await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    held[2]?.release('abort');
+    await held[2]?.done;
+    await expect(page.getByText(/일시적인 오류|temporar/i).first()).toBeVisible();
+    await expect(panelUi.favoriteOff(panel)).toBeVisible();
+    await expect(retry).toHaveAttribute('data-state', 'on');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    await panelUi.close(panel).click();
+    await expect(panel).toBeHidden();
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'retry');
+    await expect(overviewUi.marker(overviewUi.dot(page, 1))).toHaveAttribute('data-shape', 'star');
+    expect(await overviewItem(s.owner, s.workspaceId, question.id)).toMatchObject({
+      status: 'retry',
+      needs_retry: true,
+      is_favorite: true,
+      last_graded_result: 'correct',
+    });
   },
 );
 
@@ -411,13 +546,15 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: the 문제 search and the collapsed "본문 검색" disclosure (UX7-SEARCH), then 문서 n ·
-    // 문제 and the icon buttons 이력 · 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no
-    // 전체 문제 page (UX7-BANK).
+    // Header: the 문제 search (UX7-SEARCH; no 본문 search disclosure under it since UX9), then
+    // 문서 n · 문제 and the icon buttons 본문 검색 (a link to the search page, SEARCH-02) · 이력 ·
+    // 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(homeUi.questionSearch(page)).toBeVisible();
-    await expect(homeUi.contentSearchToggle(page)).toHaveAttribute('aria-expanded', 'false');
-    await expect(searchUi.box(page)).toBeHidden();
+    await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
+    await expect(searchUi.box(page)).toHaveCount(0);
+    await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
+    await expect(homeUi.contentSearchLink(page)).toHaveText(''); // icon only, named "본문 검색"
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
     await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
       0,
@@ -434,6 +571,7 @@ test(
       [
         homeUi.documentsButton(page),
         homeUi.questionMenuButton(page),
+        homeUi.contentSearchLink(page),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
@@ -469,10 +607,11 @@ test(
       (url) => url.pathname === home && url.searchParams.get('favorite') === 'true',
     );
     await expect(overviewUi.heatmap(page)).toHaveCount(0); // no favorites yet: filtered empty state
+    // The old 검색 route is the 본문 search page now (SEARCH-02): `q` becomes its `text`.
     await page.goto(`${home}/search?q=chlorine&mode=keyword`);
     await expect(page).toHaveURL(
       (url) =>
-        url.pathname === home &&
+        url.pathname === `${home}/search` &&
         url.searchParams.get('text') === 'chlorine' &&
         !url.searchParams.has('q') &&
         !url.searchParams.has('scope'),
@@ -501,6 +640,7 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac08', 3);
+    await answerCorrectly(s.owner, q(s, 2)); // RETRY-01: retry needs a correct last result
     await setMyState(s.owner, q(s, 2).id, { needs_retry: true });
     await openOverview(page, s);
 
@@ -585,6 +725,9 @@ test(
     await expect(dialog.getByRole('list', { name: /^(이력|history)$/i })).toBeVisible();
     await expect(dialog.locator('[aria-busy="true"]')).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
+    // UX9 (HOMEDLG-01): modal — the header behind it is inert until it closes.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
 
     // A sub-page (문제 PDF 가져오기, from the 문서 관리 row's 문제 검토 link; QGEN-RM moved this
     // off the retired 변형 출제 review page): the route skeleton shows while the page's server
@@ -637,49 +780,47 @@ test(
 );
 
 test(
-  'QOV-01-AC10 a dialog opened later stacks above one already open; each closes on its own',
+  'QOV-01-AC10 while a home dialog is open the other dialog buttons are inert; its close button or Escape closes it and drops its panel',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac10', 1);
     await openOverview(page, s);
 
-    await homeUi.documentsButton(page).click();
-    const documents = homeUi.documentsDialog(page);
-    await expect(documents).toBeVisible();
-    await expect(documents).not.toHaveAttribute('aria-modal', 'true');
-    // The background stays usable while a dialog is open.
+    // UX9 (HOMEDLG-01): 이력 is modal, the header behind it is inert.
     await homeUi.historyButton(page).click();
-    const history = main(page).getByRole('dialog', { name: /^(이력|history)$/i });
+    const history = page.getByRole('dialog', { name: /^(이력|history)$/i });
     await expect(history).toBeVisible();
-    await expect(documents).toBeVisible();
-    await expect(page).toHaveURL(/panel=documents&panel=history/);
+    await expect(history).toHaveAttribute('aria-modal', 'true');
+    const documentsButton = homeBackgroundUi.documentsButton(page);
+    expect(await isBlocked(documentsButton), '문서 n is inert').toBe(true);
+    expect(await isBlocked(homeBackgroundUi.questionMenuButton(page)), '문제 is inert').toBe(true);
+    // A real click where 문서 n is (left of the dialog) lands on the backdrop: it closes 이력
+    // (nothing unsaved) and opens no other dialog.
+    const box = await documentsButton.boundingBox();
+    if (!box) throw new Error('문서 n is not visible');
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(history).toHaveCount(0);
+    await expect(homeUi.documentsDialog(page)).toHaveCount(0);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
 
-    const z = (l: Locator) => l.evaluate((el) => Number(getComputedStyle(el).zIndex));
-    expect(await z(history)).toBeGreaterThan(await z(documents));
-
-    // The `문제` menu's 모의고사 dialog (QGEN-RM: it replaced 변형 출제's 문제 생성) stacks on top too.
+    // The 모의고사 dialog: its close button drops `panel=mock-exams`.
     await chooseQuestionMenu(page, 'mockExams');
-    const mockExams = main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
+    const mockExams = page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
     await expect(mockExams).toBeVisible();
-    await expect(mockExams).not.toHaveAttribute('aria-modal', 'true');
-    await expect(page).toHaveURL(/panel=documents&panel=history&panel=mock-exams/);
-    expect(await z(mockExams)).toBeGreaterThan(await z(history));
+    await expect(mockExams).toHaveAttribute('aria-modal', 'true');
+    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'mock-exams');
     await mockExams.getByRole('button', { name: /모의고사 닫기|close/i }).click();
     await expect(mockExams).toBeHidden();
-    await expect(page).toHaveURL(/panel=documents&panel=history$/);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
 
-    // Pressing 문서 again brings its (covered) dialog back on top.
-    await homeUi.documentsButton(page).click();
-    await expect.poll(async () => (await z(documents)) > (await z(history))).toBe(true);
-
-    await documents.getByRole('button', { name: /문서 관리 닫기|close/i }).click();
-    await expect(documents).toBeHidden();
+    // 이력: Escape closes it wherever focus is inside it (modal: focus never leaves it).
+    await homeUi.historyButton(page).click();
     await expect(history).toBeVisible();
     await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').join() === 'history');
-    await history.getByRole('button', { name: /이력 닫기|close/i }).focus();
     await page.keyboard.press('Escape');
     await expect(history).toBeHidden();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
+    await expect(homeUi.historyButton(page)).toBeFocused();
   },
 );
 
@@ -698,10 +839,14 @@ test(
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
       /^(직접 추가|add question)$/i,
       /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
+      // CHREDIST-01 (UX9-REDIST-W): editor-only like the two above.
+      /^(챕터 재분배|redistribute chapters)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
       // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
       /^(모의고사|mock exams?)$/i,
       /^(문제 풀기|practice questions?|start practice)$/i,
+      // ASK-01 (ASK-W): the AI 질문 panel, last, for every member.
+      /^(AI 질문|ask ai)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
@@ -716,11 +861,11 @@ test(
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리 and
-    // 보관·초안 문제; Enter).
+    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리,
+    // 챕터 재분배 and 보관·초안 문제; Enter).
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
-    for (const item of ['duplicates', 'inactive', 'mockExams'] as const) {
+    for (const item of ['duplicates', 'redistribution', 'inactive', 'mockExams'] as const) {
       await page.keyboard.press('ArrowDown');
       await expect(homeUi.questionMenuItem(page, item)).toBeFocused();
     }
@@ -748,7 +893,7 @@ test(
     await expect(homeUi.questionMenuButton(page)).toBeFocused();
 
     // Without edit rights the button stays (UX7-DOCS-2): a viewer, then the archived workspace's
-    // owner, see the editor items (직접 추가, 중복 문제 정리) disabled with the reason in text.
+    // owner, see the editor items (직접 추가, 중복 문제 정리, 챕터 재분배) disabled with the reason.
     const viewer = await workspaceFactory.member('qov01-ac11-viewer');
     seedMembership(s.workspaceId, viewer.user.id, 'viewer');
     await page.context().clearCookies();
@@ -951,6 +1096,9 @@ test(
   async ({ page, workspaceFactory }) => {
     test.setTimeout(180_000);
     const s = await seed(workspaceFactory, 'qov01-ac14', 2);
+    // A ready book: its 문서 관리 row's 요약 opens 문서 요약 stacked on 문서 관리 (UX9).
+    await uploadReadyBook(s.owner, s.workspaceId, 'book-ko');
+    const bookTitle = 'book-ko';
     const home = overviewPath(s.workspaceId);
     const onHome = (url: URL) => url.pathname === home;
     const onList = (url: URL) => url.pathname === '/workspaces';
@@ -963,7 +1111,13 @@ test(
     await signInAs(page, s.owner.user);
 
     /** A history entry before the home (the workspace list), then the home itself. */
-    async function arrive(search = '', ready = overviewUi.heatmap(page)): Promise<void> {
+    async function arrive(
+      search = '',
+      // UX9: a deep-linked modal dialog hides the heatmap from assistive technology.
+      ready = search.includes('panel=')
+        ? page.getByRole('dialog').first()
+        : overviewUi.heatmap(page),
+    ): Promise<void> {
       await gotoAfterReload('/workspaces');
       await expect(page).toHaveURL(onList);
       await page.goto(`${home}${search}`);
@@ -1048,14 +1202,27 @@ test(
     // A filter chosen while a dialog is open survives its close, by Back (UX7 확인 7) or by its
     // close button; neither Back nor Forward reopens the dialog.
     const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
-    /** Opens 문서 관리 and picks the 미열람 filter while it is open. */
+    /**
+     * Opens 문서 관리 and picks the 미열람 filter while it is open. UX9 (HOMEDLG-01): the dialog is
+     * modal, so the user cannot reach the filter behind it; the filter's own buttons are driven
+     * through the DOM to keep the rule covered for any address change made while a dialog is open.
+     */
     async function openDocumentsAndFilter(): Promise<void> {
       await arrive();
       await homeUi.documentsButton(page).click();
       await expect(documents).toBeVisible();
-      await homeUi.statusFilterToggle(page).click();
-      await homeUi.statusFilters(page).getByRole('button', { name: '미열람', exact: true }).click();
+      const filters = main(page).getByRole('group', {
+        name: /^(상태 필터|status filter)$/i,
+        includeHidden: true,
+      });
+      await main(page)
+        .getByRole('button', { name: /^(상태 필터|status filter)$/i, includeHidden: true })
+        .dispatchEvent('click');
+      await filters
+        .getByRole('button', { name: '미열람', exact: true, includeHidden: true })
+        .dispatchEvent('click');
       await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+      await expect(documents).toBeVisible();
     }
     // The close shows the filtered home over the entry before the open: Next reads it, and
     // WebKit cancels a Back started before that read ends.
@@ -1135,16 +1302,23 @@ test(
     await backLeavesHome();
     await forwardStaysClosed(panelUi.panel(page));
 
-    // Two stacked dialogs (이력 over 문서 관리): each Back closes the top one only, and Forward
-    // reopens neither.
+    // Two stacked dialogs (UX9: 문서 요약 opened from a 문서 관리 row stacks on it — buttons
+    // behind a modal dialog are inert): each Back closes the top one only, and Forward reopens
+    // neither.
+    const summary = homeUi.dialog(page, /^(문서 요약|document summary)$/i);
     await arrive();
     await homeUi.documentsButton(page).click();
     await expect(documents).toBeVisible();
-    await homeUi.historyButton(page).click();
-    await expect(history).toBeVisible();
+    await documents
+      .getByRole('button', { name: new RegExp(`^${bookTitle} (요약|summary)$`, 'i') })
+      .click();
+    await expect(summary).toBeVisible();
+    await expect(page).toHaveURL(
+      (url) => onHome(url) && panels(url) === 'documents,document-summary',
+    );
     await back();
     await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
-    await expect(history).toBeHidden();
+    await expect(summary).toBeHidden();
     await expect(documents).toBeVisible();
     await back();
     await expect(page).toHaveURL(noPanel);
@@ -1152,22 +1326,20 @@ test(
     await forward();
     await expect(page).toHaveURL(noPanel);
     await expect(documents).toBeHidden();
-    await expect(history).toBeHidden();
+    await expect(summary).toBeHidden();
     await backLeavesHome();
 
-    // Closing the lower one keeps the upper one open; the first Back closes it (the closed 문서
-    // 관리 stays closed), Forward reopens neither, the next Back leaves the home.
-    await arrive();
-    await homeUi.documentsButton(page).click();
+    // UX9: the lower dialog cannot be closed while one is stacked on it (it is inert); closing
+    // the top one with Escape leaves the lower one, the first Back closes that, Forward reopens
+    // neither, the next Back leaves the home.
+    await arrive('?panel=documents&panel=history');
+    await expect(history).toBeVisible();
+    // UX9: 문서 관리 is open under 이력, hidden from assistive technology meanwhile.
+    await expect(homeDialogUi.documents(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(history).toBeHidden();
     await expect(documents).toBeVisible();
-    await homeUi.historyButton(page).click();
-    await expect(history).toBeVisible();
-    // 문서 관리 lies under 이력: its close button is pressed from the keyboard.
-    await documents.getByRole('button', { name: closeDocuments }).focus();
-    await page.keyboard.press('Enter');
-    await expect(documents).toBeHidden();
-    await expect(history).toBeVisible();
-    await expect(page).toHaveURL((url) => panels(url) === 'history');
+    await expect(page).toHaveURL((url) => panels(url) === 'documents');
     await back();
     await expect(page).toHaveURL(noPanel);
     await expect(history).toBeHidden();
@@ -1189,7 +1361,8 @@ test(
     await forwardStaysClosed(history);
     await arrive('?panel=documents&panel=history');
     await expect(history).toBeVisible();
-    await expect(documents).toBeVisible();
+    // UX9: 문서 관리 is open under 이력, hidden from assistive technology meanwhile.
+    await expect(homeDialogUi.documents(page)).toBeVisible();
     await back();
     await expect(page).toHaveURL((url) => onHome(url) && panels(url) === 'documents');
     await expect(history).toBeHidden();
@@ -1302,20 +1475,22 @@ test(
     // 확정 the draft and 보관 해제 one archived question: both leave the list for the heatmap.
     await inactiveUi.confirm(inactiveUi.row(dialog, draft.revision.stem)).click();
     await expect(inactiveUi.rows(dialog)).toHaveCount(0);
-    await expect(overviewUi.dots(page)).toHaveCount(3);
+    // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
     await chooseFilter(page, inactiveUi.status(dialog), INACTIVE_STATUS_OPTIONS.archived);
     const restoredRow = inactiveUi.row(dialog, restored.revision.stem);
     await expect(restoredRow).toHaveCount(1);
     await inactiveUi.restore(restoredRow).click();
     await expect(restoredRow).toHaveCount(0);
-    await expect(overviewUi.dots(page)).toHaveCount(4);
-    await expect(overviewUi.dot(page, 10)).toBeVisible();
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(4);
     expect((await getQuestion(s.owner, restored.id)).publication_status).toBe('CONFIRMED');
     expect((await getQuestion(s.owner, draft.id)).publication_status).toBe('CONFIRMED');
 
     // Closing drops the panel; Back never reopens it (QOV-01-AC14).
     await inactiveUi.close(dialog).click();
     await expect(dialog).toBeHidden();
+    await expect(overviewUi.dots(page)).toHaveCount(4);
+    await expect(overviewUi.dot(page, 10)).toBeVisible();
     await expect(page).toHaveURL((url) => !url.searchParams.has('panel'));
     // As in AC14: WebKit cancels a cross-document Back started under a pending router refresh
     // (here the status actions' revalidation), not because of the feature.
@@ -1469,10 +1644,8 @@ test(
     await expect(dedupUi.keepNumber(group, 2)).toBeChecked();
     await mergeSelected(page, dialog, 2);
     await expect(dedupUi.empty(dialog)).toBeVisible();
-    await expect(overviewUi.dots(page)).toHaveCount(3);
-    await expect(overviewUi.dot(page, 2)).toBeVisible();
-    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
-    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
+    // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
     expect((await getQuestion(owner, first.id)).publication_status).toBe('ARCHIVED');
     expect((await getQuestion(owner, third.id)).publication_status).toBe('ARCHIVED');
     expect((await getQuestion(owner, second.id)).publication_status).toBe('CONFIRMED');
@@ -1482,12 +1655,17 @@ test(
     // The archived copies are in 보관·초안 문제 (보관됨).
     await dedupUi.close(dialog).click();
     await expect(dialog).toBeHidden();
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(overviewUi.dot(page, 2)).toBeVisible();
+    await expect(overviewUi.dot(page, 1)).toHaveCount(0);
+    await expect(overviewUi.dot(page, 3)).toHaveCount(0);
     await chooseQuestionMenu(page, 'inactive');
     const inactive = inactiveUi.dialog(page);
     await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
     await expect(inactiveUi.rows(inactive)).toHaveCount(2);
     await page.reload();
-    await expect(overviewUi.dots(page)).toHaveCount(3);
+    // Reloaded with 보관·초안 문제 open (modal): the Heatmap behind it.
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(3);
 
     // Viewer: the item is disabled with the reason, the URL opens nothing, the API refuses.
     for (const res of [
@@ -1571,6 +1749,10 @@ test(
     await expect(panel).toBeVisible();
     await panelUi.favoriteOff(panel).click();
     await expect(panelUi.favoriteOn(panel)).toBeVisible();
+    // The toggle flips before the save (UX9-RETRY-OPT): wait for the server before leaving.
+    await expect
+      .poll(async () => (await overviewItem(owner, ws.id, kept.id)).is_favorite)
+      .toBe(false);
     await panelUi.close(panel).click();
     await expect(overviewUi.marker(dot)).toHaveAttribute('data-shape', 'square');
     await page.reload();
@@ -1585,6 +1767,11 @@ test(
     await chooseFilter(page, inactiveUi.status(inactive), INACTIVE_STATUS_OPTIONS.archived);
     await expect(inactiveUi.rows(inactive)).toHaveCount(1);
     await inactiveUi.restore(inactiveUi.rows(inactive).first()).click();
+    await expect(homeBackgroundUi.dots(page)).toHaveCount(2);
+    // UX9: the Heatmap is read once the modal dialog is closed — Escape closes it even with the
+    // 보관 해제 toast shown (the top dialog first; the toast stays).
+    await page.keyboard.press('Escape');
+    await expect(inactive).toBeHidden();
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
     await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'incorrect');

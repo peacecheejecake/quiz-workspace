@@ -11,6 +11,7 @@
 // read by the screen when it shows them (~1000 drafts of a 316-page paper).
 import { notFound, redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
+import type { DocumentSummary } from '@/lib/documents/client-api';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { DRAFT_PAGE_SIZE, summaryFromImport, summaryOf, withLoaded } from './draft-pages';
 import {
@@ -22,7 +23,7 @@ import {
   type ReviewDraft,
 } from './drafts';
 import { classifyImportFailure, importPath } from './import-client';
-import { reviewPdfs, type ReviewPdf } from './review-pdfs';
+import { REVIEW_RUNS } from './review-pdfs';
 
 export interface ImportScreenData {
   readonly run: ImportRun | null;
@@ -115,19 +116,24 @@ export async function loadLatestImport(
   };
 }
 
-/** How many runs order `검토할 PDF` (the API's maximum page; older PDFs follow, UX6-UPLOAD). */
-const REVIEW_RUNS = 200;
+export interface ReviewListData {
+  readonly documents: readonly DocumentSummary[];
+  /** The newest runs, newest first (order and counts of the list). */
+  readonly runs: readonly ImportRun[];
+  /** The documents could not be read: the list is unknown (the screen offers a reload). */
+  readonly failed: boolean;
+}
 
 /**
- * The PDFs with an extraction for `검토할 PDF` (UX6-UPLOAD), newest extraction first. Best
- * effort: the switcher is left out (empty list) when the documents cannot be read.
+ * The documents and newest runs behind `검토할 PDF` (QIMPORT-02): one read of each, summary
+ * fields only — no other PDF's drafts.
  */
-export async function loadReviewPdfs(workspaceId: string): Promise<readonly ReviewPdf[]> {
+export async function loadReviewList(workspaceId: string): Promise<ReviewListData> {
   let api;
   try {
     api = await createServerApiClient();
   } catch {
-    return [];
+    return { documents: [], runs: [], failed: true };
   }
   const [runs, documents] = await Promise.all([
     api
@@ -141,7 +147,7 @@ export async function loadReviewPdfs(workspaceId: string): Promise<readonly Revi
       })
       .catch(() => null),
   ]);
-  if (!documents?.data) return [];
-  // The runs only order the list; without them every extracted PDF is still offered.
-  return reviewPdfs(runs?.data?.items ?? [], documents.data.items);
+  if (!documents?.data) return { documents: [], runs: [], failed: true };
+  // The runs only order the list and give its counts; without them every PDF is still listed.
+  return { documents: documents.data.items, runs: runs?.data?.items ?? [], failed: false };
 }

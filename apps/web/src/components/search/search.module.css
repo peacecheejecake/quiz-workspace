@@ -23,13 +23,6 @@
   background: var(--color-surface);
 }
 
-/* Desktop: the non-modal excerpt panel sits on the right; keep the results readable beside it. */
-@media (width >= 1024px) {
-  .resultsSection[data-panel-open] {
-    margin-inline-end: calc(var(--floating-panel-width) + var(--space-4));
-  }
-}
-
 .resultsHeader {
   display: flex;
   flex-wrap: wrap;
@@ -255,4 +248,11 @@
   .results {
     transition: opacity var(--duration-panel-exit) ease;
   }
+}
+
+/* SEARCH-02 the 본문 search page: header, search form, then the results. */
+.page {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
 }

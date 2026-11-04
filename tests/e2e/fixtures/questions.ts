@@ -141,7 +141,7 @@
 //             "보기 추가", per-option checkbox "보기 N 정답", textbox "허용 답안" (short), "채점
 //             기준" (essay), combobox "챕터", button "저장"; errors in role=alert.
 //   QIMPORT-01 h1 "문제 PDF 가져오기"; no upload since UX6-UPLOAD (PDFs are uploaded in 문서 관리;
-//             combobox "검토할 PDF" with two or more extracted PDFs; "문서 관리 열기" when none);
+//             nav "검토할 PDF" list since UX9 (QIMPORT-02); "문서 관리 열기" when none);
 //             progressbar "가져오기" while the job runs; list "가져온 초안" with one listitem per draft showing "N번",
 //             the stem, a page link (pageLabel) and "원본 비교" (opens a region/dialog "원본"
 //             showing that page); "정답 없음" when the key has no answer; checkbox "승인"; "편집"
@@ -490,7 +490,7 @@ export const importUi = {
   heading: (page: Page) => page.getByRole('heading', { level: 1 }),
   progress: (page: Page) =>
     main(page).getByRole('progressbar', { name: /가져오기|추출|분석|import|extract/i }),
-  /** UX6-UPLOAD: `검토할 PDF` (one review per PDF; shown with two or more extracted PDFs). */
+  /** UX6-UPLOAD's `검토할 PDF` combobox, replaced by the QIMPORT-02 list in UX9 (asserted absent). */
   pdfSwitcher: (page: Page) =>
     main(page).getByRole('combobox', { name: /검토할 pdf|pdf to review/i }),
   /** UX6-UPLOAD: "문서 관리 열기" (the empty import page). */
@@ -858,7 +858,8 @@ export const panelUi = {
   options: (panel: Locator) => panel.getByRole('radio').or(panel.getByRole('checkbox')),
   answerText: (panel: Locator) => panel.getByRole('textbox', { name: /답안|answer/i }),
   submit: (panel: Locator) => panel.getByRole('button', { name: /^(답안 )?제출|^submit/i }),
-  result: (panel: Locator) => panel.getByRole('status'),
+  // The result line is the first status of the panel; 관련 본문 (RELSRC-01) adds its own below it.
+  result: (panel: Locator) => panel.getByRole('status').first(),
   selfGradeCorrect: (panel: Locator) =>
     panel.getByRole('button', { name: /^(맞음|맞았|정답으로|correct)/i }),
   selfGradeIncorrect: (panel: Locator) =>

@@ -33,6 +33,8 @@ export function questionStatusVar<S extends QuestionStatus>(
 export const breakpoints = {
   md: Number.parseInt(staticTokens['breakpoint-md'], 10),
   lg: Number.parseInt(staticTokens['breakpoint-lg'], 10),
+  /** Narrowest viewport that fits a question panel plus a paired dialog (design-system §5.6). */
+  pairedPanel: Number.parseInt(staticTokens['breakpoint-paired-panel'], 10),
 } as const;
 export type BreakpointName = keyof typeof breakpoints;
 
@@ -40,4 +42,6 @@ export const mediaQueries = {
   mobile: `(width < ${breakpoints.md}px)`,
   tabletUp: `(width >= ${breakpoints.md}px)`,
   desktop: `(width >= ${breakpoints.lg}px)`,
+  /** Too narrow for a paired dialog beside its panel: the dialog is a full-screen sheet. */
+  pairedSheet: `(width < ${breakpoints.pairedPanel}px)`,
 } as const;
