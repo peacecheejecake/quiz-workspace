@@ -13,7 +13,8 @@ Environment (GitHub Environment of the deploy workflow; infra/deploy/env-manifes
     RAILWAY_TOKEN              project token of that Railway environment (header
                                `Project-Access-Token`)
     RAILWAY_ENVIRONMENT_ID     Railway environment id
-    RAILWAY_API_SERVICE_ID / RAILWAY_WORKER_SERVICE_ID
+    RAILWAY_API_SERVICE_ID / RAILWAY_WORKER_SERVICE_ID / RAILWAY_WORKER_INTERACTIVE_SERVICE_ID
+                               (the last only for --service worker-interactive, the worker image)
 
 Output names the service, the digest and Railway's statuses; never the token. `--dry-run` prints
 the planned update and needs no environment.
@@ -41,7 +42,11 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "infra/deploy/railway-services.toml"
 ENDPOINT = "https://backboard.railway.com/graphql/v2"
 IMAGE_REF = re.compile(r"^ghcr\.io/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$")
-SERVICE_ID_ENV = {"api": "RAILWAY_API_SERVICE_ID", "worker": "RAILWAY_WORKER_SERVICE_ID"}
+SERVICE_ID_ENV = {
+    "api": "RAILWAY_API_SERVICE_ID",
+    "worker": "RAILWAY_WORKER_SERVICE_ID",
+    "worker-interactive": "RAILWAY_WORKER_INTERACTIVE_SERVICE_ID",
+}
 SUCCESS = "SUCCESS"
 FAILED = frozenset({"FAILED", "CRASHED", "REMOVED", "SKIPPED"})
 

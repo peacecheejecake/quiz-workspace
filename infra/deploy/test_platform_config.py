@@ -120,6 +120,12 @@ def test_api_healthcheck_paths_exist_in_the_app() -> None:
     assert "get" in paths["/health/live"]
 
 
+def test_interactive_worker_is_the_worker_image_without_a_public_domain() -> None:
+    services = _railway()["services"]
+    spec = services["worker-interactive"]
+    assert {**spec} == {**services["worker"]}
+
+
 def test_worker_is_private_single_replica_and_always_restarted() -> None:
     worker = _railway()["services"]["worker"]
     assert worker["public_domain"] is False
