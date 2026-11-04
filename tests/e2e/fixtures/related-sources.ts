@@ -722,6 +722,41 @@ export async function relatedBody(scope: Locator): Promise<Locator> {
   return scope.page().locator(`[id="${controls}"]`);
 }
 
+/** Counts the page's `/related-sources` requests (RELSRC-COLLAPSE: none until the user expands). */
+export function trackRelatedRequests(page: Page): { count: () => number } {
+  let n = 0;
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname.endsWith('/related-sources')) n += 1;
+  });
+  return { count: () => n };
+}
+
+/**
+ * The area is collapsed (`aria-expanded="false"`, body hidden) and, after a short settle, no
+ * related-sources request went out since `tracker` started (RELSRC-COLLAPSE).
+ */
+export async function expectCollapsedWithoutRequest(
+  scope: Locator,
+  tracker: { count: () => number },
+  expectedCount = 0,
+): Promise<void> {
+  const toggle = relatedUi.toggle(scope);
+  await expect(toggle, 'the "관련 본문" disclosure is shown').toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(await relatedBody(scope), 'collapsed body is hidden').toBeHidden();
+  await scope.page().waitForTimeout(400); // a request on mount would be out by now
+  expect(tracker.count(), 'no related-sources request before the user expands').toBe(expectedCount);
+}
+
+/** Expands the disclosure when it is collapsed (a click) and returns its body. */
+export async function expandRelated(scope: Locator): Promise<Locator> {
+  const toggle = relatedUi.toggle(scope);
+  await expect(toggle, 'the "관련 본문" disclosure is shown').toBeVisible();
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  return relatedBody(scope);
+}
+
 /** `p.4`, `p.4–5` for a row, as the UI prints a page range. */
 export function pageText(page: number): RegExp {
   return new RegExp(`p\\.\\s*${page}(?!\\d)|(?<!\\d)${page}\\s*쪽|page\\s*${page}(?!\\d)`, 'i');
