@@ -580,6 +580,8 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                         label=start.group("num"), text=start.group("body").strip(), lines=[line]
                     )
                 )
+                if index not in current.block_indices:
+                    current.block_indices.append(index)
                 continue
             if start is not None:
                 number = int(start.group("num"))

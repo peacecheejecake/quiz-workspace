@@ -1733,3 +1733,12 @@ def test_llm_cannot_resplit_a_stem_list_into_extra_options() -> None:
     assert [o.text for o in draft.options] == ["(가)", "(나)"]
     assert "(나) 병은 정이다." in draft.stem
     assert "llm_text_rejected" in _codes(draft.validations)
+
+
+def test_dot_numbered_letter_options_keep_their_blocks_as_source_evidence() -> None:
+    result = _extract(
+        ["1. 옳은 것은?", "(가) 갑은 을이다.", "(나) 병은 정이다.", "1. (가)", "2. (나)", "3. (가), (나)"]
+    )
+    (draft,) = result.drafts
+    block_ids = {b for e in draft.evidence for b in e.block_ids}
+    assert len(block_ids) == 6
