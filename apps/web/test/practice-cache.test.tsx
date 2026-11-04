@@ -152,6 +152,8 @@ function question(id: string, n: number) {
     preview: `preview ${n}`,
     isFavorite: false,
     needsRetry: false,
+    lastGradedResult: null,
+    isPendingGrading: false,
   };
 }
 

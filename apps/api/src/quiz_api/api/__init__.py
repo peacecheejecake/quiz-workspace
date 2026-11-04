@@ -36,6 +36,7 @@ from quiz_api.api import (
     shared,
     shared_ai_explanations,
     shared_chapter_notes,
+    source_region,
     workspaces,
 )
 from quiz_api.errors import problem_responses
@@ -73,5 +74,6 @@ api_router.include_router(highlights.router)
 api_router.include_router(ask.router)
 api_router.include_router(related_sources.router)
 api_router.include_router(related_sources.shared_router)
+api_router.include_router(source_region.router)
 api_router.include_router(ai_explanations.router)
 api_router.include_router(shared_ai_explanations.router)

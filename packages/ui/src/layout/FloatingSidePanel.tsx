@@ -101,8 +101,18 @@ export interface FloatingSidePanelProps {
    * always the narrow width.
    */
   size?: 'default' | 'wide' | 'narrow';
-  /** Edge the panel sits at: `end` (default, right in LTR) or `start` (left). */
+  /** Edge the panel sits at: `end` (default, right in LTR) or `start` (left); `paired` defaults to `start`. */
   side?: 'end' | 'start';
+  /**
+   * A dialog opened from inside an open end-edge panel (QSRC-01 `문제 원문`, design-system §5.6).
+   * Modal and stacked above that panel (the panel stays visible beside it, inert); Escape, the
+   * close button and a backdrop click close only this dialog and focus returns to its opener.
+   * At the start edge, at least `--paired-dialog-min-width` wide and never over the panel, while
+   * the viewport is at least `--breakpoint-paired-panel` (868px) wide; narrower (and below the
+   * mobile breakpoint) it is the full-screen sheet. `usePairedSheet()` reports which, for a
+   * caller that gives the sheet a history entry. Viewport placement only.
+   */
+  paired?: boolean;
   /**
    * `viewport` (default): fixed to the viewport with 16px margins.
    * `docked` (DOCVIEW-01 목차 panel): a non-modal panel (`modal` is ignored) absolutely positioned
@@ -179,7 +189,8 @@ export function FloatingSidePanel({
   dirty: dirtyProp = false,
   steps,
   size = 'default',
-  side = 'end',
+  side: sideProp,
+  paired = false,
   placement = 'viewport',
   dockMode = 'inset',
   id,
@@ -194,6 +205,7 @@ export function FloatingSidePanel({
   children,
 }: FloatingSidePanelProps) {
   const docked = placement === 'docked';
+  const side = sideProp ?? (paired && !docked ? 'start' : 'end');
   const modal = docked ? false : modalProp;
   const contentRef = useRef<HTMLDivElement>(null);
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
@@ -271,7 +283,8 @@ export function FloatingSidePanel({
             data-side={side}
             data-placement={placement}
             data-dock-mode={docked ? dockMode : undefined}
-            data-mobile-layout={mobileLayout}
+            data-paired={paired && !docked ? '' : undefined}
+            data-mobile-layout={paired && !docked ? 'full' : mobileLayout}
             // Only when given: an explicit undefined would replace Radix's own content id.
             {...(id ? { id } : {})}
             className={cx('qz-panel', 'glass-surface', className)}

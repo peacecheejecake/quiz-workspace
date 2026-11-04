@@ -260,4 +260,5 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 
 - 위 AC ID를 Playwright test title에 포함하고 RED를 확인한 다음 API/UI를 구현한다(ASK.0). E2E는 `APP_ENV=test`의 fake만 쓰며, 실제 provider 호출은 없다.
 - 정답·해설·책 본문이 보이는 화면의 품질 spec(ASK-X의 A11Y·VISUAL)은 trace·screenshot·video와 실패 시 page text 첨부를 끈다(e2e-strategy §6, `a11y-docsum.spec.ts`와 같음).
+- **품질 ID (ASK-X, 2026-11-04):** `A11Y-17`(`quality/a11y-ask.spec.ts`) = 이 화면의 AI 질문 panel — 빈·흐르는 중(`aria-busy`)·완료+각주·출처, 대화 목록, 질문 범위 popover, 첨부 칩(문제 상세 위·모의고사 풀이 위), 실패, 분당 한도, 기능 꺼짐, 휴대폰 sheet, `본문 검색`의 `AI에게 묻기` modal(URL 그대로), 키보드 전용 질문. `A11Y-18`(같은 파일) = [ai-explanations.md](ai-explanations.md)의 AI 해설 영역(만들기·진행·완료·실패)과 [related-sources.md](related-sources.md)의 관련 본문(불러오는 중·목록·없음·오류) — `practice`·`sequence(mock)`·`manage`. `VISUAL-09`(`quality/visual.spec.ts`) = 풀이 panel의 완료된 답 + AI 해설 + 관련 본문 두 위치(답·해설 위, 출처·관련 본문 목록), light/dark × desktop·iPad·375px; 보기(세션마다 순서가 섞임)와 AI 해설 생성 시각은 mask. 이 화면의 AI 질문 panel 자체는 답이 본문에서 나온 글이라 baseline에 넣지 않는다(axe만).
 - 단위·통합 테스트는 화면으로 확인하기 어려운 경계(공개 수준·인가·인용 검증·streaming 이어 받기·로그 비노출·한도)를 보완한다.

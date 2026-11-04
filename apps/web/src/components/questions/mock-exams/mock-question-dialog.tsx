@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } fr
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { FormNotice } from '@/components/auth/form-notice';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
+import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { displayStem } from '@/lib/questions/display-stem';
 import {
   contentBody,
@@ -25,6 +26,7 @@ import {
 } from '@/lib/questions/form';
 import { QuestionContentFields } from '../question-content-fields';
 import { QuestionBody } from '../viewer/question-body';
+import { QuestionSourcePreview } from '../viewer/question-source-preview';
 import type { MockExamApi } from './mock-exam-client';
 import { needsReview, VARIATION_LABELS, type MockExamQuestion } from './mock-exam-model';
 import styles from './mock-exams.module.css';
@@ -160,6 +162,8 @@ export function MockQuestionDialog({
                     확인하고 필요하면 편집하세요. 풀이 화면에는 이 안내가 보이지 않습니다.
                   </p>
                 ) : null}
+                {/* QSRC-01 `manage(mock)`: the origin's region, `보기 섞기` questions only (API). */}
+                <QuestionSourcePreview target={{ kind: 'mock', id: question.id }} aboveModals />
                 <QuestionBody
                   kind="revision"
                   type={question.question_type}
@@ -191,6 +195,15 @@ export function MockQuestionDialog({
                       view: 'manage',
                       mock_exam_question_id: question.id,
                     }}
+                  />
+                ) : null}
+                {workspaceId ? (
+                  // RELSRC-01 `manage(mock)`: the mock question's own list (`view: manage`).
+                  <RelatedSources
+                    workspaceId={workspaceId}
+                    target={{ kind: 'mock', id: question.id }}
+                    gate={{ view: 'manage' }}
+                    revisionId={question.revision.id}
                   />
                 ) : null}
               </>

@@ -50,7 +50,16 @@ import {
   type Question,
   type QuestionInput,
 } from '../fixtures/test.ts';
+import { explUi, expectDone } from '../fixtures/ai-explanations.ts';
 import { chooseTarget, redistUi } from '../fixtures/chapter-redistribution.ts';
+import {
+  ANSWER as RELATED_ANSWER,
+  createSourcedQuestion,
+  relatedBody,
+  relatedUi,
+  relsrcInput,
+  seedRelsrcBook,
+} from '../fixtures/related-sources.ts';
 import {
   highlightExplanation,
   highlightNote,
@@ -202,6 +211,7 @@ test(
     await answerCorrectly(owner, at(2));
     await setMyState(owner, at(2).id, { is_favorite: true });
     await setMyState(owner, at(5).id, { is_favorite: true });
+    await answerCorrectly(owner, at(7)); // retry needs a correct last result (RETRY-01)
     await setMyState(owner, at(7).id, { needs_retry: true });
 
     await signInAs(page, owner.user);
@@ -589,9 +599,14 @@ test(
     const ws = await workspaceFactory.create(owner, '챕터 재분배');
     const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
     const ch1 = await outlineNodeId(owner, documentId, '1장 물의 순환');
+    const created: Question[] = [];
     for (const n of [1, 2, 3]) {
-      await createQuestion(owner, ws.id, visual10Mcq(n, ch1, documentId));
+      created.push(await createQuestion(owner, ws.id, visual10Mcq(n, ch1, documentId)));
     }
+    // The 다시 풀기 toggle only shows on a correctly answered question (RETRY-CORRECT).
+    const first = created[0];
+    if (!first) throw new Error('question 1');
+    await answerCorrectly(owner, first);
     await signInAs(page, owner.user);
     await page.goto(overviewPath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
@@ -757,3 +772,65 @@ test(
     await snapEvery(page, 'search-page-results');
   },
 );
+
+// VISUAL-09 (ASK-X): a completed answer with the AI 해설 and 관련 본문 below it. The answer, the
+// explanation and passages of the book are on screen (synthetic text only), so unlike the rest of
+// this file the page text is not attached on failure either (trace, screenshot and video are off
+// file-wide). The options are masked: the practice panel shows them in a per-session order.
+test.describe('VISUAL-09 completed answer with AI 해설 and 관련 본문', () => {
+  test.use({ attachPageTextOnFailure: false });
+
+  test(
+    'VISUAL-09 completed answer, AI 해설 and 관련 본문 in the practice panel',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('visual09');
+      const ws = await workspaceFactory.create(owner, 'AI 해설과 관련 본문');
+      const book09 = await seedRelsrcBook(owner, ws.id);
+      await createSourcedQuestion(owner, ws.id, book09, {
+        ...relsrcInput('visual09', book09),
+        question_number: 1,
+      });
+      await signInAs(page, owner.user);
+      await page.goto(overviewPath(ws.id));
+      await overviewUi.dot(page, 1).click();
+      const panel = panelUi.numbered(page, 1);
+      await expect(panel).toBeVisible();
+      await panelUi.option(panel, RELATED_ANSWER).check();
+      await panelUi.submit(panel).click();
+      await expect(
+        panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct }),
+      ).toBeVisible();
+      const related = await relatedBody(panel);
+      await expect(relatedUi.rows(related).first()).toBeVisible();
+      const area = explUi.area(panel);
+      await explUi.create(area).click();
+      await expectDone(area);
+      // The options (per-session order) and the explanation's creation time are not compared.
+      const masks = () => [
+        panel.getByRole('radiogroup'),
+        area.getByText(/^\d{4}\. \d{1,2}\. \d{1,2}\./),
+      ];
+      // A resize resets the panel's scroll, so each shot reveals its part first.
+      const shot = async (name: string, reveal: () => Promise<void>) => {
+        await reveal();
+        await page.mouse.move(0, 0);
+        await snap(page, name, masks());
+        if (test.info().project.name !== 'visual-desktop') return;
+        const viewport = page.viewportSize();
+        await page.setViewportSize(PHONE);
+        await reveal();
+        await page.mouse.move(0, 0);
+        await snap(page, `${name}-375`, masks());
+        if (viewport) await page.setViewportSize(viewport);
+      };
+      // The top of the panel: the question, the result and the start of the AI 해설.
+      await shot('ask-answer-explanation', () => area.scrollIntoViewIfNeeded());
+      // The end: the AI 해설 sources and the 관련 본문 list.
+      await shot('ask-related-sources', async () => {
+        await related.scrollIntoViewIfNeeded();
+        await relatedUi.rows(related).last().scrollIntoViewIfNeeded();
+      });
+    },
+  );
+});

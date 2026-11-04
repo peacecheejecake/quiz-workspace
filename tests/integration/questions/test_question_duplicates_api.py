@@ -337,12 +337,15 @@ def test_merge_archives_and_folds_study_state(seed: Any) -> None:
     assert state["status"] == "incorrect"
     assert overview(owner, ws["id"])[keep["id"]]["is_favorite"] is False
     assert favorite_flag(owner.user.id, dup["id"]) is False
-    state = owner.ok("PATCH", f"/questions/{keep['id']}/my-state", {"needs_retry": True})
-    assert state["status"] == "retry"
+    # RETRY-CORRECT: the merged last result is incorrect, so retry cannot be turned on yet.
+    refused = owner.call("PATCH", f"/questions/{keep['id']}/my-state", {"needs_retry": True})
+    problem(refused, 409, "retry-requires-correct")
 
     # A new attempt on the kept question is the latest grade.
     answer(owner, keep, "o0")
     assert overview(owner, ws["id"])[keep["id"]]["last_graded_result"] == "correct"
+    state = owner.ok("PATCH", f"/questions/{keep['id']}/my-state", {"needs_retry": True})
+    assert state["status"] == "retry"
 
 
 def test_merge_is_idempotent_and_rescan_is_empty(seed: Any) -> None:

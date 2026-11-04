@@ -195,6 +195,9 @@ RULES: dict[str, Rule | str] = {
     # any member (computed, not stored, when archived); `view=manage` needs edit rights and an
     # active workspace (403 workspace-archived), like an edit.
     "getQuestionRelatedSources": READ,
+    # QSRC-01-C03: any member, viewer included
+    "getQuestionSourceRegion": READ,
+    "getMockExamQuestionSourceRegion": READ,
     "getMockExamQuestionRelatedSources": EDIT,
     # workspace lifecycle and sharing
     "getWorkspace": READ,
@@ -707,7 +710,7 @@ def test_practice_routes_never_reveal_answers_before_submission(world: Any) -> N
             learner.call("GET", f"/workspaces/{wid}/attempts"),
             learner.call("GET", f"/questions/{qid}/attempts"),
             learner.call("GET", f"/workspaces/{wid}/activities"),
-            learner.call("PATCH", f"/questions/{qid}/my-state", {"needs_retry": True}),
+            learner.call("PATCH", f"/questions/{qid}/my-state", {"is_favorite": True}),
             # MOCK-P: the mock exam copy of the question (보기 섞기 keeps its explanation).
             learner.call(
                 "POST",

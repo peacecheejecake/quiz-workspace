@@ -183,7 +183,7 @@ def test_status_per_caller_counts_and_pending_grading(seed: Any) -> None:
     qs = [alice.create_question(ws["id"], numbered(seed, n)) for n in range(1, 10)]
     uid = alice.user.id
     seed_state(qs[0], uid, result="correct", retry=True)  # retry outranks correct
-    seed_state(qs[1], uid, result="incorrect", retry=True, favorite=True)
+    seed_state(qs[1], uid, result="correct", retry=True, favorite=True)
     seed_state(qs[2], uid, result="correct")
     seed_state(qs[3], uid, result="incorrect")
     seed_state(qs[4], uid, viewed=True)

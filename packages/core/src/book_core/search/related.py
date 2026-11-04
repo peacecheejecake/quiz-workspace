@@ -39,6 +39,20 @@ MAX_EXCERPT_CHARS = 300
 _ELLIPSIS = "…"
 
 
+QUESTION_PAPER = "question_paper"
+
+
+def is_searchable_document(document_type: str | None) -> bool:
+    """A question paper is never searched, never evidence and never a related passage."""
+    return document_type != QUESTION_PAPER
+
+
+def touches_question_part(block_ids: Iterable[str], question_blocks: Iterable[str]) -> bool:
+    """Whether a passage or source block touches the question part of a `mixed` document
+    (questions, options, answers, explanations): such a passage is dropped."""
+    return not set(block_ids).isdisjoint(question_blocks)
+
+
 def corpus_fingerprint(
     books: Iterable[tuple[str, str]],
     *,
@@ -172,9 +186,12 @@ __all__ = [
     "CHUNK_CONFIG_VERSION",
     "MAX_EXCERPT_CHARS",
     "MAX_RELATED_QUERY_CHARS",
+    "QUESTION_PAPER",
     "RelatedCandidate",
     "corpus_fingerprint",
+    "is_searchable_document",
     "merge_related",
     "related_excerpt",
     "related_query",
+    "touches_question_part",
 ]

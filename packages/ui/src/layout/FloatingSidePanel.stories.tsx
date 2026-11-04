@@ -11,6 +11,7 @@ import { Surface } from '../primitives/Surface';
 import { Tooltip } from '../primitives/Tooltip';
 import { useUnsavedChanges } from '../internal/dirty';
 import { FloatingSidePanel, type FloatingSidePanelProps } from './FloatingSidePanel';
+import { usePairedSheet } from './paired-sheet';
 import { SplitView } from './SplitView';
 
 const meta = {
@@ -385,3 +386,36 @@ export const StartDockedOverlay: Story = {
 };
 
 export const StartDockedDark: Story = { ...StartDocked, globals: { theme: 'dark' } };
+
+function PairedDemo() {
+  const [paired, setPaired] = useState(false);
+  const sheet = usePairedSheet();
+  return (
+    <div style={{ padding: 'var(--space-6)' }}>
+      <Background />
+      <FloatingSidePanel defaultOpen title="1장 · 문제 3" description="객관식">
+        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          <Button onClick={() => setPaired(true)}>문제 원문 보기</Button>
+          {practiceBody}
+          <p style={{ margin: 0, color: 'var(--color-text-secondary)' }}>
+            {sheet ? '868px 미만: 원문은 전체 화면 sheet' : '868px 이상: 원문은 이 panel의 왼쪽'}
+          </p>
+        </div>
+        <FloatingSidePanel paired title="문제 원문" open={paired} onOpenChange={setPaired}>
+          <Skeleton style={{ height: 160 }} />
+        </FloatingSidePanel>
+      </FloatingSidePanel>
+    </div>
+  );
+}
+
+/**
+ * Paired dialog (design-system §5.6, QSRC-01): `paired` opens to the left of the open question
+ * panel without covering it while the viewport is at least 868px wide (panel 500 + margins 16 +
+ * gap 16 + dialog minimum 320 + margin 16), and as a full-screen sheet below that. Escape, 닫기
+ * and a backdrop click close only the paired dialog; focus returns to the button.
+ */
+export const PairedDialog: Story = {
+  args: { defaultOpen: false },
+  render: () => <PairedDemo />,
+};

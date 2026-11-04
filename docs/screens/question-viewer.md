@@ -60,6 +60,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
   - 제출 결과 아래(문제 본문 부품의 결과 영역 바로 아래, footer 위): `AI 해설`(AIEXPL-01) → "관련 본문"(RELSRC-01). `practice`·`sequence(bank|mock)`는 제출 뒤(`이전`·결과 목록으로 돌아간 읽기 전용 결과 포함), `manage`는 해설 아래 제출 없이, `read-only`는 이미 있는 것만 읽기 전용. AI 해설 완료 상태의 `이 문제로 질문하기`는 `practice`·`sequence`에서 그 위치의 제출한 session을 첨부한다(`full`).
   - AI 질문 panel(`?panel=ask`)은 이 화면의 modal panel 위 층으로 열리고 닫혀도 묶음의 위치·진행·고른 답을 바꾸지 않는다. `?panel=ask`는 AC09의 `question`↔`practice` 배타와 무관하다(ASK-01 "panel 쌓기·뒤로가기").
   - 정답이 든 AI 해설·관련 본문은 `practice`·`sequence`의 session cache(UX7-CACHE)에 넣지 않는다(제출 결과와 같음).
+- **문제 원문 보기 (QSRC-SPEC 2026-11-04, [QSRC-01](question-source-preview.md) — 구현은 QSRC-UI·QSRC-W):** 문제 본문 부품 header(번호·유형 badge 줄) 끝의 `문제 원문 보기` 버튼. `practice`(1~3)·`sequence(bank)`(7)·`manage`(4·5)·`sequence(mock)`·`manage(mock)`(8·9)에서 그 문제(모의고사는 원본 문제)에 가져오기 출처 영역이 있을 때만 보이고, `read-only`(6, 공유 게스트)에는 없다. 제출 전·후 같다. 열린 원문 dialog는 문제 panel 왼쪽(< 768px는 전체 화면 sheet)에 같은 modal 층의 맨 위로 쌓여 Escape가 먼저 닫고, 이전·다음으로 위치를 바꾸면 닫힌다. 이 화면의 AC(QVIEW-01-AC01~AC09)는 바뀌지 않는다.
 - 문제 본문 부품은 모든 방식이 같다: 번호, 장, 유형 badge, 발문, 번호 붙은 보기(`1.` `2.` … 표시용, `aria-hidden`), 답 입력, 결과 영역(`role="status"`, 글자로 "정답"·"오답"·"채점 대기"), 정답·해설.
 
 **모든 방식이 지켜야 하는 UX7 동작 (기존 AC GREEN 유지, MOCK-SYNC):**
@@ -177,6 +178,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | QVIEW-01-C07 | **범위와 보관·중복 (MOCK-SYNC, UX7-BANK-2·UX7-DEDUP):** `quiz_api.question_ranges`는 Heatmap overview와 같은 판정을 쓴다 — 살아 있는 CONFIRMED 문제만(보관 ARCHIVED — 중복 정리로 보관된 중복 포함 — 과 초안 DRAFT는 범위 고르기 목록·`전체 선택`·장 선택에 없다), 풀이 상태·즐겨찾기·다시 풀기 필터는 요청한 사용자의 `question_merged_user_states`(합쳐진 중복까지 합친 상태, questions.md §10.2)로 판정해 Heatmap 필터와 같은 문제를 고른다. 보관·초안 문제 id를 직접 보내면 422 `range-invalid`(C01). 묶음을 만든 뒤 보관(중복 정리 포함)·삭제된 문제의 위치는 "이 문제는 더 이상 풀 수 없습니다."·건너뜀이다(AC08). `bank` 묶음의 제출은 그 문제(남길 문제)의 `question_attempts`·`question_user_states`에 기록되고 합친 상태는 view가 계산한다(기록을 옮기지 않음). Heatmap과 같은 결과를 내는지 같은 fixture로 비교하는 test. |
 | QVIEW-01-C08 | **`다시 풀기` 아이콘 (UX9-SPEC, 사용자 결정 C10; Vitest + VISUAL-10):** `RetryToggle`(`packages/ui/src/questions/StudyToggles.tsx`)은 `RetryIcon` = 원 안의 물음표(꺼짐 윤곽선, 켜짐 채운 원 — `data-state` 별 SVG가 다름)를 그리고, 접근성 이름은 기존대로 "다시 풀기 표시"/"다시 풀기 해제"(둘 다 "다시 풀기"를 포함), `data-state="off|on"`, tooltip은 이름과 같다. 이 toggle을 그리는 모든 방식(`practice`·`sequence(bank)`)이 같은 컴포넌트를 쓴다(이전 화살표 아이콘을 쓰는 곳이 없음 — import 검사). |
 | QVIEW-01-C09 | **하이라이트 비노출 (UX9-SPEC):** `practice-sessions`·`submit`·`self-grade`·`practice-runs/{id}/items/{position}`·모의고사 practice 응답 schema에 하이라이트 필드가 없다(HILITE-01-C07과 같은 test). |
+| QVIEW-01-C10 | **`다시 풀기`는 정답 뒤에만 (RETRY-CORRECT 2026-11-04):** `practice`·`sequence(bank)`의 `다시 풀기` toggle은 마지막 채점 결과가 정답인 문제에만 렌더링한다(비활성 아님). 규칙·AC·계약은 [RETRY-01](retry-correct.md)(C04가 Vitest). C06·C08의 "toggle을 그린다"는 이 조건 아래에서다. |
 
 ## Test-first 규칙
 

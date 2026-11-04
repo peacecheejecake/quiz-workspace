@@ -160,6 +160,8 @@ export const Practice: Story = {
       preview: STORY_SESSION.stem,
       isFavorite: false,
       needsRetry: true,
+      lastGradedResult: 'correct',
+      isPendingGrading: false,
     },
     readOnly: false,
     onClose: noop,

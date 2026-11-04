@@ -178,7 +178,7 @@ def test_history_01_ac03_attempts_and_study_state_history_are_private(seed: Any)
     owner_attempt = answer(owner, "opt-2")
     viewer_attempt = answer(viewer, "opt-1")
     viewer.ok("PATCH", f"/questions/{q['id']}/my-state", {"is_favorite": True})
-    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": True})
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"is_favorite": True})
 
     path = f"/workspaces/{ws['id']}/attempts?limit=100"
     res = viewer.call("GET", path)

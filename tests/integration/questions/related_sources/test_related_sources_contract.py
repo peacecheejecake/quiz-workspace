@@ -630,6 +630,11 @@ def test_relsrc_01_c02_book_revisions_only_sources_first_answer_query_dedup_and_
     # The query is stem + correct answer: the wrong option's passage is not retrieved.
     assert rig.block["ch2-s2-p1"] not in {i["block_id"] for i in items}
     assert any(i["block_id"] == rig.block["ch2-s1-p1"] for i in items)
+    # The whole passage is listed in reading order (the excerpt panel shows all of it): a search
+    # hit spans several blocks, and `block_id` is the first.
+    assert all(i["block_ids"] and i["block_ids"][0] == i["block_id"] for i in items)
+    applied = next(i for i in items if i["block_id"] == rig.block["ch2-s1-p1"])
+    assert len(applied["block_ids"]) > 1
     # Books only: no question paper, no mixed question segment.
     for answer, block, doc in (
         (PAPER_ONLY, paper_block, paper_doc),

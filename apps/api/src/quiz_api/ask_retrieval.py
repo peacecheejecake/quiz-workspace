@@ -50,6 +50,7 @@ from book_core.search import (
     SearchLimits,
     prepare_query,
 )
+from book_core.search.related import touches_question_part
 from qdrant_client.http.exceptions import ApiException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -296,7 +297,7 @@ class AskRetrieval:
                     question_blocks[doc.revision_id] = question_part_blocks(
                         self._repo, doc, chapters
                     )
-                if set(hit.chunk.block_ids) & question_blocks[doc.revision_id]:
+                if touches_question_part(hit.chunk.block_ids, question_blocks[doc.revision_id]):
                     dropped += 1
                     continue
             hits.append(hit)

@@ -100,6 +100,10 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'ASK.0': ['ASK-01'],
   'EXPL.0': ['AIEXPL-01'],
   'RELSRC.0': ['RELSRC-01'],
+  // QSRC-SPEC (2026-11-04): question source preview ("문제 원문 보기").
+  'QSRC.0': ['QSRC-01'],
+  // RETRY-CORRECT (2026-11-04): `다시 풀기` only on questions whose last graded result is correct.
+  'RETRY.0': ['RETRY-01'],
 };
 
 const LEADING_ID = new RegExp(

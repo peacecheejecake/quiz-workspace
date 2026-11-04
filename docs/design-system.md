@@ -266,7 +266,7 @@ reduced motion에서는 transition·animation이 전혀 실행되지 않으므�
 | Page title | 24–28px/1.2, 굵기 600 |
 | Section title | 16–18px, 굵기 600 |
 | Typography token | label `--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
-| Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다 |
+| Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다. 짝 dialog(QSRC-UI, §5.6): `--breakpoint-paired-panel: 868px`(= `--floating-panel-width` + 3×16px + `--paired-dialog-min-width`; 미만이면 전체 화면 sheet)와 `--paired-dialog-min-width: 320px` — §3.3 `:root` 예시에는 없고 `tokens.json`/생성 CSS에만 있다 |
 | Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
 | Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(24/32px)은 §6 규격 그대로 |
 | Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px·뒤로가기/breadcrumb 줄과 제목 사이 12px(UX5-UI); sidebar 12/8px; heatmap 챕터 간격 20px |
@@ -379,6 +379,13 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - **배치 고정:** 열고 닫아도 페이지 내용의 위치·크기가 바뀌지 않는다. (1) scroll root(`html`)에 `scrollbar-gutter: stable` — 잠금으로 scrollbar가 사라져도 그 폭을 지킨다. (2) kit의 modal scroll 잠금(Radix `RemoveScroll`)은 scrollbar 보정(`padding-right`/`margin-right` 추가)을 끈다(gutter가 이미 자리를 지키므로 보정하면 두 배로 밀림). 열린 동안 scrollbar는 숨는다(사용자 결정 2026-11-02, overflow hidden) — gutter가 자리를 지켜 홈 내용의 위치·크기는 그대로이고, Chromium이 그동안 root `clientWidth`를 gutter 없이 보고하는 것만 다르다(HOMEDLG-01-AC03은 내용 bounding box를 본다). (3) 홈 내용이 dialog 옆으로 비켜서던 inset(데스크톱 `--floating-panel-width`만큼 padding, UX3c)은 없앤다 — modal이 위를 덮는다. (4) 등장·퇴장은 dialog 자신의 transform·opacity만, 문서 흐름에 영향 없음. 이 규칙은 kit primitive가 보장한다(기능 코드에서 따로 padding을 주지 않음). docked panel(`placement="docked"`, DOCVIEW 목차)은 페이지 배치라 이 규칙 밖이다.
 - **홈 밖 panel도 modal:** 본문 발췌·원본 비교·공유 화면 panel도 modal이고 배치 고정 규칙이 같다(목록이 비켜서던 inset 없음). 목록의 다른 항목으로 옮기는 것은 panel header의 이전·다음 버튼(Alt+↑/Alt+↓)이고 다른 항목을 고르려면 닫고 고른다(사용자 결정 2026-11-03). non-modal로 남는 floating 표면은 없다(docked 목차는 페이지 배치).
 - 검증: HOMEDLG-01-AC03(bounding box 0px, 고전 scrollbar Chromium·iPad WebKit).
+
+### 5.6 짝 floating dialog — 문제 panel 옆 원문 (v1.2.9, QSRC-SPEC 2026-11-04, [QSRC-01](screens/question-source-preview.md))
+
+- 열린 `FloatingSidePanel`(문제 풀이 panel 등) **곁에 참고 내용을 나란히 보이는** 짝 dialog 패턴이다. 짝 dialog는 `side="start"`(문제 panel은 `end`)로 같은 modal 층의 맨 위에 쌓이고, 본 panel은 가려지지 않고 보이되 `inert`다. Escape·backdrop click은 짝 dialog만 닫고 focus는 연 버튼으로 돌아온다(§5.5의 "맨 위부터 닫기").
+- 폭 `< 768px`(`--breakpoint-md`, §4 breakpoint)와 그 위에서도 자리가 모자란 폭에서는 `mobileLayout="full"` 전체 화면 sheet가 본 panel을 덮고, 닫으면 본 panel로 돌아온다. 브라우저 Back은 sheet만 닫는다(sheet를 연 history 항목을 쓰며 URL은 바뀌지 않음).
+- 본 panel + 짝 dialog 최소 폭(320px) + 여백이 들어갈 자리가 없는 폭(500+16+16+320+16 = 868px 미만)에서는 모바일과 같은 전체 화면 sheet다(QSRC-01 사용자 결정 2026-11-04).
+- 쓰는 곳: QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 
