@@ -1633,3 +1633,14 @@ def test_chapter_segmentation_matrix_single_chapter_documents_are_read_as_before
             (e.number, e.text) for e in plain.answer_key
         ]
     assert len(QuestionExtractor().extract(_document(), document_id="q").drafts) == 8
+
+
+def test_progress_callback_reports_done_and_total_after_each_question() -> None:
+    calls: list[tuple[int, int]] = []
+    result = QuestionExtractor(_scripted()).extract(
+        _document(), document_id=DOC_ID, progress=lambda done, total: calls.append((done, total))
+    )
+
+    total = len(result.questions)
+    assert total > 1
+    assert calls == [(n, total) for n in range(1, total + 1)]
