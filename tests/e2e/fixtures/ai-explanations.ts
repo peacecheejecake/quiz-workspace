@@ -565,6 +565,9 @@ export function versionText(k: number): RegExp {
 export const explUi = {
   // The group holds the toolbar (AI 해설 / AI 질문하기) and, once there is content, the region.
   area: (scope: Locator) => scope.getByRole('group', { name: /^(AI 해설|AI explanation)$/i }),
+  /** The shared (guest) view is a region only, no toolbar group. */
+  sharedArea: (scope: Locator) =>
+    scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
   /** The content region: absent while no explanation exists. */
   region: (scope: Locator) => scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
   heading: (scope: Locator) =>
