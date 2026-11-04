@@ -4,15 +4,16 @@
 // QuestionViewer result and its AI 해설 — `practice` / `sequence(bank|mock)` once the position was
 // submitted (the caller mounts it only then: nothing is requested before a submission), `manage`
 // (문제 상세, `view: detail`) and `manage(mock)` (`view: manage`) without one. A disclosure that is
-// open by default and reads the list at once:
+// collapsed by default (RELSRC-COLLAPSE): nothing is requested until the first expand, which reads
+// the list (and makes the server store it); collapsing and expanding again reuses what was loaded.
 //   loading   3 skeleton lines and role=status "관련 본문을 찾는 중입니다"
 //   list      an ol of passages (location, excerpt with the query words in <mark>, `문제 출처`
 //             badge, "PDF" link; a row opens SEARCH-01's excerpt panel) and one status "관련 본문 n개"
 //   none      role=status "관련 본문을 찾지 못했습니다."
 //   degraded  the list plus the keyword-only notice
 //   error     role=alert + `다시 시도`
-// The collapsed state is not remembered (a new question or session starts open again). The shared
-// guest version is SharedRelatedSources.
+// The expanded state is not remembered (a new question or session starts collapsed again). The
+// shared guest version is SharedRelatedSources.
 import { Badge, Button, ChevronDownIcon, ChevronUpIcon, Skeleton } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
@@ -40,7 +41,7 @@ export interface RelatedSourcesProps {
   readonly searchClient?: Pick<SearchClient, 'block'>;
 }
 
-/** The area for one question and gate (a new question or session starts over, open again). */
+/** The area for one question and gate (a new question or session starts over, collapsed again). */
 export function RelatedSources(props: RelatedSourcesProps) {
   const key = `${props.target.kind}:${props.target.id}:${props.revisionId ?? ''}:${JSON.stringify(props.gate)}`;
   return <RelatedSourcesArea key={key} {...props} />;
@@ -63,12 +64,16 @@ function RelatedSourcesArea({
   const client = givenClient ?? defaultClient;
   const [defaultSearch] = useState(() => createSearchClient());
   const search = givenSearch ?? defaultSearch;
+  const [expanded, setExpanded] = useState(false);
+  // Set by the first expand and never cleared: the list is read once, not on every expand.
+  const [requested, setRequested] = useState(false);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const targetRef = useRef(target);
   const gateRef = useRef(gate);
 
   useEffect(() => {
+    if (!requested) return;
     const controller = new AbortController();
     client.list(targetRef.current, gateRef.current, controller.signal).then(
       (list) => {
@@ -79,7 +84,7 @@ function RelatedSourcesArea({
       },
     );
     return () => controller.abort();
-  }, [client, attempt]);
+  }, [client, attempt, requested]);
 
   // --- excerpt panel ---------------------------------------------------------------------------
   const [excerpt, setExcerpt] = useState<{ item: SearchItem; stale: boolean } | null>(null);
@@ -115,7 +120,9 @@ function RelatedSourcesArea({
   };
 
   let content: ReactNode;
-  if (load.status === 'loading') {
+  if (!requested) {
+    content = null;
+  } else if (load.status === 'loading') {
     content = (
       <>
         <p role="status" className={styles.hint}>
@@ -180,7 +187,12 @@ function RelatedSourcesArea({
 
   return (
     <RelatedShell
-      busy={load.status === 'loading'}
+      expanded={expanded}
+      onToggle={() => {
+        setExpanded((open) => !open);
+        setRequested(true);
+      }}
+      busy={requested && load.status === 'loading'}
       after={
         // Inside the area, so over a modal panel or dialog it is that layer's own child layer.
         excerpt ? (
@@ -200,18 +212,21 @@ function RelatedSourcesArea({
   );
 }
 
-/** The disclosure frame: heading with the toggle, and the body it controls (open to start with). */
+/** The disclosure frame: heading with the toggle, and the body it controls (collapsed to start). */
 export function RelatedShell({
+  expanded,
+  onToggle,
   busy = false,
   children,
   after,
 }: {
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
   readonly busy?: boolean;
   readonly children: ReactNode;
   /** Kept outside the collapsible body (the excerpt panel). */
   readonly after?: ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const headingId = useId();
   const bodyId = useId();
   return (
@@ -222,7 +237,7 @@ export function RelatedShell({
           className={`${styles.toggle} qz-focus-ring`}
           aria-expanded={expanded}
           aria-controls={bodyId}
-          onClick={() => setExpanded((open) => !open)}
+          onClick={onToggle}
         >
           {RELATED_TEXT.title}
           {expanded ? (

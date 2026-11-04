@@ -40,6 +40,8 @@ import {
   createSourcedQuestion,
   DENSE_MARKER,
   editStem,
+  expandRelated,
+  expectCollapsedWithoutRequest,
   expectProblem,
   FAIL_MARKER,
   getMockRelated,
@@ -52,7 +54,6 @@ import {
   practiceFootprint,
   RELATED_LIMIT,
   RELATED_PROBLEMS,
-  relatedBody,
   relatedResponse,
   relatedRowCount,
   relatedRows,
@@ -69,6 +70,7 @@ import {
   submitAndRead,
   submitOnce,
   TEXT,
+  trackRelatedRequests,
   UI_TEXT,
   type RelatedSources,
   type RelsrcBook,
@@ -227,7 +229,7 @@ function excerpts(list: RelatedSources): string {
 }
 
 test(
-  'RELSRC-01-AC01 after submitting, the expanded 관련 본문 lists the question-source passage first, then the 2장 passage, and opens the excerpt and the PDF page',
+  'RELSRC-01-AC01 after submitting, 관련 본문 is collapsed and requests nothing; expanded, it lists the question-source passage first, then the 2장 passage, and opens the excerpt and the PDF page',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('relsrc01-ac01');
@@ -237,6 +239,7 @@ test(
       question_number: 1,
     });
     await openHome(page, s.owner, s.workspaceId);
+    const requests = trackRelatedRequests(page);
 
     // Before the submission the result area has no 관련 본문.
     await overviewUi.dot(page, 1).click();
@@ -249,10 +252,11 @@ test(
     await panelUi.option(panel, ANSWER).check();
     await panelUi.submit(panel).click();
     await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
-    // Expanded at once, loading while the (held) list request is out.
+    // Collapsed after the submission and nothing requested; the expand reads the list (held here,
+    // so the loading state shows).
     const toggle = relatedUi.toggle(panel);
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    let body = await relatedBody(panel);
+    await expectCollapsedWithoutRequest(panel, requests);
+    let body = await expandRelated(panel);
     await expect(relatedUi.status(body, UI_TEXT.loading)).toBeVisible();
     const read = relatedResponse(page, 'questions', question.id);
     hold.release();
@@ -273,6 +277,13 @@ test(
     expect(n).toBeLessThanOrEqual(RELATED_LIMIT);
     expect(list.items).toHaveLength(n);
     await expect(relatedUi.status(body, countText(n))).toHaveCount(1);
+    // Collapsing and expanding again reuses the loaded list: no second request.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(rows).toHaveCount(n);
+    expect(requests.count(), 'one request for one expand').toBe(1);
 
     // 1: the question's own source (장 1, p.2) with the badge; 2: "가나다 응용" (장 2, p.4).
     const first = relatedUi.row(body, 0);
@@ -312,7 +323,8 @@ test(
     // Back on the home, the question opens a new session: answer again, then the second row's
     // "PDF" link opens DOC-02 at p.4.
     panel = await reanswer(page, s.workspaceId, question);
-    body = await relatedBody(panel);
+    await expect(relatedUi.toggle(panel)).toHaveAttribute('aria-expanded', 'false');
+    body = await expandRelated(panel);
     const link = relatedUi.pdf(relatedUi.row(body, 1));
     await expect(link).toHaveAttribute('href', /[?&]page=4(&|$)/);
     await link.click();
@@ -353,6 +365,7 @@ test(
 
     // A's open practice panel (a session without a submission, R11).
     await openHome(page, a, s.workspaceId);
+    const requests = trackRelatedRequests(page);
     await overviewUi.dot(page, 1).click();
     const panel = panelUi.numbered(page, 1);
     await expect(panelUi.submit(panel)).toBeVisible();
@@ -381,10 +394,12 @@ test(
     await panelUi.option(panel, ANSWER).check();
     await panelUi.submit(panel).click();
     await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
-    await expect(relatedUi.toggle(panel)).toBeVisible();
+    await expectCollapsedWithoutRequest(panel, requests);
     const ok = await requestRelated(a, question.id, { practice_session_id: session.id });
     expect(ok.status).toBe(200);
     expect(ok.body?.items.length ?? 0).toBeGreaterThan(0);
+    // The panel's own area stays collapsed and unrequested until A expands it.
+    expect(requests.count()).toBe(0);
   },
 );
 
@@ -413,9 +428,11 @@ test(
 
       // A reads the stored list: the same row, no new search.
       await openHome(page, a, s.workspaceId);
+      const requests = trackRelatedRequests(page);
       let read = relatedResponse(page, 'questions', first.id);
       let panel = await answerInPanel(page, 1, ANSWER);
-      await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
+      await expectCollapsedWithoutRequest(panel, requests);
+      await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
       expect((await read).id).toBe(stored.id);
       expect(searchCalls(first.revision.id)).toBe(1);
       await panelUi.close(panel).click();
@@ -424,7 +441,7 @@ test(
       // computation holds (R5) while the other waits on the lock.
       read = relatedResponse(page, 'questions', second.id);
       panel = await answerInPanel(page, 2, ANSWER);
-      const heldBody = await relatedBody(panel);
+      const heldBody = await expandRelated(panel);
       const bRead = submitAndRead(b, second);
       await hold.held();
       await expect(relatedUi.status(heldBody, UI_TEXT.loading)).toBeVisible();
@@ -435,7 +452,7 @@ test(
       expect(bList.items).toEqual(aList.items);
       expect(searchCalls(second.revision.id), 'one computation').toBe(1);
       expect(relatedRowCount(second.id), 'one stored list').toBe(1);
-      await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
+      await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
 
       // The editor removes "가나다 응용" from 장 2 and publishes: a new corpus fingerprint.
       await correctAndPublish(s.owner, s.book.documentId, [
@@ -443,11 +460,11 @@ test(
       ]);
       read = relatedResponse(page, 'questions', first.id);
       panel = await reanswer(page, s.workspaceId, first);
-      await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
+      await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
       const fresh = await read;
       expect(fresh.id).not.toBe(stored.id);
       expect(excerpts(fresh)).not.toContain(APPLIED);
-      await expect(relatedUi.list(await relatedBody(panel))).not.toContainText(APPLIED);
+      await expect(relatedUi.list(await expandRelated(panel))).not.toContainText(APPLIED);
       expect(searchCalls(first.revision.id)).toBe(2);
       const rows = relatedRows(first.id);
       expect(rows.map((r) => [r.id, r.superseded])).toEqual([
@@ -529,14 +546,17 @@ test(
     const degraded = await ask(5, ANSWER, [DENSE_MARKER]);
 
     await openHome(page, s.owner, s.workspaceId);
+    const requests = trackRelatedRequests(page);
     // Question paper and mixed question segment: never a candidate.
     for (const [n, q, only] of [
       [1, paperQ, TEXT.paperOnly],
       [2, mixedQ, TEXT.mixedQuestionOnly],
     ] as const) {
       const read = relatedResponse(page, 'questions', q.id);
+      const before = requests.count();
       const panel = await answerInPanel(page, n, only);
-      const body = await relatedBody(panel);
+      await expectCollapsedWithoutRequest(panel, requests, before);
+      const body = await expandRelated(panel);
       const list = await read;
       await expect(
         relatedUi.rows(body).first().or(relatedUi.status(body, UI_TEXT.empty)),
@@ -550,14 +570,18 @@ test(
 
     // Nothing related anywhere: the empty state, and no question paper in the response.
     let read = relatedResponse(page, 'questions', nowhere.id);
+    let before = requests.count();
     let panel = await answerInPanel(page, 3, 'zqxjv-보기-1');
-    await expect(relatedUi.status(await relatedBody(panel), UI_TEXT.empty)).toBeVisible();
+    await expectCollapsedWithoutRequest(panel, requests, before);
+    await expect(relatedUi.status(await expandRelated(panel), UI_TEXT.empty)).toBeVisible();
     expect((await read).items).toEqual([]);
     await panelUi.close(panel).click();
 
     // Outage (R6): alert + 다시 시도; the retry shows the list.
+    before = requests.count();
     panel = await answerInPanel(page, 4, ANSWER);
-    let body = await relatedBody(panel);
+    await expectCollapsedWithoutRequest(panel, requests, before);
+    let body = await expandRelated(panel);
     await expect(relatedUi.alert(body)).toBeVisible();
     expect(relatedRowCount(failing.id)).toBe(0);
     read = relatedResponse(page, 'questions', failing.id);
@@ -570,7 +594,8 @@ test(
     // Dense unavailable (R7): keyword rows + the non-blocking notice, nothing stored …
     read = relatedResponse(page, 'questions', degraded.id);
     panel = await answerInPanel(page, 5, ANSWER);
-    body = await relatedBody(panel);
+    await expect(relatedUi.toggle(panel)).toHaveAttribute('aria-expanded', 'false');
+    body = await expandRelated(panel);
     const weak = await read;
     expect(weak.degraded).toEqual(['dense_unavailable']);
     expect(weak.stored).toBe(false);
@@ -583,11 +608,11 @@ test(
     const healthy = await editStem(s.owner, degraded, relsrcStem(`${label}-5`));
     read = relatedResponse(page, 'questions', degraded.id);
     panel = await reanswer(page, s.workspaceId, healthy);
-    await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
+    await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
     const normal = await read;
     expect(normal.degraded).toEqual([]);
     expect(normal.stored).toBe(true);
-    await expect(relatedUi.degraded(await relatedBody(panel))).toHaveCount(0);
+    await expect(relatedUi.degraded(await expandRelated(panel))).toHaveCount(0);
     expect(relatedRowCount(degraded.id)).toBe(1);
   },
 );
@@ -628,25 +653,33 @@ test(
     const panel = panelUi.numbered(page, 1);
     await expect(panelUi.submit(panel)).toBeVisible();
     const footprint = practiceFootprint(member.user.id, stored.id);
-    const detailRequest = page.waitForRequest((r) =>
-      /\/related-sources\?(.*&)?view=detail(&|$)/.test(r.url()),
-    );
+    const requests = trackRelatedRequests(page);
     await choosePanelMenu(page, panel, 'answers');
     const dialog = detailUi.dialog(page);
     await expect(dialog).toBeVisible();
-    await detailRequest;
+    // Collapsed with no request; the keyboard expands it (view: detail), a second toggle pair
+    // reuses the loaded list.
     const toggle = relatedUi.toggle(dialog);
+    await expectCollapsedWithoutRequest(dialog, requests);
+    const detailRequest = page.waitForRequest((r) =>
+      /\/related-sources\?(.*&)?view=detail(&|$)/.test(r.url()),
+    );
+    await toggle.focus();
+    await page.keyboard.press('Enter');
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const body = await relatedBody(dialog);
+    await detailRequest;
+    const body = await expandRelated(dialog);
     const firstRow = relatedUi.row(body, 0);
     await expect(firstRow).toBeVisible();
     await expectAccessible(page, 'question details with 관련 본문');
-    // Keyboard: Enter collapses, Space expands, Enter on a row opens the excerpt, Escape returns.
-    await toggle.focus();
-    await page.keyboard.press('Enter');
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Keyboard: Space collapses, Enter expands again without a new request, Enter on a row opens
+    // the excerpt, Escape returns.
     await page.keyboard.press('Space');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('Enter');
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(firstRow).toBeVisible();
+    expect(requests.count(), 'collapse and expand reuse the loaded list').toBe(1);
     const rowButton = relatedUi.open(firstRow);
     await rowButton.focus();
     await page.keyboard.press('Enter');
@@ -667,7 +700,8 @@ test(
     await inactiveUi.open(inactiveUi.row(inactive, `${label}-3:`)).click();
     const archivedDetail = detailUi.dialog(page);
     await expect(archivedDetail).toBeVisible();
-    await expect(relatedUi.rows(await relatedBody(archivedDetail)).first()).toBeVisible();
+    await expect(relatedUi.toggle(archivedDetail)).toHaveAttribute('aria-expanded', 'false');
+    await expect(relatedUi.rows(await expandRelated(archivedDetail)).first()).toBeVisible();
     expect((await requestRelated(s.owner, archivedQ.id, { view: 'detail' })).status).toBe(200);
     await page.keyboard.press('Escape');
     await expect(archivedDetail).toBeHidden();
@@ -700,7 +734,7 @@ test(
     await expect(archivedPanel).toBeVisible();
     await choosePanelMenu(page, archivedPanel, 'answers');
     const archivedWsDetail = detailUi.dialog(page);
-    await expect(relatedUi.rows(await relatedBody(archivedWsDetail)).first()).toBeVisible();
+    await expect(relatedUi.rows(await expandRelated(archivedWsDetail)).first()).toBeVisible();
     const computed = await getRelated(s.owner, inArchive.id, { practice_session_id: earlier });
     expect(computed.stored).toBe(false);
     expect(computed.id).toBeNull();
@@ -713,15 +747,23 @@ test(
     await sharedUi.question(page, stored.revision.stem).click();
     let shared = sharedUi.questionPanel(page);
     await expect(shared).toBeVisible();
-    const sharedBody = await relatedBody(shared);
+    // Read-only follows the same rule: collapsed, nothing requested, the expand reads the list.
+    const guestRequests = trackRelatedRequests(page);
+    await expectCollapsedWithoutRequest(shared, guestRequests);
+    const sharedBody = await expandRelated(shared);
     await expect(relatedUi.rows(sharedBody).first()).toBeVisible();
     await expect(relatedUi.retry(sharedBody)).toHaveCount(0);
+    const guestBefore = guestRequests.count();
     await page.keyboard.press('Escape');
+    // No stored list: the area is collapsed too, and the expand says there is nothing.
     await sharedUi.question(page, unstored.revision.stem).click();
     shared = sharedUi.questionPanel(page);
     await expect(shared).toBeVisible();
     await expect(shared).toContainText(`${label}-2:`);
-    await expect(relatedUi.toggle(shared)).toHaveCount(0);
+    await expectCollapsedWithoutRequest(shared, guestRequests, guestBefore);
+    const emptyBody = await expandRelated(shared);
+    await expect(relatedUi.status(emptyBody, UI_TEXT.empty)).toBeVisible();
+    await expect(relatedUi.rows(emptyBody)).toHaveCount(0);
     const guest = await ShareSession.open(link.id, link.secret);
     const ok = await guest.call<{ items: unknown[] }>('GET', sharedRelatedPath(link.id, stored.id));
     expect(ok.status).toBe(200);
@@ -780,11 +822,13 @@ test(
     await runUi.start(runPanel).click();
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
     runPanel = runUi.panel(page);
+    const requests = trackRelatedRequests(page);
     let read = relatedResponse(page, 'questions', question.id);
     await runUi.option(runPanel, ANSWER).check();
     await runUi.submit(runPanel).click();
     await expect(runUi.result(runPanel)).toContainText(RESULT_TEXT.correct);
-    let body = await relatedBody(runPanel);
+    await expectCollapsedWithoutRequest(runPanel, requests);
+    let body = await expandRelated(runPanel);
     const inRun = await read;
     await expect(relatedUi.toggle(runPanel)).toHaveAttribute('aria-expanded', 'true');
     await expect(relatedUi.badge(relatedUi.row(body, 0))).toBeVisible();
@@ -793,7 +837,7 @@ test(
     // The practice panel reads the same stored list.
     read = relatedResponse(page, 'questions', question.id);
     const panel = await reanswer(page, s.workspaceId, question);
-    await expect(relatedUi.rows(await relatedBody(panel)).first()).toBeVisible();
+    await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
     expect((await read).id).toBe(inRun.id);
     await page.keyboard.press('Escape');
     await expectClosedToHome(page, panel);
@@ -822,10 +866,12 @@ test(
 
     // After submitting: the 장 1 source first (문제 출처), no question-PDF page in any row.
     read = relatedResponse(page, 'mock-exam-questions', mq.id);
+    const beforeMock = requests.count();
     await runUi.option(mockPanel, ANSWER).check();
     await runUi.submit(mockPanel).click();
     await expect(runUi.result(mockPanel)).toContainText(RESULT_TEXT.correct);
-    body = await relatedBody(mockPanel);
+    await expectCollapsedWithoutRequest(mockPanel, requests, beforeMock);
+    body = await expandRelated(mockPanel);
     const mockList = await read;
     const first = relatedUi.row(body, 0);
     await expect(relatedUi.badge(first)).toBeVisible();
@@ -865,16 +911,18 @@ test(
     // Editors: the mock question's manage view shows the list without a submission
     // (view: manage, ASK-SYNC (a)).
     await switchUser(page, s.owner, s.workspaceId);
-    const manageRequest = page.waitForRequest((r) =>
-      /\/related-sources\?(.*&)?view=manage(&|$)/.test(r.url()),
-    );
     await page.goto(mockExamsPath(s.workspaceId, exam.id));
+    const manageRequests = trackRelatedRequests(page);
     const detail = mockUi.dialog(page);
     await expect(mockUi.heading(detail, examName)).toBeVisible();
     await questionRow(detail, 1).click();
     const manage = mockUi.viewer(page, 1);
     await expect(manage).toBeVisible();
+    await expectCollapsedWithoutRequest(manage, manageRequests);
+    const manageRequest = page.waitForRequest((r) =>
+      /\/related-sources\?(.*&)?view=manage(&|$)/.test(r.url()),
+    );
+    await expect(relatedUi.rows(await expandRelated(manage)).first()).toBeVisible();
     await manageRequest;
-    await expect(relatedUi.rows(await relatedBody(manage)).first()).toBeVisible();
   },
 );

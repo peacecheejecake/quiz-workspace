@@ -249,3 +249,29 @@ step after `infra-up` and again after every `db reset`, which re-creates the rol
 New TS packages extend `tsconfig.base.json` and expose `typecheck`/`test` scripts; ESLint and
 Prettier run from the root config. New Python members must be added to both
 `[tool.uv.workspace].members` in `pyproject.toml` and `PY_MEMBERS` in the `Makefile`.
+
+## 8. Known pitfalls
+
+These are recurring failure patterns from CI and reviews. Orchestrators paste the relevant lines into subagent briefs. Keep briefs short: Task ID, branch, the requested change with the user's decisions, pointers to files and ACs, the matching pitfalls from this list, minimal verify commands, and the report format.
+
+**E2E / WebKit**
+- **Practice panel close.** Closing a practice or run panel triggers `router.refresh()` in `questions-overview.tsx` when the overview is stale. That can interrupt the next `page.goto` on WebKit. The shared fixture `tests/e2e/fixtures/test.ts` retries only that error. Import `test` from the fixtures, and don't add local retry helpers.
+- **Modal panels hide the page.** Modal panels and dialogs hide the page from the accessibility tree, so role locators on the page under them fail. Assert after closing, or scope to the dialog.
+- **Browser-neutral fixes.** Fixes for WebKit-only failures must work in every browser: no CDP, and touch via pointer events with `pointerType: 'touch'` plus the release `click`.
+- **RED fixtures on real data.** Seed data has broken these assumptions: long stems fall under the related-passage relevance floor, document titles come from the upload file name, and dots without a chapter get covered by tooltips.
+
+**Unit and lint guards**
+- **Raw colours.** `check:raw-colors` scans `apps/web` and `packages/ui`, test files included. Put hex literals only in `packages/design-tokens` tests.
+- **Token counts.** `packages/design-tokens/test/tokens.test.ts` pins the colour-token counts of the `docs/design-system.md` §3 `:root` blocks. Document non-colour tokens, such as breakpoints and sizes, in the §4 table.
+- **RSC constants.** Constants exported from a `'use client'` module become client references in Server Components, and `check:rsc` catches this. Put shared constants in a plain module, such as `tooltip-delay.ts`.
+- **Detached nodes in Vitest.** A loading placeholder can render the same text as the loaded body, so `findByText` may return a node that is about to be replaced. Wait for an element that exists only in the loaded state.
+- **Fixtures miss new fields.** Merging branches that add fields to a shared type breaks other branches' test fixtures. Run the web typecheck after integration merges.
+
+**Migrations and deploy**
+- **Timestamp order.** `supabase db push` runs without `--include-all`. A new migration's timestamp must sort after every version already applied in **production**, not only on `develop`.
+- **Applied migrations are frozen.** Never edit an applied migration, not even its comments. After a rename, the orchestrator updates the shared local DB's `supabase_migrations.schema_migrations`.
+- **Deploy covers named services only.** `deploy.yml` rolls out only `api`, `worker`, the optional `worker-interactive` and the web app. A new Railway service needs a workflow step.
+
+**Process**
+- **Integration numbering.** When integrating branches, check the shared numbering: `docs/questions.md` sections, A11Y/VISUAL IDs, plan waves, the `scripts/e2e-trace.ts` screen and AC counts, and CI `E2E_PHASES`.
+- **Review loops on heuristics.** Codex review can loop on heuristics such as regexes and races. After 2–3 rounds, ask for a structural fix or record a follow-up.

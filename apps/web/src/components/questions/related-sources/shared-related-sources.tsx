@@ -1,12 +1,14 @@
 'use client';
 
 // RELSRC-01 for a share-link guest (QuestionViewer `read-only`, WS-VIEW-01): the 관련 본문 list a
-// member's read already stored for this published question — only when there is one. A guest never
-// computes a list: no loading, empty or error state, no `다시 시도`; rows are plain text with a
-// "PDF" link into the shared document view (no excerpt panel).
+// member's read already stored for this published question. Collapsed to start like the member
+// version, and read on the first expand only (RELSRC-COLLAPSE); with no stored list (or when it
+// cannot be read) the expanded area says nothing was found. A guest never computes a list and has
+// no `다시 시도`; rows are plain text with a "PDF" link into the shared document view (no excerpt
+// panel).
 import { Badge } from '@quiz/ui';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   createRelatedClient,
   type RelatedClient,
@@ -30,22 +32,42 @@ export function SharedRelatedSources(props: SharedRelatedSourcesProps) {
 function SharedArea({ shareId, questionId, client: givenClient }: SharedRelatedSourcesProps) {
   const [defaultClient] = useState(() => createRelatedClient());
   const client = givenClient ?? defaultClient;
-  const [items, setItems] = useState<readonly SharedRelatedSource[] | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [requested, setRequested] = useState(false);
+  // undefined: not answered yet; null: none stored or unreadable.
+  const [items, setItems] = useState<readonly SharedRelatedSource[] | null | undefined>(undefined);
 
   useEffect(() => {
+    if (!requested) return;
     const controller = new AbortController();
     client.shared(shareId, questionId, controller.signal).then(
       (found) => {
         if (!controller.signal.aborted) setItems(found);
       },
-      () => undefined, // an optional extra: nothing shows when it cannot be read
+      () => {
+        if (!controller.signal.aborted) setItems(null); // an optional extra: nothing found
+      },
     );
     return () => controller.abort();
-  }, [client, shareId, questionId]);
+  }, [client, shareId, questionId, requested]);
 
-  if (!items || items.length === 0) return null;
-  return (
-    <RelatedShell>
+  let content: ReactNode;
+  if (!requested) {
+    content = null;
+  } else if (items === undefined) {
+    content = (
+      <p role="status" className={styles.hint}>
+        {RELATED_TEXT.loading}
+      </p>
+    );
+  } else if (!items || items.length === 0) {
+    content = (
+      <p role="status" className={styles.hint}>
+        {RELATED_TEXT.empty}
+      </p>
+    );
+  } else {
+    content = (
       <ol className={styles.list} aria-label={RELATED_TEXT.title}>
         {items.map((source) => (
           <li
@@ -71,6 +93,19 @@ function SharedArea({ shareId, questionId, client: givenClient }: SharedRelatedS
           </li>
         ))}
       </ol>
+    );
+  }
+
+  return (
+    <RelatedShell
+      expanded={expanded}
+      onToggle={() => {
+        setExpanded((open) => !open);
+        setRequested(true);
+      }}
+      busy={requested && items === undefined}
+    >
+      {content}
     </RelatedShell>
   );
 }

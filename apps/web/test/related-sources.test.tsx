@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // RELSRC-01 관련 본문 (docs/screens/related-sources.md): the relays forward only the gate, the view
-// model, and the area's states — open at once, loading / list / none / degraded / error + retry,
-// the excerpt panel on a row, and the guest's stored list.
+// model, and the area's states — collapsed to start with nothing requested until the first expand
+// (RELSRC-COLLAPSE), loading / list / none / degraded / error + retry, the excerpt panel on a row,
+// and the guest's stored list.
 import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -59,6 +60,13 @@ function fake(list: () => ReturnType<RelatedClient['list']>): RelatedClient {
 
 const target = { kind: 'question', id: ID } as const;
 const gate = { practice_session_id: SESSION };
+
+/** Expands the collapsed area (the first expand is what requests the list). */
+async function expand() {
+  const toggle = screen.getByRole('button', { name: '관련 본문' });
+  await userEvent.click(toggle);
+  return toggle;
+}
 
 const BLOCKS: Record<string, string> = {
   'b-1': '가나다 원리: 물이 증발한다.',
@@ -136,7 +144,7 @@ describe('RELSRC-01 view model and client', () => {
 });
 
 describe('RELSRC-01 area', () => {
-  it('opens at once, loads, lists rows with marks and the badge, and announces the count', async () => {
+  it('starts collapsed without a request, loads on the first expand, lists rows with marks and the badge, and announces the count', async () => {
     let resolve!: (v: Awaited<ReturnType<RelatedClient['list']>>) => void;
     const c = fake(() => new Promise((r) => (resolve = r)));
     render(
@@ -149,6 +157,10 @@ describe('RELSRC-01 area', () => {
       />,
     );
     const toggle = screen.getByRole('button', { name: '관련 본문' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(c.list).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+    await expand();
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(c.list).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('status')).toHaveTextContent('관련 본문을 찾는 중입니다');
@@ -180,7 +192,7 @@ describe('RELSRC-01 area', () => {
     expect(screen.getByRole('status')).toHaveTextContent('관련 본문 2개');
   });
 
-  it('collapses and expands by the toggle', async () => {
+  it('collapses and expands by the toggle, reusing the loaded list', async () => {
     const c = fake(async () => ({ items: [source()], degraded: [] }));
     render(
       <RelatedSources
@@ -191,12 +203,43 @@ describe('RELSRC-01 area', () => {
         searchClient={search}
       />,
     );
-    const toggle = screen.getByRole('button', { name: '관련 본문' });
+    const toggle = await expand();
     await screen.findByRole('list', { name: '관련 본문' });
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('list', { name: '관련 본문' })).toBeInTheDocument();
+    expect(c.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts collapsed again for another position (a new target)', async () => {
+    const c = fake(async () => ({ items: [source()], degraded: [] }));
+    const { rerender } = render(
+      <RelatedSources
+        workspaceId={WS}
+        target={target}
+        gate={gate}
+        client={c}
+        searchClient={search}
+      />,
+    );
+    await expand();
+    await screen.findByRole('list', { name: '관련 본문' });
+    rerender(
+      <RelatedSources
+        workspaceId={WS}
+        target={{ kind: 'question', id: '33333333-3333-4333-8333-333333333333' }}
+        gate={gate}
+        client={c}
+        searchClient={search}
+      />,
+    );
+    expect(screen.getByRole('button', { name: '관련 본문' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(c.list).toHaveBeenCalledTimes(1);
   });
 
   it('says so when nothing was found', async () => {
@@ -210,6 +253,7 @@ describe('RELSRC-01 area', () => {
         searchClient={search}
       />,
     );
+    await expand();
     expect(await screen.findByText('관련 본문을 찾지 못했습니다.')).toBeInTheDocument();
   });
 
@@ -224,6 +268,7 @@ describe('RELSRC-01 area', () => {
         searchClient={search}
       />,
     );
+    await expand();
     expect(await screen.findByText(/키워드 결과만 표시합니다/)).toBeInTheDocument();
     expect(screen.getByRole('list', { name: '관련 본문' })).toBeInTheDocument();
   });
@@ -242,6 +287,7 @@ describe('RELSRC-01 area', () => {
         searchClient={search}
       />,
     );
+    await expand();
     expect(await screen.findByRole('alert')).toHaveTextContent('관련 본문을 불러오지 못했습니다.');
     await userEvent.click(screen.getByRole('button', { name: '다시 시도' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
@@ -260,6 +306,7 @@ describe('RELSRC-01 area', () => {
         searchClient={search}
       />,
     );
+    await expand();
     const list = await screen.findByRole('list', { name: '관련 본문' });
     await userEvent.click(within(list).getByRole('button', { name: /가나다/ }));
     const dialog = await screen.findByRole('dialog', { name: '본문 발췌' });
@@ -285,6 +332,7 @@ describe('RELSRC-01 long passage', () => {
         searchClient={{ block }}
       />,
     );
+    await expand();
     const list = await screen.findByRole('list', { name: '관련 본문' });
     await userEvent.click(within(list).getByRole('button', { name: /가나다/ }));
     const dialog = await screen.findByRole('dialog', { name: '본문 발췌' });
@@ -298,22 +346,31 @@ describe('RELSRC-01 long passage', () => {
 });
 
 describe('RELSRC-01 guest', () => {
-  it('shows a stored list read-only, and nothing when there is none', async () => {
+  it('is collapsed without a request; the expand shows the stored list read-only', async () => {
     const stored: RelatedClient = {
       list: vi.fn(),
       shared: vi.fn().mockResolvedValue([source()]),
     };
-    const { unmount } = render(
-      <SharedRelatedSources shareId="share-1" questionId={ID} client={stored} />,
+    render(<SharedRelatedSources shareId="share-1" questionId={ID} client={stored} />);
+    expect(screen.getByRole('button', { name: '관련 본문' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
     );
+    expect(stored.shared).not.toHaveBeenCalled();
+    await expand();
     const list = await screen.findByRole('list', { name: '관련 본문' });
     expect(within(list).queryByRole('button')).toBeNull();
     expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
     expect(stored.list).not.toHaveBeenCalled();
-    unmount();
+    expect(stored.shared).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing was found when there is no stored list', async () => {
     const none: RelatedClient = { list: vi.fn(), shared: vi.fn().mockResolvedValue(null) };
     render(<SharedRelatedSources shareId="share-1" questionId={ID} client={none} />);
-    await waitFor(() => expect(none.shared).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: '관련 본문' })).toBeNull();
+    expect(none.shared).not.toHaveBeenCalled();
+    await expand();
+    expect(await screen.findByText('관련 본문을 찾지 못했습니다.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
   });
 });
