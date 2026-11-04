@@ -33,7 +33,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
-from book_core.question.labels import CIRCLED_DIGITS, answer_option_keys, split_option_line
+from book_core.question.labels import (
+    CIRCLED_DIGITS,
+    answer_option_keys,
+    break_stem_items,
+    cites_stem_item,
+    split_option_line,
+)
 from book_core.structure.numbering import NumberingKind, parse_numbering
 
 _QUESTION_START = re.compile(
@@ -80,7 +86,6 @@ _INLINE_ANSWER = re.compile(
 _QUESTION_END_CUES = re.compile(
     r"[?\uff1f]\s*(?:\(\s*\)\s*)?$|시오\.?\s*$|하라\.?\s*$|\b(?:is|are|which)\b.*$"
 )
-_LETTER_ITEM = re.compile(r"^\s*\(\s*[가나다라마바사아자차A-Ea-e]\s*\)")
 _ASKING = re.compile(r"것은|것을|고르|묶인|몇 개")
 _INLINE_CIRCLED = re.compile(r"(?<=\s)①")
 _MAX_ANSWER_KEY_BODY = 40
@@ -132,7 +137,10 @@ class RawQuestion:
 
     @property
     def stem(self) -> str:
-        return " ".join(p for p in self.stem_parts if p).strip()
+        """The stem lines joined by spaces (a wrapped line goes on), except that each printed
+        stem item (``(가) ...``, ``ㄱ. ...``) starts its own line, after a blank line below the
+        question sentence (questions.md §4 11)."""
+        return break_stem_items(" ".join(p for p in self.stem_parts if p).strip())
 
     @property
     def figure_labels(self) -> list[str]:
@@ -408,8 +416,7 @@ def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str
         and not any(o.label in CIRCLED_DIGITS for o in current.options)
         and _QUESTION_CUE.search(body) is None
         and _ASKING.search(body) is None
-        and _LETTER_ITEM.match(body) is not None
-        and any(_LETTER_ITEM.match(part) for part in current.stem_parts[1:])
+        and cites_stem_item(body, current.stem)
     )
 
 
