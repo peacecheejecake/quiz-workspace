@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
 const ok = (data: unknown) => ({ data, response: new Response(null, { status: 200 }) });
 
 describe('PERF-1 page loaders', () => {
-  it('the question editor context reuses the unfiltered document list (books that are ready)', async () => {
+  it('the question editor context reuses the unfiltered document list (ready books, paper chapters level 1)', async () => {
     const calls: { path: string; init: unknown }[] = [];
     fakeApi = {
       GET: async (path, init) => {
@@ -49,7 +49,11 @@ describe('PERF-1 page loaders', () => {
             ],
           });
         }
-        return ok({ items: [{ id: 'c1', title: ' Ch 1 ', level: 1 }] });
+        return ok({
+          items: [
+            { id: 'c1', title: ' Ch 1 ', level: 1, children: [{ id: 'c2', title: '01 Q?' }] },
+          ],
+        });
       },
     };
     const { loadChapterContext } = await import('../src/lib/questions/server');
@@ -59,9 +63,12 @@ describe('PERF-1 page loaders', () => {
       init: { params: { path: { workspace_id: WS } } },
     });
     expect(context.documents).toEqual([{ id: 'b1', title: 'Book' }]);
+    // CHAP-MATCH: the question paper adds its level-1 chapter only (never its question lines).
     expect(context.chapters).toEqual([
       { id: 'c1', title: 'Ch 1', level: 1, documentId: 'b1', documentTitle: 'Book' },
+      { id: 'c2', title: '01 Q?', level: 2, documentId: 'b1', documentTitle: 'Book' },
+      { id: 'c1', title: 'Ch 1', level: 1, documentId: 'p1', documentTitle: 'Paper' },
     ]);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
   });
 });

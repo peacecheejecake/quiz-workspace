@@ -145,6 +145,7 @@ export const NO_RECOMMENDATION_LABELS: Readonly<Record<string, string>> = {
 export const REASON_LABELS: Readonly<Record<string, string>> = {
   source_in_book: '출처 교재의 장',
   matched: '문제지 장 제목과 일치',
+  paper_chapter: '문제지의 장',
 };
 
 export function noRecommendationCount(preview: RedistributionPreview): number {
