@@ -40,7 +40,7 @@ _QUESTION_START = re.compile(
     r"^\s*(?:문(?:제)?\s*|Q\s*)?(?P<num>\d{1,3})\s*(?:\.|번[.)]?)(?!\d)\s*(?P<body>\S.*)$"
 )
 _ANSWER_KEY_HEADING = re.compile(
-    r"^\s*[\[<(]?\s*(?:정답(?:\s*(?:및|과)\s*해설)?|정답표|빠른\s*정답|답안|"
+    r"^\s*[\[<(]?\s*(?:정\s*답(?:\s*(?:및|과)\s*해\s*설)?|정\s*답\s*표|빠른\s*정\s*답|답\s*안|"
     r"answer\s*key|answers)\s*[\]>)]?\s*:?\s*$",
     re.IGNORECASE,
 )
@@ -71,7 +71,10 @@ _ESSAY_CUES = re.compile(
 _BARE_QUESTION_START = re.compile(r"^\s*(?P<num>\d{1,3})\s+(?P<body>\S.*)$")
 _QUESTION_CUE = re.compile(r"[?\uff1f]|시오|하라|\(\s*\)\s*$")
 _INLINE_ANSWER = re.compile(
-    r"^\s*(?:[\[<(]\s*정답\s*[\]>)]\s*[:\uff1a]?|정답\s*[:\uff1a]|answer\s*[:\uff1a])\s*(?P<ans>\S.*)$",
+    r"^\s*(?:[\[<(]\s*정\s*답\s*[\]>)]\s*[:\uff1a]?"
+    r"|정\s*답(?:\s*[:\uff1a]|\s+(?=[①-⑩\dA-Ea-e(]))"  # bare ``정 답 ③`` needs a label after it
+    r"|answer\s*[:\uff1a])"
+    r"\s*(?P<ans>\S.*)$",
     re.IGNORECASE,
 )
 _QUESTION_END_CUES = re.compile(

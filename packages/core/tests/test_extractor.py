@@ -1644,3 +1644,27 @@ def test_progress_callback_reports_done_and_total_after_each_question() -> None:
     total = len(result.questions)
     assert total > 1
     assert calls == [(n, total) for n in range(1, total + 1)]
+
+# ------------------------------------------------------------------------------------------
+# QPARSE-FIX: spaced answer labels and lettered stem lists
+
+
+def test_spaced_answer_label_below_options_is_the_inline_answer_not_an_option() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 갑 ② 을 ③ 병",
+            "(정  답) ③",
+            "(출제원) 1권 5page",
+            "(해  설) 갑은 틀림",
+            "2. 다음 중 틀린 것은?",
+            "① 가",
+            "② 나",
+            "정 답 ①",
+        ]
+    )
+    q1, q2 = result.drafts
+    assert [o.text for o in q1.options] == ["갑", "을", "병"]
+    assert q1.correct_option_ids == ("opt-3",)
+    assert [o.text for o in q2.options] == ["가", "나"]
+    assert q2.correct_option_ids == ("opt-1",)
