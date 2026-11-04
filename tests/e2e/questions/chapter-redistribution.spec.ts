@@ -28,7 +28,6 @@ import {
   PAPER_CHAPTER,
   reassignedActivityCount,
   REDIST_PANEL,
-  REDIST_PROBLEMS,
   redistributionList,
   redistributionPreview,
   redistUi,
