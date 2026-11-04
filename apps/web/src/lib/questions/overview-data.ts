@@ -70,6 +70,13 @@ export async function loadOverview(
     }
     throw error;
   }
+  // CHAP-MATCH: give the questions the matcher left without a chapter their chapter now (a book
+  // may have become ready). Idempotent and a no-op for viewers; never blocks the page.
+  await api
+    .POST('/api/v1/workspaces/{workspace_id}/questions/chapter-rematch', {
+      params: { path: { workspace_id: workspaceId } },
+    })
+    .catch(() => null);
   const fetchOverview = (f: OverviewFilters) =>
     api
       .GET('/api/v1/workspaces/{workspace_id}/questions/overview', {
