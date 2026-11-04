@@ -119,6 +119,7 @@ class ImportJobDeps:
     # APP_ENV=test: honour IMPORT_FAILURE_MARKER.
     inject_failures: bool = False
     lock_wait_seconds: float = 60
+    llm_concurrency: int = 1
 
 
 # --------------------------------------------------------------------------------------------
@@ -222,6 +223,7 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
         document_id=str(run.document_id),
         revision_id=str(run.revision_id),
         progress=_ExtractionProgress(progress),
+        concurrency=deps.llm_concurrency,
     )
     drafts = [
         draft_row(position, question, canonical)
@@ -430,6 +432,7 @@ def deps_from_settings(settings: WorkerSettings) -> ImportJobDeps:
         llm_model=model,
         inject_failures=settings.is_test,
         lock_wait_seconds=settings.document_lock_wait_seconds,
+        llm_concurrency=settings.question_import_llm_concurrency,
     )
 
 
