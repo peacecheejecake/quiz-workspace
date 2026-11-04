@@ -40,6 +40,7 @@ import logging
 import re
 import tempfile
 import threading
+import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -125,6 +126,43 @@ class ImportJobDeps:
 # --------------------------------------------------------------------------------------------
 
 
+EXTRACT_START_PERCENT = 40
+EXTRACT_END_PERCENT = 79
+PROGRESS_MIN_STEP_PERCENT = 5
+PROGRESS_MIN_INTERVAL_SECONDS = 5.0
+
+
+class _ExtractionProgress:
+    """Maps extractor ``(done, total)`` to 40..79% 'extracting', throttling the DB writes."""
+
+    def __init__(
+        self,
+        report: Callable[[str, int], None],
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._report = report
+        self._clock = clock
+        self._last_percent = EXTRACT_START_PERCENT
+        self._last_at = clock()
+
+    def __call__(self, done: int, total: int) -> None:
+        if total <= 0:
+            return
+        span = EXTRACT_END_PERCENT - EXTRACT_START_PERCENT
+        percent = EXTRACT_START_PERCENT + span * min(done, total) // total
+        now = self._clock()
+        if percent <= self._last_percent:
+            return
+        if (
+            percent - self._last_percent >= PROGRESS_MIN_STEP_PERCENT
+            or now - self._last_at >= PROGRESS_MIN_INTERVAL_SECONDS
+            or percent == EXTRACT_END_PERCENT
+        ):
+            self._last_percent = percent
+            self._last_at = now
+            self._report("extracting", percent)
+
+
 def run_question_import(
     deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPayloadV1
 ) -> JobResult:
@@ -178,9 +216,12 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
     source, canonical = _load_source(deps, ctx, run)
     ctx.check_cancelled()
 
-    progress("extracting", 40)
+    progress("extracting", EXTRACT_START_PERCENT)
     extraction = QuestionExtractor(deps.llm).extract(
-        source, document_id=str(run.document_id), revision_id=str(run.revision_id)
+        source,
+        document_id=str(run.document_id),
+        revision_id=str(run.revision_id),
+        progress=_ExtractionProgress(progress),
     )
     drafts = [
         draft_row(position, question, canonical)

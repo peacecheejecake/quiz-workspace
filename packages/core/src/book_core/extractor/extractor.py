@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Literal
 
@@ -138,7 +138,9 @@ class QuestionExtractor:
         *,
         document_id: str,
         revision_id: str | None = None,
+        progress: Callable[[int, int], object] | None = None,
     ) -> QuestionExtraction:
+        """Extract drafts; ``progress(done, total)`` is called after each question."""
         blocks = document.blocks
         seg = segment_chapters(blocks)
         warnings = _document_warnings(
@@ -150,7 +152,8 @@ class QuestionExtractor:
 
         questions: list[ExtractedQuestion] = []
         calls: list[LLMCallInfo] = []
-        for ctx in _contexts(seg, blocks):
+        contexts = list(_contexts(seg, blocks))
+        for done, ctx in enumerate(contexts, start=1):
             raw = ctx.raw
             candidate = _pre_extract(raw, ctx.entries, ctx.next_block, ctx.figures)
             if ctx.occurrence and not ctx.entries:
@@ -182,6 +185,8 @@ class QuestionExtractor:
                         f"Question {raw.number} has no stem text and was skipped.",
                     )
                 )
+                if progress is not None:
+                    progress(done, len(contexts))
                 continue
             questions.append(
                 ExtractedQuestion(
@@ -191,6 +196,8 @@ class QuestionExtractor:
                     draft=draft,
                 )
             )
+            if progress is not None:
+                progress(done, len(contexts))
 
         logger.info(
             "question extraction document=%s questions=%d answer_key_entries=%d llm_calls=%d",

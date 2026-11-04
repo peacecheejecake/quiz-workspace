@@ -8,6 +8,7 @@ tests/integration/questions/test_question_import_contract.py.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
@@ -29,6 +30,7 @@ from quiz_worker.envelope import JobEnvelope
 from quiz_worker.question_import_job import (
     IMPORT_FAILURE_MARKER,
     ImportJobDeps,
+    _ExtractionProgress,
     build_llm,
     question_import_definition,
 )
@@ -55,6 +57,7 @@ class FakeImportStore:
     statuses: list[str] = field(default_factory=list)
     llm: list[tuple[str | None, str | None]] = field(default_factory=list)
     progress: list[str] = field(default_factory=list)
+    percents: list[tuple[str, int]] = field(default_factory=list)
     locked: set[uuid.UUID] = field(default_factory=set)
     on_progress: Callable[[str], object] | None = None
     _mutex: threading.Lock = field(default_factory=threading.Lock)
@@ -132,6 +135,7 @@ class FakeImportStore:
 
     def report_progress(self, job_id: uuid.UUID, attempt: int, stage: str, percent: int) -> None:
         self.progress.append(stage)
+        self.percents.append((stage, percent))
         if self.on_progress is not None:
             self.on_progress(stage)
 
@@ -511,3 +515,39 @@ def test_ux6_auto_mixed_book_imports_the_questions_of_every_chapter(world: World
         ["opt-1"],
         ["opt-2"],
     ] * 3
+
+
+def test_extraction_progress_maps_to_40_79_and_throttles_writes() -> None:
+    now = [0.0]
+    reported: list[tuple[str, int]] = []
+    update = _ExtractionProgress(lambda stage, pct: reported.append((stage, pct)), lambda: now[0])
+
+    for done in range(1, 1001):  # 1000 questions, instant: only 5% steps are written
+        update(done, 1000)
+    assert reported[0] == ("extracting", 45)
+    assert all(b[1] - a[1] >= 5 for a, b in itertools.pairwise(reported[:-1]))
+    assert reported[-1] == ("extracting", 79)
+    assert len(reported) <= 9
+    assert {stage for stage, _ in reported} == {"extracting"}
+
+    reported.clear()
+    slow = _ExtractionProgress(lambda stage, pct: reported.append((stage, pct)), lambda: now[0])
+    now[0] = 6.0
+    slow(1, 1000)  # +0%: nothing to report
+    slow(30, 1000)  # +1%, but 6 s since the last write
+    assert reported == [("extracting", 41)]
+    now[0] = 7.0
+    slow(31, 1000)  # +0%, 1 s: throttled
+    assert reported == [("extracting", 41)]
+
+
+def test_import_job_reports_extraction_progress_within_the_extracting_stage(world: World) -> None:
+    run = world.start(world.paper())
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    extracting = [pct for stage, pct in world.imports.percents if stage == "extracting"]
+    assert extracting[0] == 40
+    assert extracting == sorted(extracting)
+    assert all(40 <= pct <= 79 for pct in extracting)
+    assert [s for s, _ in world.imports.percents][-1] == "saving"
