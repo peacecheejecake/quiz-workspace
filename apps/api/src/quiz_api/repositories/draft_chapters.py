@@ -16,6 +16,7 @@ from quiz_api.chapter_matching import BookChapter
 from quiz_api.repositories.tables import chapters, content_blocks, documents
 
 BOOK = "book"
+QUESTION_PAPER = "question_paper"
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,16 @@ class DraftChapterRepository:
 
     def book_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
         """Outline nodes of the current revision of every live book here, in outline order."""
+        return self._current_outline(workspace_id, BOOK)
+
+    def paper_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
+        """Level-1 outline nodes of the current revision of every live question paper here, in
+        outline order (CHAP-MATCH: the fallback chapters and the editor's extra choices)."""
+        return self._current_outline(workspace_id, QUESTION_PAPER, level_one=True)
+
+    def _current_outline(
+        self, workspace_id: uuid.UUID, document_type: str, *, level_one: bool = False
+    ) -> list[BookChapter]:
         rows = self._session.execute(
             select(
                 chapters.c.id,
@@ -57,7 +68,8 @@ class DraftChapterRepository:
             .where(
                 chapters.c.workspace_id == workspace_id,
                 documents.c.deleted_at.is_(None),
-                documents.c.document_type == BOOK,
+                documents.c.document_type == document_type,
+                *([chapters.c.level == 1] if level_one else []),
             )
             .order_by(
                 documents.c.created_at,
@@ -156,11 +168,55 @@ class DraftChapterRepository:
 
         return {key: chain(node) for key, node in nodes.items()}
 
+    def source_top_levels(
+        self,
+        workspace_id: uuid.UUID,
+        revision_id: uuid.UUID,
+        refs: Mapping[uuid.UUID, SourceRef],
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        """Per key: the top-level outline ancestor (the node without a parent, CHAP-MATCH) of
+        its source block's chapter in this document revision. Keys whose block has no chapter
+        are left out."""
+        nodes = self.source_chapters(workspace_id, revision_id, refs)
+        if not any(n is not None for n in nodes.values()):
+            return {}
+        parents = {
+            row.id: row.parent_id
+            for row in self._session.execute(
+                select(chapters.c.id, chapters.c.parent_id).where(
+                    chapters.c.workspace_id == workspace_id,
+                    chapters.c.document_revision_id == revision_id,
+                )
+            )
+        }
+        out: dict[uuid.UUID, uuid.UUID] = {}
+        for key, node in nodes.items():
+            seen: set[uuid.UUID] = set()
+            while node is not None and node in parents and node not in seen:
+                seen.add(node)
+                up = parents[node]
+                if up is None or up not in parents:
+                    out[key] = node
+                    break
+                node = up
+        return out
+
     def current_book_chapters(
         self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID]
     ) -> dict[uuid.UUID, BookChapter]:
         """chosen chapter id -> the same section in its book's current revision (missing when
         the book was deleted or the section no longer exists)."""
+        return self.current_chapters(workspace_id, chapter_ids, book_only=True)
+
+    def current_chapters(
+        self,
+        workspace_id: uuid.UUID,
+        chapter_ids: Iterable[uuid.UUID],
+        *,
+        book_only: bool,
+    ) -> dict[uuid.UUID, BookChapter]:
+        """Like `current_book_chapters`; `book_only=False` also resolves chapters of question
+        papers (CHAP-MATCH fallback)."""
         ids = sorted(set(chapter_ids))
         if not ids:
             return {}
@@ -193,7 +249,7 @@ class DraftChapterRepository:
                 chapters.c.workspace_id == workspace_id,
                 chapters.c.id.in_(ids),
                 documents.c.deleted_at.is_(None),
-                documents.c.document_type == BOOK,
+                *([documents.c.document_type == BOOK] if book_only else []),
             )
         )
         return {
