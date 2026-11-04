@@ -398,14 +398,11 @@ def _inline_answer(text: str) -> str | None:
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
 
 
-def _numbered_option_of_letter_list(
-    current: RawQuestion | None, number: int, body: str
-) -> bool:
+def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str) -> bool:
     """``1. (가)`` printed under a stem that lists ``(가) ...`` items: the next numbered option
     (not a new question) when the numbers continue the options printed so far."""
     return (
-        current is not None
-        and not current.answered
+        not current.answered
         and number == len(current.options) + 1
         and _LETTER_ITEM.match(body) is not None
         and any(_LETTER_ITEM.match(part) for part in current.stem_parts[1:])
@@ -571,10 +568,13 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 # unless what it opens asks something; either way the lines then take the
                 # normal path (explanation, or a new question).
                 start = None
-            if start is not None and _numbered_option_of_letter_list(
-                current, int(start.group("num")), start.group("body")
+            if (
+                start is not None
+                and current is not None
+                and _numbered_option_of_letter_list(
+                    current, int(start.group("num")), start.group("body")
+                )
             ):
-                assert current is not None
                 current.options.append(
                     RawOption(
                         label=start.group("num"), text=start.group("body").strip(), lines=[line]
