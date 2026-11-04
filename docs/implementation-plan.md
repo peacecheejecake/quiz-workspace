@@ -332,7 +332,7 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | Task | 범위 | 파일 | 의존 | DoD |
 |---|---|---|---|---|
 | RELSRC-COLLAPSE | `RelatedSources`/`SharedRelatedSources`: 기본 `aria-expanded=false`, 처음 펼칠 때만 `GET …/related-sources`(서버가 없으면 계산·저장), 접었다 펼치면 불러온 목록 재사용, 위치(sequence)·session이 바뀌면 다시 접힘, `read-only`·`manage`도 같음 | `docs/screens/related-sources.md` 외 문구, `apps/web/src/components/questions/related-sources`, `apps/web/test/related-sources.test.tsx`, `tests/e2e/questions/related-sources.spec.ts`, `tests/e2e/fixtures/related-sources.ts`, `tests/e2e/quality/a11y-ask.spec.ts`(A11Y-18), `tests/e2e/quality/visual.spec.ts`(VISUAL-09) | RELSRC-W | 영향 AC가 "접힘 + 펼치기 전 요청 0" 단언 후 기존 동작 단언, 제출 전 요청 없음·상태 5종·`다시 시도`·status·키보드 유지, VISUAL-09 baseline 변경 시 재생성 |
-| AIEXPL-LAYOUT AI 해설 버튼·내용 영역 분리, `AI 질문하기` 나란히 | 🔄 진행 중 | 이 branch(`feature/aiexp-layout`) | 2026-11-04. 사용자 결정(§7 AIEXPL-LAYOUT). AC 수 변화 없음. E2E는 PR CI에서 확인. |
+| AIEXPL-LAYOUT AI 해설 버튼·내용 영역 분리, `AI 질문하기` 나란히 | ✅ (Codex P2×2 → a9e17c02 · 9f85fb77) | 이 branch(`feature/aiexp-layout`) | 2026-11-04. 사용자 결정(§7 AIEXPL-LAYOUT). AC 수 변화 없음. E2E는 PR CI에서 확인. |
 
 ## 4. Task 의존 그래프
 
@@ -1010,9 +1010,8 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | HEATMAP-PALETTE Heatmap palette·테두리 삭제 | ✅ | 이 branch(`task/HEATMAP-PALETTE`) | 2026-11-04. 사용자 결정(§7 HEATMAP-PALETTE). AC 수 변화 없음. |
 | RELSRC-COLLAPSE 관련 본문 접힘 기본·펼칠 때 생성 | 🔄 진행 중 | 이 branch(`task/RELSRC-COLLAPSE`) | 2026-11-04. 사용자 결정(§7 RELSRC-COLLAPSE). AC 수 변화 없음. |
 | IMPORT-TIMEOUT 문제 추출 시간 한도·진행률 | ✅ | 99bb7774 · 9c833812 | 2026-11-04. `task/IMPORT-TIMEOUT`(from `feature/import-timeout` f7c78725). (1) `question.import`에 document task 한도 적용(`DOCUMENT_LIMIT_JOB_TYPES`), (2) `QuestionExtractor.extract(progress=)` + job의 throttled 40→79% 보고. test: `test_resource_limits`·`test_question_import_job`·`test_extractor`. Codex 리뷰 대기. |
-| PALETTE-UNIFY 앱 전체 palette 통일 | 🔄 진행 중 | `feature/palette-unify` | 2026-11-05. 사용자 결정(§7 PALETTE-UNIFY). AC 수 변화 없음. 영향 VISUAL-*·Storybook baseline은 재생성 전(목록은 PR 설명). |
-| QPARSE-FIX 문제 가져오기 파싱(정 답 공백·(가) 보기 목록) | 🔄 진행 중 | 이 branch(`feature/qparse-fix`) | 2026-11-04. §7 QPARSE-FIX. AC 수 변화 없음. |
-| CHAP-MATCH 챕터 매칭 폴백·재매칭 | ✅ (API·web; Codex review 대기) | cdcc51e5 · d47e92ad | 2026-11-04. `feature/chap-match`. matcher: 같은 key 후보는 level 최소 하나면 선택; `StartBlock.paper_chapter`(최상위 조상, 현재 revision으로 해석)로 `paper_chapter` 폴백; `quiz_api.chapter_rematch`·`POST …/questions/chapter-rematch`; 문제지 level-1 장이 옮기기 대상·편집기 선택에 포함. 테스트: API 단위(규칙·폴백·재매칭 멱등·manual 불변·Workspace 격리) 899 통과, web 1174 통과. 후속: (1) infra 통합 테스트(SQL 후보·잠금)는 스택 없이 못 돌려 미작성, (2) worker hook, (3) `chapter-redistribution` 목록의 폴백 reason 문구. |
-| CHAP-MATCH 챕터 매칭 폴백·재매칭 | ✅ (API·worker·DB; Codex review 대기) | cdcc51e5 · d47e92ad · 이후 커밋 | 2026-11-04. `feature/chap-match`. matcher: 같은 key 후보는 level 최소 하나면 선택; `StartBlock.paper_chapter`(최상위 조상, 현재 revision으로 해석)로 `paper_chapter` 폴백; `quiz_worker.chapter_rematch`(교재 활성화 직후)·`worker_rematch_chapters`(migration, rolled-back 트랜잭션에서 검증, 적용은 orchestrator); 문제지 level-1 장이 옮기기 대상·편집기 선택에 포함. 테스트: API 단위(규칙·폴백·재매칭 멱등·manual 불변·Workspace 격리) 899 통과, web 1174 통과. 후속: (1) worker의 SqlRematchStore 읽기 SQL은 단위 테스트가 fake로만 돈다(실 DB infra 테스트 없음), (2) `chapter-redistribution` 목록의 폴백 reason 문구. |
+| PALETTE-UNIFY 앱 전체 palette 통일 | ✅ (Codex 지적 없음) | `feature/palette-unify` | 2026-11-05. 사용자 결정(§7 PALETTE-UNIFY). AC 수 변화 없음. 영향 VISUAL-*·Storybook baseline은 재생성 전(목록은 PR 설명). |
+| QPARSE-FIX 문제 가져오기 파싱(정 답 공백·(가) 보기 목록) | ✅ (Codex P2×2 → 6e808ec3 · 8e4aa0dd) | 이 branch(`feature/qparse-fix`) | 2026-11-04. §7 QPARSE-FIX. AC 수 변화 없음. |
+| CHAP-MATCH 챕터 매칭 폴백·재매칭 | ✅ (API·worker·DB; Codex 지적 없음) | cdcc51e5 · d47e92ad · 이후 커밋 | 2026-11-04. `feature/chap-match`. matcher: 같은 key 후보는 level 최소 하나면 선택; `StartBlock.paper_chapter`(최상위 조상, 현재 revision으로 해석)로 `paper_chapter` 폴백; `quiz_worker.chapter_rematch`(교재 활성화 직후)·`worker_rematch_chapters`(migration, rolled-back 트랜잭션에서 검증, 적용은 orchestrator); 문제지 level-1 장이 옮기기 대상·편집기 선택에 포함. 테스트: API 단위(규칙·폴백·재매칭 멱등·manual 불변·Workspace 격리) 899 통과, web 1174 통과. 후속: (1) worker의 SqlRematchStore 읽기 SQL은 단위 테스트가 fake로만 돈다(실 DB infra 테스트 없음), (2) `chapter-redistribution` 목록의 폴백 reason 문구. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
