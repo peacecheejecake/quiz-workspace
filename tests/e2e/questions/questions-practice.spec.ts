@@ -496,13 +496,16 @@ test(
 
     let panel = await openPanel(page, 1);
     await expect(page).toHaveURL(at(1));
+    await expect(panelUi.options(panel)).toHaveCount(4);
     await panelUi.next(panel).click();
     panel = panelUi.numbered(page, 2);
     await expect(panel).toBeVisible();
     await expect(page).toHaveURL(at(2));
+    await expect(panelUi.options(panel)).toHaveCount(4);
     await panelUi.next(panel).click();
     await expect(panelUi.numbered(page, 3)).toBeVisible();
     await expect(page).toHaveURL(at(3));
+    await expect(panelUi.options(panelUi.numbered(page, 3))).toHaveCount(4);
     await panelUi.previous(panelUi.numbered(page, 3)).click();
     await expect(panelUi.numbered(page, 2)).toBeVisible();
     await expect(page).toHaveURL(at(2));
@@ -521,6 +524,7 @@ test(
     // A deep link opens the panel directly; every question visited was recorded as viewed.
     await page.goto(overviewPath(s.workspaceId, q(s, 3).id));
     await expect(panelUi.numbered(page, 3)).toBeVisible();
+    await expect(panelUi.options(panelUi.numbered(page, 3))).toHaveCount(4);
     for (const n of [1, 2, 3]) {
       expect((await overviewItem(s.owner, s.workspaceId, q(s, n).id)).status).toBe('viewed');
     }
