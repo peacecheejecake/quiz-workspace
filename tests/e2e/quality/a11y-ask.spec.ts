@@ -22,6 +22,7 @@ import {
   ASK_TIMEOUT_MS,
   askPath,
   askThroughApi,
+  conversationOf,
   askUi,
   createSecretQuestion,
   openAskPanel,
@@ -182,10 +183,12 @@ test(
   async ({ page, workspaceFactory }) => {
     const s = await askWorkspace(workspaceFactory, 'a11y17-stacks');
     const limited = await startAskLimitStack();
+    let conversation: string;
     try {
       await openHome(page, s.owner, s.workspaceId, limited.webUrl);
       const panel = await openAskPanel(page);
       await waitDone(await ask(panel, `${QUESTION} 1`));
+      conversation = conversationOf(page);
       await waitDone(await ask(panel, `${QUESTION} 2`));
       await askUi.input(panel).fill(`${QUESTION} 3`);
       await askUi.input(panel).press('Enter');
@@ -198,9 +201,14 @@ test(
     try {
       await page.goto(`${off.webUrl}${homePath(s.workspaceId)}`);
       await expect(homeUi.questionMenuButton(page)).toBeVisible();
-      const panel = await openAskPanel(page);
+      await expect(askUi.headerButton(page)).toHaveCount(0);
+      await page.goto(`${off.webUrl}${askPath(s.workspaceId, conversation)}`);
+      const panel = askUi.panel(page);
+      await expect(askUi.answers(panel)).toHaveCount(2);
+      await expect(askUi.answers(panel).first()).toContainText(PASSAGES.book);
       await expect(askUi.input(panel)).toHaveAttribute('aria-disabled', 'true');
       await expect(askUi.input(panel)).toHaveAccessibleDescription(ASK_TEXT.disabled);
+      await expect(askUi.send(panel)).toHaveCount(0);
       await expectAccessible(page, 'AI 질문 panel, feature off (saved conversations only)');
     } finally {
       await off.stop();
