@@ -149,7 +149,7 @@ export function MockExamForm({
   }
 
   return (
-    <div className={styles.form}>
+    <div className={`${styles.form} ${styles.playForm}`}>
       <ol className={styles.steps} aria-label="풀기 단계">
         {STEPS.map((item, index) => (
           <li key={item.id} aria-current={step === index ? 'step' : undefined}>
@@ -158,7 +158,7 @@ export function MockExamForm({
         ))}
       </ol>
       {step === 0 ? (
-        <form className={styles.form} onSubmit={next} noValidate>
+        <form className={`${styles.form} ${styles.playForm}`} onSubmit={next} noValidate>
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
             옵션
           </h3>
@@ -267,7 +267,7 @@ export function MockExamForm({
               onCheckedChange={(checked) => setValues({ ...values, wholeRange: checked === true })}
             />
           ) : null}
-          <div className={styles.footer}>
+          <div className={`${styles.footer} ${styles.playFooter}`}>
             {onCancel ? (
               <Button type="button" onClick={onCancel} disabled={busy}>
                 취소
@@ -279,7 +279,7 @@ export function MockExamForm({
           </div>
         </form>
       ) : (
-        <div className={styles.form}>
+        <div className={`${styles.form} ${styles.playForm}`}>
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
             범위
           </h3>
@@ -307,7 +307,7 @@ export function MockExamForm({
               {error}
             </p>
           ) : null}
-          <div className={styles.footer}>
+          <div className={`${styles.footer} ${styles.playFooter}`}>
             <Button
               onClick={() => {
                 setStep(0);
