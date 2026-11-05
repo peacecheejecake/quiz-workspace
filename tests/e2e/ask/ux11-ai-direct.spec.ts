@@ -237,22 +237,40 @@ test(
       '사용자 A의 비공개 질문',
     );
     await context.clearCookies();
-    const signedOutIdentity = page.waitForResponse((response) =>
-      response.url().includes('/api/auth/identity'),
-    );
+    let captureIdentity!: (value: { status: number; body: unknown }) => void;
+    const signedOutIdentity = new Promise<{ status: number; body: unknown }>((resolve) => {
+      captureIdentity = resolve;
+    });
+    await page.route('**/api/auth/identity', async (route) => {
+      const response = await route.fetch();
+      captureIdentity({ status: response.status(), body: await response.json() });
+      await route.fulfill({ response });
+    });
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    const identity = await signedOutIdentity;
-    expect(identity.status()).toBe(200);
-    expect(await identity.json()).toEqual({ id: null });
+    expect(await signedOutIdentity).toEqual({ status: 200, body: { id: null } });
+    await page.unroute('**/api/auth/identity');
     await expect(panel.getByText('사용자 A의 비공개 질문')).toHaveCount(0);
-    await page.keyboard.press('Escape');
     const second = await context.newPage();
     await signInAs(second, other.user);
     await second.close();
     await page.bringToFront();
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.goto(searchPath(ws.id));
     panel = await openSearchAsk();
     await expect(panel.getByText('사용자 A의 비공개 질문')).toHaveCount(0);
+    await expect(panel.getByRole('group', { name: '보내지 못한 질문' })).toHaveCount(0);
+    const otherInput = askUi.input(panel);
+    await expect(otherInput).toHaveValue('');
+    await otherInput.fill('사용자 B의 질문');
+    await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await page.unroute('**/api/ask/conversations/*/messages');
+    const accepted = page.waitForResponse(
+      (response) => response.status() === 202 && response.url().includes('/messages'),
+    );
+    await otherInput.press('Enter');
+    await accepted;
   },
 );
 
@@ -442,6 +460,7 @@ test(
     });
     const input = askUi.input(panel);
     await expect(input).toBeEditable();
+    await expect(panel.getByRole('button', { name: '보내기' })).toBeVisible();
     await input.fill('응답이 유실된 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
       'aria-disabled',
