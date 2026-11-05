@@ -1115,3 +1115,9 @@ UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·�
 | UX11-AI-DIRECT | ✅ 독립 리뷰·main 재검증·통합 | 1f0a370f · 99ffceda | 최종 test 후속 리뷰 지적 없음(215824 log). 통합 AI 양 브라우저34 GREEN, 직접 질문·즉시 입력 비우기·owner/compose session별 draft/수신/멱등 재시도 복구. 로그아웃 후 보호 경로 이동에도 새 사용자 입력 가능 검증 |
 | UX11-RETURN | ✅ 독립 리뷰·main 재검증·통합 | 7295831f · 28180e26 | 마지막 리뷰 지적 없음(215453 log). main 단위66·실제 API5·pgTAP1204·전용 양 브라우저18 및 로그 감사 추가10 GREEN. 별도 연습·원 회차 유지·리셋 fencing·안전 계정 전환, 공유 origin migration 적용. 과거 WebKit 생성 1건 미재현: production agent5회·main 각 엔진3회 통과 |
 | UX11-STEM | ✅ 독립 리뷰·main 재검증·통합 | bf8d3a8e | 최종 리뷰 지적 없음(182003 log). main TS67·Python52·Chromium/WebKit16·trace16/strict·screen30 GREEN. 초기/후속 항목 경계 분리, 문단·범위 참조·산술 기호 보존 |
+
+### PR #78 CI 후속 — 2026-11-05
+
+첫 CI에서 모바일 SMOKE-02와 ACCOUNT-01-AC01의 실제 헤더 겹침을 발견했다. 공통 `.qz-button`과 같은 specificity였던 UserMenu/WorkspaceSwitcher 축소 규칙이 bundle 순서에 따라 덮이는 문제로, module selector를 button으로 한정해 의도된 flex-shrink를 보장했다(5066268f, 리뷰 233203 log). 원래 검증은 그대로 두었으며 main에서 실패했던 9개 프로젝트·케이스를 다시 통과했다. 기존 mask는 바꾸지 않고 실제 phone header 경계에서 달라진 16개 PNG만 갱신·직접 확인했다.
+
+기존 DOC-01/HOMEDLG-01 검증의 제거된 메뉴 항목·옛 모의고사 제목 기대값은 통합 풀기 기준으로 교정했다(01723cbc, 리뷰 232845 log). 종류 변경은 키보드 End 뒤 실제 focus를 기다리며 원래 변경·권한·modal/inert/focus/layout 검증을 유지한다. main Chromium/WebKit 30개 통과. CI 결과와 이후 병합·배포는 [PR #78](https://github.com/peacecheejecake/quiz-workspace/pull/78)의 실행 기록으로 확인한다.
