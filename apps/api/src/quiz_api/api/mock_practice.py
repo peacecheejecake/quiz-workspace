@@ -166,7 +166,7 @@ def _own_session(
     found = repo.get_session(session_id, user_id, lock=True)
     if found is None:  # the question was taken out of its mock exam
         raise _not_found()
-    if found.practice_run_id is None and not found.shown:
+    if found.practice_run_id is None and not found.shown and not found.retry_origin_valid:
         # Outside a run a session ends with what the mock exam lists: after 삭제 (MOCK-01-C05)
         # or 다시 만들기 (the earlier round is hidden, C04). Runs continue (decision n).
         raise _not_found()

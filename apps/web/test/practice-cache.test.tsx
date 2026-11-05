@@ -135,9 +135,14 @@ describe('PracticeSessionCache', () => {
 const latest = vi.fn<() => Promise<unknown>>();
 const open = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
 const submit = vi.fn<(ws: string, sessionId: string, answer: unknown) => Promise<unknown>>();
+const reset = vi.fn();
+const recordReturn = vi.fn();
+vi.mock('../src/components/practice-return/practice-return-provider', () => ({
+  useOptionalPracticeReturn: () => ({ recordActivity: recordReturn }),
+}));
 vi.mock('../src/lib/questions/practice-actions', () => ({
   latestPracticeAction: () => latest(),
-  resetPracticeAction: vi.fn(),
+  resetPracticeAction: reset,
   openPracticeSessionAction: (ws: string, q: string, key: string) => open(ws, q, key),
   submitPracticeAction: (ws: string, s: string, a: unknown) => submit(ws, s, a),
   selfGradePracticeAction: vi.fn(),
@@ -186,6 +191,8 @@ function Harness({
 beforeEach(() => {
   open.mockReset();
   submit.mockReset();
+  reset.mockReset();
+  recordReturn.mockReset();
   latest.mockReset();
   latest.mockResolvedValue({
     ok: true,
@@ -204,6 +211,16 @@ beforeEach(() => {
 });
 
 describe('QuestionViewer practice session cache', () => {
+  it('UX11-RETURN-AC02 records the valid standalone question on entry', async () => {
+    render(<Harness questionId={Q1} />);
+    await screen.findByText(`stem of ${Q1}`);
+    expect(recordReturn).toHaveBeenCalledWith({
+      kind: 'question',
+      workspaceId: WS,
+      questionId: Q1,
+    });
+  });
+
   it('re-opens a viewed unanswered question after metadata verification without a new session', async () => {
     const view = render(<Harness questionId={Q1} />);
     expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();
@@ -258,7 +275,7 @@ describe('QuestionViewer practice session cache', () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses a retry when the latest attempt is the one that preceded it', async () => {
+  it('UX11-RETURN-AC01 opens a fresh session without resetting history and reuses that retry', async () => {
     const user = userEvent.setup();
     const previous = session(Q1);
     const result = {
@@ -284,13 +301,15 @@ describe('QuestionViewer practice session cache', () => {
     });
     const view = render(<Harness questionId={Q1} />);
     await screen.findByText('정답입니다.');
-    await user.click(screen.getByRole('button', { name: /한 번 더 풀기/ }));
+    await user.click(screen.getByRole('button', { name: /^다시 풀기$/ }));
     await screen.findByRole('button', { name: '제출' });
     expect(open).toHaveBeenCalledTimes(1);
+    expect(reset).not.toHaveBeenCalled();
     view.rerender(<Harness questionId={null} />);
     view.rerender(<Harness questionId={Q1} />);
     await screen.findByRole('button', { name: '제출' });
     expect(open).toHaveBeenCalledTimes(1);
+    expect(reset).not.toHaveBeenCalled();
   });
 
   it('reuses a current revision session when only an older revision was submitted', async () => {

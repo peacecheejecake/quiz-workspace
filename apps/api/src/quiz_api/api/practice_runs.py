@@ -57,6 +57,7 @@ answer can still be self-graded.
 
 from __future__ import annotations
 
+import hashlib
 import random
 import secrets
 import uuid
@@ -65,7 +66,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from quiz_api.api.question_overview import chapter_number, preview_text
@@ -74,7 +75,9 @@ from quiz_api.authz import (
     AccessRepository,
     Action,
     LockMode,
+    ResourceType,
     WorkspaceAccess,
+    authorize_resource,
     authorize_workspace,
     decide,
     get_access_repository,
@@ -147,6 +150,30 @@ class PracticeRunCreate(BaseModel):
         if self.source == "mock" and self.question_count is not None:
             raise ValueError("question_count is only supported for source=bank.")
         return self
+
+
+class RetrySession(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    question_id: uuid.UUID
+    question_revision_id: uuid.UUID
+    question_type: QuestionType
+    chapter_id: uuid.UUID | None
+    question_number: int | None
+    stem: str
+    is_multi_answer: bool
+    options: list[RunOption]
+    displayed_option_ids: list[str]
+    state: SessionState
+    opened_at: datetime
+    practice_run_id: uuid.UUID | None = None
+    run_position: int | None = None
+
+
+class RetrySessionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_reset_epoch: int | None = Field(default=None, ge=0)
 
 
 class RunSummary(BaseModel):
@@ -581,6 +608,135 @@ def _progress(run: RunRecord, runs: PracticeRunRepository, mocks: MockPracticeRe
 def get_practice_run(run: ReadRun, runs: RunRepo, mocks: MockRepo) -> PracticeRun:
     """The run's counts, progress and summary (no items, no content)."""
     return _run_out(run, _progress(run, runs, mocks))
+
+
+@router.post(
+    "/practice-runs/{run_id}/items/{position}/retry-session",
+    status_code=status.HTTP_201_CREATED,
+    response_model=RetrySession,
+    operation_id="startRunItemRetrySession",
+    responses=problem_responses(409),
+)
+def start_run_item_retry_session(
+    run: WriteRun,
+    position: Annotated[int, Path(ge=1)],
+    runs: RunRepo,
+    practice: PracticeRepo,
+    mocks: MockRepo,
+    db: Annotated[Session, Depends(get_db_session)],
+    access_repo: AccessRepo,
+    idempotency: IdempotencyStoreDep,
+    user: CurrentUser,
+    body: RetrySessionCreate | None = None,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    from quiz_api.api.mock_practice import session_out
+    from quiz_api.api.practice import PracticeSessionCreate, start_practice_session
+    from quiz_api.repositories.questions import QuestionRepository
+
+    if position > run.total:
+        raise _not_found()
+    question_id = runs.question_at(run.id, position)
+    if question_id is None:
+        raise _not_found()
+    authorize_workspace(
+        access_repo,
+        user.id,
+        run.workspace_id,
+        Action.PRACTICE,
+        LockMode.SHARE,
+        not_found_detail=NOT_FOUND,
+    )
+    body = body or RetrySessionCreate()
+    if run.source == "bank":
+        if runs.live_question(run.workspace_id, question_id) is None:
+            raise _not_found()
+        epoch = practice.lock_epoch(user.id, question_id)
+        origin_session = practice.run_session(run.id, position, user.id)
+        if origin_session is not None and origin_session.reset_epoch != epoch:
+            raise ProblemException(
+                409,
+                ProblemType.PRACTICE_SESSION_RESET,
+                detail="This practice session was reset. Start a new run.",
+            )
+        access = authorize_resource(
+            access_repo, user.id, ResourceType.QUESTION, question_id, Action.PRACTICE
+        )
+        scoped_key = (
+            hashlib.sha256(f"run-retry:{run.id}:{position}:{idempotency_key}".encode()).hexdigest()
+            if idempotency_key is not None
+            else None
+        )
+        return start_practice_session(
+            access,
+            practice,
+            QuestionRepository(db),
+            runs,
+            idempotency,
+            user,
+            PracticeSessionCreate(expected_reset_epoch=body.expected_reset_epoch),
+            scoped_key,
+        )
+
+    target = mocks.target(question_id)
+    if (
+        target is None
+        or target.removed
+        or target.exam_deleted
+        or target.workspace_id != run.workspace_id
+        or not mocks.valid_retry_origin(run.id, position, user.id, question_id)
+    ):
+        raise _not_found()
+    scope = f"POST /practice-runs/{run.id}/items/{position}/retry-session"
+    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True))
+    if idempotency_key is not None:
+        idempotency.lock(user.id, scope, idempotency_key)
+        stored = idempotency.find(user.id, scope, idempotency_key)
+        if stored is not None:
+            return replay(stored, body_hash)
+    displayed = (
+        [option["id"] for option in target.revision.options]
+        if target.question_type == "MCQ"
+        else []
+    )
+    opened = mocks.open_session(
+        target,
+        user.id,
+        displayed_option_ids=displayed,
+        shuffle_seed=None,
+        retry_origin_run_id=run.id,
+        retry_origin_position=position,
+    )
+    session = mocks.get_session(opened.id, user.id)
+    if session is None:
+        raise _not_found()
+    mock = session_out(session)
+    result = RetrySession(
+        id=mock.id,
+        workspace_id=mock.workspace_id,
+        question_id=mock.mock_exam_question_id,
+        question_revision_id=mock.revision_id,
+        question_type=mock.question_type,
+        chapter_id=None,
+        question_number=None,
+        stem=mock.stem,
+        is_multi_answer=mock.is_multi_answer,
+        options=[RunOption(id=o.id, text=o.text) for o in mock.options],
+        displayed_option_ids=mock.displayed_option_ids,
+        state=mock.state,
+        opened_at=mock.opened_at,
+    )
+    if idempotency_key is not None:
+        idempotency.save(
+            user.id,
+            scope,
+            idempotency_key,
+            body_hash,
+            status.HTTP_201_CREATED,
+            result.model_dump(mode="json"),
+        )
+    mocks.commit()
+    return result
 
 
 @router.get("/practice-runs/{run_id}/items/{position}", operation_id="getPracticeRunItem")

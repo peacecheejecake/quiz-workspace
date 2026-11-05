@@ -243,7 +243,7 @@ export function FloatingSidePanel({
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const layer = useFloatingLayer(isOpen, raiseKey, aboveModals);
+  const layer = useFloatingLayer(isOpen, raiseKey, aboveModals, modal);
   const swipe = useSwipeDismiss(
     contentRef,
     layer.rank,

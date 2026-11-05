@@ -5,6 +5,7 @@ import { ToastProvider } from '@quiz/ui';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { PracticeReturnIdentity } from '@/components/practice-return/practice-return-provider';
 import { LOGIN_PATH } from '@/lib/auth/routes';
 import { getVerifiedUser } from '@/lib/supabase/server';
 import styles from './authenticated-shell.module.css';
@@ -30,7 +31,8 @@ export async function AuthenticatedShell({
   if (!user) redirect(LOGIN_PATH);
 
   return (
-    <ToastProvider>
+    <ToastProvider key={user.id}>
+      <PracticeReturnIdentity userId={user.id} />
       <AppFrame
         sidebar={sidebar}
         navLabel={navLabel}

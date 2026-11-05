@@ -22,6 +22,7 @@ questions for the size boundary) and reads rows no API exposes (`practice_runs.i
 from __future__ import annotations
 
 import hashlib
+import os
 import random
 import uuid
 from typing import Any
@@ -32,7 +33,9 @@ from quiz_api.settings import LOCAL_CORS_ORIGINS
 
 pytestmark = pytest.mark.infra
 
-DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+DB_ADMIN_URL = os.environ.get(
+    "QUIZ_DB_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+)
 PROBLEM = "urn:quiz-workspace:problem:"
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
 MAX_RUN = 5_000
@@ -1372,3 +1375,206 @@ def test_ux10_play_mock_result_source_metadata_and_chapterless_fallback(seed: An
     admin("update public.questions set deleted_at = now() where id = %s", (r.heatmap[0],))
     after = r.owner.ok("GET", f"/practice-runs/{run['id']}/results")
     assert all(item["chapter_id"] is None for item in after["items"])
+
+
+def test_ux11_return_ac01_standalone_bank_retry_preserves_run_result(seed: Any) -> None:
+    owner = seed.client("ux11-return-bank")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("ux11", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    original = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{original['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    before = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    before_summary = owner.ok("GET", f"/practice-runs/{run['id']}")["summary"]
+    path = f"/practice-runs/{run['id']}/items/1/retry-session"
+    key = str(uuid.uuid4())
+    generic_path = f"/questions/{question['id']}/practice-sessions"
+    generic = owner.ok_response(
+        owner.call_with_headers("POST", generic_path, {}, {"Idempotency-Key": key}),
+        "POST",
+        generic_path,
+        (201,),
+    )
+    retry = owner.ok_response(
+        owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key}), "POST", path, (201,)
+    )
+    replayed = owner.ok_response(
+        owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key}), "POST", path, (201,)
+    )
+    assert replayed["id"] == retry["id"]
+    assert retry["id"] != generic["id"]
+    assert not (_keys(retry) & ANSWER_KEYS)
+    assert retry["id"] != original["id"]
+    assert retry.get("practice_run_id") is None
+    assert retry.get("run_position") is None
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{retry['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+    assert owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200") == before
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["summary"] == before_summary
+    assert (
+        count(
+            "select count(*) from public.question_attempts where question_id = %s",
+            (question["id"],),
+        )
+        == 2
+    )
+    owner.ok("POST", f"/questions/{question['id']}/practice-reset", {})
+    assert owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key}).status_code == 409
+    owner.ok("POST", f"/workspaces/{workspace}/archive")
+    assert owner.call("POST", path, {}).status_code == 403
+
+
+def test_ux11_return_ac01_standalone_mock_retry_preserves_run_result(seed: Any) -> None:
+    owner = seed.client("ux11-return-mock")
+    workspace = str(owner.create_workspace()["id"])
+    bank_question = owner.create_question(workspace, mcq("ux11-mock", 1, 1, None))
+    exam = create_mock_exam(owner, workspace, [bank_question["id"]])
+    question = mock_questions(owner, exam["id"])[0]
+    run = created(owner, workspace, mock(exam["id"], {"all": True}))
+    original = owner.ok_response(
+        mock_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok_response(
+        mock_submit(owner, original["id"], [mock_wrong(question)]), "POST", "submit", (200,)
+    )
+    owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    before = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    before_summary = owner.ok("GET", f"/practice-runs/{run['id']}")["summary"]
+    retry = owner.ok("POST", f"/mock-exam-questions/{question['id']}/practice-sessions", {}, (201,))
+    assert retry["id"] != original["id"]
+    assert retry.get("practice_run_id") is None
+    assert retry.get("run_position") is None
+    owner.ok_response(
+        mock_submit(owner, retry["id"], question["correct_option_ids"]), "POST", "submit", (200,)
+    )
+    assert owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200") == before
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["summary"] == before_summary
+    assert (
+        count(
+            "select count(*) from public.mock_exam_attempts where mock_exam_question_id = %s",
+            (question["id"],),
+        )
+        == 2
+    )
+    assert (
+        count("select count(*) from public.question_attempts where workspace_id = %s", (workspace,))
+        == 0
+    )
+    assert (
+        count(
+            "select count(*) from public.question_user_states where workspace_id = %s", (workspace,)
+        )
+        == 0
+    )
+
+
+def test_ux11_return_historical_mock_retry_is_separate_and_keeps_run(seed: Any) -> None:
+    owner = seed.client("ux11-history-owner")
+    other = seed.client("ux11-history-other")
+    workspace = str(owner.create_workspace()["id"])
+    seed.membership(workspace, other.user, "viewer")
+    bank_question = owner.create_question(workspace, mcq("ux11-history", 1, 1, None))
+    exam = create_mock_exam(owner, workspace, [bank_question["id"]])
+    question = mock_questions(owner, exam["id"])[0]
+    run = created(owner, workspace, mock(exam["id"], {"all": True}))
+    original = owner.ok_response(
+        mock_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok_response(
+        mock_submit(owner, original["id"], [mock_wrong(question)]), "POST", "submit", (200,)
+    )
+    owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    before = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    remade = owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
+    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert item(owner, run["id"], 1)["available"] is True
+    path = f"/practice-runs/{run['id']}/items/1/retry-session"
+    assert other.call("POST", path, {}).status_code == 404
+    key = str(uuid.uuid4())
+    response = owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key})
+    retry = owner.ok_response(response, "POST", path, (201,))
+    assert not (_keys(retry) & ANSWER_KEYS)
+    assert retry.get("practice_run_id") is None
+    assert retry.get("run_position") is None
+    again = owner.ok_response(
+        owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key}), "POST", path, (201,)
+    )
+    assert again["id"] == retry["id"]
+    owner.ok_response(
+        mock_submit(owner, retry["id"], question["correct_option_ids"]), "POST", "submit", (200,)
+    )
+    assert owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200") == before
+    assert (
+        count(
+            "select count(*) from public.mock_exam_attempts where mock_exam_question_id = %s",
+            (question["id"],),
+        )
+        == 2
+    )
+    assert (
+        count("select count(*) from public.question_attempts where workspace_id = %s", (workspace,))
+        == 0
+    )
+    pending = owner.ok("POST", path, {}, (201,))
+    assert owner.call("DELETE", f"/mock-exam-questions/{question['id']}").status_code == 204
+    assert mock_submit(owner, pending["id"], question["correct_option_ids"]).status_code == 404
+    assert owner.call("POST", path, {}).status_code == 404
+    assert owner.call_with_headers("POST", path, {}, {"Idempotency-Key": key}).status_code == 404
+
+
+def test_ux11_return_deleted_mock_exam_rejects_retry_open_submit_and_self_grade(seed: Any) -> None:
+    owner = seed.client("ux11-deleted-mock")
+    workspace = str(owner.create_workspace()["id"])
+    bank_question = owner.create_question(workspace, mcq("ux11-delete", 1, 1, None))
+    exam = create_mock_exam(owner, workspace, [bank_question["id"]])
+    question = mock_questions(owner, exam["id"])[0]
+    run = created(owner, workspace, mock(exam["id"], {"all": True}))
+    path = f"/practice-runs/{run['id']}/items/1/retry-session"
+    retry = owner.ok("POST", path, {}, (201,))
+    assert owner.call("DELETE", f"/mock-exams/{exam['id']}").status_code == 204
+    assert owner.call("POST", path, {}).status_code == 404
+    assert mock_submit(owner, retry["id"], question["correct_option_ids"]).status_code == 404
+    assert (
+        owner.call(
+            "POST", f"/mock-practice-sessions/{retry['id']}/self-grade", {"result": "correct"}
+        ).status_code
+        == 404
+    )
+
+
+def test_ux11_return_deleted_exam_rejects_self_grading_a_pending_retry(seed: Any) -> None:
+    owner = seed.client("ux11-deleted-pending")
+    workspace = str(owner.create_workspace()["id"])
+    essay = owner.create_question(
+        workspace,
+        {
+            "question_type": "ESSAY",
+            "stem": "Explain the cycle.",
+            "rubric": "Evaporation",
+            "explanation": "Synthetic explanation",
+        },
+    )
+    exam = create_mock_exam(owner, workspace, [essay["id"]])
+    run = created(owner, workspace, mock(exam["id"], {"all": True}))
+    retry = owner.ok("POST", f"/practice-runs/{run['id']}/items/1/retry-session", {}, (201,))
+    submitted = owner.ok(
+        "POST", f"/mock-practice-sessions/{retry['id']}/submit", {"answer_text": "Evaporation"}
+    )
+    assert submitted["result"] == "pending"
+    assert owner.call("DELETE", f"/mock-exams/{exam['id']}").status_code == 204
+    assert (
+        owner.call(
+            "POST", f"/mock-practice-sessions/{retry['id']}/self-grade", {"result": "correct"}
+        ).status_code
+        == 404
+    )

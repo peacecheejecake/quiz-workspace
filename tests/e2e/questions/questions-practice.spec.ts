@@ -315,7 +315,7 @@ test(
 
     // A new session: a subset of the correct answers is wrong.
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -355,7 +355,7 @@ test(
     await page.keyboard.press('Escape');
 
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.answerText(panel).fill('응결');
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -385,7 +385,7 @@ test(
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await panelUi.retryOn(panel).click();
     await expect(panelUi.retryOff(panel)).toBeVisible();
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, question.revision.options[1]?.text ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
@@ -635,7 +635,7 @@ test(
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await expect(panelUi.submit(panel)).toBeVisible();
     await expect(panelUi.options(panel)).toHaveCount(4);
     expect(answerKeysIn(await startPractice(s.owner, created.id))).toEqual([]);
@@ -1082,7 +1082,7 @@ test(
 
     // Wrong: the chosen option grey with "내 선택", the correct option red with "정답".
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);

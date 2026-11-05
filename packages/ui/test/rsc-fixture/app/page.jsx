@@ -2,6 +2,7 @@
 // component is rendered here with serializable props only. test/client-boundary.test.ts keeps
 // this list in sync with src/index.ts.
 import {
+  useModalLayerOpen,
   AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
@@ -184,6 +185,7 @@ const label = questionDotLabel({
 });
 
 export default function Page() {
+  void useModalLayerOpen;
   return (
     <ThemeProvider defaultTheme="light">
       <ToastProvider>

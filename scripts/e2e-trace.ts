@@ -114,6 +114,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX10-QVIEW.0': ['UX10-QVIEW'],
   'UX10-PLAY.0': ['UX10-PLAY'],
   'UX10-HOME.0': ['UX10-HOME'],
+  'UX11-RETURN': ['UX11-RETURN'],
 };
 
 const LEADING_ID = new RegExp(

@@ -231,6 +231,20 @@ describe('DocumentViewerLayout', () => {
     shell.remove();
   });
 
+  it('UX11-RETURN-AC05 exempts only the named global return portal from fullscreen inertness', () => {
+    const control = document.createElement('div');
+    control.dataset.appGlobalControl = 'practice-return';
+    const unrelated = document.createElement('div');
+    unrelated.dataset.appGlobalControl = 'other';
+    document.body.append(control, unrelated);
+    const { unmount } = render(<Harness />);
+    expect(control.inert).toBeFalsy();
+    expect(unrelated.inert).toBe(true);
+    unmount();
+    control.remove();
+    unrelated.remove();
+  });
+
   describe('pane-header drag', () => {
     // jsdom has no PointerEvent or layout: a minimal PointerEvent and fixed pane boxes
     // (원본 0–500, 변환본 512–1000, both 100–700 tall).

@@ -36,6 +36,8 @@ export const RUN_BFF_PATHS = {
   run: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}`,
   item: (runId: string, position: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}`,
+  retrySession: (runId: string, position: number) =>
+    `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/retry-session`,
   results: (runId: string, offset: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/results?offset=${offset}&limit=${RUN_RESULTS_PAGE}`,
   finish: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}/finish`,
@@ -63,6 +65,12 @@ export interface PracticeRunApi {
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
   openSession(
     questionId: string,
+    runId: string,
+    position: number,
+    key: string,
+    expectedResetEpoch?: number | null,
+  ): Promise<RunActionResult<PracticeSession>>;
+  openRetrySession(
     runId: string,
     position: number,
     key: string,
@@ -153,6 +161,14 @@ export function createPracticeRunApi(
             run_position: position,
             ...(expectedResetEpoch == null ? {} : { expected_reset_epoch: expectedResetEpoch }),
           },
+          key,
+        }),
+      ),
+    openRetrySession: async (runId, position, key, epoch) =>
+      own(
+        await call<PracticeSession>(RUN_BFF_PATHS.retrySession(runId, position), {
+          method: 'POST',
+          body: epoch == null ? {} : { expected_reset_epoch: epoch },
           key,
         }),
       ),

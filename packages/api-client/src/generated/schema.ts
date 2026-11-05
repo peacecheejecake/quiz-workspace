@@ -1030,6 +1030,23 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/practice-runs/{run_id}/items/{position}/retry-session': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Start Run Item Retry Session */
+    post: operations['startRunItemRetrySession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-runs/{run_id}/results': {
     parameters: {
       query?: never;
@@ -6776,6 +6793,65 @@ export type components = {
         [key: string]: string;
       };
     };
+    /** RetrySession */
+    RetrySession: {
+      /** Chapter Id */
+      chapter_id: string | null;
+      /** Displayed Option Ids */
+      displayed_option_ids: string[];
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Is Multi Answer */
+      is_multi_answer: boolean;
+      /**
+       * Opened At
+       * Format: date-time
+       */
+      opened_at: string;
+      /** Options */
+      options: components['schemas']['RunOption'][];
+      /** Practice Run Id */
+      practice_run_id?: string | null;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /** Question Number */
+      question_number: number | null;
+      /**
+       * Question Revision Id
+       * Format: uuid
+       */
+      question_revision_id: string;
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /** Run Position */
+      run_position?: number | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: 'open' | 'pending_grade' | 'graded';
+      /** Stem */
+      stem: string;
+      /**
+       * Workspace Id
+       * Format: uuid
+       */
+      workspace_id: string;
+    };
+    /** RetrySessionCreate */
+    RetrySessionCreate: {
+      /** Expected Reset Epoch */
+      expected_reset_epoch?: number | null;
+    };
     /** ReviewedImportDraft */
     ReviewedImportDraft: {
       /**
@@ -12312,6 +12388,90 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  startRunItemRetrySession: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        position: number;
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['RetrySessionCreate'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RetrySession'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
