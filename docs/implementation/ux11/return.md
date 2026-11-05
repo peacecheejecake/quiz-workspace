@@ -15,7 +15,7 @@
 
 ## 복귀 상태·보안
 
-단일 사용자·탭에서 마지막 유효 대상 하나를 보관한다. workspace/question/run/position 등 최소 식별자와 allowlist route만 저장하고 정답·발문·JWT·signed URL·전체 URL을 저장하지 않는다. 기본은 인증 layout에 유지되는 메모리 provider; 새로고침 영속 여부는 구현자가 제안하고 main 확인 후 적용한다. 계정 변경/로그아웃 시 제거한다. auth/share public 화면에서 표시하지 않는다. 접근 불가·삭제·reset된 run은 서버가 재검증하고 복귀 실패 시 대상 정리·안내한다.
+단일 사용자·탭에서 마지막 유효 대상 하나를 보관한다. workspace/question/run/position 등 최소 식별자와 allowlist route만 저장하고 정답·발문·JWT·signed URL·전체 URL을 저장하지 않는다. 기본은 인증 layout에 유지되는 메모리 provider; 새로고침 영속 여부는 구현자가 제안하고 main 확인 후 적용한다. 계정 변경/로그아웃 시 제거한다. 보호 경로에서 서버 검증으로 계정 변경이 확인되면 이전 화면을 계속 가린 채 `/workspaces`로 이동하고, 로그아웃이 확인되면 `/login`으로 이동한다. 이전 Workspace에 새 계정의 권한이 없어도 복구가 멈추지 않아야 한다. 공개 공유·비밀번호 복구 화면은 이 보호 경로 전환 대기 때문에 가려지지 않는다. 일시적인 검증 실패는 계정 변경으로 처리하지 않으며 기존 draft·풀이 상태를 유지한 채 재확인한다. auth/share public 화면에서 표시하지 않는다. 접근 불가·삭제·reset된 run은 서버가 재검증하고 복귀 실패 시 대상 정리·안내한다.
 
 Floating은 safe area·작은 화면·키보드·다른 modal과 겹침을 검증한다. 기존 semantic Button/IconButton 및 z-index tokens 사용, X 접근성 이름과 44px touch target. fullscreen 문서의 shell inert 정책과 충돌하지 않도록 명시적 global-control portal 계약을 DOC agent와 조율한다. 다른 modal 위로 focus를 탈출시키지 않는다.
 
