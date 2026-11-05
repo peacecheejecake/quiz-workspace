@@ -102,6 +102,8 @@ RULES: dict[str, Rule | str] = {
     "listWorkspaceJobs": READ,
     # practice (personal)
     "getPracticeSession": OWN_READ,
+    "getLatestQuestionPractice": READ,
+    "resetQuestionPractice": PRACTICE,
     "selfGradePracticeSession": OWN_WRITE,
     "submitPracticeSession": OWN_WRITE,
     "listMyQuestionAttempts": READ,
@@ -112,6 +114,7 @@ RULES: dict[str, Rule | str] = {
     "createPracticeRun": RUN_CREATE,
     "getPracticeRun": OWN_READ,
     "getPracticeRunItem": OWN_READ,
+    "startRunItemRetrySession": OWN_WRITE,
     "listPracticeRunResults": OWN_READ,
     "finishPracticeRun": OWN_RUN_WRITE,
     # questions, drafts, import (the QGEN generation routes were retired by QGEN-RM)
