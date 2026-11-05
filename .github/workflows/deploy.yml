@@ -181,7 +181,11 @@ jobs:
             image · api
             image · worker
             image · web
-            db · infra · e2e · restore
+            e2e · 1/4
+            e2e · 2/4
+            e2e · 3/4
+            e2e · 4/4
+            db · infra · visual · restore
             visual · @quiz/ui Storybook
         run: |
           set -euo pipefail
