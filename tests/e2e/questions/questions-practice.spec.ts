@@ -15,7 +15,9 @@
 // answer only through the "문제 상세" dialog (detailUi) and check the practice session stays
 // answer-free. AC12/AC13 (UX7-QDISPLAY: result borders, no visible 보기 label, trailing empty
 // answer parentheses hidden) compare row borders with the semantic tokens the browser resolves
-// (tokenColor) rather than with a screenshot.
+// (tokenColor) rather than with a screenshot. AC14 (STEM-ITEMS: stem item lists in a 제시 항목 box)
+// checks the list by role and name and its place between the question sentence and the options
+// by bounding boxes.
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
@@ -1169,6 +1171,157 @@ test(
     expect((await getQuestion(s.owner, question.id)).revision.stem).toBe(stored);
   },
 );
+
+test(
+  'QPLAY-01-AC14 stem item lists are shown one per line in a 제시 항목 box between the question sentence and the options; inline mentions and stored text stay',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const tag = unique('qplay01-ac14');
+    // (1) a one-line stem: question sentence, trailing empty answer mark, (가)~(라) items.
+    const lead1 = `${tag} 수신 업무 내용 중 맞는 것으로만 묶인 것은?`;
+    const items1 = [
+      '(가) 개인과 법인은 공동명의 계좌개설이 불가하다.',
+      '(나) 만 14세 미만 미성년자는 법정대리인의 동의를 받아야 한다.',
+      '(다) 세법상 비거주자의 이자소득은 원천징수한다.',
+      '(라) 임의단체는 법인과세 처리한다.',
+    ];
+    const stored1 = `${lead1} ( ) ${items1.join(' ')}`;
+    const options1 = ['(가), (나)', '(나), (다)', '(다), (라)', '(가), (라)'];
+    // (2) ㄱ.~ㄷ. items stored one per line, then a blank line and a closing sentence.
+    const lead2 = `${tag} 다음은 물의 순환에 대한 설명이다.`;
+    const items2 = [
+      'ㄱ. 증발은 액체가 기체로 바뀌는 현상이다.',
+      'ㄴ. 응결은 기체가 액체로 바뀌는 현상이다.',
+      'ㄷ. 강수는 물이 땅속으로 스며드는 현상이다.',
+    ];
+    const tail2 = '위에서 옳은 것을 모두 고르면?';
+    const stored2 = `${lead2}\n\n${items2.join('\n')}\n\n${tail2}`;
+    // (3) labels only mentioned inside the sentence.
+    const stored3 = `${tag} 빈칸 (가)와 (나)에 들어갈 말로 옳은 것은?`;
+
+    const owner = await workspaceFactory.member('qplay01-ac14');
+    const ws = await workspaceFactory.create(owner);
+    const first = await createQuestion(owner, ws.id, {
+      question_number: 1,
+      ...mcqInput(stored1, options1, 2),
+      explanation: `해설 ${tag}`,
+    });
+    const second = await createQuestion(owner, ws.id, {
+      question_number: 2,
+      ...mcqInput(stored2, ['ㄱ', 'ㄱ, ㄴ', 'ㄴ, ㄷ', 'ㄱ, ㄴ, ㄷ'], 1),
+    });
+    const third = await createQuestion(owner, ws.id, {
+      question_number: 3,
+      ...mcqInput(stored3, ['응결, 증발', '증발, 강수', '강수, 침투', '침투, 응결'], 0),
+    });
+    const s: Seeded = { owner, workspaceId: ws.id, questions: [first, second, third] };
+    expect(first.revision.stem).toBe(stored1);
+    await openOverview(page, s);
+
+    // (1) Practice panel: question paragraph, then the 제시 항목 list, then the options.
+    let panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await expectItemBox(panel, lead1, items1, panel.getByRole('radiogroup'));
+    await expect(panelUi.option(panel, '(다), (라)')).toBeVisible();
+
+    // (1) 문제 상세: the same layout above the option list named 보기.
+    await choosePanelManage(page, panel, 'answers');
+    const detail = detailUi.dialog(page);
+    await expect(detail).toBeVisible();
+    await expectItemBox(
+      detail,
+      lead1,
+      items1,
+      detail.getByRole('list', { name: /^(보기|options)$/i }),
+    );
+    await expect(
+      detail
+        .getByRole('list', { name: /^(보기|options)$/i })
+        .getByText('(다), (라)', { exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+
+    // (1) The editor shows (and the API keeps) the stored one-line text.
+    await choosePanelManage(page, panel, 'edit');
+    const form = questionFormUi.form(page);
+    await expect(form).toBeVisible();
+    await expect(questionFormUi.stem(form)).toHaveValue(stored1);
+    await page.keyboard.press('Escape');
+    await expect(form).toBeHidden();
+    expect((await getQuestion(owner, first.id)).revision.stem).toBe(stored1);
+    await panelUi.close(panel).click();
+    await expect(panel).toBeHidden();
+
+    // (2) Newline-stored items in the box; the paragraph after the blank line stays below it.
+    panel = await openPanel(page, 2);
+    await expectItemBox(panel, lead2, items2, panel.getByRole('radiogroup'));
+    const tail = panel.getByText(tail2, { exact: true });
+    await expect(tail).toBeVisible();
+    await expect(itemList(panel).getByText(tail2)).toHaveCount(0);
+    const listBox = await itemList(panel).boundingBox();
+    const tailBox = await tail.boundingBox();
+    expect(listBox && tailBox && tailBox.y >= listBox.y + listBox.height - 1).toBe(true);
+    await panelUi.close(panel).click();
+    await expect(panel).toBeHidden();
+
+    // (3) Inline mentions are not items: no box, the stem is one paragraph as stored.
+    panel = await openPanel(page, 3);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await expect(panel.getByText(stored3, { exact: true })).toBeVisible();
+    await expect(itemList(panel)).toHaveCount(0);
+    await panelUi.close(panel).click();
+    await expect(panel).toBeHidden();
+
+    // 375 px: the box fits the panel without horizontal scrolling.
+    await page.setViewportSize({ width: 375, height: 812 });
+    panel = await openPanel(page, 1);
+    const list = itemList(panel);
+    await expect(list).toBeVisible();
+    const box = await list.boundingBox();
+    expect(box && box.x >= 0 && box.x + box.width <= 375 + 0.5, 'box inside 375 px').toBe(true);
+    const overflow = await page.evaluate(() => {
+      const root = document.scrollingElement ?? document.documentElement;
+      return root.scrollWidth - root.clientWidth;
+    });
+    expect(overflow, 'no horizontal page scroll').toBeLessThanOrEqual(0);
+    expect(
+      await list.evaluate((el) => el.scrollWidth - el.clientWidth),
+      'no horizontal scroll inside the box',
+    ).toBeLessThanOrEqual(0);
+  },
+);
+
+/** The STEM-ITEMS list of stem items (QPLAY-01-AC14), named apart from the 보기 option list. */
+function itemList(scope: Locator): Locator {
+  return scope.getByRole('list', { name: /^(제시 항목|stem items)$/i });
+}
+
+/**
+ * `scope` shows `lead` as its own paragraph (no trailing empty answer mark), then the 제시 항목
+ * list with exactly `items` in order, then `options` below it; the list is not inside `options`.
+ */
+async function expectItemBox(
+  scope: Locator,
+  lead: string,
+  items: readonly string[],
+  options: Locator,
+): Promise<void> {
+  const question = scope.getByText(lead, { exact: true });
+  await expect(question).toBeVisible();
+  const list = itemList(scope);
+  await expect(list).toBeVisible();
+  await expect(list.getByRole('listitem')).toHaveText([...items]);
+  await expect(options.getByRole('list', { name: /^(제시 항목|stem items)$/i })).toHaveCount(0);
+  const [q, l, o] = await Promise.all([
+    question.boundingBox(),
+    list.boundingBox(),
+    options.boundingBox(),
+  ]);
+  if (!q || !l || !o) throw new Error('question, item list or options not laid out');
+  expect(l.y, 'item list below the question sentence').toBeGreaterThanOrEqual(q.y + q.height - 1);
+  expect(o.y, 'options below the item list').toBeGreaterThanOrEqual(l.y + l.height - 1);
+}
 
 /** No text "보기" a sighted user can see in `scope` (a visually hidden name is 1×1px). */
 async function expectNoVisibleLabel(scope: Locator): Promise<void> {

@@ -15,7 +15,7 @@ import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import styles from './question-import.module.css';
-import { displayStem } from '@/lib/questions/display-stem';
+import { StemText } from '@/components/questions/stem/stem-text';
 
 export interface SourceComparePanelProps {
   /** Null while closed. */
@@ -121,7 +121,7 @@ function DraftContent({ draft, page }: { draft: ReviewDraft; page?: number }) {
           {page !== undefined ? ` · 지금 보는 쪽: ${page}쪽` : null}
         </p>
       ) : null}
-      <p className={styles.compareStem}>{displayStem(draft.stem)}</p>
+      <StemText stem={draft.stem} className={styles.compareStem} />
       {draft.options.length > 0 ? (
         <ol className={styles.compareOptions}>
           {draft.options.map((o) => (
