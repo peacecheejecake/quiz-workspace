@@ -600,6 +600,34 @@ test(
 );
 
 test(
+  'DOCVIEW-01-AC07 a selected highlight stays visible when a loaded PDF changes split direction',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'docview01-ac07-loaded', {
+      viewport: DESKTOP,
+      settings: PDF_60,
+    });
+    await expect(viewerUi.currentPage(page)).toBeEnabled();
+    await viewerUi.outlineItem(page, CH2_S2.title).click();
+    await expectPdfAt(page, CH2_S2.page, 'selected page before resize');
+    await expect(viewerUi.highlight(page)).toBeInViewport();
+    await chooseOrientation(page, 'vertical');
+    await expectSplit(page, { orientation: 'vertical', first: 'pdf', pdfRatio: 60 });
+    await expect(viewerUi.highlight(page)).toBeInViewport();
+    await expectPdfAt(page, CH2_S2.page, 'selected page after resize');
+
+    // Once the reader has moved away, another resize must preserve that reading position.
+    await editorUi.pdfPages(page).evaluate((scroller) => {
+      scroller.scrollTop = 0;
+    });
+    await expectPdfAt(page, 1, 'reader moved away from the highlight');
+    await chooseOrientation(page, 'horizontal');
+    await expectPdfAt(page, 1, 'resize keeps the reader’s position');
+    await expect(viewerUi.highlight(page)).not.toBeInViewport();
+  },
+);
+
+test(
   'DOCVIEW-01-AC08 위치 바꾸기 swaps the panes from the keyboard in both orientations and keeps each pane its size',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
