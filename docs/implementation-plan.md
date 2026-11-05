@@ -1102,10 +1102,10 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 | UX10-HOME | ✅ 독립 리뷰·main 재검증·통합 | 981a9976 | 최종 리뷰 지적 없음(202933 log). main 웹1298·Chromium/WebKit14 GREEN. all/none의 overview·범위 picker·BFF 일관성, debounce·검색 설정·header guard 포함 |
 | UX10-PLAY | ✅ 독립 리뷰·main 재검증·QA 통합 | b462a79a · 97f03465 · merge ea311455 | 최종 리뷰 지적 없음(194306 log). main 전체 web1285·전용 양 브라우저16·계약2, 후속 UI32·web28 GREEN. primary 진입·은행/변형 통합, 결과·폼·이름 수정·focus 복구 포함 |
 | UX10-AI | ✅ 리뷰·main 재검증·HOME 연결 QA 통합 | 09b04855 · 8ead4059 · a6650c80 | 기존 ASK07/08/11 후속 최종 리뷰 지적 없음(205229 log), main 양 브라우저8 GREEN. 새 AI 동작 숨김·기존 답변 열람·정확한 409/403 계약 유지 |
-| UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC/STEM main 재검증 완료, 공통 버튼·gesture 후속 통합. 별도 DB 전체 pgTAP1192 GREEN. 전체 통합 후 Linux baseline·종합 QA |
+| UX10-QA | ◐ 전체 통합 검사·Linux visual QA | feature/ux10-spec | 모든 기능 Task 독립 리뷰·통합 완료. 메인 전체 lint/typecheck/test/contracts·affected E2E/접근성, UI agent Linux baseline batch 진행. AI 로그아웃 경로 기대값의 test-only 후속은 원 agent 검증·리뷰 대기 |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
 | UX11-AI-DIRECT | ✅ 독립 리뷰·main 재검증·통합 | 1f0a370f · merge bdf4c08c | 최종 리뷰 지적 없음(205604 log). main prompt/worker18·웹37·Chromium/WebKit26 GREEN. 최신 통합 web1326·typecheck·strict trace GREEN. 직접 답변·즉시 입력 비우기·owner/compose session별 draft·수신/재시도 복구 포함 |
-| UX11-RETURN | ◐ 별도 연습·복귀·신원 검증 구현 | task/UX11-RETURN | 현재 문제 별도 시도·회차 결과 유지 계약3 GREEN, provenance migration 별도 DB pgTAP10 GREEN. 신원 endpoint 통합 후 실제 브라우저·독립 리뷰 대기 |
+| UX11-RETURN | ✅ 독립 리뷰·main 재검증·통합 | 7295831f · merge f82f894d | 최종 리뷰 지적 없음(214616 log). main 관련 단위66·실제 API5·별도 DB pgTAP1204 GREEN. 양 브라우저 전용18·기존 Workspace 포함29/30 뒤 production 생성 반복8 GREEN. 과거 WebKit 생성 1건 원인 미확정·최종 통합 QA에서 재확인. 공유 로컬 origin migration 적용 |
 | UX11-STEM | ✅ 독립 리뷰·main 재검증·통합 | bf8d3a8e | 최종 리뷰 지적 없음(182003 log). main TS67·Python52·Chromium/WebKit16·trace16/strict·screen30 GREEN. 초기/후속 항목 경계 분리, 문단·범위 참조·산술 기호 보존 |
