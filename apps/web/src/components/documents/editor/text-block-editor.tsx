@@ -23,7 +23,7 @@ import { blockPage } from '@/lib/documents/outline';
 import { answerLines, optionLabel, QUESTION_TYPE_LABELS } from '@/lib/documents/document-questions';
 import { blockPageSpan, type PageGroup, type QuestionItem } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
-import { displayStem } from '@/lib/questions/display-stem';
+import { StemText } from '@/components/questions/stem/stem-text';
 
 export interface TextBlockEditorProps {
   /** The revision's blocks grouped by page (lib/documents/text-groups pageGroups). */
@@ -300,7 +300,7 @@ function QuestionCard({
           ) : null}
         </span>
       </div>
-      <p className={styles.questionStem}>{displayStem(question.stem)}</p>
+      <StemText stem={question.stem} className={styles.questionStem} />
       {question.options.length > 0 ? (
         <ol className={styles.optionList} aria-label="보기">
           {question.options.map((option, index) => (

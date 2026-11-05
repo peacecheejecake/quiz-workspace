@@ -19,9 +19,16 @@ pytestmark = pytest.mark.infra
 RANDOM_ID = "00000000-0000-4000-8000-000000000000"
 
 
-def test_ws_share_01_ac02_secret_is_shown_once_and_stored_only_as_digest(seed: Any) -> None:
+def test_ws_share_01_ac02_share_url_persists_for_owner_until_revoked_with_digest_only_db(
+    seed: Any,
+) -> None:
     owner = seed.client("ac02-owner")
+    editor = seed.client("ac02-editor")
+    viewer = seed.client("ac02-viewer")
+    stranger = seed.client("ac02-stranger")
     ws = owner.create_workspace()
+    seed.membership(ws["id"], editor.user, "editor")
+    seed.membership(ws["id"], viewer.user, "viewer")
     link = owner.create_link(ws["id"])
 
     secret = str(link["secret"])
@@ -32,13 +39,22 @@ def test_ws_share_01_ac02_secret_is_shown_once_and_stored_only_as_digest(seed: A
     assert share_url.endswith(f"/share/{link['id']}#k={secret}"), "secret travels in the fragment"
     assert "?" not in share_url, "no secret or token in the query string"
 
-    # Listing never returns the secret or its digest.
+    # Owner listing reconstructs share_url for non-revoked links without exposing raw secret/digest.
     listed = owner.call("GET", f"/workspaces/{ws['id']}/share-links")
     seed.assert_status(listed, 200, "list links")
-    assert (secret in listed.text) is False, "listing must not echo the secret"
     items = listed.json()["items"]
     assert [i["id"] for i in items] == [link["id"]]
-    assert not {"secret", "token", "token_digest", "share_url"} & set(items[0])
+    assert items[0]["share_url"] == share_url
+    assert not {"secret", "token", "token_digest"} & set(items[0])
+
+    # Non-owners (editor, viewer, stranger) cannot read share_url.
+    stranger_res = stranger.call("GET", f"/workspaces/{ws['id']}/share-links")
+    seed.assert_status(stranger_res, 404, "stranger list links")
+    assert (secret in stranger_res.text) is False
+    for member in (editor, viewer):
+        member_res = member.call("GET", f"/workspaces/{ws['id']}/share-links")
+        seed.problem(member_res, 403, seed.INSUFFICIENT_ROLE)
+        assert (secret in member_res.text) is False
 
     # The DB holds a digest only: never the plaintext, nor its raw bytes.
     row, digest = seed.link_row(link["id"])
@@ -47,10 +63,22 @@ def test_ws_share_01_ac02_secret_is_shown_once_and_stored_only_as_digest(seed: A
     assert digest not in {secret.encode(), decoded}, "the raw secret is not a digest"
     assert len(digest) == 32, "SHA-256/HMAC-SHA-256 digest expected"
 
-    # A link is not a membership: the owner stays the only member, also after a guest exchange.
+    # A link is not a membership: the guest exchange adds no member.
     guest = seed.guest()
     guest.session(link["id"], secret)
-    assert seed.memberships(ws["id"]) == [(owner.user.id, "owner")]
+    assert seed.memberships(ws["id"]) == sorted(
+        [(owner.user.id, "owner"), (editor.user.id, "editor"), (viewer.user.id, "viewer")]
+    )
+
+    # Once revoked, share_url disappears immediately from revoke and owner listing responses.
+    revoked = owner.revoke(ws["id"], link["id"])
+    seed.assert_status(revoked, 200, "revoke link")
+    assert revoked.json()["share_url"] is None
+    assert (secret in revoked.text) is False
+    listed_after = owner.call("GET", f"/workspaces/{ws['id']}/share-links")
+    seed.assert_status(listed_after, 200, "list links after revoke")
+    assert listed_after.json()["items"][0]["share_url"] is None
+    assert (secret in listed_after.text) is False
 
 
 def test_ws_share_01_ac03_only_the_owner_manages_links(seed: Any) -> None:

@@ -1,6 +1,6 @@
 # WS-SHARE-01 — Owner Workspace 공유 관리
 
-**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog) · UX7-SHARE-EXPIRY 개정 2026-11-01 (만료일 삭제 AC06, 만료일 영역 너비 AC07, 복사 완료 표시 AC08) · UX7-COPY-LABEL 개정 2026-11-02 (AC08 버튼 이름 `복사 완료`)
+**상태:** 확정 요구사항 (v1.3) · UX3c 개정 2026-10-20 (공유하기 버튼 → 링크 공유 floating dialog) · UX7-SHARE-EXPIRY 개정 2026-11-01 (만료일 삭제 AC06, 만료일 영역 너비 AC07, 복사 완료 표시 AC08) · UX7-COPY-LABEL 개정 2026-11-02 (AC08 버튼 이름 `복사 완료`) · SHARE-PERSIST 개정 2026-11-05 (철회 전 링크 공유 dialog 재오픈·새로고침 시 생성된 링크 계속 표시 AC02)
 **화면:** `/workspaces/:workspaceId?panel=share` (Workspace header의 `공유하기` 버튼, Owner만; 이전 `/workspaces/:workspaceId/settings/sharing`은 여기로 redirect)
 **연계:** [공유·Fork 명세](../workspace-sharing.md), [인증](../auth.md), [디자인 시스템](../design-system.md)
 
@@ -21,7 +21,7 @@
 
 - Given 해당 화면에 필요한 사용자/링크 상태
 - When 사용자가 기능을 수행하거나 직접 API를 호출
-- Then Owner가 링크를 생성하면 보기 전용 비밀 URL을 1회만 노출하고 복사·만료 설정이 가능하다. Viewer 멤버십을 만들지 않는다.
+- Then Owner가 링크를 생성하면 보기 전용 비밀 URL이 표시되고 복사·만료 설정이 가능하다. 링크가 철회되기 전까지 Owner가 `링크 공유` dialog를 닫았다 다시 열거나 페이지를 새로 고쳐도(다른 기기 포함) 같은 공유 링크가 계속 표시되며(`localStorage`/`sessionStorage`나 DB 평문 저장 없이 서버 키로 재구성), 철회하면 링크 입력칸이 사라진다(재발급할 수 없는 이전 레거시 링크는 재발급 안내를 표시). Viewer 멤버십을 만들지 않는다.
 
 ### WS-SHARE-01-AC03
 

@@ -4425,10 +4425,10 @@
           "revoked_at",
           "status",
           "rotated_from_id",
+          "share_url",
           "created_at",
           "updated_at",
           "secret",
-          "share_url",
           "secret_already_issued"
         ],
         "title": "IssuedShareLink",
@@ -10809,7 +10809,7 @@
         "type": "object"
       },
       "ShareLink": {
-        "description": "A share link's metadata (never its secret or digest).",
+        "description": "A share link's metadata (never its raw `secret` or `token_digest`).",
         "properties": {
           "allow_fork": {
             "description": "Whether signed-in viewers may fork (default off).",
@@ -10864,6 +10864,18 @@
             ],
             "description": "The revoked link this one replaced (rotate).",
             "title": "Rotated From Id"
+          },
+          "share_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`<web origin>/share/{id}#k={secret}` for non-revoked links whose secret can be reconstructed by the server; null when revoked or unavailable.",
+            "title": "Share Url"
           },
           "status": {
             "description": "Derived from revoked_at / expires_at.",
@@ -26744,7 +26756,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/share-links": {
       "get": {
-        "description": "Every link of the workspace (revoked and expired included), newest first; no secrets.",
+        "description": "Every link of the workspace (revoked and expired included), newest first; no raw secrets.",
         "operationId": "listShareLinks",
         "parameters": [
           {
@@ -26831,7 +26843,7 @@
         ]
       },
       "post": {
-        "description": "Issue a read-only share link (WS-SHARE-01-AC02). Fork is off unless `allow_fork`.\n\nThe secret appears only in this response. A link is not a membership.",
+        "description": "Issue a read-only share link (WS-SHARE-01-AC02). Fork is off unless `allow_fork`.\n\nThe raw `secret` appears only in this response. A link is not a membership.",
         "operationId": "createShareLink",
         "parameters": [
           {

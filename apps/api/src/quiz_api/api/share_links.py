@@ -1,8 +1,9 @@
 """Owner share-link API (S1a, WS-SHARE-01; docs/workspace-sharing.md §1-§5).
 
     POST /workspaces/{id}/share-links                    issue a link (owner; not while archived);
-                                                         201 with the secret, shown only here
-    GET  /workspaces/{id}/share-links                    every link, newest first, no secret
+                                                         201 with `secret` and `share_url`
+    GET  /workspaces/{id}/share-links                    every link, newest first; `share_url` for
+                                                         non-revoked links (no raw `secret`)
     PATCH /workspaces/{id}/share-links/{linkId}          allow_fork / expires_at (owner; also
                                                          archived); revoked links are 409
     POST /workspaces/{id}/share-links/{linkId}/revoke    owner (also archived); repeat = no-op
@@ -15,21 +16,24 @@ for list/PATCH/revoke; editors and viewers get 403 `insufficient-role`, non-memb
 soft-deleted workspaces 404. A link id is resolved to its real workspace from the DB, so a link
 of another workspace is the same 404 as a missing one.
 
-Secrets: 32 CSPRNG bytes, returned once as unpadded base64url in `secret` and in
-`share_url = <web origin>/share/{id}#k={secret}` (fragment only: it never reaches a server log
-or a Referer). Only SHA-256 of the bytes is stored (`quiz_api.share_secrets`). Responses under
-/api/v1 are `Cache-Control: no-store`, `Referrer-Policy: no-referrer`.
+Secrets: 32 bytes derived deterministically via domain-separated HMAC-SHA-256 from
+`ShareSessionKey` (`SHARE_SESSION_SECRET`) and `link_id`, encoded as unpadded base64url in `secret`
+(returned only on 201 issue/rotate) and in `share_url = <web origin>/share/{id}#k={secret}`
+(fragment only: never reaches a server log or a Referer). Only SHA-256 of the bytes (`token_digest`)
+is stored in PostgreSQL (`quiz_api.share_secrets`); owner `GET`/`PATCH` reconstruct `share_url`
+for non-revoked links whose digest matches. Responses under /api/v1 are `Cache-Control: no-store`,
+`Referrer-Policy: no-referrer`.
 
-Idempotency-Key (issue and rotate): the secret is never written to the idempotency store. A
-replay of a completed request returns the same status and the link's metadata with
-`secret: null`, `share_url: null` and `secret_already_issued: true` (and `Idempotent-Replayed:
-true`); a client that lost the first response rotates the link to get a new secret. Revoke is
-naturally idempotent and PATCH is a set, so neither takes a key.
+Idempotency-Key (issue and rotate): neither `secret` nor `share_url` is ever written to the
+idempotency store. A replay of a completed request returns the same status and the link's metadata
+with `secret: null`, `share_url: null` and `secret_already_issued: true` (and `Idempotent-Replayed:
+true`). Revoke is naturally idempotent and PATCH is a set, so neither takes a key.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -57,7 +61,8 @@ from quiz_api.repositories.share_links import (
     ShareLinkStatus,
 )
 from quiz_api.settings import Settings
-from quiz_api.share_secrets import issue_secret
+from quiz_api.share_secrets import derive_secret, reconstruct_secret
+from quiz_api.share_sessions import ShareSessionKey, resolve_share_key
 
 router = APIRouter(
     prefix="/workspaces/{workspace_id}/share-links",
@@ -67,7 +72,7 @@ router = APIRouter(
 
 
 class ShareLink(BaseModel):
-    """A share link's metadata (never its secret or digest)."""
+    """A share link's metadata (never its raw `secret` or `token_digest`)."""
 
     id: uuid.UUID = Field(description="The public share id (`/share/{id}`).")
     workspace_id: uuid.UUID
@@ -77,6 +82,13 @@ class ShareLink(BaseModel):
     status: ShareLinkStatus = Field(description="Derived from revoked_at / expires_at.")
     rotated_from_id: uuid.UUID | None = Field(
         description="The revoked link this one replaced (rotate)."
+    )
+    share_url: str | None = Field(
+        default=None,
+        description=(
+            "`<web origin>/share/{id}#k={secret}` for non-revoked links whose secret can be "
+            "reconstructed by the server; null when revoked or unavailable."
+        ),
     )
     created_at: datetime
     updated_at: datetime
@@ -167,6 +179,7 @@ def get_settings_dep(request: Request) -> Settings:
 ShareLinkRepo = Annotated[ShareLinkRepository, Depends(get_share_link_repository)]
 IdempotencyStoreDep = Annotated[IdempotencyStore, Depends(get_idempotency_store)]
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
+ShareKeyDep = Annotated[ShareSessionKey, Depends(resolve_share_key)]
 
 CreateAccess = Annotated[WorkspaceAccess, Depends(require_workspace_access(Action.SHARE_CREATE))]
 ListAccess = Annotated[
@@ -186,7 +199,22 @@ ManageLinkAccess = Annotated[ResourceAccess, _link_access(Action.SHARE_MANAGE)]
 RotateLinkAccess = Annotated[ResourceAccess, _link_access(Action.SHARE_CREATE)]
 
 
-def _out(record: ShareLinkRecord) -> ShareLink:
+def _share_url(record: ShareLinkRecord, secret: str | None, settings: Settings) -> str | None:
+    if secret is None:
+        return None
+    return f"{settings.share_web_origin}/share/{record.id}#k={secret}"
+
+
+def _out(
+    record: ShareLinkRecord,
+    settings: Settings,
+    key: ShareSessionKey | None = None,
+) -> ShareLink:
+    secret = (
+        reconstruct_secret(key.value, record.id, record.token_digest)
+        if record.revoked_at is None and key is not None
+        else None
+    )
     return ShareLink(
         id=record.id,
         workspace_id=record.workspace_id,
@@ -195,19 +223,17 @@ def _out(record: ShareLinkRecord) -> ShareLink:
         revoked_at=record.revoked_at,
         status=record.status,
         rotated_from_id=record.rotated_from_id,
+        share_url=_share_url(record, secret, settings),
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
 
 
 def _issued(record: ShareLinkRecord, secret: str | None, settings: Settings) -> IssuedShareLink:
-    share_url = (
-        None if secret is None else f"{settings.share_web_origin}/share/{record.id}#k={secret}"
-    )
     return IssuedShareLink(
-        **_out(record).model_dump(),
+        **_out(record, settings).model_dump(exclude={"share_url"}),
         secret=secret,
-        share_url=share_url,
+        share_url=_share_url(record, secret, settings),
         secret_already_issued=secret is None,
     )
 
@@ -224,18 +250,20 @@ def _issue(
     idempotency_key: str | None,
     repo: ShareLinkRepository,
     settings: Settings,
-    run: Any,
+    key: ShareSessionKey,
+    run: Callable[[uuid.UUID, bytes], ShareLinkRecord],
 ) -> Any:
-    """Shared Idempotency-Key handling of issue and rotate; `run(digest)` does the write."""
+    """Shared Idempotency-Key handling of issue and rotate; `run(link_id, digest)` writes."""
     if idempotency_key is not None:
         idempotency.lock(user_id, scope, idempotency_key)
         stored = idempotency.find(user_id, scope, idempotency_key)
         if stored is not None:
             return replay(stored, body_hash)
-    secret = issue_secret()
-    record: ShareLinkRecord = run(secret.digest)
+    link_id = uuid.uuid4()
+    secret = derive_secret(key.value, link_id)
+    record: ShareLinkRecord = run(link_id, secret.digest)
     if idempotency_key is not None:
-        # The replay body: metadata only, never the secret.
+        # The replay body: metadata only, never the secret or share_url.
         idempotency.save(
             user_id,
             scope,
@@ -261,14 +289,15 @@ def create_share_link(
     repo: ShareLinkRepo,
     idempotency: IdempotencyStoreDep,
     settings: SettingsDep,
+    key: ShareKeyDep,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Issue a read-only share link (WS-SHARE-01-AC02). Fork is off unless `allow_fork`.
 
-    The secret appears only in this response. A link is not a membership.
+    The raw `secret` appears only in this response. A link is not a membership.
     """
 
-    def run(digest: bytes) -> ShareLinkRecord:
+    def run(link_id: uuid.UUID, digest: bytes) -> ShareLinkRecord:
         _ensure_future(body.expires_at)
         return repo.create(
             access.workspace_id,
@@ -276,6 +305,7 @@ def create_share_link(
             token_digest=digest,
             allow_fork=body.allow_fork,
             expires_at=body.expires_at,
+            link_id=link_id,
         )
 
     return _issue(
@@ -286,19 +316,29 @@ def create_share_link(
         idempotency_key,
         repo,
         settings,
+        key,
         run,
     )
 
 
 @router.get("", operation_id="listShareLinks")
-def list_share_links(access: ListAccess, repo: ShareLinkRepo) -> ShareLinkList:
-    """Every link of the workspace (revoked and expired included), newest first; no secrets."""
-    return ShareLinkList(items=[_out(r) for r in repo.list(access.workspace_id)])
+def list_share_links(
+    access: ListAccess,
+    repo: ShareLinkRepo,
+    settings: SettingsDep,
+    key: ShareKeyDep,
+) -> ShareLinkList:
+    """Every link of the workspace (revoked and expired included), newest first; no raw secrets."""
+    return ShareLinkList(items=[_out(r, settings, key) for r in repo.list(access.workspace_id)])
 
 
 @router.patch("/{link_id}", operation_id="updateShareLink", responses=problem_responses(409))
 def update_share_link(
-    access: ManageLinkAccess, body: ShareLinkUpdate, repo: ShareLinkRepo
+    access: ManageLinkAccess,
+    body: ShareLinkUpdate,
+    repo: ShareLinkRepo,
+    settings: SettingsDep,
+    key: ShareKeyDep,
 ) -> ShareLink:
     """Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).
 
@@ -311,16 +351,18 @@ def update_share_link(
         raise _inactive("This share link is revoked; create a new link instead.")
     record = repo.update_policy(link, ws.user_id, body.changes())
     repo.commit()
-    return _out(record)
+    return _out(record, settings, key)
 
 
 @router.post("/{link_id}/revoke", operation_id="revokeShareLink")
-def revoke_share_link(access: ManageLinkAccess, repo: ShareLinkRepo) -> ShareLink:
+def revoke_share_link(
+    access: ManageLinkAccess, repo: ShareLinkRepo, settings: SettingsDep
+) -> ShareLink:
     """Revoke at once (WS-SHARE-01-AC04; allowed on archived). Repeating it is a no-op."""
     ws = access.workspace
     record = repo.revoke(repo.lock(ws.workspace_id, access.resource_id), ws.user_id)
     repo.commit()
-    return _out(record)
+    return _out(record, settings)
 
 
 @router.post(
@@ -335,6 +377,7 @@ def rotate_share_link(
     repo: ShareLinkRepo,
     idempotency: IdempotencyStoreDep,
     settings: SettingsDep,
+    key: ShareKeyDep,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Revoke the link and issue a replacement (new id and secret, same policy) atomically.
@@ -344,11 +387,11 @@ def rotate_share_link(
     """
     ws = access.workspace
 
-    def run(digest: bytes) -> ShareLinkRecord:
+    def run(link_id: uuid.UUID, digest: bytes) -> ShareLinkRecord:
         link = repo.lock(ws.workspace_id, access.resource_id)
         if link.status != "active":
             raise _inactive("Only an active share link can be rotated.")
-        return repo.rotate(link, ws.user_id, token_digest=digest)
+        return repo.rotate(link, ws.user_id, token_digest=digest, link_id=link_id)
 
     return _issue(
         f"POST /workspaces/{ws.workspace_id}/share-links/{access.resource_id}/rotate",
@@ -358,5 +401,6 @@ def rotate_share_link(
         idempotency_key,
         repo,
         settings,
+        key,
         run,
     )

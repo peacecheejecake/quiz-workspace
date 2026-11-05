@@ -8,6 +8,7 @@ playwright-report/
 playwright-report-*/
 test-results/
 test-results-*/
+blob-report/
 node_modules/
 .next/
 __pycache__/

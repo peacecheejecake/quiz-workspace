@@ -4,8 +4,8 @@
 // been seen yet (the box must then keep what the user typed since), anything else came from outside
 // (browser Back/Forward, a reset) and replaces the box.
 
-/** Pause after the last keystroke before the heatmap is re-read. */
-export const LIVE_QUERY_DELAY_MS = 250;
+/** Pause after the last keystroke before a non-empty heatmap query is committed. */
+export const LIVE_QUERY_DELAY_MS = 350;
 
 /** Committed values remembered until the URL reports them (older ones are dropped). */
 export const MAX_PENDING_WRITES = 20;

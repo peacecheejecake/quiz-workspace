@@ -2,9 +2,9 @@
 
 // WS-SHARE-01 server actions (BFF): validate input, call the owner share-link API with the
 // session's Bearer token (never exposed to the client) and answer with the refreshed link list.
-// The one-time share URL travels only in the create/rotate result to the owner's browser, which
-// keeps it in component state; it is never logged, cached, put in a URL query or stored.
-// Authorization (owner only, archived rules) is FastAPI's; these actions only translate answers.
+// The share URL with `#k=` travels only in the owner action results to the browser, which keeps
+// it in React component memory — never logged, cached, put in a URL query or persisted to web
+// storage. Authorization (owner only, archived rules) is FastAPI's; these actions translate answers.
 import type { ApiClient } from '@quiz/api-client';
 import { redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
@@ -70,13 +70,20 @@ async function callApi<T>(
   return outcome;
 }
 
+function normalizeLinks(items: readonly ShareLink[]): readonly ShareLink[] {
+  return items.map((item) => ({
+    ...item,
+    share_url: isShareUrl(item.share_url, item.id) ? item.share_url : null,
+  }));
+}
+
 async function listLinks(workspaceId: string): Promise<readonly ShareLink[] | undefined> {
   const result = await callApi(workspaceId, (api) =>
     api.GET('/api/v1/workspaces/{workspace_id}/share-links', {
       params: { path: { workspace_id: workspaceId } },
     }),
   );
-  return result.ok ? result.data.items : undefined;
+  return result.ok ? normalizeLinks(result.data.items) : undefined;
 }
 
 function expiryFailure(failure: ShareFailureKind, policy: SharePolicyInput): ShareFailureKind {
@@ -146,8 +153,9 @@ async function issuedResult(workspaceId: string, link: Issued): Promise<ShareAct
 }
 
 /**
- * The workspace's share links (metadata only, never a secret) for the "링크 공유" dialog, which
- * opens at once and loads them (UX3c). Owner only: FastAPI answers 403 to other members.
+ * The workspace's share links (never a raw secret; `share_url` is present for non-revoked links
+ * whose secret the server can reconstruct) for the "링크 공유" dialog, which opens at once and
+ * loads them (UX3c). Owner only: FastAPI answers 403 to other members.
  */
 export async function listShareLinksAction(workspaceId: string): Promise<ShareActionResult> {
   if (!isUuid(workspaceId)) return failed('invalid');
@@ -156,7 +164,9 @@ export async function listShareLinksAction(workspaceId: string): Promise<ShareAc
       params: { path: { workspace_id: workspaceId } },
     }),
   );
-  return result.ok ? { ok: true, links: result.data.items } : failed(result.failure);
+  return result.ok
+    ? { ok: true, links: normalizeLinks(result.data.items) }
+    : failed(result.failure);
 }
 
 /** Issues a view-only link (owner, not while archived); the URL is in the result only. */
