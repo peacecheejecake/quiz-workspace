@@ -93,6 +93,20 @@ describe('stemItems', () => {
     expect(stemItems('옳은 것은? ㄱ. 하나 (ㄴ) 끼어듦 ㄴ. 둘')).toBeNull();
   });
 
+  it('checks every label of the family in the whole paragraph', () => {
+    // a mixed-format label after the last item is not absorbed into it
+    expect(stemItems('옳은 것은? (가) 하나 (나) 둘 다) 셋')).toBeNull();
+    expect(stemItems('옳은 것은? ㄱ. 하나 ㄴ. 둘 (ㄷ) 셋')).toBeNull();
+    // a valid label of the family inside the lead sentence
+    expect(stemItems('다음 글의 (가) 시기 사회상으로 옳은 것은? (가) 갑 (나) 을')).toBeNull();
+    expect(stemItems('다음 ㄱ. 항목을 보고 고르면? ㄱ. 갑 ㄴ. 을')).toBeNull();
+    // a mention in the lead is not a valid label and does not count
+    expect(pairs('(가)와 (나)에 들어갈 것은? (가) 갑 (나) 을')).toEqual([
+      ['(가)', '갑'],
+      ['(나)', '을'],
+    ]);
+  });
+
   it('keeps a list when only other families appear inside the items', () => {
     expect(pairs('옳은 것은? (가) A) 하나 (나) 둘')).toEqual([
       ['(가)', 'A) 하나'],
