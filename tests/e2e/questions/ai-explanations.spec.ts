@@ -583,7 +583,7 @@ test(
       let shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toBeVisible();
       const sArea = explUi.sharedArea(shared);
-      await explUi.sharedToggle(sArea).click();
+      await expect(explUi.sharedToggle(sArea)).toHaveAttribute('aria-expanded', 'true');
       await expect(explUi.badge(sArea)).toBeVisible();
       await expect(sArea).toContainText(nth(withExpl.revision.options, 0).text);
       for (const absent of [
@@ -708,8 +708,8 @@ test(
       await expect(explUi.area(panel).getByText(EXPL_TEXT.disabled)).toBeVisible();
       await expect(explUi.create(explUi.area(panel))).toHaveCount(0);
       await panelUi.close(panel).click();
-      ({ panel } = await openAndSubmit(page, 6, correctText(withExpl), RESULT_TEXT.correct));
-
+      panel = await openPanel(page, 6);
+      await expect(result(panel)).toContainText(RESULT_TEXT.correct);
       await expectDone(explUi.area(panel));
       const session = await submittedSession(s.owner, withoutExpl);
       const refused = await stackRequest<Problem>(
@@ -858,8 +858,8 @@ test(
     await page.keyboard.press('Escape');
     await expect(run).toBeHidden();
     // The same cache from the Heatmap's practice panel.
-    const { panel } = await openAndSubmit(page, 1, correctText(q1), RESULT_TEXT.correct);
-
+    const panel = await openPanel(page, 1);
+    await expect(result(panel)).toContainText(RESULT_TEXT.correct);
     await expectDone(explUi.area(panel));
     const viaPanel = await getExplanation(a, bank(q1.id), {
       practice_session_id: await sessionOf(a, q1),

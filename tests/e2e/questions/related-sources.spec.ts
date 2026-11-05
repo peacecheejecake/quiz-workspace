@@ -35,7 +35,6 @@ import {
   CH1,
   CH2,
   correctAndPublish,
-  correctText,
   countText,
   createSourcedQuestion,
   DENSE_MARKER,
@@ -182,13 +181,15 @@ async function expectClosedToHome(page: Page, panel: Locator): Promise<void> {
   await expect(page).toHaveURL((url) => url.search === '');
 }
 
-/** Re-opens `question` with `?question=` (a submitted question opens a new session) and answers. */
-async function reanswer(page: Page, workspaceId: string, question: Question): Promise<Locator> {
+/** Reopens the submitted result with `?question=` and checks its restored grading. */
+async function reopenSubmitted(
+  page: Page,
+  workspaceId: string,
+  question: Question,
+): Promise<Locator> {
   await page.goto(overviewPath(workspaceId, question.id));
   const panel = panelUi.panel(page);
   await expect(panel).toBeVisible();
-  await panelUi.option(panel, correctText(question)).check();
-  await panelUi.submit(panel).click();
   await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
   return panel;
 }
@@ -320,9 +321,9 @@ test(
     );
     await expect(editorUi.currentPage(page)).toHaveValue(String(ANSWER_PAGE));
 
-    // Back on the home, the question opens a new session: answer again, then the second row's
+    // Back on the home, the submitted result is restored, then the second row's
     // "PDF" link opens DOC-02 at p.4.
-    panel = await reanswer(page, s.workspaceId, question);
+    panel = await reopenSubmitted(page, s.workspaceId, question);
     await expect(relatedUi.toggle(panel)).toHaveAttribute('aria-expanded', 'false');
     body = await expandRelated(panel);
     const link = relatedUi.pdf(relatedUi.row(body, 1));
@@ -459,7 +460,7 @@ test(
         { blockId: s.book.appliedBlockId, text: TEXT.appliedRemoved },
       ]);
       read = relatedResponse(page, 'questions', first.id);
-      panel = await reanswer(page, s.workspaceId, first);
+      panel = await reopenSubmitted(page, s.workspaceId, first);
       await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
       const fresh = await read;
       expect(fresh.id).not.toBe(stored.id);
@@ -607,7 +608,12 @@ test(
     // … and in the normal state the same question is computed and stored.
     const healthy = await editStem(s.owner, degraded, relsrcStem(`${label}-5`));
     read = relatedResponse(page, 'questions', degraded.id);
-    panel = await reanswer(page, s.workspaceId, healthy);
+    await page.goto(overviewPath(s.workspaceId, healthy.id));
+    panel = panelUi.panel(page);
+    await expect(panel).toBeVisible();
+    await panelUi.option(panel, ANSWER).check();
+    await panelUi.submit(panel).click();
+    await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
     const normal = await read;
     expect(normal.degraded).toEqual([]);
@@ -836,7 +842,7 @@ test(
     await expectClosedToHome(page, runPanel);
     // The practice panel reads the same stored list.
     read = relatedResponse(page, 'questions', question.id);
-    const panel = await reanswer(page, s.workspaceId, question);
+    const panel = await reopenSubmitted(page, s.workspaceId, question);
     await expect(relatedUi.rows(await expandRelated(panel)).first()).toBeVisible();
     expect((await read).id).toBe(inRun.id);
     await page.keyboard.press('Escape');
