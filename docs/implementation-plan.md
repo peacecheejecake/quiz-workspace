@@ -1077,12 +1077,15 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 
 | UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
 | UX10-UI | ✅ 독립 리뷰·main 재검증 | 28b870f6 · merge 3d386787 | UI unit434·RSC·Chromium/WebKit E2E10 main 재실행 GREEN. Review: task worktree .reviews/20261105-151302-31355-UX10-UI-controls-and-overlay-swipe.log, 지적 없음. 확대 gesture matrix는 UX10-QA에서 검증 |
-| UX10-QVIEW | ◐ 구현·로컬 검증 | task/UX10-QVIEW | terra 1:1 agent, reset 조회 경로·경합 검증 |
+| UX10-QVIEW | ◐ 독립 리뷰 수정 | task/UX10-QVIEW | owner별 reset epoch·최신 결과·캐시/계정 경계 검증. main 실제 HTTP 검증 후, 늦은 run-item 응답과 reset 경합 마지막 리뷰 수정 중 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
-| UX10-HOME·PLAY·AI·QA | ☐ 대기 | — | 각 Task 문서 기준으로 착수 |
+| UX10-HOME | ◐ 분리 구현·인계 대기 | task/UX10-HOME | 검색·메뉴·필터 모델 구현 및 부분 검증, QVIEW 통합 후 상태 debounce/overview 연결 |
+| UX10-PLAY | ◐ 분리 구현·인계 대기 | task/UX10-PLAY | 이름 수정·행별 비활성화·결과 그룹 단위 검증, AI/QVIEW 인계 후 통합 flow·bank 문항 수 구현 |
+| UX10-AI | ◐ 독립 재리뷰 | task/UX10-AI | 비활성 환경 action 숨김·저장 해설 기본 펼침, keyboard 회귀 수정 후 재리뷰 |
+| UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC main 재검증 완료, UI agent 버튼 전수 점검·gesture 확대 검증. 전체 통합 후 Linux baseline·종합 QA |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
 | UX11-AI-DIRECT | ◐ 신규 terra agent 구현 | task/UX11-AI-DIRECT | prompt RED→GREEN 18개, composer는 UX10-AI 인계 후; 실패 복구 사용자 확정 |
 | UX11-RETURN | ◐ 신규 terra agent 구현 | task/UX11-RETURN | provider/model/RSC 검증 진행, 회차 결과 반영만 확인 중, viewer 연결 인계 대기 |
-| UX11-STEM | ◐ 구현 검증·리뷰 대기 | task/UX11-STEM | TS62/Python162·Chromium/WebKit12·core strict mypy·RSC/Storybook GREEN, 제공 세 사례 및 반례 포함 |
+| UX11-STEM | ◐ 독립 리뷰 수정 후 재리뷰 대기 | task/UX11-STEM | 제공 세 사례·bullet 뒤 별도 문단 보존·CI phase 등록. TS64/추가 Python52·Chromium/WebKit12·core strict mypy·RSC/Storybook GREEN |
