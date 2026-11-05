@@ -284,7 +284,8 @@ describe('QuestionHeatmap', () => {
     expect(screen.getAllByTestId('question-marker')).toHaveLength(12);
     const first = screen.getByRole('region', { name: '1장 Chapter 1' });
     expect(within(first).getByRole('heading', { level: 3 })).toHaveTextContent('1장 Chapter 1');
-    expect(within(first).getByText('7문제')).toBeInTheDocument();
+    expect(within(first).getByLabelText('7문제')).toHaveTextContent('7');
+    expect(within(first).queryByText('7문제')).not.toBeInTheDocument();
     expect(within(first).getAllByRole('button')).toHaveLength(7);
     expect(screen.getByRole('group', { name: '문제 heatmap' })).toBeInTheDocument();
   });

@@ -1,5 +1,7 @@
 # SEARCH-01 — 문제 검색·다국어 본문 검색
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace header 통합 검색) · UX4 개정 2026-10-21 (검색 옵션 단일 목록) · UX6 개정 2026-10-28 (문제·본문 검색 범위 분리와 on/off) · UX7-SELECT 개정 2026-11-01 (터치로 연 Select의 현재 항목 탭) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리, 본문 검색 접힘, 결과 항목 → 주변 내용 panel, 문제 실시간 필터) · UX7-SEARCH-2 개정 2026-11-01 (문제지는 문제 검색에서만: 본문 검색에서 제외) · UX7-BACK-2 개정 2026-11-01 (dialog가 열린 동안 바꾼 본문 검색어는 그 dialog를 닫는 뒤로가기 뒤에도 남음, AC09) · UX9-SPEC 개정 2026-11-02 (본문 검색을 별도 페이지로 — [SEARCH-02](search-page.md); 문제 검색은 홈에 그대로)
 **Route:** `/workspaces/:workspaceId?q=:문제검색어` (Workspace 홈 header의 문제 검색) · 본문 검색은 `/workspaces/:workspaceId/search?text=:본문검색어` ([SEARCH-02](search-page.md), UX9; 홈의 `?text=…`와 이전 `/workspaces/:workspaceId/search?q=…`는 그 페이지로 redirect)
 **테스트:** `tests/e2e/search/search.spec.ts`

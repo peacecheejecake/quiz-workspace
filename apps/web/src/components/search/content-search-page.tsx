@@ -92,7 +92,7 @@ export function ContentSearchPage({
   const [askConversation, setAskConversation] = useState<string | null>(null);
   const [askIntent, setAskIntent] = useState<AskIntent | null>(null);
   function askFromSearch() {
-    if (askUnavailable) return;
+    if (!ask.state?.available || workspace.archived) return;
     setAskIntent({
       key: askSession + 1,
       text: draft.trim(),
@@ -133,7 +133,11 @@ export function ContentSearchPage({
         onDraftChange={setDraft}
         onSearch={search}
         searchable={searchable}
-        extraAction={<AskSearchButton unavailable={askUnavailable} onAsk={askFromSearch} />}
+        extraAction={
+          ask.state?.available && !workspace.archived ? (
+            <AskSearchButton unavailable={askUnavailable} onAsk={askFromSearch} />
+          ) : null
+        }
         settings={
           <ContentSearchOptions
             search={content}
@@ -149,7 +153,7 @@ export function ContentSearchPage({
         <ContentSearchResults workspaceId={workspace.id} search={content} onClose={clear} />
       ) : null}
       <AskPanel
-        key={askSession}
+        key={`${askSession}:${ask.identityGeneration}`}
         open={askOpen}
         onOpenChange={setAskOpen}
         container={null}
@@ -157,6 +161,7 @@ export function ContentSearchPage({
         archived={workspace.archived}
         askState={ask.state}
         client={ask.client}
+        recovery={ask.recovery}
         conversationId={askConversation}
         onNavigate={(conversationId) => setAskConversation(conversationId)}
         documents={documents}

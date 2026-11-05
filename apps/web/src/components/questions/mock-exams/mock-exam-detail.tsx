@@ -10,6 +10,7 @@
 // While a round runs the mock exam is read again every MOCK_POLL_MS; its end is announced.
 import { Badge, Button, ConfirmDialog, ProgressBar, Skeleton } from '@quiz/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import type { RunRange } from '@/lib/questions/practice-runs';
 import type { MockExamApi } from './mock-exam-client';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
 import {
@@ -62,6 +63,9 @@ export interface MockExamDetailProps {
   readonly openSettings: boolean;
   readonly onSettingsShown: () => void;
   readonly onPractise: (exam: MockExam) => void;
+  readonly onBankSubmit: (range: RunRange, count: number | null, random: boolean) => void;
+  readonly bankBusy: boolean;
+  readonly bankError: string | null;
   readonly onRename: (exam: MockExam, title: string) => Promise<string | null>;
   readonly onDelete: (exam: MockExam, trigger: HTMLElement | null) => void;
   /** The mock exam changed (a new round, a finished one, a question): the list reads again. */
@@ -92,6 +96,9 @@ export function MockExamDetail({
   openSettings,
   onSettingsShown,
   onPractise,
+  onBankSubmit,
+  bankBusy,
+  bankError,
   onRename,
   onDelete,
   onChanged,
@@ -333,6 +340,7 @@ export function MockExamDetail({
                 if (!failure) {
                   setExam({ status: 'ready', data: { ...shown, title } });
                   setRenaming(false);
+                  renameButton.current?.focus();
                   onChanged();
                 }
                 return failure;
@@ -360,7 +368,7 @@ export function MockExamDetail({
         {mode === 'view' ? (
           <div className={styles.actions}>
             {canPractise(shown) ? (
-              <Button variant="primary" onClick={() => onPractise(shown)}>
+              <Button variant="primary" disabled={renaming} onClick={() => onPractise(shown)}>
                 풀기
               </Button>
             ) : null}
@@ -393,8 +401,9 @@ export function MockExamDetail({
             initial={optionsFromConfig(shown.title, shown.config)}
             initialRange={shown.range}
             llmAvailable={llmAvailable}
-            busy={starting}
-            error={startError}
+            busy={starting || bankBusy}
+            error={startError ?? bankError}
+            onBankSubmit={onBankSubmit}
             onSubmit={(value) => askRound({ config: value.config, range: value.range })}
             onCancel={() => {
               setMode('view');

@@ -62,6 +62,7 @@ const STATUS_CHIPS: readonly { readonly status: QuestionDotStatus; readonly labe
   { status: 'viewed', label: '본 문제' },
   { status: 'incorrect', label: '틀린 문제' },
   { status: 'correct', label: '맞힌 문제' },
+  { status: 'retry', label: '다시 풀기' },
 ];
 const ALL_TYPES = '__all__';
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];

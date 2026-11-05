@@ -15,7 +15,8 @@ OpenAPI schema can carry one (apps/api/tests/test_practice_api_schema.py). Answe
 only by `SubmitResult` (the submit response, and `outcome` of a submitted session).
 
 Sessions: opening one pins the question's active revision and, for an MCQ, a displayed option
-order drawn from a CSPRNG seed (both stored: `displayed_option_ids`, `shuffle_seed`). Opening is
+order: authored by default, or drawn from a CSPRNG seed when explicitly requested (both
+stored: `displayed_option_ids`, `shuffle_seed`). Opening is
 the only study view: it writes `first_viewed_at`/`last_viewed_at` (reading the overview, the bank
 or a question never does). Grading compares stable option ids of the pinned revision, never
 positions, so an edit after opening does not change how the session is graded. A session is
@@ -152,11 +153,15 @@ class PracticeSession(BaseModel):
 
 
 class PracticeSessionCreate(BaseModel):
-    """Empty for the practice panel; `practice_run_id` + `run_position` for a run position
-    (QVIEW-B): the position must hold this question; one session per position."""
+    """Option order and reset precondition; a run requires both run id and position.
+
+    A run position must hold this question and has at most one session.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    shuffle_options: bool = False
+    expected_reset_epoch: int | None = Field(default=None, ge=0)
     practice_run_id: uuid.UUID | None = None
     run_position: int | None = Field(default=None, ge=1, le=MAX_RUN)
 
@@ -220,6 +225,7 @@ class MyStateUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     is_favorite: _Flag = None
+    expected_reset_epoch: int | None = Field(default=None, ge=0)
     needs_retry: _Flag = Field(
         default=None,
         description=(
@@ -337,11 +343,19 @@ def _own_session(
     together with membership (one query), so a foreign session is indistinguishable from an
     unknown id (404, same body) whatever the caller's role or the workspace's state. Writes lock
     the session row."""
-    record = practice.session_membership(session_id, user_id, policy_for(action).lock)
-    access = decide(record, action, not_found_detail=NOT_FOUND)
-    found = practice.get_session(session_id, user_id, lock=action is Action.PRACTICE)
-    if found is None:  # the question was soft-deleted
+    membership = practice.session_membership(session_id, user_id, policy_for(action).lock)
+    if membership is None:
         raise _not_found()
+    access = decide(membership[0], action, not_found_detail=NOT_FOUND)
+    practice.lock_reset(user_id, membership[1])
+    session_epoch = practice.get_session_epoch(session_id, user_id, lock=action is Action.PRACTICE)
+    if session_epoch is None:  # the question was soft-deleted
+        raise _not_found()
+    found, epoch = session_epoch
+    if found.reset_epoch != epoch:
+        raise ProblemException(
+            409, ProblemType.PRACTICE_SESSION_RESET, detail="This practice session was reset."
+        )
     return access, found
 
 
@@ -521,19 +535,33 @@ def start_practice_session(
     body: PracticeSessionCreate | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
-    """Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-    options, records the caller's view. No answers in the response. With a run position
+    """Open the practice panel on a CONFIRMED question: pins its active revision, optionally
+    shuffles MCQ options, records the caller's view. No answers in the response. With a run position
     (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
     open session is resumed (another view), a submitted one is 409 `already-submitted`."""
     body = body or PracticeSessionCreate()
     scope = f"POST /questions/{access.resource_id}/practice-sessions"
-    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True))
+    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True, exclude_defaults=True))
     if idempotency_key is not None:
         idempotency.lock(user.id, scope, idempotency_key)
+    epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
+    if (
+        body.expected_reset_epoch is not None and body.expected_reset_epoch != epoch
+    ) or reset_since_start:
+        raise ProblemException(
+            409, ProblemType.PRACTICE_SESSION_RESET, detail="This practice session was reset."
+        )
+    if idempotency_key is not None:
         stored = idempotency.find(user.id, scope, idempotency_key)
         if stored is not None:
+            replayed = practice.get_session(uuid.UUID(stored.body["id"]), user.id)
+            if replayed is None or replayed.reset_epoch != epoch:
+                raise ProblemException(
+                    409,
+                    ProblemType.PRACTICE_SESSION_RESET,
+                    detail="This practice session was reset.",
+                )
             return replay(stored, body_hash)
-
     run_id, position = body.practice_run_id, body.run_position
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
@@ -545,6 +573,12 @@ def start_practice_session(
             raise wrong_position()
         existing = practice.run_session(run.id, position, user.id)
         if existing is not None:
+            if existing.reset_epoch != epoch:
+                raise ProblemException(
+                    409,
+                    ProblemType.PRACTICE_SESSION_RESET,
+                    detail="This practice session was reset. Start a new run.",
+                )
             if existing.state != "open":
                 raise already_submitted()
             practice.record_view(existing.workspace_id, existing.question_id, user.id)
@@ -575,8 +609,10 @@ def start_practice_session(
     seed: int | None = None
     displayed: list[str] = []
     if question.question_type == "MCQ":
-        seed = new_shuffle_seed()
-        displayed = shuffled_option_ids([o["id"] for o in question.revision.options], seed)
+        displayed = [o["id"] for o in question.revision.options]
+        if body.shuffle_options:
+            seed = new_shuffle_seed()
+            displayed = shuffled_option_ids(displayed, seed)
 
     opened = practice.open_session(
         workspace_id=question.workspace_id,
@@ -585,6 +621,7 @@ def start_practice_session(
         user_id=user.id,
         displayed_option_ids=displayed,
         shuffle_seed=seed,
+        reset_epoch=epoch,
         practice_run_id=run_id,
         run_position=position,
     )
@@ -599,6 +636,7 @@ def start_practice_session(
             chapter_id=question.chapter_id,
             question_number=question.question_number,
             displayed_option_ids=displayed,
+            reset_epoch=epoch,
             state=opened.state,
             opened_at=opened.opened_at,
             submitted_at=None,
@@ -617,6 +655,94 @@ def start_practice_session(
             status.HTTP_201_CREATED,
             result.model_dump(mode="json"),
         )
+    practice.commit()
+    return result
+
+
+class LatestPractice(BaseModel):
+    reset_epoch: int
+    active_revision_id: uuid.UUID
+    latest_attempt_id: uuid.UUID | None
+    session: PracticeSessionDetail | None
+    previous_revision: bool
+    submitted_answer: dict[str, Any] | None = None
+
+
+@router.get("/questions/{question_id}/practice-recent", operation_id="getLatestQuestionPractice")
+def latest_question_practice(
+    access: ReadQuestion,
+    practice: PracticeRepo,
+    questions: QuestionRepo,
+    user: CurrentUser,
+) -> LatestPractice:
+    epoch = practice.lock_epoch(user.id, access.resource_id)
+    question = questions.get(access.resource_id, with_sources=False)
+    if question is None:
+        raise _not_found()
+    found = practice.latest_submitted_session(access.resource_id, user.id)
+    if found is None:
+        return LatestPractice(
+            reset_epoch=epoch,
+            active_revision_id=question.revision.id,
+            latest_attempt_id=None,
+            session=None,
+            previous_revision=False,
+        )
+    latest = practice.latest_attempt(found.id, user.id)
+    if found.revision.id != question.revision.id:
+        return LatestPractice(
+            reset_epoch=epoch,
+            active_revision_id=question.revision.id,
+            latest_attempt_id=latest.id if latest else None,
+            session=None,
+            previous_revision=True,
+        )
+    initial = practice.initial_attempt(found.id, user.id)
+    outcome = _result_out(found, latest.id, latest.result) if latest else None
+    return LatestPractice(
+        reset_epoch=epoch,
+        active_revision_id=question.revision.id,
+        latest_attempt_id=latest.id if latest else None,
+        session=PracticeSessionDetail(
+            **_session_out(found).model_dump(),
+            submitted_at=found.submitted_at,
+            graded_at=found.graded_at,
+            outcome=outcome,
+        ),
+        previous_revision=False,
+        submitted_answer=initial.submitted_answer if initial else None,
+    )
+
+
+class PracticeResetResult(BaseModel):
+    reset: bool
+    epochs: dict[str, int]
+
+
+@router.post(
+    "/questions/{question_id}/practice-reset",
+    operation_id="resetQuestionPractice",
+    response_model=PracticeResetResult,
+)
+def reset_question_practice(
+    access: PracticeQuestion,
+    practice: PracticeRepo,
+    idempotency: IdempotencyStoreDep,
+    user: CurrentUser,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Reset personal study state; immutable attempts remain for audit."""
+    scope = f"POST /questions/{access.resource_id}/practice-reset"
+    body_hash = request_hash({})
+    if idempotency_key is not None:
+        idempotency.lock(user.id, scope, idempotency_key)
+        stored = idempotency.find(user.id, scope, idempotency_key)
+        if stored is not None:
+            return replay(stored, body_hash)
+    epochs = practice.reset(user.id, access.resource_id)
+    result = {"reset": True, "epochs": epochs}
+    if idempotency_key is not None:
+        idempotency.save(user.id, scope, idempotency_key, body_hash, 200, result)
     practice.commit()
     return result
 
@@ -748,6 +874,15 @@ def update_my_state(
             [{"loc": ("body",), "msg": "Give is_favorite and/or needs_retry.", "type": "missing"}]
         )
     ws = access.workspace
+    epoch, reset_since_start = practice.lock_epoch_with_reset(ws.user_id, access.resource_id)
+    if (
+        body.expected_reset_epoch is not None and body.expected_reset_epoch != epoch
+    ) or reset_since_start:
+        raise ProblemException(
+            409,
+            ProblemType.PRACTICE_SESSION_RESET,
+            detail="This question's practice state was reset.",
+        )
     before = practice.lock_state(ws.workspace_id, access.resource_id, ws.user_id)
     changed = {k: v for k, v in flags.items() if getattr(before, k) != v}
     # The request is judged, not the diff: a legacy flag already on does not let it through.

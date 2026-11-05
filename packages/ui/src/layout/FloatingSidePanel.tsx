@@ -22,6 +22,7 @@ import { containOverscroll } from '../internal/overscroll-guard';
 import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
+import { useSwipeDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from '../primitives/icons';
 
@@ -145,6 +146,8 @@ export interface FloatingSidePanelProps {
   container?: HTMLElement | null;
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
+  /** Receives the resolved opening control, including Safari mouse-click fallback. */
+  onOpenerResolved?: (opener: HTMLElement | null) => void;
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
   /**
    * Changing this while the panel is open brings it to the top of the open floating layers again
@@ -197,6 +200,7 @@ export function FloatingSidePanel({
   mobileLayout = 'sheet',
   container,
   onOpenAutoFocus,
+  onOpenerResolved,
   onCloseAutoFocus,
   raiseKey,
   staysExposedUnderModal = false,
@@ -239,7 +243,14 @@ export function FloatingSidePanel({
     if (open === undefined) setUncontrolledOpen(next);
     onOpenChange?.(next);
   };
-  const layer = useFloatingLayer(isOpen, raiseKey, aboveModals);
+  const layer = useFloatingLayer(isOpen, raiseKey, aboveModals, modal);
+  const swipe = useSwipeDismiss(
+    contentRef,
+    layer.rank,
+    modal,
+    side === 'end' ? 'right' : 'left',
+    () => handleOpenChange(false),
+  );
   const registry = useDirtyRegistry();
   useModalStackEntry(modal && isOpen, () => handleOpenChange(false));
   useEffect(watchOpeners, []);
@@ -299,6 +310,7 @@ export function FloatingSidePanel({
                 return;
               }
               returnFocusRef.current = currentOpener();
+              onOpenerResolved?.(returnFocusRef.current);
               onOpenAutoFocus?.(event);
               if (event.defaultPrevented) return;
               event.preventDefault();
@@ -356,6 +368,7 @@ export function FloatingSidePanel({
                 declinedEscapes.has(event.nativeEvent) &&
                 !handlesOwnEscape(event.nativeEvent)
               ) {
+                declinedEscapes.delete(event.nativeEvent);
                 handleOpenChange(false);
               }
             }}
@@ -373,7 +386,7 @@ export function FloatingSidePanel({
           >
             <LayerProvider value={layer.zIndex}>
               <DirtyProvider value={registry.report}>
-                <div className="header">
+                <div className="header" onPointerDown={swipe}>
                   <div className="heading">
                     <Dialog.Title
                       ref={titleRef}

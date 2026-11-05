@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.exceptions import RequestValidationError
@@ -223,7 +223,8 @@ def get_question_overview(
         str | None, Query(max_length=MAX_SEARCH, description="Case-insensitive stem search.")
     ] = None,
     status: Annotated[
-        list[DotStatus] | None, Query(description="Repeatable; keeps these statuses.")
+        list[DotStatus | Literal["none"]] | None,
+        Query(description="Repeatable statuses; none selects no questions, omitted selects all."),
     ] = None,
     favorite: Annotated[bool | None, Query(description="Keep (non-)favorites only.")] = None,
     retry: Annotated[
@@ -236,7 +237,7 @@ def get_question_overview(
     scope = [_item(r) for r in rows]
     counts = summarize((i.status, i.is_favorite) for i in scope)
 
-    wanted = set(status) if status else None
+    wanted = set(status) if status is not None else None
     selected = [
         (row, item)
         for row, item in zip(rows, scope, strict=True)

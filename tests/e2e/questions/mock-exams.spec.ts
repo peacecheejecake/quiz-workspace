@@ -153,7 +153,7 @@ async function fillOptions(
   for (const type of ['OPTION_SHUFFLE', 'PARAPHRASE', 'INVERT_POLARITY'] as const) {
     const box = mockUi.variation(dialog, type);
     if (types.includes(type)) await box.check();
-    else if (await box.isChecked()) await box.uncheck();
+    else if ((await box.count()) > 0 && (await box.isChecked())) await box.uncheck();
   }
   await mockUi.questionCount(dialog).fill(String(count));
   await mockUi.next(dialog).click();
@@ -184,7 +184,7 @@ async function expectProblem(
 }
 
 test(
-  'MOCK-01-AC01 the 문제 menu opens the 모의고사 dialog instead of 변형 출제, with a skeleton, an empty state and 추가 for editors only',
+  'MOCK-01-AC01 the saved mock list link shows a skeleton and an empty state with 추가 for editors only',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('mock01-ac01');
@@ -194,9 +194,6 @@ test(
     seedMembership(ws.id, viewer.user.id, 'viewer');
 
     await openHome(page, owner, ws.id);
-    await homeUi.questionMenuButton(page).click();
-    await expect(mockUi.menuItem(page)).toBeVisible();
-    await expect(mockUi.generateMenuItem(page)).toHaveCount(0);
 
     // The dialog opens before the list arrives: busy skeleton, then the empty state.
     let release!: () => void;
@@ -208,7 +205,7 @@ test(
         await route.fallback();
       },
     );
-    await mockUi.menuItem(page).click();
+    await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const dialog = mockUi.dialog(page);
     await expect(dialog).toBeVisible();
     // UX9 (HOMEDLG-01): a modal dialog.
@@ -243,9 +240,7 @@ test(
 
     // A viewer gets the same entry (enabled) and the empty state, without 추가.
     await switchUser(page, viewer, ws.id);
-    await homeUi.questionMenuButton(page).click();
-    await expect(mockUi.menuItem(page)).not.toHaveAttribute('aria-disabled', 'true');
-    await mockUi.menuItem(page).click();
+    await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const viewerDialog = mockUi.dialog(page);
     await expect(viewerDialog.getByText(MOCK_TEXT.empty)).toBeVisible();
     await expect(mockUi.add(viewerDialog)).toHaveCount(0);
@@ -597,6 +592,7 @@ test(
     await mockUi.changeSettings(dialog).click();
     await mockUi.variation(dialog, 'PARAPHRASE').uncheck();
     await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
+    await mockUi.questionCount(dialog).fill('2');
     await mockUi.next(dialog).click();
     await picker.chapter(dialog, CH1).uncheck();
     await picker.chapter(dialog, CH2).check();
@@ -803,8 +799,7 @@ test(
       await mockUi.add(offDialog).click();
       for (const type of ['PARAPHRASE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
         const box = mockUi.variation(offDialog, type);
-        await expect(box).toBeDisabled();
-        await expect(box).toHaveAccessibleDescription(MOCK_TEXT.aiDisabled);
+        await expect(box).toHaveCount(0);
       }
       await expect(mockUi.variation(offDialog, 'OPTION_SHUFFLE')).toBeEnabled();
       await fillOptions(offDialog, '섞기만', ['OPTION_SHUFFLE'], 2);

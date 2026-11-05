@@ -143,15 +143,18 @@ def _stem(text: str) -> str:
 
 
 # Budgets after PERF-1 (before: in parentheses), local stack, warm pool.
+# UX10 reset adds a transaction-scoped advisory lock and a fresh epoch snapshot. The GET session
+# path also needs a real transaction around authorization, locking, outcome assembly and rollback;
+# its PERF-1 budget assumed autocommit. These remain strict ceilings, including transaction traffic.
 BUDGETS = {
     "GET /workspaces": 1,  # (4)
     "GET /workspaces/{id}": 2,  # (5)
     "GET overview": 2,  # (5)
     "GET documents": 2,  # (5)
-    "POST practice-sessions (Idempotency-Key)": 8,  # (13)
-    "POST submit": 5,  # (10)
-    "GET practice-session": 3,  # (7)
-    "PATCH my-state": 7,  # (10)
+    "POST practice-sessions (Idempotency-Key)": 10,  # PERF-1: 8
+    "POST submit": 6,  # PERF-1: 5
+    "GET practice-session": 6,  # PERF-1: 3
+    "PATCH my-state": 9,  # PERF-1: 7
 }
 
 

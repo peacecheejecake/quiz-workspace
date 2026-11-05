@@ -36,7 +36,7 @@ function SharedArea({
   const [defaultClient] = useState(() => createExplanationClient());
   const client = givenClient ?? defaultClient;
   const [found, setFound] = useState<SharedExplanation | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const headingId = useId();
   const bodyId = useId();
 

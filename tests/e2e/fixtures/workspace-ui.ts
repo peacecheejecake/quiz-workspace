@@ -88,8 +88,8 @@ export const homeUi = {
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
   /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
   questionMenuButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문제|questions)$/i }),
-  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제|questions)$/i }),
+    main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i }),
+  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제 메뉴|question menu)$/i }),
   questionMenuItem: (page: Page, item: QuestionMenuItem) =>
     homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
@@ -121,7 +121,12 @@ export const homeUi = {
   searchSettingsButton: (page: Page, scope: SearchScopeName) =>
     main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
   searchSettings: (page: Page, scope: SearchScopeName) =>
-    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+    scope === 'questions'
+      ? main(page)
+          .getByRole('search', { name: /문제 검색|question search/i })
+          .locator(':scope > div')
+          .nth(1)
+      : page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -130,7 +135,7 @@ export const homeUi = {
 
 export type SearchScopeName = 'questions' | 'body';
 const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(문제 설정|question settings)$/i,
+  questions: /^(검색 설정|search settings)$/i,
   body: /^(본문 설정|body settings|content settings)$/i,
 };
 const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
@@ -180,9 +185,6 @@ const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.duplicates,
   QUESTION_MENU_ITEMS.redistribution,
   QUESTION_MENU_ITEMS.inactive,
-  QUESTION_MENU_ITEMS.mockExams,
-  QUESTION_MENU_ITEMS.practice,
-  QUESTION_MENU_ITEMS.ask,
 ] as const;
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
@@ -211,7 +213,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
   // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
   // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
-  for (const item of ['inactive', 'mockExams', 'practice'] as const) {
+  for (const item of ['inactive'] as const) {
     await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
   }
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
@@ -257,6 +259,12 @@ export async function expectReadOnlyQuestionMenu(
 
 /** Opens the header's `문제` menu and chooses `item` (UX4). */
 export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
+  if (item === 'mockExams') {
+    const url = new URL(page.url());
+    url.searchParams.append('panel', 'mock-exams');
+    await page.goto(url.toString());
+    return;
+  }
   await homeUi.questionMenuButton(page).click();
   await homeUi.questionMenuItem(page, item).click();
 }
@@ -294,6 +302,12 @@ export async function closeSearchOptions(
   const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
   const popover = homeUi.searchSettings(page, scope);
+  if (scope === 'questions') {
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(popover).toBeHidden();
+    return;
+  }
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {
@@ -382,7 +396,7 @@ export const editorUi = {
   outlineItem: (page: Page, title: string) =>
     editorUi.outline(page).getByRole('treeitem', { name: title }),
   viewer: (page: Page) => page.getByRole('region', { name: /pdf/i }),
-  currentPage: (page: Page) => editorUi.viewer(page).getByLabel(/현재 페이지|current page/i),
+  currentPage: (page: Page) => page.getByLabel(/현재 페이지|current page/i),
   highlight: (page: Page) =>
     editorUi.viewer(page).getByLabel(/원문 위치|출처 위치|source (location|highlight)/i),
   textPanel: (page: Page) => page.getByRole('region', { name: /원문|텍스트|canonical|text/i }),

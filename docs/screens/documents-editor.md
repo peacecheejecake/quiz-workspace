@@ -1,5 +1,7 @@
 # DOC-02 — PDF 열람·원문 교정
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.5 (DOCVIEW 보기 개선 2026-11-01 · DOCVIEW-PORT 2026-11-02: 목차 panel·폭 조정(AC06·AC10) 폐기, 배치는 [DOCVIEW-01](documents-viewer-layout.md))
 **Route:** `/workspaces/:workspaceId/documents/:documentId`
 **테스트:** `tests/e2e/documents/documents-editor.spec.ts`

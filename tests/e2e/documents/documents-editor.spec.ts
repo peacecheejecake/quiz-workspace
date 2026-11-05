@@ -41,6 +41,12 @@ import {
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ timeout: 2 * JOB_TIMEOUT_MS + 60_000 });
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('quiz.documentViewer.v1', JSON.stringify({ mode: 'both' })),
+  );
+});
+
 const BOOK = book('book-ko');
 const RAIN = block(BOOK, 'ch1-s2-p1'); // page 2, unchanged by the edits below
 const CHLORINE = block(BOOK, 'ch2-s2-p2'); // page 4: "마지막으로 염소와 같은 소독제를 넣어 …"
@@ -228,10 +234,20 @@ test(
     const [anyHit] = await hits(owner, ws.id, documentId, snippet(RAIN.text, 12));
     expect(anyHit?.block_id).toBeTruthy();
     await workspaceFactory.archive(owner, ws.id);
+    await page.setViewportSize({ width: 1024, height: 375 });
 
     await signInAs(page, owner.user);
     await page.goto(documentPath(ws.id, documentId));
     await expect(editorUi.viewer(page)).toBeVisible();
+    await expect(
+      page
+        .getByRole('group', { name: '보기 설정' })
+        .locator('..')
+        .getByRole('note')
+        .filter({ hasText: /보관된 Workspace.*복원/ }),
+    ).toBeVisible();
+    await page.getByRole('radio', { name: '상하로 나누기' }).click();
+    await expect(editorUi.pdfPages(page)).toBeVisible();
     await expect(editorUi.textPanel(page)).toContainText(snippet(RAIN.text));
     await expect(editorUi.editButton(editorUi.textPanel(page))).toHaveCount(0);
     await expect(editorUi.publishButton(page)).toHaveCount(0);
@@ -308,16 +324,15 @@ test(
     page.on('request', onRequest);
 
     const turn = async (go: () => Promise<void>, n: number) => {
+      await page.getByRole('button', { name: '보기 도구 표시' }).focus();
       const started = Date.now();
       await go();
       await expect(editorUi.currentPage(page)).toHaveValue(String(n));
       await expectPainted(page, n, 1_000);
       expect(Date.now() - started, `page ${n} drawn within 1 s`).toBeLessThan(1_000);
     };
-    const next = editorUi.viewer(page).getByRole('button', { name: /다음 페이지|next page/i });
-    const previous = editorUi
-      .viewer(page)
-      .getByRole('button', { name: /이전 페이지|previous page/i });
+    const next = page.getByRole('button', { name: /다음 페이지|next page/i });
+    const previous = page.getByRole('button', { name: /이전 페이지|previous page/i });
     await turn(() => next.click(), 2);
     await turn(() => next.click(), 3);
     await turn(async () => {
@@ -347,9 +362,8 @@ test(
     await expect(editorUi.pageHeading(page, 4)).toBeInViewport();
     await expect(editorUi.pageHeading(page, 2)).not.toBeInViewport();
 
-    const previous = editorUi
-      .viewer(page)
-      .getByRole('button', { name: /이전 페이지|previous page/i });
+    const previous = page.getByRole('button', { name: /이전 페이지|previous page/i });
+    await page.getByRole('button', { name: '보기 도구 표시' }).focus();
     await previous.click();
     await expect(editorUi.currentPage(page)).toHaveValue('3');
     // No block starts on page 3: the block that continues onto it is shown.

@@ -113,9 +113,12 @@ test(
     const [doc] = (await session.workspace()).documents;
     await sharedUi.documentLink(page, doc?.title ?? '?').click();
     await expect(sharedUi.pdfViewer(page)).toBeVisible();
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expect(page.getByText(snippet(PUBLISHED_BLOCK.text)).first()).toBeVisible();
     await expectAccessible(page, 'shared document');
 
+    await page.getByRole('link', { name: /공유 Workspace 홈/i }).click();
+    await expect(page).toHaveURL((url) => !url.searchParams.has('document'));
     await sharedUi.searchBox(page).fill(snippet(PUBLISHED_BLOCK.text, 12));
     await sharedUi.searchBox(page).press('Enter');
     await expect(sharedUi.results(page).getByRole('listitem').first()).toBeVisible();

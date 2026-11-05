@@ -157,7 +157,9 @@ def test_idempotency_hash_ignores_client_identity_fields() -> None:
 
 
 def test_session_body_pairs_run_and_position() -> None:
-    assert PracticeSessionCreate.model_validate({}).model_dump(exclude_none=True) == {}
+    assert PracticeSessionCreate.model_validate({}).model_dump(exclude_none=True) == {
+        "shuffle_options": False
+    }
     PracticeSessionCreate.model_validate({"practice_run_id": str(uuid.uuid4()), "run_position": 1})
     for bad in (
         {"practice_run_id": str(uuid.uuid4())},
@@ -287,3 +289,19 @@ def test_run_models_are_an_allowlist() -> None:
     assert set(RunResults.model_fields) == {"total", "offset", "limit", "items"}
     assert "attempt" in RunItem.model_fields
     assert not set(RunItem.model_fields) & ANSWER_KEYS
+
+
+def test_ux10_home_empty_status_range_is_empty_even_with_favorite() -> None:
+    assert pick(all=True, filters={}) == IDS
+    assert pick(all=True, filters={"status": []}) == []
+    assert pick(all=True, filters={"status": [], "favorite": True}) == []
+
+
+def test_ux11_retry_open_schema_never_exposes_answers_or_origin() -> None:
+    spec = json.loads(render_openapi())
+    schema = _response(
+        spec, "/practice-runs/{run_id}/items/{position}/retry-session", "post", "201"
+    )
+    props = _props(spec, schema, set(), set())
+    assert {"id", "question_id", "stem", "options"} <= props
+    assert not props & (ANSWER_KEYS | {"retry_origin_run_id", "retry_origin_position"})

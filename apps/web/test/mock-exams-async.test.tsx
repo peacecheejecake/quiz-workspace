@@ -154,7 +154,7 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
         initial={{
           title: '중간 점검',
           types: ['PARAPHRASE'],
-          count: '3',
+          count: '2',
           wholeRange: false,
           difficulty: null,
         }}
@@ -171,6 +171,34 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
     await user.click(remake);
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0]?.[0].range).toEqual(saved);
+  });
+  it('UX10-AI-AC01 normalizes saved AI types when the LLM is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(overview())),
+    );
+    render(
+      <MockExamForm
+        workspaceId={WS}
+        mode="settings"
+        initial={{
+          title: '중간 점검',
+          types: ['PARAPHRASE'],
+          count: '3',
+          wholeRange: false,
+          difficulty: null,
+        }}
+        initialRange={{ all: true, chapter_ids: [], question_ids: [], excluded_question_ids: [] }}
+        llmAvailable={false}
+        busy={false}
+        error={null}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: /발문/ })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByRole('button', { name: '다시 만들기' })).toBeInTheDocument();
   });
 });
 
@@ -223,11 +251,14 @@ describe('만들기 after leaving the form', () => {
       canEdit: true,
       onViewChange,
       onPractise: () => undefined,
+      onBankStarted: () => undefined,
       api,
     };
     const user = userEvent.setup();
     const { rerender } = render(<MockExamsPanel {...props} view={{ view: 'create' }} />);
     async function make() {
+      await user.click(await screen.findByRole('checkbox', { name: /보기 섞기/ }));
+      await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
       await user.click(await screen.findByRole('button', { name: '다음' }));
       await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
       await user.click(screen.getByRole('button', { name: '만들기' }));
@@ -256,4 +287,83 @@ describe('만들기 after leaving the form', () => {
     await act(async () => pending[2]?.answer.resolve({ ok: true, data: exam(EXAM) }));
     expect(onViewChange).toHaveBeenCalledWith({ view: 'detail', mockExamId: EXAM }, 'replace');
   });
+});
+
+describe('UX10-PLAY-AC01 unified bank mode', () => {
+  it('keeps empty types with AI off and starts all selected questions as bank without mock config', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(overview())),
+    );
+    const onBankSubmit = vi.fn();
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MockExamForm
+        workspaceId={WS}
+        mode="create"
+        initial={{ title: '풀이', types: [], count: '10', wholeRange: true, difficulty: null }}
+        llmAvailable={false}
+        busy={false}
+        error={null}
+        onSubmit={onSubmit}
+        onBankSubmit={onBankSubmit}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).not.toBeChecked();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '시작' }));
+    expect(onBankSubmit).toHaveBeenCalledWith(expect.objectContaining({ all: true }), null, false);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+it('UX10-PLAY-AC01 preserves other URL state in the bank fallback', async () => {
+  const { bankRunLocation } =
+    await import('../src/components/questions/mock-exams/mock-exams-panel');
+  const target = bankRunLocation(
+    '/workspaces/w',
+    '?status=incorrect&panel=mock-exams&mock=new',
+    RUN,
+  );
+  const url = new URL(target, 'http://localhost');
+  expect(url.searchParams.get('status')).toBe('incorrect');
+  expect(url.searchParams.get('panel')).toBeNull();
+  expect(url.searchParams.get('mock')).toBeNull();
+  expect(url.searchParams.get('practice')).toBe(RUN);
+  expect(url.searchParams.get('i')).toBe('1');
+});
+
+it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return json({ id: RUN, workspace_id: WS });
+      return json(overview());
+    }),
+  );
+  const api = { list: async () => ({ ok: true, data: { llm_available: false, items: [] } }) };
+  const onBankStarted = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <MockExamsPanel
+      open
+      onOpenChange={() => undefined}
+      container={null}
+      workspaceId={WS}
+      canEdit
+      view={{ view: 'create' }}
+      onViewChange={() => undefined}
+      onPractise={() => undefined}
+      onBankStarted={onBankStarted}
+      api={api as never}
+    />,
+  );
+  await user.click(await screen.findByRole('checkbox', { name: '선택 범위의 모든 문항' }));
+  await user.click(screen.getByRole('button', { name: '다음' }));
+  await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+  await user.click(screen.getByRole('button', { name: '시작' }));
+  await waitFor(() => expect(onBankStarted).toHaveBeenCalledWith(RUN));
 });

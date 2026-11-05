@@ -83,7 +83,7 @@ async function answer(panel: Locator, question: Question, correct: boolean): Pro
   );
 }
 
-const ANOTHER_TRY = /한 번 더 풀기|solve again/i;
+const ANOTHER_TRY = /^다시 풀기$|solve again/i;
 
 test(
   'RETRY-01-AC01 the practice panel shows 다시 풀기 only after a correct submission',

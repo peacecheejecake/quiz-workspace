@@ -11,3 +11,7 @@
 9. [구현 계획 — Task 계층·의존 그래프](implementation-plan.md)
 
 > 범용 RAG 챗봇을 구현하지 않고 검색 Core를 독립 구현한다. 화면별 명세 → 수용 기준별 Playwright RED → 화면 구현 GREEN 순서가 필수다.
+
+10. [UX10 세부 구현 기준·Task 문서](implementation/ux10/index.md) — 후속 구현 brief 필수 참조
+
+11. [UX11 추가 구현 기준](implementation/ux11/index.md) — 직접 AI 답변·풀이 복귀·제시문 문단

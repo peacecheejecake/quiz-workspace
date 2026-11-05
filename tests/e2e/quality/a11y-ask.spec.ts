@@ -22,6 +22,7 @@ import {
   ASK_TIMEOUT_MS,
   askPath,
   askThroughApi,
+  conversationOf,
   askUi,
   createSecretQuestion,
   openAskPanel,
@@ -182,10 +183,12 @@ test(
   async ({ page, workspaceFactory }) => {
     const s = await askWorkspace(workspaceFactory, 'a11y17-stacks');
     const limited = await startAskLimitStack();
+    let conversation: string;
     try {
       await openHome(page, s.owner, s.workspaceId, limited.webUrl);
       const panel = await openAskPanel(page);
       await waitDone(await ask(panel, `${QUESTION} 1`));
+      conversation = conversationOf(page);
       await waitDone(await ask(panel, `${QUESTION} 2`));
       await askUi.input(panel).fill(`${QUESTION} 3`);
       await askUi.input(panel).press('Enter');
@@ -198,9 +201,14 @@ test(
     try {
       await page.goto(`${off.webUrl}${homePath(s.workspaceId)}`);
       await expect(homeUi.questionMenuButton(page)).toBeVisible();
-      const panel = await openAskPanel(page);
+      await expect(askUi.headerButton(page)).toHaveCount(0);
+      await page.goto(`${off.webUrl}${askPath(s.workspaceId, conversation)}`);
+      const panel = askUi.panel(page);
+      await expect(askUi.answers(panel)).toHaveCount(2);
+      await expect(askUi.answers(panel).first()).toContainText(PASSAGES.book);
       await expect(askUi.input(panel)).toHaveAttribute('aria-disabled', 'true');
       await expect(askUi.input(panel)).toHaveAccessibleDescription(ASK_TEXT.disabled);
+      await expect(askUi.send(panel)).toHaveCount(0);
       await expectAccessible(page, 'AI 질문 panel, feature off (saved conversations only)');
     } finally {
       await off.stop();
@@ -427,7 +435,7 @@ test(
     await expect(detail).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(detail)).first()).toBeVisible();
     // The shared explanation is cached: 문제 상세 offers `AI 해설 보기`.
-    await explUi.show(explUi.area(detail)).click();
+    await expect(explUi.show(explUi.area(detail))).toHaveAttribute('aria-expanded', 'true');
     await expectDone(explUi.area(detail));
     await settle(page);
     await expectAccessible(page, 'AI 해설 and 관련 본문 in 문제 상세 (manage)');
@@ -492,13 +500,14 @@ test(
     await expect(explUi.create(area)).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'AI 해설 make button and 관련 본문 list (mock exam run)');
-    await explUi.create(area).click();
+    await keyTo(page, explUi.create(area));
+    await page.keyboard.press('Enter');
     await expectDone(area);
     await settle(page);
     await expectAccessible(page, 'AI 해설 done and 관련 본문 list (mock exam run)');
     await page.keyboard.press('Escape');
 
-    // manage(mock): the mock question's view, AI 해설 made by keyboard alone.
+    // manage(mock): the cached explanation opens without another generation.
     await page.goto(mockExamsPath(s.workspaceId, exam.id));
     const detail = mockUi.dialog(page);
     await expect(mockUi.heading(detail, examName)).toBeVisible();
@@ -507,9 +516,7 @@ test(
     await expect(manage).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(manage)).first()).toBeVisible();
     const manageArea = explUi.area(manage);
-    const action = explUi.show(manageArea).or(explUi.create(manageArea));
-    await keyTo(page, action);
-    await page.keyboard.press('Enter');
+    await expect(explUi.show(manageArea)).toHaveAttribute('aria-expanded', 'true');
     await expectDone(manageArea);
     await settle(page);
     await expectAccessible(page, 'AI 해설 and 관련 본문 in the mock question manage view');

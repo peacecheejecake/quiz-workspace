@@ -95,6 +95,24 @@ describe('FlagSync', () => {
     return { calls, send, events, sync, flush };
   }
 
+  it('drops a pre-reset response without affecting a fresh flag change', async () => {
+    const { calls, events, sync, flush } = setup();
+    sync.toggle('q', OFF, { is_favorite: true });
+    sync.invalidate('q');
+    sync.toggle('q', OFF, { needs_retry: true });
+    expect(calls).toHaveLength(2);
+    const count = events.length;
+    calls[0]?.resolve({ ok: true, data: { is_favorite: true, needs_retry: false } });
+    await flush();
+    expect(events).toHaveLength(count);
+    calls[1]?.resolve({ ok: true, data: { is_favorite: false, needs_retry: true } });
+    await flush();
+    expect(events.at(-1)?.[1]).toMatchObject({
+      type: 'saved',
+      flags: { is_favorite: false, needs_retry: true },
+    });
+  });
+
   it('never has two requests of one question in flight, so responses cannot arrive out of order', async () => {
     const { calls, events, sync, flush } = setup();
     sync.toggle('q', OFF, { needs_retry: true });

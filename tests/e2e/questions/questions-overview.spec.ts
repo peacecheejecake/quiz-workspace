@@ -186,9 +186,12 @@ test(
     );
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 2).id)).status).toBe('unseen');
 
-    // Positive control: actually opening the practice panel records the view.
+    // Positive control: opening a loaded practice session records the view.
     await overviewUi.dot(page, 2).click();
     await expect(panelUi.numbered(page, 2)).toBeVisible();
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, q(s, 2).id)).status)
+      .toBe('viewed');
     await page.keyboard.press('Escape');
     await expect(overviewUi.dot(page, 2)).toHaveAttribute('data-status', 'viewed');
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 2).id)).status).toBe('viewed');
@@ -636,7 +639,7 @@ test(
 );
 
 test(
-  'QOV-01-AC08 no status legend or summary; the status filter is collapsed until its chevron toggle opens it',
+  'QOV-01-AC08 status chips remain visible and support filtering without color alone',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac08', 3);
@@ -649,38 +652,19 @@ test(
     ).toHaveCount(0);
     await expect(main(page).getByRole('list', { name: /상태 범례|legend/i })).toHaveCount(0);
 
-    const toggle = homeUi.statusFilterToggle(page);
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const controls = await toggle.getAttribute('aria-controls');
-    expect(controls).toBeTruthy();
-    await expect(homeUi.statusFilters(page)).toHaveCount(0); // hidden
-    await expect(toggle.locator('svg')).toHaveCount(1); // chevron icon
-
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const filters = homeUi.statusFilters(page);
     await expect(filters).toBeVisible();
-    await expect(filters).toHaveAttribute('id', controls ?? '');
-    // Each status is a swatch plus its text (never colour alone).
     for (const label of ['미열람', '열람', '오답', '정답', '다시 풀기']) {
-      await expect(filters.getByRole('button', { name: label, exact: true })).toBeVisible();
+      await expect(filters.getByRole('button', { name: label, exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      if (label !== '다시 풀기')
+        await filters.getByRole('button', { name: label, exact: true }).click();
     }
-    await filters.getByRole('button', { name: '다시 풀기', exact: true }).click();
     await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
     await expect(overviewUi.dots(page)).toHaveCount(1);
-
-    // Collapsing keeps the filter applied (and says so in text).
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(homeUi.statusFilters(page)).toHaveCount(0);
-    await expect(overviewUi.dots(page)).toHaveCount(1);
-    await expect(page).toHaveURL(/[?&]status=retry(&|$)/);
-    await expect(main(page).getByText(/상태 필터 적용 중|status filter on/i)).toBeVisible();
-
-    // UX4: at 375px the chips wrap as whole chips; none is squeezed or wraps its label, and the
-    // page never scrolls sideways.
     await page.setViewportSize({ width: 375, height: 800 });
-    await toggle.click();
     const chips = homeUi.statusFilters(page).getByRole('button');
     const heights = new Set<number>();
     for (const chip of await chips.all()) {
@@ -825,7 +809,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the header 문제 menu opens 직접 추가 and 모의고사 by mouse and keyboard, without 변형 출제, 전체 문제 or PDF 관리; viewers and archived workspaces keep the button with the editor items disabled and the reason',
+  'QOV-01-AC11 the question menu supports keyboard and editor permissions while 풀기 opens the unified flow',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -842,11 +826,6 @@ test(
       // CHREDIST-01 (UX9-REDIST-W): editor-only like the two above.
       /^(챕터 재분배|redistribute chapters)$/i,
       /^(보관·초안 문제|archived and draft questions)$/i,
-      // MOCK-01 (MOCK-W): mock exams; QVIEW-01 (QVIEW-W): the range run — both for every member.
-      /^(모의고사|mock exams?)$/i,
-      /^(문제 풀기|practice questions?|start practice)$/i,
-      // ASK-01 (ASK-W): the AI 질문 panel, last, for every member.
-      /^(AI 질문|ask ai)$/i,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
@@ -861,20 +840,10 @@ test(
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    // 모의고사 by keyboard (Enter opens the menu on 직접 추가; ArrowDown past 중복 문제 정리,
-    // 챕터 재분배 and 보관·초안 문제; Enter).
-    await page.keyboard.press('Enter');
-    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
-    for (const item of ['duplicates', 'redistribution', 'inactive', 'mockExams'] as const) {
-      await page.keyboard.press('ArrowDown');
-      await expect(homeUi.questionMenuItem(page, item)).toBeFocused();
-    }
-    await page.keyboard.press('Enter');
-    await expect(
-      main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
-    ).toBeVisible();
-    await expect(page).toHaveURL((url) => url.searchParams.getAll('panel').includes('mock-exams'));
+    await page.getByRole('button', { name: /^풀기$/ }).click();
+    await expect(page).toHaveURL(/[?&]mock=new/);
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     // 직접 추가 by mouse → the 문제 등록 dialog on the home (UX7-BANK): same path, `?panel=question-create`,
     // modal; closing it drops the panel value.
@@ -1215,12 +1184,11 @@ test(
         name: /^(상태 필터|status filter)$/i,
         includeHidden: true,
       });
-      await main(page)
-        .getByRole('button', { name: /^(상태 필터|status filter)$/i, includeHidden: true })
-        .dispatchEvent('click');
-      await filters
-        .getByRole('button', { name: '미열람', exact: true, includeHidden: true })
-        .dispatchEvent('click');
+      for (const label of ['열람', '오답', '정답', '다시 풀기']) {
+        await filters
+          .getByRole('button', { name: label, exact: true, includeHidden: true })
+          .dispatchEvent('click');
+      }
       await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
       await expect(documents).toBeVisible();
     }

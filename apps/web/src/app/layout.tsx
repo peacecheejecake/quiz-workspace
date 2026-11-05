@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import type { ReactNode } from 'react';
+import { PracticeReturnProvider } from '@/components/practice-return/practice-return-provider';
+import { getVerifiedUser } from '@/lib/supabase/server';
 import '@quiz/ui/styles.css';
 import './globals.css';
 
@@ -18,9 +20,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // Every page renders per request: the CSP nonce from `proxy.ts` must be stamped on Next's
   // scripts, which a build-time (static) page cannot carry.
   await connection();
+  const user = await getVerifiedUser();
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <PracticeReturnProvider userId={user?.id ?? null}>{children}</PracticeReturnProvider>
+      </body>
     </html>
   );
 }

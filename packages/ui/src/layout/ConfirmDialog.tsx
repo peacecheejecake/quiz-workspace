@@ -49,7 +49,7 @@ export function ConfirmDialog({
   // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
-  const layer = useFloatingLayer(open);
+  const layer = useFloatingLayer(open, undefined, false, true);
   // Escape cancels it (unless busy), also while a toast is shown over it.
   useModalStackEntry(open, () => {
     if (!loading) onOpenChange(false);

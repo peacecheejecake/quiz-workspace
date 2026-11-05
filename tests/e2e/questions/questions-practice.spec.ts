@@ -19,6 +19,7 @@
 // checks the list by role and name and its place between the question sentence and the options
 // by bounding boxes.
 import { randomUUID } from 'node:crypto';
+import { createPracticeRun, openRunSession } from '../fixtures/practice-runs.ts';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   answerKeysIn,
@@ -47,6 +48,7 @@ import {
   overviewPath,
   overviewUi,
   panelUi,
+  practiceSessionIds,
   PROBLEM_TYPES,
   questionFormUi,
   RESULT_TEXT,
@@ -54,6 +56,7 @@ import {
   seedMembership,
   signInAs,
   startPractice,
+  submitPractice,
   test,
   tokenColor,
   TRANSPARENT,
@@ -241,7 +244,7 @@ test(
 );
 
 test(
-  'QPLAY-01-AC02 a shuffled single-answer MCQ keeps its order in the session and is graded by option id',
+  'QPLAY-01-AC02 a single-answer MCQ keeps its authored order and is graded by option id',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('qplay01-ac02');
@@ -267,7 +270,7 @@ test(
       );
     }
 
-    // Pick the correct option by its text, wherever the shuffle put it.
+    // Pick the correct option by its stable id, independently of its position.
     await panelUi.option(panel, correctText).check();
     expect(await displayedOrder(panel, texts)).toEqual(order);
     await panelUi.submit(panel).click();
@@ -312,6 +315,7 @@ test(
 
     // A new session: a subset of the correct answers is wrong.
     panel = await openPanel(page, 1);
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -351,6 +355,7 @@ test(
     await page.keyboard.press('Escape');
 
     panel = await openPanel(page, 1);
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.answerText(panel).fill('응결');
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -380,7 +385,7 @@ test(
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await panelUi.retryOn(panel).click();
     await expect(panelUi.retryOff(panel)).toBeVisible();
-    await panel.getByRole('button', { name: /한 번 더 풀기/ }).click();
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, question.revision.options[1]?.text ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
@@ -491,13 +496,16 @@ test(
 
     let panel = await openPanel(page, 1);
     await expect(page).toHaveURL(at(1));
+    await expect(panelUi.options(panel)).toHaveCount(4);
     await panelUi.next(panel).click();
     panel = panelUi.numbered(page, 2);
     await expect(panel).toBeVisible();
     await expect(page).toHaveURL(at(2));
+    await expect(panelUi.options(panel)).toHaveCount(4);
     await panelUi.next(panel).click();
     await expect(panelUi.numbered(page, 3)).toBeVisible();
     await expect(page).toHaveURL(at(3));
+    await expect(panelUi.options(panelUi.numbered(page, 3))).toHaveCount(4);
     await panelUi.previous(panelUi.numbered(page, 3)).click();
     await expect(panelUi.numbered(page, 2)).toBeVisible();
     await expect(page).toHaveURL(at(2));
@@ -516,6 +524,7 @@ test(
     // A deep link opens the panel directly; every question visited was recorded as viewed.
     await page.goto(overviewPath(s.workspaceId, q(s, 3).id));
     await expect(panelUi.numbered(page, 3)).toBeVisible();
+    await expect(panelUi.options(panelUi.numbered(page, 3))).toHaveCount(4);
     for (const n of [1, 2, 3]) {
       expect((await overviewItem(s.owner, s.workspaceId, q(s, n).id)).status).toBe('viewed');
     }
@@ -540,7 +549,7 @@ function countContentLoads(page: Page): { count: () => number; stop: () => void 
 }
 
 test(
-  'QPLAY-01-AC06 re-opening a viewed unanswered question (close/reopen, previous/next) shows it from the client cache without a new content request',
+  'QPLAY-01-AC06 re-opening a viewed unanswered question checks recent state and reuses its session',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedMany(workspaceFactory, 'qplay01-ac06', 2);
@@ -556,19 +565,25 @@ test(
     await expect(panelUi.options(panel)).toHaveCount(4);
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
+    const firstSessions = practiceSessionIds(s.owner.user.id, q(s, 1).id);
+    const secondSessions = practiceSessionIds(s.owner.user.id, q(s, 2).id);
+    expect(firstSessions).toHaveLength(1);
+    expect(secondSessions).toHaveLength(1);
 
-    // Close/reopen and previous/next back to already viewed questions: no new load.
+    // Close/reopen and previous/next check recent metadata and reuse the open sessions.
     const loads = countContentLoads(page);
     panel = await openPanel(page, 1);
     await expect(panelUi.options(panel)).toHaveCount(4);
-    // The same session: the same displayed order (a new session would reshuffle).
+    // The same open session retains its displayed order.
     expect(await displayedOrder(panel, texts)).toEqual(order);
     await panelUi.next(panel).click();
     await expect(panelUi.options(panelUi.numbered(page, 2))).toHaveCount(4);
     await panelUi.previous(panelUi.numbered(page, 2)).click();
     panel = panelUi.numbered(page, 1);
     await expect(panelUi.options(panel)).toHaveCount(4);
-    expect(loads.count(), 'question content requests while re-opening viewed questions').toBe(0);
+    expect(loads.count(), 'recent metadata requests while reopening').toBeGreaterThan(0);
+    expect(practiceSessionIds(s.owner.user.id, q(s, 1).id)).toEqual(firstSessions);
+    expect(practiceSessionIds(s.owner.user.id, q(s, 2).id)).toEqual(secondSessions);
     loads.stop();
 
     // The cached session is the server's open session: submitting it grades once.
@@ -576,16 +591,18 @@ test(
     await panelUi.option(panel, correctText).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    expect((await listAttempts(s.owner, q(s, 1).id)).map((a) => a.result)).toEqual(['correct']);
+    const attempts = await listAttempts(s.owner, q(s, 1).id);
+    expect(attempts.map((a) => a.result)).toEqual(['correct']);
+    expect(attempts[0]?.practice_session_id).toBe(firstSessions[0]);
 
-    // A submitted session is never reused: re-opening starts a new session (a new request).
+    // A submitted session is not served from the open-session cache: the server restores
+    // the caller's result for the current revision (UX10-QVIEW-AC03).
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     const after = countContentLoads(page);
     panel = await openPanel(page, 1);
-    await expect(panelUi.submit(panel)).toBeVisible();
-    await expect(panelUi.options(panel)).toHaveCount(4);
-    await expect(panelUi.option(panel, correctText)).not.toBeChecked();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await expect(panelUi.option(panel, correctText)).toBeChecked();
     expect(after.count()).toBeGreaterThan(0);
     after.stop();
   },
@@ -618,13 +635,14 @@ test(
     const attemptId = seedGradedAttempt(s.workspaceId, created.id, v1.id, s.owner.user.id);
 
     await signInAs(page, s.owner.user);
-    // Opening the panel alone never carries the answer (QPLAY-01-AC01): the editor's full
-    // question is fetched only once 편집 is chosen.
-    const capture = captureResponses(page);
+    // The existing result is restored; a new retry remains answer-free until submitted.
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
+    await expect(panelUi.submit(panel)).toBeVisible();
     await expect(panelUi.options(panel)).toHaveCount(4);
-    expect(leaks(await capture.stop(), [])).toEqual([]);
+    expect(answerKeysIn(await startPractice(s.owner, created.id))).toEqual([]);
 
     await choosePanelManage(page, panel, 'edit');
     const form = questionFormUi.form(page);
@@ -1068,6 +1086,7 @@ test(
 
     // Wrong: the chosen option grey with "내 선택", the correct option red with "정답".
     panel = await openPanel(page, 1);
+    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -1330,3 +1349,143 @@ async function expectNoVisibleLabel(scope: Locator): Promise<void> {
     expect(box === null || (box.width <= 1 && box.height <= 1), 'visible "보기" label').toBe(true);
   }
 }
+
+test(
+  'UX10-QVIEW-AC01 authored option order persists on reload',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedOne(
+      workspaceFactory,
+      'ux10-order',
+      numberedMcq(unique('ux10-order'), 1, 2),
+    );
+    const texts = q(s, 1).revision.options.map((o) => o.text);
+    await openOverview(page, s);
+    const panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    expect(await displayedOrder(panel, texts)).toEqual(texts);
+    await page.reload();
+    const reopened = panelUi.numbered(page, 1);
+    await expect(panelUi.options(reopened)).toHaveCount(4);
+    expect(await displayedOrder(reopened, texts)).toEqual(texts);
+  },
+);
+
+test(
+  'UX10-QVIEW-AC02 navigation arrows retain labels and submission height',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedMany(workspaceFactory, 'ux10-arrows', 2);
+    await openOverview(page, s);
+    const panel = await openPanel(page, 1);
+    const previous = panel.getByRole('button', { name: /이전 문제|previous/i });
+    const next = panel.getByRole('button', { name: /다음 문제|next/i });
+    await expect(previous).toHaveAttribute('aria-disabled', 'true');
+    await expect(next).not.toHaveAttribute('aria-disabled', 'true');
+    const [arrow, submit] = await Promise.all([
+      next.boundingBox(),
+      panelUi.submit(panel).boundingBox(),
+    ]);
+    expect(arrow?.height).toBe(submit?.height);
+    await next.click();
+    const second = panelUi.numbered(page, 2);
+    await expect(second.getByRole('button', { name: /다음 문제|next/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  },
+);
+
+test(
+  'UX10-QVIEW-AC03 reopening a submitted question restores its own result',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedOne(
+      workspaceFactory,
+      'ux10-result',
+      numberedMcq(unique('ux10-result'), 1, 2),
+    );
+    const question = q(s, 1);
+    await openOverview(page, s);
+    const panel = await openPanel(page, 1);
+    await panelUi.option(panel, question.revision.options[2]?.text ?? '').check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await panelUi.close(panel).click();
+    const reopened = await openPanel(page, 1);
+    await expect(panelUi.result(reopened)).toContainText(RESULT_TEXT.correct);
+    await expect(panelUi.option(reopened, question.revision.options[2]?.text ?? '')).toBeChecked();
+  },
+);
+
+test(
+  'UX10-QVIEW-AC03 a newer bank-run result replaces a cached unanswered session',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedOne(
+      workspaceFactory,
+      'ux10-cached-run',
+      numberedMcq(unique('ux10-cached-run'), 1, 2),
+    );
+    const question = q(s, 1);
+    await openOverview(page, s);
+    const panel = await openPanel(page, 1);
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await panelUi.close(panel).click();
+    const run = await createPracticeRun(s.owner, s.workspaceId, {
+      source: 'bank',
+      range: { all: true },
+      random_order: false,
+    });
+    const opened = await openRunSession(s.owner, question.id, run.id, 1);
+    expect(opened.status).toBe(201);
+    if (!opened.body) throw new Error('missing run session');
+    await submitPractice(s.owner, opened.body.id, {
+      selected_option_ids: [question.revision.options[2]?.id ?? ''],
+    });
+    const reopened = await openPanel(page, 1);
+    await expect(panelUi.result(reopened)).toContainText(RESULT_TEXT.correct);
+    await expect(panelUi.option(reopened, question.revision.options[2]?.text ?? '')).toBeChecked();
+    await panelUi.close(reopened).click();
+    await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'correct');
+  },
+);
+
+test(
+  'UX10-QVIEW-AC04 reset clears personal attempts and the heatmap',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedOne(
+      workspaceFactory,
+      'ux10-reset',
+      numberedMcq(unique('ux10-reset'), 1, 2),
+    );
+    const question = q(s, 1);
+    await openOverview(page, s);
+    const panel = await openPanel(page, 1);
+    await panelUi.option(panel, question.revision.options[2]?.text ?? '').check();
+    await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    const otherTab = await page.context().newPage();
+    await otherTab.goto(overviewPath(s.workspaceId));
+    const otherPanel = await openPanel(otherTab, 1);
+    await expect(panelUi.result(otherPanel)).toContainText(RESULT_TEXT.correct);
+    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    const confirmation = page.getByRole('alertdialog', { name: /풀이 기록 초기화/ });
+    await expect(confirmation).toContainText(/Heatmap/);
+    await confirmation.getByRole('button', { name: /취소|cancel/i }).click();
+    expect(await listAttempts(s.owner, question.id)).toHaveLength(1);
+    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    await confirmation.getByRole('button', { name: /^초기화$/ }).click();
+    await expect(panel).not.toBeVisible();
+    await expect(otherPanel).not.toBeVisible();
+    await otherTab.close();
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, question.id)).status)
+      .toBe('unseen');
+    expect(await listAttempts(s.owner, question.id)).toEqual([]);
+    const reopened = await openPanel(page, 1);
+    await expect(panelUi.submit(reopened)).toBeVisible();
+    await expect(panelUi.result(reopened)).toHaveCount(0);
+  },
+);

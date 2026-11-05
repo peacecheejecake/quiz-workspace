@@ -31,3 +31,8 @@ body {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+
+/* Hide app content and body-portalled panels while identity is being verified. */
+body[data-identity-pending] > :not([data-app-global-control='practice-return']) {
+  visibility: hidden;
+}

@@ -1,5 +1,7 @@
 # CHNOTE-01 — 챕터 정리 노트 Floating Side Panel
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.0 · DOCSUM-SPEC 신규 2026-10-29 (사용자 요청 "문제 및 해설로부터 챕터별 내용 정리 생성 — 추가한 내용은 문제 출처를 주석에 명시", 사용자 결정 Q4·Q6·Q7·Q10) · UX9-SPEC 개정 2026-11-02 (사용자 결정 C7 "정리 노트의 접기/펼치기는 필요 없을듯": "정답·해설 포함" disclosure 폐지, 본문 항상 표시 — 새 동작의 AC는 [CHNOTE-02](chapter-note-tools.md)(검색·각주 미리보기·Heatmap marker를 누르면 노트 닫기)와 [HILITE-01](highlights.md)(하이라이트·`내 하이라이트`); 이 화면의 AC01·AC02·AC04·AC05 문구를 함께 고침, test는 UX9-NOTE-W가 고침)
 **Route:** `/workspaces/:workspaceId?panel=chapter-note&chapter=:chapterId` (Workspace 홈 Heatmap의 챕터 그룹 header `정리 노트` 버튼이 여는 panel — DOCSUM-SPEC은 non-modal, UX9-SPEC 사용자 결정 2026-11-02부터 modal: "정리 노트도 모달로 변경. 모달을 닫고 문제를 누르도록 유도", [HOMEDLG-01](home-dialogs.md)) · 공유 게스트는 `/share/:shareId?panel=chapter-note&chapter=:chapterId`
 **테스트:** `tests/e2e/questions/chapter-notes.spec.ts` (계약: `tests/integration/questions/chapter_notes/test_chapter_notes_contract.py`, `apps/worker` · `packages/core` unit test)
@@ -92,7 +94,7 @@ linked_tests: [CHNOTE-01-AC01 … CHNOTE-01-AC06]
 
 - **Given:** "챕터 없음" 그룹이 있는 Heatmap, 확정 문제가 없는(초안만 있는) 장의 id, 실패하도록 설정된 fake 시나리오의 장, 노트 생성이 진행 중인 장, 그리고 노트 기능이 꺼진 환경
 - **When:** 각 그룹 header를 보고, 확정 문제 없는 장을 딥링크로 열고, 실패 장에서 만들기를 누르고, 진행 중인 장에 POST를 직접 보내고, 기능이 꺼진 환경에서 노트 panel을 연다
-- **Then:** "챕터 없음" 그룹에는 `정리 노트` 버튼이 없다. 확정 문제 없는 장은 "이 장에는 확정된 문제가 없습니다."이고 만들기 버튼이 없으며 POST는 409 `no-chapter-questions`다. 실패하면 alert "정리 노트를 만들지 못했습니다"와 이유, 편집 권한자에게 `다시 시도`가 보이고 보기 권한자에게는 버튼이 없다. 진행 중인 장의 POST는 409 `note-generation-running`이다. 기능이 꺼진 환경에서는 `정리 노트 만들기`가 비활성(`aria-disabled`)이고 "이 환경에서는 AI 정리 노트를 사용할 수 없습니다."를 보이며 POST는 409 `note-generation-disabled`, 저장된 노트는 읽힌다.
+- **Then:** "챕터 없음" 그룹에는 `정리 노트` 버튼이 없다. 확정 문제 없는 장은 "이 장에는 확정된 문제가 없습니다."이고 만들기 버튼이 없으며 POST는 409 `no-chapter-questions`다. 실패하면 alert "정리 노트를 만들지 못했습니다"와 이유, 편집 권한자에게 `다시 시도`가 보이고 보기 권한자에게는 버튼이 없다. 진행 중인 장의 POST는 409 `note-generation-running`이다. 기능이 꺼진 환경에서는 `정리 노트 만들기`가 숨겨지고 "이 환경에서는 AI 정리 노트를 사용할 수 없습니다."를 보이며 POST는 409 `note-generation-disabled`, 저장된 노트는 읽힌다.
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 

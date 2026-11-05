@@ -1,5 +1,7 @@
 # QOV-01 — Questions Heatmap 홈
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.3 · UX3c 개정 2026-10-20 (Workspace 홈 통합) · UX4 개정 2026-10-21 (header 버튼 묶음·`문제` 메뉴) · UX6-PROGRESS 개정 2026-10-28 (`문제은행` 버튼 → `문제` 메뉴의 `전체 문제`) · UX6-BANK 개정 2026-10-28 (문제은행 페이지 이름도 `전체 문제`) · UX7-BANK 개정 2026-11-01 (전체 문제 페이지 폐기: 직접 추가는 홈 위 dialog, 편집·삭제는 풀이 panel) · UX7-DOCS 개정 2026-11-01 (`PDF 관리` 항목 폐기, 문서 관리로 통합) · UX7-SEARCH 개정 2026-11-01 (문제·본문 검색창 분리) · UX7-BACK 개정 2026-11-01 (닫은 dialog를 뒤로가기로 다시 열지 않음) · UX7-DOCS-2 개정 2026-11-01 (`문제` 버튼은 편집 권한이 없어도 보이고 항목은 이유와 함께 비활성) · UX7-BACK-2 개정 2026-11-01 (닫은 dialog는 앞으로가기로도 다시 열지 않음, 뒤로가기 한 번에 dialog 하나) · UX7-BANK-2 개정 2026-11-01 (`보관·초안 문제` dialog) · UX7-DEDUP 개정 2026-11-01 (`중복 문제 정리` dialog, 합친 풀이 기록) · UX9-SPEC 개정 2026-11-02 (`챕터 재분배` 메뉴 항목·dialog — [CHREDIST-01](chapter-redistribution.md); 정리 노트가 열린 동안 marker를 누르면 노트 닫기 — [CHNOTE-02](chapter-note-tools.md); 같은 날 모든 홈 dialog와 정리 노트를 modal로, 열고 닫아도 배치 고정 — [HOMEDLG-01](home-dialogs.md); 본문 검색은 header 아이콘 버튼으로 가는 페이지 — [SEARCH-02](search-page.md))
 **Route:** `/workspaces/:workspaceId` (이전 `/workspaces/:workspaceId/questions`는 같은 query로 redirect)
 **테스트:** `tests/e2e/questions/questions-overview.spec.ts`

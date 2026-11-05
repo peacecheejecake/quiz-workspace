@@ -4574,6 +4574,66 @@
         "title": "Job",
         "type": "object"
       },
+      "LatestPractice": {
+        "properties": {
+          "active_revision_id": {
+            "format": "uuid",
+            "title": "Active Revision Id",
+            "type": "string"
+          },
+          "latest_attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Attempt Id"
+          },
+          "previous_revision": {
+            "title": "Previous Revision",
+            "type": "boolean"
+          },
+          "reset_epoch": {
+            "title": "Reset Epoch",
+            "type": "integer"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PracticeSessionDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submitted_answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted Answer"
+          }
+        },
+        "required": [
+          "reset_epoch",
+          "active_revision_id",
+          "latest_attempt_id",
+          "session",
+          "previous_revision"
+        ],
+        "title": "LatestPractice",
+        "type": "object"
+      },
       "LivenessReport": {
         "properties": {
           "status": {
@@ -6249,6 +6309,18 @@
         "additionalProperties": false,
         "description": "Omitted flags are kept; at least one is required.",
         "properties": {
+          "expected_reset_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Reset Epoch"
+          },
           "is_favorite": {
             "anyOf": [
               {
@@ -7033,6 +7105,27 @@
         "title": "PracticeOption",
         "type": "object"
       },
+      "PracticeResetResult": {
+        "properties": {
+          "epochs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Epochs",
+            "type": "object"
+          },
+          "reset": {
+            "title": "Reset",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reset",
+          "epochs"
+        ],
+        "title": "PracticeResetResult",
+        "type": "object"
+      },
       "PracticeRun": {
         "description": "Counts, progress and summary only: never the item list or question content.",
         "properties": {
@@ -7141,6 +7234,19 @@
               }
             ],
             "title": "Mock Exam Id"
+          },
+          "question_count": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Count"
           },
           "random_order": {
             "default": false,
@@ -7320,8 +7426,20 @@
       },
       "PracticeSessionCreate": {
         "additionalProperties": false,
-        "description": "Empty for the practice panel; `practice_run_id` + `run_position` for a run position\n(QVIEW-B): the position must hold this question; one session per position.",
+        "description": "Option order and reset precondition; a run requires both run id and position.\n\nA run position must hold this question and has at most one session.",
         "properties": {
+          "expected_reset_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Reset Epoch"
+          },
           "practice_run_id": {
             "anyOf": [
               {
@@ -7346,6 +7464,11 @@
               }
             ],
             "title": "Run Position"
+          },
+          "shuffle_options": {
+            "default": false,
+            "title": "Shuffle Options",
+            "type": "boolean"
           }
         },
         "title": "PracticeSessionCreate",
@@ -8978,7 +9101,7 @@
                 "type": "null"
               }
             ],
-            "description": "Keep these dot statuses.",
+            "description": "Keep these dot statuses; empty selects none, omitted selects all.",
             "title": "Status"
           },
           "type": {
@@ -9662,6 +9785,157 @@
         "title": "ResumableUpload",
         "type": "object"
       },
+      "RetrySession": {
+        "properties": {
+          "chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Id"
+          },
+          "displayed_option_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Displayed Option Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_multi_answer": {
+            "title": "Is Multi Answer",
+            "type": "boolean"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/RunOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "practice_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practice Run Id"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "question_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Number"
+          },
+          "question_revision_id": {
+            "format": "uuid",
+            "title": "Question Revision Id",
+            "type": "string"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "run_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Position"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "pending_grade",
+              "graded"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stem": {
+            "title": "Stem",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "question_id",
+          "question_revision_id",
+          "question_type",
+          "chapter_id",
+          "question_number",
+          "stem",
+          "is_multi_answer",
+          "options",
+          "displayed_option_ids",
+          "state",
+          "opened_at"
+        ],
+        "title": "RetrySession",
+        "type": "object"
+      },
+      "RetrySessionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_reset_epoch": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Reset Epoch"
+          }
+        },
+        "title": "RetrySessionCreate",
+        "type": "object"
+      },
       "ReviewedImportDraft": {
         "additionalProperties": false,
         "properties": {
@@ -10093,6 +10367,17 @@
             ],
             "title": "Question Type"
           },
+          "reset_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Epoch"
+          },
           "session_state": {
             "anyOf": [
               {
@@ -10266,7 +10551,8 @@
                   "correct",
                   "incorrect",
                   "pending",
-                  "skipped"
+                  "skipped",
+                  "reset"
                 ],
                 "type": "string"
               },
@@ -17259,7 +17545,7 @@
     },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions": {
       "post": {
-        "description": "Open a mock exam question: pins its active revision and shuffles MCQ options. No answers\nin the response, nothing recorded outside the mock exam tables. With a run position the\ncaller's mock run of this workspace must hold this question there; the position's open\nsession is resumed, a submitted one is 409 `already-submitted`.",
+        "description": "Open a mock exam question: pins its active revision and optionally shuffles MCQ options.\nNo answers in the response, nothing recorded outside the mock exam tables. With a run\nposition the caller's mock run must hold this question; an open session is resumed, and a\nsubmitted one is 409 `already-submitted`.",
         "operationId": "startMockPracticeSession",
         "parameters": [
           {
@@ -18988,6 +19274,150 @@
           }
         ],
         "summary": "Get Practice Run Item",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/practice-runs/{run_id}/items/{position}/retry-session": {
+      "post": {
+        "operationId": "startRunItemRetrySession",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "position",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Position",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RetrySessionCreate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrySession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Start Run Item Retry Session",
         "tags": [
           "practice"
         ]
@@ -21214,9 +21644,205 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/practice-recent": {
+      "get": {
+        "operationId": "getLatestQuestionPractice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestPractice"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Latest Question Practice",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/practice-reset": {
+      "post": {
+        "description": "Reset personal study state; immutable attempts remain for audit.",
+        "operationId": "resetQuestionPractice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeResetResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Reset Question Practice",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/practice-sessions": {
       "post": {
-        "description": "Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ\noptions, records the caller's view. No answers in the response. With a run position\n(QVIEW-B) the caller's run of this workspace must hold this question there; the position's\nopen session is resumed (another view), a submitted one is 409 `already-submitted`.",
+        "description": "Open the practice panel on a CONFIRMED question: pins its active revision, optionally\nshuffles MCQ options, records the caller's view. No answers in the response. With a run position\n(QVIEW-B) the caller's run of this workspace must hold this question there; the position's\nopen session is resumed (another view), a submitted one is 409 `already-submitted`.",
         "operationId": "startPracticeSession",
         "parameters": [
           {
@@ -26390,7 +27016,7 @@
             }
           },
           {
-            "description": "Repeatable; keeps these statuses.",
+            "description": "Repeatable statuses; none selects no questions, omitted selects all.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -26398,14 +27024,22 @@
               "anyOf": [
                 {
                   "items": {
-                    "enum": [
-                      "unseen",
-                      "viewed",
-                      "incorrect",
-                      "correct",
-                      "retry"
-                    ],
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "unseen",
+                          "viewed",
+                          "incorrect",
+                          "correct",
+                          "retry"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "const": "none",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "type": "array"
                 },
@@ -26413,7 +27047,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Repeatable; keeps these statuses.",
+              "description": "Repeatable statuses; none selects no questions, omitted selects all.",
               "title": "Status"
             }
           },

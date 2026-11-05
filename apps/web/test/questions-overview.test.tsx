@@ -37,6 +37,17 @@ const lookupOverviewQuestionAction = vi.fn();
 const submitPracticeAction = vi.fn();
 const selfGradePracticeAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
+  latestPracticeAction: vi.fn(async () => ({
+    ok: true,
+    data: {
+      session: null,
+      previous_revision: false,
+      reset_epoch: 0,
+      active_revision_id: '88888888-8888-4888-8888-888888888888',
+      latest_attempt_id: null,
+    },
+  })),
+  resetPracticeAction: vi.fn(),
   submitPracticeAction: (...a: unknown[]) => submitPracticeAction(...a),
   selfGradePracticeAction: (...a: unknown[]) => selfGradePracticeAction(...a),
   openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
@@ -216,29 +227,18 @@ const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
 
-describe('QOV-01-AC08 status filter', () => {
-  it('QOV-01-AC08 is collapsed by default, toggles with aria-expanded and has no legend or summary', async () => {
+describe('UX10-HOME-AC02 status filter', () => {
+  it('is always visible with all statuses selected', async () => {
     const user = userEvent.setup();
     onFiltersChange.mockReset();
     render(<Screen />);
-    const toggle = screen.getByRole('button', { name: '상태 필터' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    const regionId = toggle.getAttribute('aria-controls') ?? '';
-    expect(document.getElementById(regionId)).not.toBeVisible();
-    expect(screen.queryByRole('group', { name: '상태 필터' })).toBeNull();
-    expect(screen.queryByText(/상태 범례|문제 상태 요약/)).toBeNull();
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const group = screen.getByRole('group', { name: '상태 필터' });
-    expect(group.id).toBe(regionId);
-    // Each status carries its text next to the swatch, never colour alone.
-    await user.click(within(group).getByRole('button', { name: '다시 풀기' }));
-    expect(onFiltersChange).toHaveBeenCalledWith({ status: ['retry'] });
-
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('group', { name: '상태 필터' })).toBeNull();
+    const retry = within(group).getByRole('button', { name: '다시 풀기' });
+    expect(retry).toHaveAttribute('aria-pressed', 'true');
+    await user.click(retry);
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      status: ['unseen', 'viewed', 'incorrect', 'correct'],
+    });
   });
 });
 
@@ -312,7 +312,7 @@ describe('QuestionsOverview practice panel', () => {
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
     expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
-    expect(setMyStateAction).toHaveBeenCalledWith(WS, id(1), { is_favorite: true });
+    expect(setMyStateAction).toHaveBeenCalledWith(WS, id(1), { is_favorite: true }, 0);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(dot(1)).toHaveAttribute('aria-label', expect.stringMatching(/즐겨찾기/));
@@ -421,7 +421,7 @@ describe('QuestionsOverview review fixes', () => {
     rerender(<Screen data={only()} />);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('button', { name: '상태 필터' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '미열람' })).toHaveFocus();
   });
 
   it('a rejected my-state request rolls the optimistic change back and reports it', async () => {
@@ -1304,7 +1304,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       meanwhile: async () => undefined,
       expectState: async (panel: HTMLElement) => {
         expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
-        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+        expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
       },
     },
     {
@@ -1323,7 +1323,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
           'data-state',
           'on',
         );
-        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+        expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
       },
     },
     {
@@ -1368,7 +1368,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
         await within(panel).findByText('오답입니다.');
       },
       expectState: async (panel: HTMLElement) => {
-        expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+        expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
         expect(dotStatus(1)).toBe('incorrect');
       },
     },
@@ -1452,7 +1452,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       }),
     );
     await waitFor(() => expect(dotStatus(1)).toBe('retry'));
-    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
   });
 
   it('a rejected request after a saved change keeps the saved change', async () => {

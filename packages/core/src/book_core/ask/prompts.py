@@ -1,4 +1,4 @@
-"""The `ask.answer/v1` request: instructions, the pinned passages, the attached question at its
+"""The `ask.answer/v2` request: instructions, the pinned passages, the attached question at its
 disclosure level and the recent turns (ASK-01 "실행 경로", "대화·보존", C03, C06).
 
 ``build_request`` is the only way a request is made, so the limits apply to every call: each
@@ -25,7 +25,7 @@ from book_core.llm.config import Effort
 from book_core.llm.streaming import TextMessage, TextStreamRequest
 
 TASK = "ask.answer"
-PROMPT_VERSION = "ask.answer/v1"
+PROMPT_VERSION = "ask.answer/v2"
 NO_ANSWER_MARK = "[NO_ANSWER]"
 DEFAULT_MAX_SOURCE_CHARS = 2000
 DEFAULT_MAX_CONTEXT_CHARS = 16_000
@@ -36,6 +36,11 @@ _BASE_SYSTEM = (
     "너는 사용자가 올린 Workspace 문서에 근거해 질문에 답하는 도우미다.\n"
     "- 아래에 [S1], [S2]처럼 태그가 붙은 근거 구절과 (있으면) 첨부한 문제만 근거로 답한다. "
     "구절끼리 잇는 설명 정도의 일반 지식은 써도 되지만 구절에 없는 사실을 단정하지 않는다.\n"
+    "- 첨부한 문제는 참고 문맥이며 답변 대상은 최신 사용자 질문이다. "
+    "특정 보기·용어·문장·근거를 물으면 그 범위에 직접 답한다. "
+    "사용자가 명시적으로 전체 해설을 요청하지 않았다면 "
+    "모든 보기를 순회하거나 전체 풀이를 덧붙이지 않는다. "
+    "전체 해설 요청도 아래의 공개 수준 제한을 따른다.\n"
     "- 근거 구절을 쓴 문장 끝에는 그 구절의 태그를 [S1]처럼 대괄호로 적는다. "
     "받은 태그 말고 다른 표시는 만들지 않는다.\n"
     "- 근거 구절로 답할 수 없으면 답을 지어내지 말고 맨 앞에 " + NO_ANSWER_MARK + "만 쓴다.\n"

@@ -98,6 +98,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX9.0': ['CHREDIST-01', 'HILITE-01', 'CHNOTE-02', 'QIMPORT-02', 'SEARCH-02', 'HOMEDLG-01'],
   // ASK-SPEC (2026-11-01): ask the LLM, AI explanations and related passages after submission.
   'ASK.0': ['ASK-01'],
+  'UX11-AI-DIRECT': ['UX11-AI-DIRECT'],
   'EXPL.0': ['AIEXPL-01'],
   'RELSRC.0': ['RELSRC-01'],
   // QSRC-SPEC (2026-11-04): question source preview ("문제 원문 보기").
@@ -106,6 +107,14 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'RETRY.0': ['RETRY-01'],
   // STEM-ITEMS (2026-11-05): stem item lists one per line in a 제시 항목 box (QPLAY-01-AC14).
   'STEM.0': ['QPLAY-01'],
+  'UX11-STEM': ['UX11-STEM'],
+  'UX10-UI.0': ['UX10-UI'],
+  'UX10-DOC.0': ['UX10-DOC'],
+  'UX10-AI.0': ['UX10-AI'],
+  'UX10-QVIEW.0': ['UX10-QVIEW'],
+  'UX10-PLAY.0': ['UX10-PLAY'],
+  'UX10-HOME.0': ['UX10-HOME'],
+  'UX11-RETURN': ['UX11-RETURN'],
 };
 
 const LEADING_ID = new RegExp(

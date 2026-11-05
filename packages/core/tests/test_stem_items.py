@@ -93,3 +93,86 @@ def test_option_lines_naming_items_are_recognised_leniently() -> None:
     assert leading_item_families("A man walks") == frozenset()
     assert has_item_label("옳은 것은 (가) 갑 (다) 을")
     assert not has_item_label("(가)와 (나)에 들어갈 말은?")
+
+
+def test_ux11_range_bullets_and_passage() -> None:
+    cases = [
+        ("다음 (가) ~ (라)의 것은? ( ) (가) 첫째 (나) 둘째 (다) 셋째 (라) 넷째", 5),
+        (
+            "다음은? ( ) - 첫째 ( 가) 이내. - 둘째 ( 나)이 경과. "
+            "- 셋째 ( 다)이다. - 넷째 ( 라) 이내.",
+            5,
+        ),
+        (
+            "주요 내용이다. ( )안에 맞는 것은? ( ) 카드사는 회원의 카드가 최종 이용일 이후 "
+            "장기간 이용실적이 없는 경우 회원에게 의사를 확인하여야 합니다.",
+            2,
+        ),
+    ]
+    for text, count in cases:
+        result = break_stem_items(text)
+        assert len(result.splitlines()) - result.count("\n\n") == count
+        assert "".join(result.split()) == "".join(text.split())
+        assert break_stem_items(result) == result
+
+
+def test_ux11_user_cases_preserve_text_and_are_idempotent() -> None:
+    import json
+    from pathlib import Path
+
+    cases = json.loads((Path(__file__).parents[3] / "tests/fixtures/ux11-stem.json").read_text())
+    for case, expected_lines in zip(cases, (5, 5, 2), strict=True):
+        text = case["stem"]
+        result = break_stem_items(text)
+        assert len(result.splitlines()) - result.count("\n\n") == expected_lines
+        assert "".join(result.split()) == "".join(text.split())
+        assert break_stem_items(result) == result
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "온도는 - 10도에서 - 5도로 상승한다.",
+        "온도는? ( ) - 10도에서 - 5도",
+        "다음은 A - B 또는 C - D 범위이다.",
+        "옳은 것은? ( ) 짧은 답",
+        "이미 문단이다.\n\n다음 문단이다.",
+        "옳은 것은? A. 첫째 I. 다른 항목 B. 둘째",
+    ],
+)
+def test_ux11_near_counterexamples(text: str) -> None:
+    assert break_stem_items(text) == text
+
+
+def test_ux11_bullet_list_preserves_following_paragraph() -> None:
+    text = "다음은? ( ) - 갑이다. - 을이다.\n\n위 내용을 참고하시오."
+    expected = "다음은? ( )\n\n- 갑이다.\n- 을이다.\n\n위 내용을 참고하시오."
+    assert break_stem_items(text) == expected
+    assert break_stem_items(expected) == expected
+
+
+def test_ux11_shared_bullet_parity_matrix() -> None:
+    import json
+    from pathlib import Path
+
+    cases = json.loads((Path(__file__).parents[3] / "tests/fixtures/ux11-bullets.json").read_text())
+    for case in cases:
+        assert break_stem_items(case["stem"]) == case["normalized"]
+        assert break_stem_items(case["normalized"]) == case["normalized"]
+
+
+def test_ux11_shared_range_and_passage_boundaries() -> None:
+    import json
+    from pathlib import Path
+
+    cases = json.loads(
+        (Path(__file__).parents[3] / "tests/fixtures/ux11-boundaries.json").read_text()
+    )
+    for case in cases:
+        result = break_stem_items(case["stem"])
+        assert "".join(result.split()) == "".join(case["stem"].split())
+        assert break_stem_items(result) == result
+        if case["kind"] == "range":
+            assert len(stem_item_starts(case["stem"])) == case["items"]
+        else:
+            assert result.startswith("서문입니다.\n\n옳은 것은? ( )\n\n카드사는")

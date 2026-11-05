@@ -38,7 +38,12 @@ export function useLayerStyle(): CSSProperties | undefined {
 // above `--z-modal` instead, in the same order, below `--z-toast`.
 
 const order: string[] = [];
+
+export function isTopFloatingLayer(rank: number): boolean {
+  return rank >= 0 && rank === order.length - 1;
+}
 const elevated = new Set<string>();
+const modalLayers = new Set<string>();
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -52,13 +57,16 @@ function subscribe(listener: () => void) {
   };
 }
 
-function bringToFront(id: string, aboveModals: boolean) {
+function bringToFront(id: string, aboveModals: boolean, modal: boolean) {
+  const wasModal = modalLayers.has(id);
+  if (modal) modalLayers.add(id);
+  else modalLayers.delete(id);
   const wasElevated = elevated.has(id);
   if (aboveModals) elevated.add(id);
   else elevated.delete(id);
   const at = order.indexOf(id);
   if (at === order.length - 1 && at !== -1) {
-    if (wasElevated !== aboveModals) emit();
+    if (wasElevated !== aboveModals || wasModal !== modal) emit();
     return;
   }
   if (at !== -1) order.splice(at, 1);
@@ -68,6 +76,7 @@ function bringToFront(id: string, aboveModals: boolean) {
 
 function release(id: string) {
   elevated.delete(id);
+  modalLayers.delete(id);
   const at = order.indexOf(id);
   if (at === -1) return;
   order.splice(at, 1);
@@ -101,14 +110,15 @@ export function useFloatingLayer(
   open: boolean,
   raiseKey?: unknown,
   aboveModals = false,
+  modal = false,
 ): FloatingLayer {
   const id = useId();
   // A new `raiseKey` while open re-registers the layer, which puts it on top again.
   useIsomorphicLayoutEffect(() => {
     if (!open) return undefined;
-    bringToFront(id, aboveModals);
+    bringToFront(id, aboveModals, modal);
     return () => release(id);
-  }, [id, open, raiseKey, aboveModals]);
+  }, [id, open, raiseKey, aboveModals, modal]);
   const rank = useSyncExternalStore(
     subscribe,
     () => order.indexOf(id),
@@ -126,4 +136,13 @@ export function useFloatingLayer(
       ? `min(calc(var(--z-modal) + 2 + ${step}), calc(var(--z-toast) - 2))`
       : `min(calc(var(--z-side-panel) + ${step}), calc(var(--z-modal) - 2))`,
   };
+}
+
+/** True while a registered modal layer is open. */
+export function useModalLayerOpen(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => modalLayers.size > 0,
+    () => false,
+  );
 }

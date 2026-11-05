@@ -41,6 +41,7 @@ import {
   type WorkspaceAttempt,
   type WorkspaceJob,
 } from '@/lib/history/model';
+import { subscribePracticeResets } from '@/lib/questions/practice-reset-events';
 import { withPracticeQuestion } from '@/lib/workspaces/home';
 import styles from './history.module.css';
 
@@ -84,7 +85,16 @@ function HistoryTime({ iso }: { readonly iso: string }) {
   return <time dateTime={iso}>{formatHistoryTime(iso)}</time>;
 }
 
-export function HistoryPanel({ workspaceId, viewerId }: HistoryPanelProps) {
+export function HistoryPanel(props: HistoryPanelProps) {
+  const [version, setVersion] = useState(0);
+  useEffect(
+    () => subscribePracticeResets(props.workspaceId, () => setVersion((v) => v + 1)),
+    [props.workspaceId],
+  );
+  return <HistoryPanelBody key={version} {...props} />;
+}
+
+function HistoryPanelBody({ workspaceId, viewerId }: HistoryPanelProps) {
   const client = useMemo(() => createHistoryClient(), []);
   const [lists, setLists] = useState<Lists>(LOADING);
   const [loadingMore, setLoadingMore] = useState(false);

@@ -3,7 +3,7 @@
 import { Dialog } from 'radix-ui';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
-import { LayerProvider } from '../internal/layer';
+import { LayerProvider, useFloatingLayer } from '../internal/layer';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon, MenuIcon } from '../primitives/icons';
@@ -48,6 +48,7 @@ export function AppShell({
 }: AppShellProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const drawerOpen = mobileNavOpen ?? uncontrolledOpen;
+  useFloatingLayer(!!sidebar && drawerOpen, undefined, false, true);
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const setDrawerOpen = (open: boolean) => {
     if (mobileNavOpen === undefined) setUncontrolledOpen(open);

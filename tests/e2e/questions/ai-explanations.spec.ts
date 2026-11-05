@@ -263,7 +263,7 @@ test(
     // No explanation yet: the button and notice only, no area (region / heading).
     await expect(explUi.region(panel)).toHaveCount(0);
     await expect(explUi.heading(area)).toHaveCount(0);
-    await expect(area.getByText(EXPL_TEXT.sendNotice)).toBeVisible();
+    await expect(area.getByText(EXPL_TEXT.sendNotice)).toHaveCount(0);
     // The area sits below the result and the human explanation.
     const resultBox = await result(panel).boundingBox();
     const areaBox = await area.boundingBox();
@@ -403,14 +403,12 @@ test(
     const b = await viewerOf(workspaceFactory, s, 'aiexpl01-ac03-b');
     const firstCalls = explainCalls(first.id);
 
-    // A: the cached one, collapsed, opened without a generation.
+    // A: the cached one opens without a generation.
     await openHome(page, a, s.workspaceId);
     let { panel } = await openAndSubmit(page, 1, wrongText(first), RESULT_TEXT.incorrect);
     let area = explUi.area(panel);
-    await expect(explUi.show(area)).toHaveAttribute('aria-expanded', 'false');
-    await expect(explUi.create(area)).toHaveCount(0);
-    await explUi.show(area).click();
     await expect(explUi.show(area)).toHaveAttribute('aria-expanded', 'true');
+    await expect(explUi.create(area)).toHaveCount(0);
     await expect(area).toContainText(nth(first.revision.options, 0).text);
     expect(explainCalls(first.id)).toBe(firstCalls);
     const viaFirst = await getExplanation(a, bank(first.id), {
@@ -498,7 +496,7 @@ test(
     const { panel } = await openAndSubmit(page, 1, correctText(withExpl), RESULT_TEXT.correct);
     const sessionId = await sessionOf(s.owner, withExpl);
     const area = explUi.area(panel);
-    await explUi.show(area).click();
+
     await expectDone(area);
     for (const k of [2, 3, 4]) {
       await explUi.regenerate(area).click();
@@ -543,7 +541,7 @@ test(
       await p.goto(overviewPath(archived.workspaceId));
       let detail = await openDetail(p, await openPanel(p, 1));
       let dArea = explUi.area(detail);
-      await explUi.show(dArea).click();
+
       await expectDone(dArea);
       await expect(explUi.create(dArea)).toHaveCount(0);
       await expect(explUi.regenerate(dArea)).toHaveCount(0);
@@ -585,7 +583,7 @@ test(
       let shared = sharedUi.questionPanel(guest.page);
       await expect(shared).toBeVisible();
       const sArea = explUi.sharedArea(shared);
-      await explUi.sharedToggle(sArea).click();
+      await expect(explUi.sharedToggle(sArea)).toHaveAttribute('aria-expanded', 'true');
       await expect(explUi.badge(sArea)).toBeVisible();
       await expect(sArea).toContainText(nth(withExpl.revision.options, 0).text);
       for (const absent of [
@@ -685,7 +683,7 @@ test(
         await panelUi.close(panel).click();
       }
       const { panel } = await openAndSubmit(page, 6, correctText(withExpl), RESULT_TEXT.correct);
-      await explUi.show(explUi.area(panel)).click();
+
       await expectDone(explUi.area(panel));
       const third = nth(plainQuestions, 2);
       const session = await submittedSession(learner, third);
@@ -710,8 +708,8 @@ test(
       await expect(explUi.area(panel).getByText(EXPL_TEXT.disabled)).toBeVisible();
       await expect(explUi.create(explUi.area(panel))).toHaveCount(0);
       await panelUi.close(panel).click();
-      ({ panel } = await openAndSubmit(page, 6, correctText(withExpl), RESULT_TEXT.correct));
-      await explUi.show(explUi.area(panel)).click();
+      panel = await openPanel(page, 6);
+      await expect(result(panel)).toContainText(RESULT_TEXT.correct);
       await expectDone(explUi.area(panel));
       const session = await submittedSession(s.owner, withoutExpl);
       const refused = await stackRequest<Problem>(
@@ -855,13 +853,13 @@ test(
     await runUi.previous(run).click();
     await expect(runUi.title(run, 1, 1)).toBeVisible();
     area = explUi.area(run);
-    await explUi.show(area).click();
+
     await expectDone(area);
     await page.keyboard.press('Escape');
     await expect(run).toBeHidden();
     // The same cache from the Heatmap's practice panel.
-    const { panel } = await openAndSubmit(page, 1, correctText(q1), RESULT_TEXT.correct);
-    await explUi.show(explUi.area(panel)).click();
+    const panel = await openPanel(page, 1);
+    await expect(result(panel)).toContainText(RESULT_TEXT.correct);
     await expectDone(explUi.area(panel));
     const viaPanel = await getExplanation(a, bank(q1.id), {
       practice_session_id: await sessionOf(a, q1),
@@ -945,7 +943,7 @@ test(
         return r;
       };
       let r = await startMock();
-      await explUi.show(explUi.area(r)).click();
+
       await expectDone(explUi.area(r));
       expect(explainCalls(mq.id)).toBe(1);
       await p.keyboard.press('Escape');

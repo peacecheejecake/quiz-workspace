@@ -12,11 +12,19 @@ import {
 } from '../src/components/documents/editor/document-viewer-layout';
 import { VIEWER_SETTINGS_KEY, viewerSettingsStore } from '../src/lib/documents/viewer-settings';
 
-function Harness() {
+function Harness({
+  preventAutoHide = false,
+  alert = false,
+}: {
+  preventAutoHide?: boolean;
+  alert?: boolean;
+}) {
   const viewer = useDocumentViewer();
   return (
     <DocumentViewerLayout
       viewer={viewer}
+      preventAutoHide={preventAutoHide}
+      chrome={alert ? <p role="alert">오류</p> : null}
       outline={
         <nav aria-label="문서 목차">
           <ul role="tree" aria-label="목차">
@@ -47,29 +55,22 @@ const region = (name: string) => screen.getByRole('region', { name, hidden: true
 
 beforeEach(() => {
   window.localStorage.clear();
-  act(() => viewerSettingsStore.reload());
+  seed({ mode: 'both' });
 });
 
 describe('DocumentViewerLayout', () => {
-  it('opens with the defaults: outline open, 함께 보기 · 좌우 · 원본 first at 50%', () => {
+  it('UX10-DOC-AC01 opens with the original selected by default', () => {
+    window.localStorage.clear();
+    act(() => viewerSettingsStore.reload());
     render(<Harness />);
     const settings = bar();
     expect(within(settings).getByRole('button', { name: '목차 접기' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
-    expect(within(settings).getByRole('radio', { name: '원본과 변환본 함께 보기' })).toBeChecked();
-    expect(within(settings).getByRole('radio', { name: '좌우로 나누기' })).toBeChecked();
-    expect(screen.getByRole('dialog', { name: '목차' })).toBeInTheDocument();
-    const separator = screen.getByRole('separator', { name: '원본과 변환본 크기 조절' });
-    expect(separator).toHaveAttribute('aria-orientation', 'vertical');
-    expect(separator).toHaveAttribute('aria-valuenow', '50');
-    expect(separator).toHaveAttribute('aria-valuetext', '원본 50%, 변환본 50%');
-    // 원본 comes first in the DOM order of the split.
-    const [first, second] = screen.getAllByRole('region');
-    expect(first).toHaveAccessibleName('PDF 원본');
-    expect(second).toHaveAccessibleName('변환본 텍스트');
-    expect(stored()).toBeNull(); // nothing is written until the user changes something
+    expect(within(settings).getByRole('checkbox', { name: '원본' })).toBeChecked();
+    expect(within(settings).getByRole('checkbox', { name: '변환본' })).not.toBeChecked();
+    expect(stored()).toBeNull();
   });
 
   it('hides a pane without unmounting it, so an unsaved input survives', async () => {
@@ -78,35 +79,29 @@ describe('DocumentViewerLayout', () => {
     const field = screen.getByRole('textbox', { name: '블록 텍스트' });
     await user.type(field, '교정 중');
 
-    await user.click(screen.getByRole('radio', { name: 'PDF 원본만 보기' }));
+    await user.click(screen.getByRole('checkbox', { name: '변환본' }));
     expect(region('변환본 텍스트').closest('[hidden]')).not.toBeNull();
     expect(screen.queryByRole('separator')).toBeNull();
     expect(screen.queryByRole('radiogroup', { name: '분할 방향' })).toBeNull();
     expect(screen.queryByRole('button', { name: '원본과 변환본 위치 바꾸기' })).toBeNull();
     expect(stored()).toMatchObject({ mode: 'pdf' });
 
-    await user.click(screen.getByRole('radio', { name: '원본과 변환본 함께 보기' }));
+    await user.click(screen.getByRole('checkbox', { name: '변환본' }));
     expect(screen.getByRole('textbox', { name: '블록 텍스트' })).toBe(field);
     expect(field).toHaveValue('교정 중');
   });
 
-  it('moves between view modes with the arrow keys (one tab stop)', async () => {
+  it('UX10-DOC-AC01 prevents deselecting the last pane', async () => {
+    seed({ mode: 'pdf' });
     const user = userEvent.setup();
     render(<Harness />);
-    const both = screen.getByRole('radio', { name: '원본과 변환본 함께 보기' });
-    expect(both).toHaveAttribute('tabindex', '0');
-    expect(screen.getByRole('radio', { name: 'PDF 원본만 보기' })).toHaveAttribute(
-      'tabindex',
-      '-1',
-    );
-    both.focus();
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('radio', { name: 'PDF 원본만 보기' })).toHaveFocus();
-    expect(stored()).toMatchObject({ mode: 'pdf' });
+    await user.click(screen.getByRole('checkbox', { name: '원본' }));
+    expect(screen.getByRole('checkbox', { name: '원본' })).toBeChecked();
+    expect(screen.getByText('하나 이상 선택하세요')).toBeInTheDocument();
   });
 
   it('swaps the panes keeping their DOM and sizes, announces and saves the new order', async () => {
-    seed({ pdfRatio: 60 });
+    seed({ mode: 'both', pdfRatio: 60 });
     const user = userEvent.setup();
     render(<Harness />);
     const field = screen.getByRole('textbox', { name: '블록 텍스트' });
@@ -127,7 +122,7 @@ describe('DocumentViewerLayout', () => {
   });
 
   it('saves the PDF share from separator keys in either order', async () => {
-    seed({ order: 'text-first' });
+    seed({ mode: 'both', order: 'text-first' });
     const user = userEvent.setup();
     render(<Harness />);
     const separator = screen.getByRole('separator');
@@ -166,11 +161,88 @@ describe('DocumentViewerLayout', () => {
     );
     act(() => viewerSettingsStore.reload());
     render(<Harness />);
-    expect(screen.getByRole('radio', { name: '원본과 변환본 함께 보기' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: '상하로 나누기' })).toBeChecked();
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'horizontal');
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '20');
+    expect(screen.getByRole('checkbox', { name: '원본' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '변환본' })).not.toBeChecked();
     expect(screen.queryByRole('dialog', { name: '목차' })).toBeNull();
+  });
+
+  it('UX10-DOC-AC04 hides the chrome after inactivity and restores it from the hotspot', () => {
+    vi.useFakeTimers();
+    const { container } = render(<Harness />);
+    const chrome = container.querySelector('[class*="chrome"]');
+    expect(chrome).not.toHaveAttribute('data-hidden');
+    act(() => vi.advanceTimersByTime(3000));
+    expect(chrome).toHaveAttribute('data-hidden');
+    fireEvent.pointerMove(window, { clientY: 10 });
+    expect(chrome).not.toHaveAttribute('data-hidden');
+    vi.useRealTimers();
+  });
+
+  it('UX10-DOC-AC04 keeps chrome visible while focused or a menu is open', () => {
+    vi.useFakeTimers();
+    const { container, unmount } = render(<Harness />);
+    const chrome = container.querySelector('[class*="chrome"]');
+    const checkbox = screen.getByRole('checkbox', { name: '원본' });
+    fireEvent.focus(checkbox);
+    act(() => vi.advanceTimersByTime(4000));
+    expect(chrome).not.toHaveAttribute('data-hidden');
+    fireEvent.blur(checkbox);
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    document.body.append(menu);
+    act(() => vi.advanceTimersByTime(4000));
+    expect(chrome).not.toHaveAttribute('data-hidden');
+    menu.remove();
+    act(() => vi.advanceTimersByTime(300));
+    expect(chrome).toHaveAttribute('data-hidden');
+    fireEvent.pointerMove(window, { clientY: 10 });
+    const clearTimeout = vi.spyOn(window, 'clearTimeout');
+    unmount();
+    expect(clearTimeout).toHaveBeenCalled();
+    clearTimeout.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('UX10-DOC-AC04 keeps chrome visible during editing or a warning', () => {
+    vi.useFakeTimers();
+    const { container } = render(<Harness preventAutoHide />);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(container.querySelector('[class*="chrome"]')).not.toHaveAttribute('data-hidden');
+    vi.useRealTimers();
+  });
+
+  it('UX10-DOC-AC04 pins chrome and reading space while an important error is present', () => {
+    vi.useFakeTimers();
+    const { container } = render(<Harness alert />);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(container.querySelector('[data-chrome-pinned]')).not.toBeNull();
+    expect(container.querySelector('[class*="chrome"]')).not.toHaveAttribute('data-hidden');
+    vi.useRealTimers();
+  });
+
+  it('UX10-DOC-AC03 makes covered shell controls inert and restores them on unmount', () => {
+    const shell = document.createElement('button');
+    shell.textContent = 'Shell control';
+    document.body.append(shell);
+    const { unmount } = render(<Harness />);
+    expect(shell.inert).toBe(true);
+    unmount();
+    expect(shell.inert).toBeFalsy();
+    shell.remove();
+  });
+
+  it('UX11-RETURN-AC05 exempts only the named global return portal from fullscreen inertness', () => {
+    const control = document.createElement('div');
+    control.dataset.appGlobalControl = 'practice-return';
+    const unrelated = document.createElement('div');
+    unrelated.dataset.appGlobalControl = 'other';
+    document.body.append(control, unrelated);
+    const { unmount } = render(<Harness />);
+    expect(control.inert).toBeFalsy();
+    expect(unrelated.inert).toBe(true);
+    unmount();
+    control.remove();
+    unrelated.remove();
   });
 
   describe('pane-header drag', () => {
@@ -230,7 +302,7 @@ describe('DocumentViewerLayout', () => {
       const { release } = drag({ clientX: 1040, clientY: 400 });
       expect(screen.queryByText('여기에 놓아 위치 바꾸기')).toBeNull();
       release();
-      expect(stored()).toBeNull();
+      expect(stored()).toMatchObject({ mode: 'both' });
       const [first] = screen.getAllByRole('region');
       expect(first).toHaveAccessibleName('PDF 원본');
     });

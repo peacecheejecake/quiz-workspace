@@ -65,6 +65,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { PracticeViewerScope } from '@/components/questions/viewer/practice-viewer-scope';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -94,7 +95,7 @@ import {
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { useAskState } from '@/components/ask/use-ask-state';
 import { normalizeScope } from '@/lib/ask/client';
-import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
+import { EMPTY_SCOPE } from '@/lib/ask/model';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
@@ -150,7 +151,6 @@ import {
   withShownMockView,
   RUN_DIALOG,
   withPracticeQuestion,
-  withRunPanel,
   searchPagePath,
   type HomePanel,
   ASK_PANEL,
@@ -210,7 +210,15 @@ export interface WorkspaceHomeProps {
   };
 }
 
-export function WorkspaceHome({
+export function WorkspaceHome(props: WorkspaceHomeProps) {
+  return (
+    <PracticeViewerScope viewerId={props.viewerId}>
+      <WorkspaceHomeContent key={props.viewerId} {...props} />
+    </PracticeViewerScope>
+  );
+}
+
+function WorkspaceHomeContent({
   workspace,
   viewerId,
   filters,
@@ -334,13 +342,6 @@ export function WorkspaceHome({
     practiceReturnFocusRef.current = returnFocus;
     openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
   }
-  // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
-  // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
-  function openRun() {
-    if (homeOpensBlocked(new URLSearchParams(window.location.search))) return;
-    const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
-    openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
-  }
   function navigateRun(state: RunUrlState, how: 'push' | 'replace') {
     const target = `${pathname}${keepMockView(withRunState(window.location.search, state))}`;
     if (how === 'push') panelHistory.push(target);
@@ -424,8 +425,6 @@ export function WorkspaceHome({
   const ask = useAskState(workspace.id);
   const askConversation = askConversationOf(searchParams) ?? null;
   const askOpen = isOpen(ASK_PANEL);
-  const askReason = unavailableReason(ask.state, workspace.archived);
-  const askUnavailable = askReason ? unavailableText(askReason) : null;
   const [askSession, setAskSession] = useState(0);
   const [askWasOpen, setAskWasOpen] = useState(askOpen);
   if (askOpen !== askWasOpen) {
@@ -529,6 +528,28 @@ export function WorkspaceHome({
   }));
   const [fetchingKey, setFetchingKey] = useState<string | null>(null);
   const [view, setView] = useState(filters);
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const [statusPending, setStatusPending] = useState(false);
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const cancel = () => {
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = null;
+      setStatusPending(false);
+      const restored = effectiveOverviewFilters(new URLSearchParams(window.location.search));
+      viewRef.current = restored;
+      setView(restored);
+    };
+    window.addEventListener('popstate', cancel);
+    return () => {
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = null;
+      window.removeEventListener('popstate', cancel);
+    };
+  }, [workspace.id]);
 
   const [ssrSnapshot, setSsrSnapshot] = useState({
     workspaceId: workspace.id,
@@ -600,7 +621,7 @@ export function WorkspaceHome({
       fetchingKey === urlFiltersKey ||
       (shown.filtersKey === urlFiltersKey && shown.source === cache);
     if (!alreadyHandled) {
-      setView(urlEffectiveFilters);
+      if (!statusPending) setView(urlEffectiveFilters);
       const hit = cache.get(urlEffectiveFilters);
       if (hit) {
         setFetchingKey(null);
@@ -703,6 +724,7 @@ export function WorkspaceHome({
   );
 
   useEffect(() => {
+    if (statusPending) return;
     if (inFlightRef.current && (fetchingKey === null || inFlightRef.current.source !== cache)) {
       abortInFlight();
     }
@@ -716,6 +738,7 @@ export function WorkspaceHome({
     requestOverview,
     shown.filtersKey,
     shown.source,
+    statusPending,
     urlEffectiveFilters,
     urlFiltersKey,
   ]);
@@ -751,7 +774,7 @@ export function WorkspaceHome({
     const target = `${pathname}${search}`;
     panelHistory.replace(target);
     const nextFilters = effectiveOverviewFilters(new URLSearchParams(search));
-    setView(nextFilters);
+    if (!statusTimer.current) setView(nextFilters);
     requestOverview(nextFilters);
   }
 
@@ -764,11 +787,29 @@ export function WorkspaceHome({
   }
 
   function changeFilters(patch: Partial<OverviewFilters>) {
-    const next = { ...view, ...patch };
+    const next = { ...viewRef.current, ...patch };
+    viewRef.current = next;
     setView(next);
+    if (patch.status) {
+      abortInFlight();
+      setStatusPending(true);
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = setTimeout(() => {
+        statusTimer.current = null;
+        setStatusPending(false);
+        const search = window.location.search;
+        applyHeatmapUrl(
+          keepNoteChapter(search, mergeOverviewFilters(search, viewRef.current), null),
+        );
+      }, 350);
+      return;
+    }
     const search = window.location.search;
+    const committed = statusTimer.current
+      ? { ...next, status: effectiveOverviewFilters(new URLSearchParams(search)).status }
+      : next;
     applyHeatmapUrl(
-      keepNoteChapter(search, mergeOverviewFilters(search, next), patch.chapter ?? null),
+      keepNoteChapter(search, mergeOverviewFilters(search, committed), patch.chapter ?? null),
     );
   }
 
@@ -783,6 +824,9 @@ export function WorkspaceHome({
   });
 
   function resetAll() {
+    if (statusTimer.current) clearTimeout(statusTimer.current);
+    statusTimer.current = null;
+    setStatusPending(false);
     questionSearch.replace('');
     setView(EMPTY_OVERVIEW_FILTERS);
     const search = window.location.search;
@@ -843,23 +887,33 @@ export function WorkspaceHome({
             <Button onClick={() => setPanel('documents', true)}>
               문서 <span className={styles.count}>{bookCount}</span>
             </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
+                  panelHistory.push(
+                    `${pathname}${withMockView(window.location.search, { view: 'create' })}`,
+                  );
+                }
+              }}
+            >
+              풀기
+            </Button>
             <QuestionMenu
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
-              onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
-              onPractice={openRun}
-              onAsk={openAsk}
-              askUnavailable={askUnavailable}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
-            <Button onClick={openAsk}>
-              <AskIcon width={16} height={16} />
-              AI 질문
-            </Button>
+            {askAvailable ? (
+              <Button onClick={openAsk}>
+                <AskIcon width={16} height={16} />
+                AI 질문
+              </Button>
+            ) : null}
             {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
             <Tooltip content="본문 검색">
               <Link
@@ -1034,6 +1088,11 @@ export function WorkspaceHome({
             view={mockView}
             onViewChange={changeMockView}
             onPractise={(exam) => openMockRun(exam.id)}
+            onBankStarted={(runId) =>
+              panelHistory.replace(
+                `${pathname}${withRunState(withoutMockExams(window.location.search), { step: 'solve', runId, position: 1 })}`,
+              )
+            }
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel
@@ -1082,7 +1141,7 @@ export function WorkspaceHome({
             onActivity={summaryActivity.report}
           />
           <AskPanel
-            key={askSession}
+            key={`${askSession}:${ask.identityGeneration}`}
             open={shows(ASK_PANEL)}
             onOpenChange={(open) => setPanel(ASK_PANEL, open)}
             container={host}
@@ -1090,6 +1149,7 @@ export function WorkspaceHome({
             archived={workspace.archived}
             askState={ask.state}
             client={ask.client}
+            recovery={ask.recovery}
             conversationId={askConversation}
             onNavigate={navigateAsk}
             documents={searchDocuments}

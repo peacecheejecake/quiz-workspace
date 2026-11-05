@@ -54,6 +54,7 @@ export async function openPracticeSessionAction(
   workspaceId: string,
   questionId: string,
   idempotencyKey: string,
+  expectedResetEpoch?: number,
 ): Promise<StudyActionResult<PracticeSession>> {
   if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
   const key =
@@ -64,11 +65,44 @@ export async function openPracticeSessionAction(
         path: { question_id: questionId },
         ...(key ? { header: { 'Idempotency-Key': key } } : {}),
       },
-      body: {},
+      body: expectedResetEpoch === undefined ? {} : { expected_reset_epoch: expectedResetEpoch },
     }),
   );
   if (outcome.ok && outcome.data.workspace_id !== workspaceId) return failed('notFound');
   return fromOutcome(outcome);
+}
+
+export async function latestPracticeAction(
+  workspaceId: string,
+  questionId: string,
+): Promise<StudyActionResult<Schemas['LatestPractice']>> {
+  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
+  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
+    api.GET('/api/v1/questions/{question_id}/practice-recent', {
+      params: { path: { question_id: questionId } },
+    }),
+  );
+  if (outcome.ok && outcome.data.session && outcome.data.session.workspace_id !== workspaceId) {
+    return failed('notFound');
+  }
+  return fromOutcome(outcome);
+}
+
+export async function resetPracticeAction(
+  workspaceId: string,
+  questionId: string,
+  key: string,
+): Promise<StudyActionResult<{ reset: boolean; epochs: Record<string, number> }>> {
+  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId) || !KEY.test(key)) {
+    return failed('invalid');
+  }
+  return fromOutcome(
+    await callQuestionApi(overviewPath(workspaceId), (api) =>
+      api.POST('/api/v1/questions/{question_id}/practice-reset', {
+        params: { path: { question_id: questionId }, header: { 'Idempotency-Key': key } },
+      }),
+    ),
+  );
 }
 
 function submissionBody(
@@ -138,12 +172,14 @@ export async function setMyStateAction(
   workspaceId: string,
   questionId: string,
   patch: MyStatePatch,
+  expectedResetEpoch?: number,
 ): Promise<StudyActionResult<MyState>> {
   if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
-  const body: { is_favorite?: boolean; needs_retry?: boolean } = {};
+  const body: { is_favorite?: boolean; needs_retry?: boolean; expected_reset_epoch?: number } = {};
   if (typeof patch?.is_favorite === 'boolean') body.is_favorite = patch.is_favorite;
   if (typeof patch?.needs_retry === 'boolean') body.needs_retry = patch.needs_retry;
   if (Object.keys(body).length === 0) return failed('invalid');
+  if (expectedResetEpoch !== undefined) body.expected_reset_epoch = expectedResetEpoch;
   const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
     api.PATCH('/api/v1/questions/{question_id}/my-state', {
       params: { path: { question_id: questionId } },

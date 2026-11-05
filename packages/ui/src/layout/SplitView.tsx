@@ -141,17 +141,22 @@ export function SplitView({
     return found && found.length === 2 && found[0] && found[1] ? [found[0], found[1]] : null;
   }, []);
 
-  const measure = useCallback(() => {
+  const measurePaneSpace = useCallback((): number | null => {
     const pair = panes();
-    if (!pair || pair[0].hidden || pair[1].hidden) return;
+    if (!pair || pair[0].hidden || pair[1].hidden) return null;
     const [first, second] = pair;
     const a = first.getBoundingClientRect();
     const b = second.getBoundingClientRect();
     const size = horizontal ? a.width + b.width : a.height + b.height;
-    // 0 = not laid out (e.g. inside a hidden ancestor): keep the ratio-only range.
-    const next = size > 0 ? size : null;
-    setAvailable((prev) => (prev === next ? prev : next));
+    return size > 0 ? size : null;
   }, [horizontal, panes]);
+
+  const measure = useCallback(() => {
+    const pair = panes();
+    if (!pair || pair[0].hidden || pair[1].hidden) return;
+    const next = measurePaneSpace();
+    setAvailable((prev) => (prev === next ? prev : next));
+  }, [measurePaneSpace, panes]);
 
   useIsomorphicLayoutEffect(() => {
     measure();
@@ -162,27 +167,39 @@ export function SplitView({
     return () => observer.disconnect();
   }, [measure, visible]);
 
-  const change = (next: number, commit: boolean) => {
-    const value = Math.round(clamp(next, range.min, range.max));
+  const change = (next: number, commit: boolean, bounds = range, previous = current) => {
+    const value = Math.round(clamp(next, bounds.min, bounds.max));
     if (ratio === undefined) setUncontrolled(value);
-    if (value !== current) onRatioChange?.(value);
+    if (value !== previous) onRatioChange?.(value);
     if (commit) onRatioCommit?.(value);
   };
 
-  const reset = () => change(defaultRatio, true);
+  const eventSnapshot = () => {
+    const measured = measurePaneSpace();
+    if (measured !== null) setAvailable(measured);
+    const bounds = splitRange(measured ?? available, minRatio, minPx);
+    return { bounds, current: Math.round(clamp(requested, bounds.min, bounds.max)) };
+  };
+
+  const reset = () => {
+    const snapshot = eventSnapshot();
+    change(defaultRatio, true, snapshot.bounds, snapshot.current);
+  };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const decrease = horizontal ? 'ArrowLeft' : 'ArrowUp';
     const increase = horizontal ? 'ArrowRight' : 'ArrowDown';
-    let next: number | null = null;
-    if (event.key === decrease) next = current - KEY_STEP;
-    else if (event.key === increase) next = current + KEY_STEP;
-    else if (event.key === 'Home') next = range.min;
-    else if (event.key === 'End') next = range.max;
-    else if (event.key === 'Enter') next = defaultRatio;
-    if (next === null) return;
+    if (![decrease, increase, 'Home', 'End', 'Enter'].includes(event.key)) return;
+    // ResizeObserver may not have reported a recent viewport change yet. Read the panes now so
+    // an immediate key cannot use stale limits or jump from an out-of-range displayed value.
+    const { bounds, current: liveCurrent } = eventSnapshot();
+    let next = defaultRatio;
+    if (event.key === decrease) next = liveCurrent - KEY_STEP;
+    else if (event.key === increase) next = liveCurrent + KEY_STEP;
+    else if (event.key === 'Home') next = bounds.min;
+    else if (event.key === 'End') next = bounds.max;
     event.preventDefault();
-    change(next, true);
+    change(next, true, bounds, liveCurrent);
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -201,13 +218,15 @@ export function SplitView({
     } catch {
       // Synthetic or already-released pointers cannot be captured; moves still reach the bar.
     }
+    const bounds = splitRange(size > 0 ? size : null, minRatio, minPx);
+    const startRatio = Math.round(clamp(requested, bounds.min, bounds.max));
     dragRef.current = {
       pointerId: event.pointerId,
       start: horizontal ? event.clientX : event.clientY,
-      startRatio: current,
+      startRatio,
       available: size,
       moved: false,
-      last: current,
+      last: startRatio,
     };
     setDragging(true);
   };
@@ -215,6 +234,30 @@ export function SplitView({
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId || drag.available <= 0) return;
+    const measured = measurePaneSpace();
+    if (measured !== null && Math.abs(measured - drag.available) > 0.5) {
+      // Cancel a gesture across a resize, retaining its last valid share under the new limits.
+      const bounds = splitRange(measured, minRatio, minPx);
+      const value = Math.round(clamp(drag.last, bounds.min, bounds.max));
+      setAvailable(measured);
+      dragRef.current = null;
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // Nothing captured.
+      }
+      setDragging(false);
+      if (drag.moved) {
+        if (value !== drag.last) {
+          if (ratio === undefined) setUncontrolled(value);
+          onRatioChange?.(value);
+        }
+        onRatioCommit?.(value);
+      }
+      return;
+    }
     const delta = (horizontal ? event.clientX : event.clientY) - drag.start;
     if (!drag.moved && Math.abs(delta) < TAP_SLOP_PX && event.pointerType !== 'mouse') return;
     if (delta !== 0) drag.moved = true;
@@ -241,7 +284,15 @@ export function SplitView({
       // Nothing captured.
     }
     if (drag.moved) {
-      onRatioCommit?.(drag.last);
+      const measured = measurePaneSpace();
+      if (measured !== null) setAvailable(measured);
+      const bounds = splitRange(measured ?? drag.available, minRatio, minPx);
+      const value = Math.round(clamp(drag.last, bounds.min, bounds.max));
+      if (value !== drag.last) {
+        if (ratio === undefined) setUncontrolled(value);
+        onRatioChange?.(value);
+      }
+      onRatioCommit?.(value);
       return;
     }
     // A tap without movement: two quick taps reset (touch and pen have no reliable dblclick).
