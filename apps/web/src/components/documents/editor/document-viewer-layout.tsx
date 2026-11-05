@@ -276,7 +276,7 @@ export function DocumentViewerLayout({
             !(sibling instanceof HTMLElement) ||
             sibling === current ||
             sibling.matches(
-              'script, style, link, [data-radix-portal], [data-radix-focus-guard], [aria-live], [role="status"], [role="alert"]',
+              'script, style, link, [data-radix-portal], [data-radix-focus-guard], [data-app-global-control="practice-return"], [aria-live], [role="status"], [role="alert"]',
             )
           )
             continue;

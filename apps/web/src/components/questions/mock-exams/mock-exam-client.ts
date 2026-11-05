@@ -270,6 +270,10 @@ export function submitFromMock(r: MockSubmitResult): SubmitResult {
 }
 
 export interface MockPracticeApi {
+  openStandaloneSession(
+    questionId: string,
+    key: string,
+  ): Promise<StudyActionResult<PracticeSession>>;
   openSession(
     questionId: string,
     runId: string,
@@ -293,18 +297,25 @@ export function createMockPracticeApi(
     if (!raw.ok) return studyFailed(studyFailure(raw.status, raw.body));
     return { ok: true, data: raw.body as T };
   }
+  async function open(
+    questionId: string,
+    key: string,
+    body: object,
+  ): Promise<StudyActionResult<PracticeSession>> {
+    const result = await call<MockPracticeSession>(MOCK_BFF_PATHS.session(questionId), {
+      method: 'POST',
+      body,
+      key,
+    });
+    if (!result.ok) return result;
+    if (result.data.workspace_id.toLowerCase() !== workspaceId.toLowerCase())
+      return studyFailed('notFound');
+    return { ok: true, data: sessionFromMock(result.data) };
+  }
   return {
+    openStandaloneSession: (questionId, key) => open(questionId, key, {}),
     async openSession(questionId, runId, position, key) {
-      const result = await call<MockPracticeSession>(MOCK_BFF_PATHS.session(questionId), {
-        method: 'POST',
-        body: { practice_run_id: runId, run_position: position },
-        key,
-      });
-      if (!result.ok) return result;
-      if (result.data.workspace_id.toLowerCase() !== workspaceId.toLowerCase()) {
-        return studyFailed('notFound');
-      }
-      return { ok: true, data: sessionFromMock(result.data) };
+      return open(questionId, key, { practice_run_id: runId, run_position: position });
     },
     async submit(sessionId, answer) {
       const result = await call<MockSubmitResult>(MOCK_BFF_PATHS.submit(sessionId), {

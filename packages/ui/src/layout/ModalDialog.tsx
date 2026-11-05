@@ -101,7 +101,7 @@ export function ModalDialog({
   useModalStackEntry(isOpen, () => changeOpen(false));
   // One stacking order with the panels (UX9, HOMEDLG-01): the layer opened later is on top,
   // whether a centered dialog or a side panel.
-  const layer = useFloatingLayer(isOpen);
+  const layer = useFloatingLayer(isOpen, undefined, false, true);
   const swipe = useSwipeDismiss(contentRef, layer.rank, true, 'bottom', () => changeOpen(false));
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirty && !registry.dirty, () =>
     changeOpen(false),

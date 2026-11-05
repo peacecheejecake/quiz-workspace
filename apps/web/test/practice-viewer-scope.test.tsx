@@ -50,3 +50,39 @@ it('switches verified users before rendering and rejects late work from the prev
   view.unmount();
   setPracticeViewer(null);
 });
+
+it('suspends without remount on uncertainty and invalidates old work on confirmed account change', async () => {
+  const { publishVerifiedUser, suspendVerifiedUser } =
+    await import('../src/lib/auth/verified-user-events');
+  publishVerifiedUser('user-a');
+  const view = render(
+    <PracticeViewerScope viewerId="user-a">
+      <PrivateSession />
+    </PracticeViewerScope>,
+  );
+  const old = screen.getByText(/session/).textContent;
+  rememberPracticeEpoch('workspace', 'question', 7);
+  const version = practiceResetVersion('workspace', 'question');
+  act(() => suspendVerifiedUser());
+  expect(screen.getByText(old ?? '')).not.toBeVisible();
+  act(() => publishVerifiedUser('user-a'));
+  expect(screen.getByText(old ?? '')).toBeVisible();
+  act(() => publishVerifiedUser('user-b'));
+  expect(screen.queryByText(old ?? '')).toBeNull();
+  expect(practiceResetVersion('workspace', 'question')).not.toBe(version);
+  view.unmount();
+  publishVerifiedUser(null);
+});
+
+it('does not mount a stale server scope after a different owner was confirmed', async () => {
+  const { publishVerifiedUser } = await import('../src/lib/auth/verified-user-events');
+  publishVerifiedUser('user-b');
+  const view = render(
+    <PracticeViewerScope viewerId="user-a">
+      <PrivateSession />
+    </PracticeViewerScope>,
+  );
+  expect(screen.queryByText(/session/)).toBeNull();
+  view.unmount();
+  publishVerifiedUser(null);
+});

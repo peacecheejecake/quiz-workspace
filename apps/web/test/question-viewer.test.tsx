@@ -37,6 +37,25 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   setMyStateAction: vi.fn(),
   lookupOverviewQuestionAction: vi.fn(),
 }));
+vi.mock('../src/components/questions/viewer/separate-retry', () => ({
+  SeparateRetry: ({
+    onGraded,
+    onClose,
+  }: {
+    onGraded: (id: string, result: 'correct' | 'incorrect') => void;
+    onClose: () => void;
+  }) => (
+    <div>
+      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'incorrect')}>
+        retry incorrect
+      </button>
+      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'correct')}>
+        retry correct
+      </button>
+      <button onClick={onClose}>close retry</button>
+    </div>
+  ),
+}));
 vi.mock('../src/lib/questions/actions', () => ({
   getQuestionAction: vi.fn(),
   getQuestionRevisionAction: vi.fn(),
@@ -208,7 +227,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByText(/^보기$/)).toHaveClass('qz-visually-hidden');
     expect(within(panel).getByRole('button', { name: SUBMIT_UI })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
+    expect(
+      within(panel).getByRole('button', { name: /다시 풀기 (표시|해제)/ }),
+    ).toBeInTheDocument();
     expect(openSession).toHaveBeenCalledTimes(1);
   });
 
@@ -242,7 +263,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       );
       const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
       expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
     }
     // D1: a correct result with a newer submission still waiting for grading hides it too.
     rerender(
@@ -255,7 +276,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     expect(
       within(screen.getByRole('dialog', { name: '3장 12번 문제' })).queryByRole('button', {
-        name: /다시 풀기/,
+        name: /다시 풀기 (표시|해제)/,
       }),
     ).toBeNull();
     rerender(
@@ -311,7 +332,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     await user.click(await within(panel).findByRole('button', { name: '다시 풀기 표시' }));
     await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
     expect(client.openSession).toHaveBeenCalledTimes(1);
@@ -359,7 +380,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     // is the newer truth and hides the toggle.
     await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
   });
 
@@ -403,7 +424,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     await waitFor(() => expect(onFlagsFailed).toHaveBeenCalledWith(message));
     await waitFor(() => expect(flags).toHaveBeenCalledTimes(2));
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
   });
 
@@ -428,7 +449,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     const panel = screen.getByRole('dialog');
     await within(panel).findByRole('button', { name: /즐겨찾기/ });
-    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
   });
 
   it('RETRY-01-C04 sequence(bank): no 다시 풀기 for a question not answered correctly', async () => {
@@ -451,7 +472,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     const panel = screen.getByRole('dialog');
     await within(panel).findByRole('button', { name: /즐겨찾기/ });
-    expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull();
   });
 
   it('RETRY-01-C04 sequence(bank): a delayed first flags lookup does not undo a grading made meanwhile', async () => {
@@ -522,7 +543,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(dialog).queryByRole('radio')).toBeNull();
     expect(within(dialog).queryByRole('textbox')).toBeNull();
     expect(within(dialog).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: /즐겨찾기|다시 풀기/ })).toBeNull();
+    expect(
+      within(dialog).queryByRole('button', { name: /즐겨찾기|다시 풀기 (표시|해제)/ }),
+    ).toBeNull();
   });
 
   it('read-only: a modal preview (UX9) with the answers, no submit UI and no toggles', () => {
@@ -541,7 +564,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByText(REVISION.explanation)).toBeInTheDocument();
     expect(within(panel).queryByRole('radio')).toBeNull();
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
-    expect(within(panel).queryByRole('button', { name: /즐겨찾기|다시 풀기/ })).toBeNull();
+    expect(
+      within(panel).queryByRole('button', { name: /즐겨찾기|다시 풀기 (표시|해제)/ }),
+    ).toBeNull();
   });
 
   it('sequence(bank): the position title, progress, toggles; after 제출 the grading border text', async () => {
@@ -571,7 +596,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       '2문제 중 1번째',
     );
     expect(await within(panel).findByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /다시 풀기/ })).toBeInTheDocument();
+    expect(
+      within(panel).getByRole('button', { name: /다시 풀기 (표시|해제)/ }),
+    ).toBeInTheDocument();
     // No answer before a submission: the radios have no 정답 mark.
     expect(within(panel).queryByText('정답')).toBeNull();
 
@@ -586,6 +613,35 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
     expect(within(panel).getByRole('button', { name: '다음' })).toBeInTheDocument();
+  });
+
+  it('UX11-RETURN-AC01 updates bank retry-flag eligibility after a separate grade without changing run result', async () => {
+    const user = userEvent.setup();
+    const client = fakeClient();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={client}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    expect(
+      await within(panel).findByRole('button', { name: '다시 풀기 표시' }),
+    ).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
+    await user.click(screen.getByText('retry incorrect'));
+    await user.click(screen.getByText('close retry'));
+    expect(within(panel).queryByRole('button', { name: '다시 풀기 표시' })).toBeNull();
+    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
+    await user.click(screen.getByText('retry correct'));
+    await user.click(screen.getByText('close retry'));
+    expect(within(panel).getByRole('button', { name: '다시 풀기 표시' })).toBeInTheDocument();
+    expect(client.submit).not.toHaveBeenCalled();
   });
 
   it('sequence(bank): UX9-RETRY-OPT toggles flip before the response, never busy, failures roll back', async () => {
@@ -652,7 +708,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     const panel = screen.getByRole('dialog');
     expect(await within(panel).findByRole('heading', { name: '문제 1' })).toBeInTheDocument();
     expect(await within(panel).findByRole('button', { name: SUBMIT_UI })).toBeInTheDocument();
-    expect(within(panel).queryByRole('button', { name: /즐겨찾기|다시 풀기/ })).toBeNull();
+    expect(
+      within(panel).queryByRole('button', { name: /즐겨찾기|다시 풀기 (표시|해제)/ }),
+    ).toBeNull();
     expect(within(panel).queryByRole('button', { name: '문제 정보' })).toBeNull();
   });
 

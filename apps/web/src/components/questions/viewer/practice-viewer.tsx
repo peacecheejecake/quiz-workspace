@@ -46,6 +46,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
@@ -191,6 +192,8 @@ export function PracticeViewer({
   invalidated = null,
 }: PracticeViewerProps) {
   const questionId = question?.id ?? null;
+  const returnControl = useOptionalPracticeReturn();
+  const recordActivity = returnControl?.recordActivity;
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
@@ -252,7 +255,8 @@ export function PracticeViewer({
     void (async () => {
       const latest = await latestPracticeAction(workspaceId, id);
       if (latest && !latest.ok) {
-        if (current) setSession({ status: 'error', message: latest.message, key });
+        if (current && practiceResetVersion(workspaceId, id) === resetVersion)
+          setSession({ status: 'error', message: latest.message, key });
         return;
       }
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
@@ -294,7 +298,8 @@ export function PracticeViewer({
       if (opening.cached) cache.dropSession(opening.cached.id);
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
       const result = await openPracticeSessionAction(workspaceId, id, key, latest.data.reset_epoch);
-      if (result.ok && practiceResetVersion(workspaceId, id) === resetVersion) {
+      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
+      if (result.ok) {
         cache.put(result.data, latest.data.reset_epoch, latest.data.latest_attempt_id);
         if (current) onViewed(id);
       }
@@ -323,6 +328,11 @@ export function PracticeViewer({
   const state: SessionState =
     session.key === opening.key ? session : { status: 'loading' as const };
   const ready = state.status === 'ready' ? state.session : null;
+  useEffect(() => {
+    if (questionId && !readOnly) {
+      recordActivity?.({ kind: 'question', workspaceId, questionId });
+    }
+  }, [questionId, readOnly, recordActivity, workspaceId]);
 
   // Answering state belongs to one opening of one session: a new session (next question, reopen)
   // and a re-opened cached one start empty.
@@ -438,7 +448,7 @@ export function PracticeViewer({
           variant="ghost"
           onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
         >
-          한 번 더 풀기
+          다시 풀기
         </Button>
       ) : null}
       {ready ? (

@@ -32,6 +32,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
@@ -87,6 +88,7 @@ import {
   type AnswerQuestion,
   type RevealedAnswers,
 } from './question-body';
+import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
 import { QuestionSourcePreview } from './question-source-preview';
 import {
@@ -705,6 +707,9 @@ function useSolveStep({
   const position = view?.position ?? 1;
   const [runSeq, setRunSeq] = useState(0);
   const [itemSeq, setItemSeq] = useState(0);
+  const [retryTarget, setRetryTarget] = useState<{ key: string; questionId: string } | null>(null);
+  const recordReturn = useOptionalPracticeReturn()?.recordActivity;
+  if (retryTarget && (!active || retryTarget.key !== `${runId}:${position}`)) setRetryTarget(null);
 
   // An edited / archived / deleted question on screen is read again.
   const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
@@ -718,6 +723,11 @@ function useSolveStep({
   const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
+  const returnable = !!run && !!item?.available && !!item.question_id;
+  useEffect(() => {
+    if (active && runId && returnable)
+      recordReturn?.({ kind: 'run', workspaceId, runId, position });
+  }, [active, runId, position, workspaceId, returnable, recordReturn]);
   useLayoutEffect(() => {
     if (source === 'bank' && item?.question_id && item.reset_epoch != null) {
       rememberPracticeEpoch(workspaceId, item.question_id, item.reset_epoch);
@@ -1211,6 +1221,16 @@ function useSolveStep({
       {pendingSessionId ? (
         <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
+      {item?.available && item.question_id && run && !archived ? (
+        <Button
+          disabled={holding}
+          onClick={() =>
+            setRetryTarget({ key: `${runId}:${position}`, questionId: item.question_id ?? '' })
+          }
+        >
+          다시 풀기
+        </Button>
+      ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
         {position > 1 ? (
           <Button size="sm" disabled={holding} onClick={() => go(position - 1)}>
@@ -1272,6 +1292,22 @@ function useSolveStep({
       <>
         {progress}
         {content}
+        {retryTarget && retryTarget.key === `${runId}:${position}` && active ? (
+          <SeparateRetry
+            workspaceId={workspaceId}
+            questionId={retryTarget.questionId}
+            source={source}
+            runId={view.runId}
+            position={position}
+            resetEpoch={item?.reset_epoch ?? null}
+            onGraded={(qid, result) => {
+              if (result === 'pending') pendingHere(qid);
+              else gradedHere(qid, result);
+              onGraded?.(qid, result);
+            }}
+            onClose={() => setRetryTarget(null)}
+          />
+        ) : null}
       </>
     ),
     footer,
