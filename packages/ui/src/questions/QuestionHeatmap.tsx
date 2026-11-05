@@ -188,7 +188,9 @@ export function QuestionHeatmap({
               <Heading id={headingId} className="title">
                 {chapter.title}
               </Heading>
-              <span className="count">{chapter.questions.length}문제</span>
+              <span className="count" aria-label={`${chapter.questions.length}문제`}>
+                {chapter.questions.length}
+              </span>
               {actions ? <div className="actions">{actions}</div> : null}
             </div>
             {chapter.questions.length > 0 ? (

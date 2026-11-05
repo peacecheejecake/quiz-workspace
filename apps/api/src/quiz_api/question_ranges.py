@@ -58,7 +58,9 @@ class RangeFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: list[DotStatus] | None = Field(
-        default=None, max_length=len(DOT_STATUSES), description="Keep these dot statuses."
+        default=None,
+        max_length=len(DOT_STATUSES),
+        description="Keep these dot statuses; empty selects none, omitted selects all.",
     )
     favorite: bool | None = None
     retry: bool | None = Field(default=None, description="The `needs_retry` flag.")
@@ -113,7 +115,7 @@ def select_rows(
     picked = set(range_.question_ids)
     excluded = set(range_.excluded_question_ids)
     f = range_.filters
-    wanted = set(f.status) if f.status else None
+    wanted = set(f.status) if f.status is not None else None
     return [
         r
         for r in rows

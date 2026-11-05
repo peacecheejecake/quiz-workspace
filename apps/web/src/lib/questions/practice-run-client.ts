@@ -121,7 +121,8 @@ export function createPracticeRunApi(
   return {
     async rangeQuestions(query) {
       const params = new URLSearchParams();
-      for (const status of query.status) params.append('status', status);
+      if (query.status.length === 0) params.set('status', 'none');
+      else for (const status of query.status) params.append('status', status);
       if (query.favorite) params.set('favorite', 'true');
       if (query.retry) params.set('retry', 'true');
       if (query.type) params.set('type', query.type);

@@ -528,6 +528,28 @@ function WorkspaceHomeContent({
   }));
   const [fetchingKey, setFetchingKey] = useState<string | null>(null);
   const [view, setView] = useState(filters);
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const [statusPending, setStatusPending] = useState(false);
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const cancel = () => {
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = null;
+      setStatusPending(false);
+      const restored = effectiveOverviewFilters(new URLSearchParams(window.location.search));
+      viewRef.current = restored;
+      setView(restored);
+    };
+    window.addEventListener('popstate', cancel);
+    return () => {
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = null;
+      window.removeEventListener('popstate', cancel);
+    };
+  }, [workspace.id]);
 
   const [ssrSnapshot, setSsrSnapshot] = useState({
     workspaceId: workspace.id,
@@ -599,7 +621,7 @@ function WorkspaceHomeContent({
       fetchingKey === urlFiltersKey ||
       (shown.filtersKey === urlFiltersKey && shown.source === cache);
     if (!alreadyHandled) {
-      setView(urlEffectiveFilters);
+      if (!statusPending) setView(urlEffectiveFilters);
       const hit = cache.get(urlEffectiveFilters);
       if (hit) {
         setFetchingKey(null);
@@ -702,6 +724,7 @@ function WorkspaceHomeContent({
   );
 
   useEffect(() => {
+    if (statusPending) return;
     if (inFlightRef.current && (fetchingKey === null || inFlightRef.current.source !== cache)) {
       abortInFlight();
     }
@@ -715,6 +738,7 @@ function WorkspaceHomeContent({
     requestOverview,
     shown.filtersKey,
     shown.source,
+    statusPending,
     urlEffectiveFilters,
     urlFiltersKey,
   ]);
@@ -750,7 +774,7 @@ function WorkspaceHomeContent({
     const target = `${pathname}${search}`;
     panelHistory.replace(target);
     const nextFilters = effectiveOverviewFilters(new URLSearchParams(search));
-    setView(nextFilters);
+    if (!statusTimer.current) setView(nextFilters);
     requestOverview(nextFilters);
   }
 
@@ -763,11 +787,29 @@ function WorkspaceHomeContent({
   }
 
   function changeFilters(patch: Partial<OverviewFilters>) {
-    const next = { ...view, ...patch };
+    const next = { ...viewRef.current, ...patch };
+    viewRef.current = next;
     setView(next);
+    if (patch.status) {
+      abortInFlight();
+      setStatusPending(true);
+      if (statusTimer.current) clearTimeout(statusTimer.current);
+      statusTimer.current = setTimeout(() => {
+        statusTimer.current = null;
+        setStatusPending(false);
+        const search = window.location.search;
+        applyHeatmapUrl(
+          keepNoteChapter(search, mergeOverviewFilters(search, viewRef.current), null),
+        );
+      }, 350);
+      return;
+    }
     const search = window.location.search;
+    const committed = statusTimer.current
+      ? { ...next, status: effectiveOverviewFilters(new URLSearchParams(search)).status }
+      : next;
     applyHeatmapUrl(
-      keepNoteChapter(search, mergeOverviewFilters(search, next), patch.chapter ?? null),
+      keepNoteChapter(search, mergeOverviewFilters(search, committed), patch.chapter ?? null),
     );
   }
 
@@ -782,6 +824,9 @@ function WorkspaceHomeContent({
   });
 
   function resetAll() {
+    if (statusTimer.current) clearTimeout(statusTimer.current);
+    statusTimer.current = null;
+    setStatusPending(false);
     questionSearch.replace('');
     setView(EMPTY_OVERVIEW_FILTERS);
     const search = window.location.search;
@@ -863,10 +908,12 @@ function WorkspaceHomeContent({
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
-            <Button onClick={openAsk}>
-              <AskIcon width={16} height={16} />
-              AI 질문
-            </Button>
+            {askAvailable ? (
+              <Button onClick={openAsk}>
+                <AskIcon width={16} height={16} />
+                AI 질문
+              </Button>
+            ) : null}
             {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
             <Tooltip content="본문 검색">
               <Link

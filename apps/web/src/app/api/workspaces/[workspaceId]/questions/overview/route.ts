@@ -6,7 +6,7 @@ import { NO_CHAPTER, OVERVIEW_SEARCH_MAX } from '@/lib/questions/overview-filter
 
 export const dynamic = 'force-dynamic';
 
-const STATUSES = new Set(['unseen', 'viewed', 'incorrect', 'correct', 'retry']);
+const STATUSES = new Set(['unseen', 'viewed', 'incorrect', 'correct', 'retry', 'none']);
 const TYPES = new Set(['MCQ', 'SHORT_ANSWER', 'ESSAY']);
 const FLAG = /^(true|false)$/;
 
@@ -39,7 +39,11 @@ export async function GET(
     out.set('q', trimmed);
   }
   const statuses = incoming.getAll('status');
-  if (statuses.length > STATUSES.size || !statuses.every((s) => STATUSES.has(s))) {
+  if (
+    statuses.length > 5 ||
+    !statuses.every((s) => STATUSES.has(s)) ||
+    (statuses.includes('none') && statuses.length !== 1)
+  ) {
     return problemResponse(400, 'Bad Request', 'Malformed query.');
   }
   for (const status of new Set(statuses)) out.append('status', status);

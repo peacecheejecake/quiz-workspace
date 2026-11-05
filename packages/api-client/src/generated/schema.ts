@@ -6445,7 +6445,7 @@ export type components = {
       retry?: boolean | null;
       /**
        * Status
-       * @description Keep these dot statuses.
+       * @description Keep these dot statuses; empty selects none, omitted selects all.
        */
       status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
       /** Type */
@@ -17440,8 +17440,8 @@ export interface operations {
         q?: string | null;
         /** @description Keep questions (not) marked for retry. */
         retry?: boolean | null;
-        /** @description Repeatable; keeps these statuses. */
-        status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
+        /** @description Repeatable statuses; none selects no questions, omitted selects all. */
+        status?: (('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry') | 'none')[] | null;
         type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
       };
       header?: never;

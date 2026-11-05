@@ -5,7 +5,7 @@
 // questions come grouped by source chapter too (mock-run.ts `mockRangeOverview`), numbered
 // "문제 k", and a whole chapter is sent as its question ids (a mock run refuses `chapter_ids`).
 // Unit-tested.
-import type { QuestionDotStatus } from '@quiz/ui';
+import { QUESTION_DOT_STATUSES, type QuestionDotStatus } from '@quiz/ui';
 import { displayStem } from '@/lib/questions/display-stem';
 import type { QuestionOverview } from '@/lib/questions/overview-data';
 import { NO_CHAPTER_KEY, placeQuestions } from '@/lib/questions/overview-placement';
@@ -113,21 +113,28 @@ export interface RangeFilterState {
 }
 
 export const EMPTY_RANGE_FILTERS: RangeFilterState = {
-  status: [],
+  status: QUESTION_DOT_STATUSES,
   favorite: false,
   retry: false,
   type: null,
 };
 
 export function isRangeFiltered(filters: RangeFilterState): boolean {
-  return filters.status.length > 0 || filters.favorite || filters.retry || filters.type !== null;
+  return (
+    filters.status.length !== QUESTION_DOT_STATUSES.length ||
+    filters.favorite ||
+    filters.retry ||
+    filters.type !== null
+  );
 }
 
 /** The API's filters (the overview's judgement, QVIEW-01-C07); undefined when none is set. */
 export function rangeApiFilters(filters: RangeFilterState): RunRangeFilters | undefined {
   if (!isRangeFiltered(filters)) return undefined;
   return {
-    ...(filters.status.length > 0 ? { status: [...filters.status] } : {}),
+    ...(filters.status.length !== QUESTION_DOT_STATUSES.length
+      ? { status: [...filters.status] }
+      : {}),
     ...(filters.favorite ? { favorite: true } : {}),
     ...(filters.retry ? { retry: true } : {}),
     ...(filters.type ? { type: filters.type } : {}),

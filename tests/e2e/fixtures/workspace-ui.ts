@@ -121,7 +121,12 @@ export const homeUi = {
   searchSettingsButton: (page: Page, scope: SearchScopeName) =>
     main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
   searchSettings: (page: Page, scope: SearchScopeName) =>
-    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+    scope === 'questions'
+      ? main(page)
+          .getByRole('search', { name: /문제 검색|question search/i })
+          .locator(':scope > div')
+          .nth(1)
+      : page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -130,7 +135,7 @@ export const homeUi = {
 
 export type SearchScopeName = 'questions' | 'body';
 const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(문제 설정|question settings)$/i,
+  questions: /^(검색 설정|search settings)$/i,
   body: /^(본문 설정|body settings|content settings)$/i,
 };
 const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
@@ -297,6 +302,12 @@ export async function closeSearchOptions(
   const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
   const popover = homeUi.searchSettings(page, scope);
+  if (scope === 'questions') {
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(popover).toBeHidden();
+    return;
+  }
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {
