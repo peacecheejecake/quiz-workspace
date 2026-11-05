@@ -1101,17 +1101,17 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
 
-| UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
-| UX10-UI | ✅ 독립 리뷰·main 재검증·QA 후속 통합 | 28b870f6 · 0412ef39 · merge a0c5b4fa | main UI445/RSC·전체 Chromium/WebKit overlay10 GREEN. 공통/custom 버튼 테두리·pen/reduced-motion/취소 gesture 보강, 최종 리뷰 지적 없음(174148 log). 전체 Linux baseline은 최종 QA 대기 |
-| UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
-| UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
+| UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 후속 기능 구현·통합 QA 완료 |
+| UX10-UI | ✅ 독립 리뷰·main 재검증·최종 visual 통합 | 28b870f6 · 0412ef39 · 360ddf0c · 8346762f | 최종 이미지 리뷰 지적 없음(223812 log). main 전체 147장+footer 수정 12장 직접 검토, Linux app24·Storybook26 GREEN. 공통 버튼·아이콘·swipe와 RETURN 안전 이미지 확인 |
+| UX10-QVIEW | ✅ 리뷰·main 재검증·최종 API QA 통합 | 6d8381b1 · 3fff01a0 | 마지막 리뷰 지적 없음(223106 log). main 실제 HTTP/리셋/왕복/전체 권한 matrix531 GREEN, 전체 infra1036 GREEN. 새 잠금 예산은 §7 결정, 공유 DB reset epoch 적용·이력 보존 |
+| UX10-DOC | ✅ 리뷰·main 재검증·reflow QA 통합 | aee599d9 · 3f61c7b9 · 2221660f | 마지막 리뷰 지적 없음(221923 log). main Chromium/WebKit 전체 viewer40 GREEN. 선택 위치 보이는 경우만 fit reflow 후 보존·읽던 위치 유지, 원래 AC07 불변. Linux DOC4 비교 동일 |
 | UX10-HOME | ✅ 독립 리뷰·main 재검증·통합 | 981a9976 | 최종 리뷰 지적 없음(202933 log). main 웹1298·Chromium/WebKit14 GREEN. all/none의 overview·범위 picker·BFF 일관성, debounce·검색 설정·header guard 포함 |
-| UX10-PLAY | ✅ 독립 리뷰·main 재검증·QA 통합 | b462a79a · 97f03465 · merge ea311455 | 최종 리뷰 지적 없음(194306 log). main 전체 web1285·전용 양 브라우저16·계약2, 후속 UI32·web28 GREEN. primary 진입·은행/변형 통합, 결과·폼·이름 수정·focus 복구 포함 |
-| UX10-AI | ✅ 리뷰·main 재검증·HOME 연결 QA 통합 | 09b04855 · 8ead4059 · a6650c80 | 기존 ASK07/08/11 후속 최종 리뷰 지적 없음(205229 log), main 양 브라우저8 GREEN. 새 AI 동작 숨김·기존 답변 열람·정확한 409/403 계약 유지 |
-| UX10-QA | ◐ 전체 통합 검사·Linux visual QA | feature/ux10-spec | 모든 기능 Task 독립 리뷰·통합 완료. 메인 전체 lint/typecheck/test/contracts·affected E2E/접근성, UI agent Linux baseline batch 진행. AI 로그아웃 경로 기대값의 test-only 후속은 원 agent 검증·리뷰 대기 |
+| UX10-PLAY | ✅ 리뷰·main 재검증·최종 footer QA 통합 | b462a79a · 97f03465 · c9431efb | 마지막 리뷰 지적 없음(222117 log). main 범위/PLAY 양 브라우저34 GREEN. 실제 dialog 하단 footer·3 viewport bounds·마지막 문항 접근, 기존 순서/이력 검증 유지. 관련 Linux 12장 갱신·직접 확인 |
+| UX10-AI | ✅ 리뷰·main 재검증·접근성 QA 통합 | 09b04855 · 8ead4059 · a6650c80 · 8d4fbb54 | 마지막 리뷰 지적 없음(222718 log). 새 AI 동작 숨김·기존 답변 열람·정확한 409/403 유지. main ASK/모의고사 접근성 후속11 GREEN, 전체 접근성 최초29/30에서 유일한 과거 off 진입 기대값 교정 |
+| UX10-QA | ✅ 전체 통합·독립 리뷰·main QA 완료 | feature/ux10-spec | 최종 lint/format·typecheck374·unit(web1365/UI446/Python2655)·계약·infra1036·pgTAP1204·db lint GREEN. Linux app24/Storybook26·strict trace·log/artifact 감사 0건. 변경 범위 양 브라우저 최초238/246의 8건은 후속 QVIEW/PLAY34·DOC40으로 모두 재검증 GREEN. PR/CI는 요청 순서대로 후속 진행 |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
-| UX11-AI-DIRECT | ✅ 독립 리뷰·main 재검증·통합 | 1f0a370f · merge bdf4c08c | 최종 리뷰 지적 없음(205604 log). main prompt/worker18·웹37·Chromium/WebKit26 GREEN. 최신 통합 web1326·typecheck·strict trace GREEN. 직접 답변·즉시 입력 비우기·owner/compose session별 draft·수신/재시도 복구 포함 |
-| UX11-RETURN | ✅ 독립 리뷰·main 재검증·통합 | 7295831f · merge f82f894d | 최종 리뷰 지적 없음(214616 log). main 관련 단위66·실제 API5·별도 DB pgTAP1204 GREEN. 양 브라우저 전용18·기존 Workspace 포함29/30 뒤 production 생성 반복8 GREEN. 과거 WebKit 생성 1건 원인 미확정·최종 통합 QA에서 재확인. 공유 로컬 origin migration 적용 |
+| UX11-AI-DIRECT | ✅ 독립 리뷰·main 재검증·통합 | 1f0a370f · 99ffceda | 최종 test 후속 리뷰 지적 없음(215824 log). 통합 AI 양 브라우저34 GREEN, 직접 질문·즉시 입력 비우기·owner/compose session별 draft/수신/멱등 재시도 복구. 로그아웃 후 보호 경로 이동에도 새 사용자 입력 가능 검증 |
+| UX11-RETURN | ✅ 독립 리뷰·main 재검증·통합 | 7295831f · 28180e26 | 마지막 리뷰 지적 없음(215453 log). main 단위66·실제 API5·pgTAP1204·전용 양 브라우저18 및 로그 감사 추가10 GREEN. 별도 연습·원 회차 유지·리셋 fencing·안전 계정 전환, 공유 origin migration 적용. 과거 WebKit 생성 1건 미재현: production agent5회·main 각 엔진3회 통과 |
 | UX11-STEM | ✅ 독립 리뷰·main 재검증·통합 | bf8d3a8e | 최종 리뷰 지적 없음(182003 log). main TS67·Python52·Chromium/WebKit16·trace16/strict·screen30 GREEN. 초기/후속 항목 경계 분리, 문단·범위 참조·산술 기호 보존 |

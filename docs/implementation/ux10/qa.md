@@ -42,3 +42,13 @@ main thread가 각 Task의 독립 Codex 로그·커밋·실제 검증 결과를 
 - 작업 브랜치·worktree를 사용하고 다른 Task scope를 수정하지 않는다. 공통 파일·migration 번호·API client 생성 충돌은 main thread에 보고한다. 공유 DB migration 적용은 main thread만 한다.
 - 리뷰는 scripts/codex-review.sh --uncommitted --title "<Task ID>: <summary>"로 커밋 전에 실행한다. 수정 후 재리뷰한다. 기본 모델을 사용한다. RED 및 구현·QA 증거를 보고한다.
 - semantic token·Radix·공통 FloatingSidePanel 사용, 한국어 UI, 키보드·터치 동등, reduced-motion 준수. 테스트 skip/fixme 및 API client 수동 편집 금지.
+
+## 최종 로컬 QA 결과 — 2026-11-05
+
+각 Task 및 QA 수정은 terra 담당자가 구현하고 독립 Codex 리뷰 후 커밋했으며, main이 통합하고 검증을 다시 실행했다. 전체 lint/format, TypeScript·Python typecheck(374 sources), 웹 1,365·UI 446·Python 2,655 단위 테스트, 실제 infra 1,036, pgTAP 1,204, db lint가 통과했다. strict trace는 46개 화면·286개 screen AC와 AUTH API AC 3개에 orphan/focus/skip이 없음을 확인했다.
+
+전체 변경 범위 Chromium/WebKit 실행의 최초 246건 중 8건은 기존 API barrier/상태 버튼·재진입 fixture와 PDF reflow 문제였으며, 수정 후 범위/PLAY 전체 34건·문서 전체 40건으로 재검증했다. AI 통합 34건, 접근성 전체 최초 29/30 뒤 ASK/모의고사 후속 11건, Workspace 생성 각 엔진 3회 반복도 통과했다. 리셋·재연습·권한/소유자·계정 변경·public share·리셋 후 늦은 응답도 검증했다.
+
+Linux app desktop/iPad 24건과 Storybook 26건을 main이 기준 이미지 갱신 없이 비교했다. 변경 PNG 147장과 footer 후속 12장의 before/after, 합성 RETURN 모바일/전체화면 이미지를 직접 검토했다. 최종 baseline 커밋은 8346762f다. 로그 감사의 실제 복귀 시나리오 10건은 API·web·worker 로그 유출 0건이며, artifact 감사도 공유 비밀 유출 0건이다.
+
+공유 로컬 스택은 기존 데이터/ERRATA 이력을 보존하고 새 20261106100000·20261106110000을 추가 적용했다. 기존 누락 baseline인 20261105090000도 앞서 별도로 적용했으며 migration 이력은 재작성하지 않았다. 중간 DB 연결 포화(99/100)는 완료된 본 작업 worker의 정확한 PID를 확인해 정상 종료하여 해소했고, 실패한 이미지 검사는 전부 다시 통과했다. 기존 WebKit Workspace 생성 1건은 원인 미확정이나 변경 없는 clean production 반복 검증은 통과했다. PR CI가 이 로컬 QA의 다음 단계이며, CI 결과와 develop/main 병합·배포 결과는 해당 PR과 실행 기록으로 확인한다.
