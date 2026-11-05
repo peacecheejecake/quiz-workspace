@@ -1,6 +1,6 @@
 # UX10-UI — 공통 버튼과 overlay 제스처
 
-**Route:** 공통 UI · **Phase:** UX10-UI
+**Route:** 공통 UI · **Phase:** UX10-UI.0
 **테스트:** `tests/e2e/workspaces/ux10-overlays.spec.ts`
 
 ```yaml

@@ -1064,7 +1064,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
 
 | UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
-| UX10-UI | ◐ 구현·로컬 검증 | task/UX10-UI | terra 1:1 agent, 독립 리뷰 대기 |
+| UX10-UI | ✅ 독립 리뷰·main 재검증 | 28b870f6 · merge 3d386787 | UI unit434·RSC·Chromium/WebKit E2E10 main 재실행 GREEN. Review: task worktree .reviews/20261105-151302-31355-UX10-UI-controls-and-overlay-swipe.log, 지적 없음. 확대 gesture matrix는 UX10-QA에서 검증 |
 | UX10-QVIEW | ◐ 구현·로컬 검증 | task/UX10-QVIEW | terra 1:1 agent, reset 조회 경로·경합 검증 |
 | UX10-DOC | ◐ 구현·로컬 검증 | task/UX10-DOC | terra 1:1 agent, 원본 기본 RED 확인 |
 | UX10-HOME·PLAY·AI·QA | ☐ 대기 | — | 각 Task 문서 기준으로 착수 |
