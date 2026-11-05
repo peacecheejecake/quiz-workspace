@@ -1077,7 +1077,7 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 
 | UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
 | UX10-UI | ✅ 독립 리뷰·main 재검증 | 28b870f6 · merge 3d386787 | UI unit434·RSC·Chromium/WebKit E2E10 main 재실행 GREEN. Review: task worktree .reviews/20261105-151302-31355-UX10-UI-controls-and-overlay-swipe.log, 지적 없음. 확대 gesture matrix는 UX10-QA에서 검증 |
-| UX10-QVIEW | ◐ 독립 리뷰 수정 | task/UX10-QVIEW | owner별 reset epoch·최신 결과·캐시/계정 경계 검증. main 실제 HTTP 검증 후, 늦은 run-item 응답과 reset 경합 마지막 리뷰 수정 중 |
+| UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
 | UX10-HOME | ◐ 분리 구현·인계 대기 | task/UX10-HOME | 검색·메뉴·필터 모델 구현 및 부분 검증, QVIEW 통합 후 상태 debounce/overview 연결 |
 | UX10-PLAY | ◐ 분리 구현·인계 대기 | task/UX10-PLAY | 이름 수정·행별 비활성화·결과 그룹 단위 검증, AI/QVIEW 인계 후 통합 flow·bank 문항 수 구현 |
