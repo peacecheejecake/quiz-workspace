@@ -1121,3 +1121,5 @@ UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·�
 첫 CI에서 모바일 SMOKE-02와 ACCOUNT-01-AC01의 실제 헤더 겹침을 발견했다. 공통 `.qz-button`과 같은 specificity였던 UserMenu/WorkspaceSwitcher 축소 규칙이 bundle 순서에 따라 덮이는 문제로, module selector를 button으로 한정해 의도된 flex-shrink를 보장했다(5066268f, 리뷰 233203 log). 원래 검증은 그대로 두었으며 main에서 실패했던 9개 프로젝트·케이스를 다시 통과했다. 기존 mask는 바꾸지 않고 실제 phone header 경계에서 달라진 16개 PNG만 갱신·직접 확인했다.
 
 기존 DOC-01/HOMEDLG-01 검증의 제거된 메뉴 항목·옛 모의고사 제목 기대값은 통합 풀기 기준으로 교정했다(01723cbc, 리뷰 232845 log). 종류 변경은 키보드 End 뒤 실제 focus를 기다리며 원래 변경·권한·modal/inert/focus/layout 검증을 유지한다. main Chromium/WebKit 30개 통과. CI 결과와 이후 병합·배포는 [PR #78](https://github.com/peacecheejecake/quiz-workspace/pull/78)의 실행 기록으로 확인한다.
+
+CI의 iPad VISUAL-07/10 차이는 화면 배치가 아니라 비동기 초기 focus와 촬영 시점 차이였다. 실제 제목·검색 입력에 focus를 명시하고 toBeFocused를 확인한 뒤 촬영하도록 고정했다(3cd01cdf, 독립 리뷰 234820 log). mask·허용 오차는 유지하고 검색 입력 focus ring만 달라진 6개 PNG를 main이 확인했다. 담당자 Linux non-update 3회 반복 12건과 main 재검증 4건 모두 통과했다.
