@@ -37,6 +37,7 @@ from book_core.question.labels import (
     CIRCLED_DIGITS,
     answer_option_keys,
     break_stem_items,
+    has_item_label,
     leading_item_families,
     split_option_line,
 )
@@ -416,15 +417,20 @@ def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str
         and not any(o.label in CIRCLED_DIGITS for o in current.options)
         and _QUESTION_CUE.search(body) is None
         and _ASKING.search(body) is None
-        and _names_stem_item(body, current.stem_parts[1:])
+        and _names_stem_item(body, current.stem_parts)
     )
 
 
 def _names_stem_item(body: str, stem_parts: Sequence[str]) -> bool:
-    """``body`` starts with an item label and so does a stem line after the first (``(가)``,
-    ``( 가 )``, ``ㄱ.``): independent of the stem layout rules (sentence end, a complete list in
-    order), so a list printed loosely keeps its numbered options (questions.md §4 11)."""
-    return bool(leading_item_families(body)) and any(leading_item_families(p) for p in stem_parts)
+    """``body`` starts with an item label and the stem prints items: a stem line after the first
+    starts with a label (``(가)``, ``( 가 )``, ``ㄱ.``), or the question line itself holds one
+    (``옳은 것은? (가) 갑 (나) 을`` extracted as one line). Independent of the stem layout rules
+    (sentence end, a complete list in order), so a list printed loosely keeps its numbered
+    options (questions.md §4 11)."""
+    if not leading_item_families(body) or not stem_parts:
+        return False
+    first, *rest = stem_parts
+    return has_item_label(first) or any(leading_item_families(p) for p in rest)
 
 
 def _letter_list_back_to_stem(question: RawQuestion) -> None:

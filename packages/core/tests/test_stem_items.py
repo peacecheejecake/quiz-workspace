@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from book_core.question import break_stem_items, leading_item_families, stem_item_starts
+from book_core.question import (
+    break_stem_items,
+    has_item_label,
+    leading_item_families,
+    stem_item_starts,
+)
 
 
 @pytest.mark.parametrize(
@@ -86,3 +91,5 @@ def test_option_lines_naming_items_are_recognised_leniently() -> None:
     assert leading_item_families("ㄱ에 대한 설명") == frozenset()
     assert leading_item_families("① 갑") == frozenset()
     assert leading_item_families("A man walks") == frozenset()
+    assert has_item_label("옳은 것은 (가) 갑 (다) 을")
+    assert not has_item_label("(가)와 (나)에 들어갈 말은?")
