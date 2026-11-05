@@ -22,6 +22,7 @@ import {
   NO_VISUAL_ARTIFACTS,
   openShareWithSecret,
   PUBLISHED_BLOCK,
+  registerShareSecret,
   revokeShareLink,
   seedSharedContent,
   sharedUi,
@@ -53,8 +54,10 @@ test(
 
     await sharingUi.createButton(page).click();
     await expect(sharingUi.linkField(page)).toBeVisible();
-    await expect(sharingUi.onceNotice(page)).toBeVisible();
-    await expectAccessible(page, 'one-time link shown');
+    const issuedValue = await sharingUi.linkField(page).inputValue();
+    registerShareSecret(issuedValue.split('#k=')[1] ?? '');
+    await expect(sharingUi.onceNotice(page)).toHaveCount(0);
+    await expectAccessible(page, 'share link shown');
 
     // UX7-SHARE-EXPIRY: the copied state (check + "복사 완료") and a saved expiry with 만료일 삭제.
     await page.evaluate(() => {

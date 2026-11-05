@@ -168,8 +168,10 @@ def test_issue_stores_only_the_sha256_digest_and_never_logs_the_secret(seed: Any
         assert count[0][0] == 1
 
         listed = tx.call(token, "GET", f"/workspaces/{ws}/share-links")
-        assert (secret in listed.text) is False
-        assert [i["id"] for i in listed.json()["items"]] == [link["id"]]
+        listed_items = listed.json()["items"]
+        assert [i["id"] for i in listed_items] == [link["id"]]
+        assert listed_items[0]["share_url"] == link["share_url"]
+        assert not {"secret", "token_digest"} & set(listed_items[0])
         # A link is not a membership.
         members = tx.sql(
             "select user_id::text from public.workspace_memberships where workspace_id = :w", w=ws
@@ -196,7 +198,9 @@ def test_rotate_revokes_and_replaces_atomically(seed: Any) -> None:
         assert set(items) == {second["id"], first["id"]}
         assert items[first["id"]]["status"] == "revoked"
         assert items[first["id"]]["revoked_at"] is not None
+        assert items[first["id"]]["share_url"] is None
         assert items[second["id"]]["status"] == "active"
+        assert items[second["id"]]["share_url"] == second["share_url"]
         digests = tx.sql(
             "select count(distinct token_digest) from public.workspace_share_links "
             "where workspace_id = :w",
@@ -210,6 +214,7 @@ def test_rotate_revokes_and_replaces_atomically(seed: Any) -> None:
         )
         revoked = tx.ok(token, "POST", f"{base}/{second['id']}/revoke")
         assert revoked["status"] == "revoked"
+        assert revoked["share_url"] is None
         assert (
             tx.ok(token, "POST", f"{base}/{second['id']}/revoke")["revoked_at"]
             == (revoked["revoked_at"])
@@ -239,6 +244,7 @@ def test_policy_changes_and_expiry(seed: Any) -> None:
         url = f"{base}/{link['id']}"
         patched = tx.ok(token, "PATCH", url, {"allow_fork": True, "expires_at": FUTURE})
         assert (patched["allow_fork"], patched["status"]) == (True, "active")
+        assert patched["share_url"] == link["share_url"]
         _problem(tx.call(token, "PATCH", url, {"expires_at": "2000-01-01T00:00:00Z"}), 422)
 
         tx.sql(
@@ -246,7 +252,9 @@ def test_policy_changes_and_expiry(seed: Any) -> None:
             "where id = :id",
             id=link["id"],
         )
-        assert tx.ok(token, "GET", base)["items"][0]["status"] == "expired"
+        expired_item = tx.ok(token, "GET", base)["items"][0]
+        assert expired_item["status"] == "expired"
+        assert expired_item["share_url"] == link["share_url"]
         _problem(tx.call(token, "POST", f"{url}/rotate"), 409, INACTIVE)
         # The owner can bring an expired link back with a new expiry, or drop the expiry.
         assert tx.ok(token, "PATCH", url, {"expires_at": FUTURE})["status"] == "active"

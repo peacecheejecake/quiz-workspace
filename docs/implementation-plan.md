@@ -844,10 +844,13 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 | 2026-11-05 | **QSEARCH-CACHE**: 문제 keyword 필터 debounce를 250ms에서 350ms로 바꾸고 검색어 비우기는 0ms로 복원한다. 전체 RSC 재조회 대신 경량 BFF와 workspace/user 범위 인메모리 LRU(최대 50·TTL 5분)를 사용한다. SSR은 무필터 및 현재 다른 필터를 유지한 빈 검색어 결과를 미리 채운다. 문제 변경 중 도착한 이전 조회는 버리고 다시 읽는다. 기존 UX7-SEARCH 기록의 250ms·server 재읽기를 이 결정으로 대체한다. | SEARCH-01-AC12 |
 
+| 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |
 |---|---|---|---|
+| SHARE-PERSIST 공유 링크 재표시 | ✅ (전체 E2E·빌드는 PR CI 확인) | 3d88e674 | 독립 Codex subagent review: 지적 없음. Python 34·web 30 통과. 기록: `.reviews/SHARE-PERSIST-3d88e674-subagent.md`. |
 | QSEARCH-CACHE 문제 검색 debounce·캐시 | ✅ (전체 E2E·빌드는 PR CI 확인) | 2a637c6e · 5fbc3fac | 독립 Codex review P2×2 수정, 재리뷰 지적 없음. orchestrator 단위 테스트 19 통과, lint·format·web 타입 검사 통과. 기록: `.reviews/QSEARCH-CACHE-5fbc3fac-subagent.md`. |
 | PLAN (계획·AGENTS.md·리뷰 스크립트) | ✅ | 7f11b19 · e223735 · fix 2건 | 4회 리뷰: P2×3 반영(RED 의존 edge, exit status, 원자적 lock) → P2 lock 수명 반영 → P2 상태 경합 반영(status file) → 지적 없음 |
 | P0.1 monorepo 골격 | ✅ | 704c61a | 지적 없음 |

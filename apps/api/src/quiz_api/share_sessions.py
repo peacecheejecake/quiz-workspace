@@ -15,7 +15,8 @@ The cookie value is a stateless token, `v1.<link id>.<expiry>.<mac>`:
 
 Key: `SHARE_SESSION_SECRET` (≥ 32 characters). Locally and in tests an unset key is replaced by
 a random per-process key (sessions end when the API restarts); preview/production without it
-answer 503 on the shared routes instead of minting sessions other replicas cannot verify.
+answer 503 on the share routes instead of minting sessions or link secrets other replicas cannot
+verify or reconstruct (`resolve_share_key`).
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ import secrets
 import time
 import uuid
 from dataclasses import dataclass, field
+
+from fastapi import HTTPException, Request
+
+from quiz_api.settings import Settings
 
 SHARE_COOKIE = "quiz_share_session"
 FORMAT_VERSION = "v1"
@@ -49,6 +54,24 @@ class ShareSessionKey:
             raise ValueError(f"SHARE_SESSION_SECRET must have at least {MIN_KEY_CHARS} characters")
         # Domain-separated derivation: the configured string never keys anything else.
         return cls(hmac.new(secret.encode(), b"quiz-share-session/v1", hashlib.sha256).digest())
+
+
+def resolve_share_key(request: Request) -> ShareSessionKey:
+    """Return the process-cached `ShareSessionKey`, or raise 503 if unconfigured in deployment."""
+    state = request.app.state
+    key: ShareSessionKey | None = getattr(state, "share_session_key", None)
+    if key is not None:
+        return key
+    settings: Settings = state.settings
+    secret = settings.share_session_secret
+    if secret is not None and secret.get_secret_value():
+        key = ShareSessionKey.from_secret(secret.get_secret_value())
+    elif settings.is_deployed:
+        raise HTTPException(status_code=503, detail="Shared access is not configured.")
+    else:
+        key = ShareSessionKey.random()
+    state.share_session_key = key
+    return key
 
 
 @dataclass(frozen=True)
