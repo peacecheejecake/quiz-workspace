@@ -1096,4 +1096,4 @@ UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·�
 
 | UX11-AI-DIRECT | ◐ 신규 terra agent 구현 | task/UX11-AI-DIRECT | prompt RED→GREEN 18개, composer는 UX10-AI 인계 후; 실패 복구 사용자 확정 |
 | UX11-RETURN | ◐ 신규 terra agent 구현 | task/UX11-RETURN | provider/model/standalone viewer 검증. 사용자 확정: 원 회차 결과 유지·현재 문제 별도 연습; PLAY sequence 인계 후 연결 |
-| UX11-STEM | ◐ 경계 parser 독립 리뷰 수정 중 | task/UX11-STEM | 세 사례·범위 참조 span·기존 문단·TS/Python 공유 matrix 보강. main TS67/Python52 GREEN, 양 브라우저14 통과 보고. inline 연산자와 bullet 경계 분류 마지막 P2 수정 대기 |
+| UX11-STEM | ✅ 독립 리뷰·main 재검증·통합 | bf8d3a8e | 최종 리뷰 지적 없음(182003 log). main TS67·Python52·Chromium/WebKit16·trace16/strict·screen30 GREEN. 초기/후속 항목 경계 분리, 문단·범위 참조·산술 기호 보존 |
