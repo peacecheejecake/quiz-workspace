@@ -1127,3 +1127,11 @@ CI의 iPad VISUAL-07/10 차이는 화면 배치가 아니라 비동기 초기 fo
 UX10-CI 착수: PR runner의 Ubuntu Azure mirror가 30–40 kB/s로 40분 넘게 의존성을 내려받으며 새 실행에도 반복된다. 별도 Terra agent가 [QA 후속 범위·DoD](implementation/ux10/qa.md#ux10-ci--pr-검증-환경-후속)에 따라 공식 배포 경로의 최소 수정과 기존 workflow 검증을 담당한다. 전체 검증 gate와 고정 버전은 유지한다. 리뷰·main 재검증·커밋은 완료 후 기록한다.
 
 UX10-CI 로컬 완료: 2d51ef57, 독립 리뷰 20261106-000127 log 지적 없음. 기존 Playwright install 직전에 runner의 Ubuntu mirror 파일에서 Azure 주소만 공식 archive.ubuntu.com으로 치환한다. browser/dependency 버전·APT 서명 검증·테스트 gate는 불변이다. main Prettier·diff 검사 및 CI 분류/배포 workflow 테스트 121개 통과. 실제 다운로드 속도 개선 여부는 후속 GitHub runner 실행으로 검증한다.
+
+### PR #78 추가 회귀 검증 — 2026-11-06
+
+전체 CI 42051265843에서 정적 검사·단위·계약·이미지 3종·Storybook·DB/infra/visual/restore와 E2E 1/4·4/4가 통과했다. 2/4·3/4의 실패는 과거 테스트가 완료된 문제를 다시 제출하거나 기본 펼침인 저장 AI 해설을 다시 펼치려던 흐름, 로딩 placeholder 단계에서 메뉴를 열던 흐름이다. AI 담당자가 b4b13943·799264ad로 교정했다(독립 리뷰 002217·003254 log 지적 없음). 원래 권한·캐시·개정·누설 검증을 보존하며 문제 개정 후 새 제출은 그대로 수행한다. 담당자 전체 68건 및 ASK 전체 28건·문제 케이스 양 브라우저 각 3회 통과. main 전체 재검증 67/68의 유일한 ASK 로딩 실패도 재현·교정 후 ASK 전체 28건 통과, touched lint·format·E2E typecheck 통과.
+
+QPLAY-01-AC05의 최초 `viewed` 검사 실패/재시도 통과는 제목만 보이는 loading placeholder를 문제 열람 완료로 간주한 테스트 경합이었다. adf67be5는 각 방문 문제와 마지막 딥링크에서 보기 네 개의 표시를 기다린다(독립 리뷰 002919 log 지적 없음). URL·뒤/앞 이동·재로드·세 문제 모두 viewed 검증은 유지한다. 담당자 양 브라우저 각 3회, main 6건 통과. QPLAY-01-AC14·QOV-01-AC14는 변경 없이 양 브라우저 각 3회 및 이번 CI에서 통과해 추정 수정은 하지 않았다.
+
+UX10-CI 공식 Ubuntu archive 변경 뒤 이번 실행의 모든 E2E runner는 의존성 설치를 수 분 내 마쳤다. 기존 40분 이상 Azure mirror 지연은 재현되지 않았으며, 전체 검증 gate·버전은 그대로다. 이후 커밋의 최종 GREEN 및 병합·배포 결과는 PR 실행 기록으로 확인한다.
