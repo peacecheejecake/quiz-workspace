@@ -1076,16 +1076,16 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
 
 | UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
-| UX10-UI | ✅ 독립 리뷰·main 재검증 | 28b870f6 · merge 3d386787 | UI unit434·RSC·Chromium/WebKit E2E10 main 재실행 GREEN. Review: task worktree .reviews/20261105-151302-31355-UX10-UI-controls-and-overlay-swipe.log, 지적 없음. 확대 gesture matrix는 UX10-QA에서 검증 |
+| UX10-UI | ✅ 독립 리뷰·main 재검증·QA 후속 통합 | 28b870f6 · 0412ef39 · merge a0c5b4fa | main UI445/RSC·전체 Chromium/WebKit overlay10 GREEN. 공통/custom 버튼 테두리·pen/reduced-motion/취소 gesture 보강, 최종 리뷰 지적 없음(174148 log). 전체 Linux baseline은 최종 QA 대기 |
 | UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
 | UX10-HOME | ◐ 독립 리뷰 중 | task/UX10-HOME | all/none·350ms debounce·메뉴/AI header guard 구현, web1275·API range21·양 브라우저12 및 경합회귀6 GREEN. root typecheck의 AI test 오류는 별도 수정 대기 |
 | UX10-PLAY | ◐ 분리 구현·인계 대기 | task/UX10-PLAY | 이름 수정·행별 비활성화·결과 그룹 단위 검증, AI/QVIEW 인계 후 통합 flow·bank 문항 수 구현 |
-| UX10-AI | ◐ 리뷰·통합 후 QA 수정 대기 | 09b04855 · merge d2a7e85c | 리뷰 지적 없음(173225 log), main frontend91·web typecheck·trace16/strict GREEN. 통합 root typecheck에서 off.request 인수 타입 오류 확인, 원 AI agent 수정 대기. HOME header guard 연결 및 최종 QA 필요 |
+| UX10-AI | ◐ 리뷰·통합 후 HOME 연결 QA 대기 | 09b04855 · 8ead4059 · merge f21eae93 | 원 agent가 typed 요청 본문·정확한 explanation-disabled 응답으로 QA 수정, 독립 리뷰 통과(175336 log). main 전체 typecheck(E2E·mypy373) GREEN. HOME header guard 연결 후 최종 QA |
 | UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC main 재검증 완료, UI agent 버튼 전수 점검·gesture 확대 검증. 전체 통합 후 Linux baseline·종합 QA |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
 | UX11-AI-DIRECT | ◐ 신규 terra agent 구현 | task/UX11-AI-DIRECT | prompt RED→GREEN 18개, composer는 UX10-AI 인계 후; 실패 복구 사용자 확정 |
 | UX11-RETURN | ◐ 신규 terra agent 구현 | task/UX11-RETURN | provider/model/RSC 검증 진행, 회차 결과 반영만 확인 중, viewer 연결 인계 대기 |
-| UX11-STEM | ◐ 독립 리뷰 수정 후 재리뷰 대기 | task/UX11-STEM | 제공 세 사례·bullet 뒤 별도 문단 보존·CI phase 등록. TS64/추가 Python52·Chromium/WebKit12·core strict mypy·RSC/Storybook GREEN |
+| UX11-STEM | ◐ 경계 parser 독립 리뷰 수정 중 | task/UX11-STEM | 세 사례·범위 참조 span·기존 문단·TS/Python 공유 matrix 보강. main TS67/Python52 GREEN, 양 브라우저14 통과 보고. inline 연산자와 bullet 경계 분류 마지막 P2 수정 대기 |
