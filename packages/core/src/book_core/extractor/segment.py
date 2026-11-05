@@ -37,7 +37,7 @@ from book_core.question.labels import (
     CIRCLED_DIGITS,
     answer_option_keys,
     break_stem_items,
-    cites_stem_item,
+    leading_item_families,
     split_option_line,
 )
 from book_core.structure.numbering import NumberingKind, parse_numbering
@@ -416,8 +416,15 @@ def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str
         and not any(o.label in CIRCLED_DIGITS for o in current.options)
         and _QUESTION_CUE.search(body) is None
         and _ASKING.search(body) is None
-        and cites_stem_item(body, current.stem)
+        and _names_stem_item(body, current.stem_parts[1:])
     )
+
+
+def _names_stem_item(body: str, stem_parts: Sequence[str]) -> bool:
+    """``body`` starts with an item label and so does a stem line after the first (``(가)``,
+    ``( 가 )``, ``ㄱ.``): independent of the stem layout rules (sentence end, a complete list in
+    order), so a list printed loosely keeps its numbered options (questions.md §4 11)."""
+    return bool(leading_item_families(body)) and any(leading_item_families(p) for p in stem_parts)
 
 
 def _letter_list_back_to_stem(question: RawQuestion) -> None:

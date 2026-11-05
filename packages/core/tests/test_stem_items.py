@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from book_core.question import break_stem_items, cites_stem_item, stem_item_starts
+from book_core.question import break_stem_items, leading_item_families, stem_item_starts
 
 
 @pytest.mark.parametrize(
@@ -34,6 +34,8 @@ from book_core.question import break_stem_items, cites_stem_item, stem_item_star
         ("「갑」 (가) 갑 (나) 을", "「갑」\n\n(가) 갑\n(나) 을"),
         ("(가) 갑 (나) 을", "(가) 갑\n(나) 을"),
         # A wrapped item keeps its continuation on the same line.
+        ("옳은 것은? ( 가 ) 갑 ( 나 ) 을", "옳은 것은?\n\n( 가 ) 갑\n( 나 ) 을"),
+        ("옳은 것은? (가 ) 갑 ( 나) 을", "옳은 것은?\n\n(가 ) 갑\n( 나) 을"),
         (
             "옳은 것은? (가) 갑은 길어서 다음 줄로 이어진다. (나) 을",
             "옳은 것은?\n\n(가) 갑은 길어서 다음 줄로 이어진다.\n(나) 을",
@@ -58,6 +60,13 @@ def test_item_lists_break_before_each_label(text: str, expected: str) -> None:
         "옳은 것은? (나) 갑 (다) 을",
         "옳은 것은? (가) 갑 나. 을",
         "옳은 것은? (가) 갑 (다) 을",
+        # Interrupted lists (missing, skipped, swapped, another format): no line breaks at all.
+        "옳은 것은? (가) 갑 (다) 병 (나) 을",
+        "옳은 것은? (가) 갑 (나) 을 (라) 정",
+        "옳은 것은? (가) 갑 (나) 을 (나) 병",
+        "옳은 것은? (가) 갑 나. 을 (나) 병",
+        "옳은 것은? ㄱ. 갑 ㄴ) 을 ㄴ. 병",
+        "옳은 것은 (가) 갑 (나) 을",
         "옳은 것은? (가)갑 (나)을",
         "물이 기체가 되는 과정은?",
     ],
@@ -67,10 +76,13 @@ def test_mentions_option_labels_and_broken_sequences_are_not_item_lists(text: st
     assert break_stem_items(text) == text
 
 
-def test_option_texts_citing_the_stem_items() -> None:
-    stem = "옳은 것은? ㄱ. 갑 ㄴ. 을 ㄷ. 병"
-    assert cites_stem_item("ㄱ, ㄴ", stem)
-    assert cites_stem_item("ㄷ", stem)
-    assert not cites_stem_item("ㄱ에 대한 설명으로 옳은 것은?", stem)
-    assert cites_stem_item("(라)", "옳은 것은? (가) 갑 (나) 을")
-    assert not cites_stem_item("(가)", "옳은 것은?")
+def test_option_lines_naming_items_are_recognised_leniently() -> None:
+    assert leading_item_families("(가), (나)") == {"hangul"}
+    assert leading_item_families("( 가 ) 갑은 을이다.") == {"hangul"}
+    assert leading_item_families("ㄱ, ㄴ") == {"jamo"}
+    assert leading_item_families("ㄷ") == {"jamo"}
+    assert leading_item_families("ㄱ. 갑") == {"jamo"}
+    assert leading_item_families("㉠ 갑") == {"circled-jamo"}
+    assert leading_item_families("ㄱ에 대한 설명") == frozenset()
+    assert leading_item_families("① 갑") == frozenset()
+    assert leading_item_families("A man walks") == frozenset()

@@ -137,11 +137,12 @@ _BARE_ITEMS = "".join(
     label for labels, formats in _ITEM_FAMILIES.values() if "bare" in formats for label in labels
 )
 # A label token: at the start or after whitespace, followed by whitespace and some content, so a
-# mention inside a sentence ("(가)와 (나)에", "빈칸 (가)에") is never one.
+# mention inside a sentence ("(가)와 (나)에", "빈칸 (가)에") is never one. Spaces inside the
+# brackets do not matter (``( 가 )``).
 _ITEM_TOKEN = re.compile(
     rf"""(?:^|(?<=\s))(?:
-        \((?P<paren>[^\s()\uff08\uff09]{{1,4}})\)
-      | \uff08(?P<fullparen>[^\s()\uff08\uff09]{{1,4}})\uff09
+        \(\s*(?P<paren>[^\s()\uff08\uff09]{{1,4}})\s*\)
+      | \uff08\s*(?P<fullparen>[^\s()\uff08\uff09]{{1,4}})\s*\uff09
       | (?P<close>[^\s()\uff08\uff09.]{{1,4}})\)
       | (?P<dot>[^\s()\uff08\uff09.]{{1,4}})\.
       | (?P<bare>[{_BARE_ITEMS}])
@@ -153,45 +154,40 @@ _ITEM_FORMATS = ("paren", "fullparen", "close", "dot", "bare")
 _BEFORE_FIRST_ITEM = re.compile(r"[?\uff1f.:\uff1a)\uff09」>]\s*$")
 
 
-def _item_tokens(text: str) -> list[tuple[int, tuple[str, str], int]]:
-    """``(offset, (family, format), ordinal)`` of every item-label token in ``text``; a token
-    that reads in several families (``I``: Latin 9th, Roman 1st) appears once per family."""
-    tokens: list[tuple[int, tuple[str, str], int]] = []
+def _item_tokens(text: str) -> list[tuple[int, str, str, int]]:
+    """``(offset, family, format, ordinal)`` of every item-label token in ``text``; a token that
+    reads in several families (``I``: Latin 9th, Roman 1st) appears once per family."""
+    tokens: list[tuple[int, str, str, int]] = []
     for match in _ITEM_TOKEN.finditer(text):
         fmt = next(f for f in _ITEM_FORMATS if match.group(f) is not None)
         for family, ordinal in _ITEM_ORDINALS.get(match.group(fmt), []):
             if fmt in _ITEM_FAMILIES[family][1]:
-                tokens.append((match.start(), (family, fmt), ordinal))
+                tokens.append((match.start(), family, fmt, ordinal))
     return tokens
-
-
-def _stem_item_list(text: str) -> tuple[tuple[str, str], list[int]] | None:
-    """``((family, format), label offsets)`` of the stem's item list (``stem_item_starts``)."""
-    tokens = _item_tokens(text)
-    for i, (start, key, ordinal) in enumerate(tokens):
-        if ordinal != 1:
-            continue
-        head = text[:start].strip()
-        if head and _BEFORE_FIRST_ITEM.search(head) is None:
-            continue
-        starts = [start]
-        for later, later_key, later_ordinal in tokens[i + 1 :]:
-            if later_key == key and later_ordinal == len(starts) + 1:
-                starts.append(later)
-        if len(starts) >= 2:
-            return key, starts
-    return None
 
 
 def stem_item_starts(text: str) -> list[int]:
     """Offsets of the printed item labels of the stem's item list, ``[]`` without one.
 
-    A list is two or more labels of one family and one format, in order from the family's first
-    label (``(가)`` ``(나)``, ``ㄱ.`` ``ㄴ.``, ``⑴`` ``⑵``); text before the first item must end
-    like a question sentence (``?``, ``.``, ``:``, ``)``, ``」``, ``>``, an answer blank ``( )``).
+    ``text`` is one paragraph. A list is the label tokens of one family, all in one format, that
+    run exactly from the family's first label in order (``(가)`` ``(나)``, ``ㄱ.`` ``ㄴ.``,
+    ``⑴`` ``⑵``), at least two. Any other token of that family in the paragraph (a missing,
+    skipped or swapped label, another format) means no list at all: ``(가) … (다) … (나) …``
+    is left alone. Text before the first item must end like a question sentence (``?``, ``.``,
+    ``:``, ``)``, ``」``, ``>``, an answer blank ``( )``).
     """
-    found = _stem_item_list(text)
-    return found[1] if found is not None else []
+    tokens = _item_tokens(text)
+    for family in dict.fromkeys(family for _, family, _, ordinal in tokens if ordinal == 1):
+        run = [t for t in tokens if t[1] == family]
+        if len(run) < 2 or len({fmt for _, _, fmt, _ in run}) != 1:
+            continue
+        if [ordinal for *_, ordinal in run] != list(range(1, len(run) + 1)):
+            continue
+        head = text[: run[0][0]].strip()
+        if head and _BEFORE_FIRST_ITEM.search(head) is None:
+            continue
+        return [start for start, *_ in run]
+    return []
 
 
 def break_stem_items(text: str) -> str:
@@ -206,27 +202,27 @@ def break_stem_items(text: str) -> str:
     return f"{head}\n\n{body}" if head else body
 
 
-_PRINTED = {
-    "paren": "({})",
-    "fullparen": "\uff08{}\uff09",
-    "close": "{})",
-    "dot": "{}.",
-    "bare": "{}",
-}
+# A label at the very start, in any item format and with nothing required after it: ``(가)``,
+# ``( 가 )``, ``ㄱ.``, ``a)``, ``㉠``, or bare before a separator or the end (``ㄱ, ㄴ``).
+_LEADING_LABEL = re.compile(
+    rf"""^\s*(?:
+        [(\uff08]\s*(?P<bracket>[^\s()\uff08\uff09]{{1,4}})\s*[)\uff09]
+      | (?P<closed>[^\s()\uff08\uff09.,]{{1,4}})[).]
+      | (?P<bare>[^\s()\uff08\uff09.,、·]{{1,4}})(?=\s*[,、·]|\s*$)
+      | (?P<enclosed>[{_BARE_ITEMS}])
+    )""",
+    re.VERBOSE,
+)
 
 
-def cites_stem_item(text: str, stem: str) -> bool:
-    """Whether ``text`` (an option) starts by naming an item of the family ``stem`` lists:
-    the label as printed (``(가)``, ``(가), (나)``, ``(다)``) or bare before a separator or the
-    end (``ㄱ, ㄴ`` under ``ㄱ.`` items)."""
-    found = _stem_item_list(stem)
-    if found is None:
-        return False
-    (family, fmt), _ = found
-    text = text.lstrip()
-    for label in _ITEM_FAMILIES[family][0]:
-        if text.startswith(_PRINTED[fmt].format(label)):
-            return True
-        if re.match(rf"{re.escape(label)}(?:[,、·]|$)", text):
-            return True
-    return False
+def leading_item_families(text: str) -> frozenset[str]:
+    """The item families (``hangul``, ``jamo``, ...) of a label that starts ``text``, any format
+    and position in the family; empty without one. Lenient on purpose: it tells which lines name
+    stem items (``(가) ...`` printed under the question, ``1. (가), (나)`` options), not how the
+    stem is laid out, so it needs neither a sentence end nor a complete list (questions.md §4 11).
+    Option labels (``①``, ``❶``, ``➀``) belong to no family."""
+    match = _LEADING_LABEL.match(text)
+    if match is None:
+        return frozenset()
+    core = next(g for g in match.groups() if g is not None)
+    return frozenset(family for family, _ in _ITEM_ORDINALS.get(core, []))

@@ -1850,6 +1850,41 @@ def test_latin_items_moved_back_from_the_options_keep_their_lines() -> None:
     assert [o.text for o in draft.options] == ["(A)", "(B)"]
 
 
+@pytest.mark.parametrize(
+    ("question", "items", "stem"),
+    [
+        (
+            "1. 옳은 것은",
+            ["( 가 ) 갑은 을이다.", "( 나 ) 병은 정이다."],
+            "옳은 것은 ( 가 ) 갑은 을이다. ( 나 ) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은?",
+            ["( 가 ) 갑은 을이다.", "( 나 ) 병은 정이다."],
+            "옳은 것은?\n\n( 가 ) 갑은 을이다.\n( 나 ) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은",
+            ["(가) 갑은 을이다.", "(나) 병은 정이다."],
+            "옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은?",
+            ["(가) 갑은 을이다.", "(다) 병은 정이다.", "(나) 무는 기이다."],
+            "옳은 것은? (가) 갑은 을이다. (다) 병은 정이다. (나) 무는 기이다.",
+        ),
+    ],
+    ids=["spaced-no-sentence-end", "spaced", "no-sentence-end", "interrupted"],
+)
+def test_numbered_options_under_loosely_printed_items_stay_options(
+    question: str, items: list[str], stem: str
+) -> None:
+    """The option boundary does not depend on the item layout rules (questions.md §4 11)."""
+    (draft,) = _extract([question, *items, "1. (가)", "2. (나)", "3. (가), (나)"]).drafts
+    assert draft.stem == stem
+    assert [o.text for o in draft.options] == ["(가)", "(나)", "(가), (나)"]
+
+
 def test_labels_mentioned_in_the_question_sentence_do_not_break_the_stem() -> None:
     (draft,) = _extract(
         [
