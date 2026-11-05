@@ -3,12 +3,9 @@
 // shared document view. Korean first, English accepted (AGENTS.md §5); a deliberate label change
 // is a one-place edit here.
 //
-// UI contract (DOCVIEW-SPEC 2026-10-29, DOCVIEW-PORT 2026-11-02; implementation-plan §7):
-//   - group "보기 설정" right above the split area holding: the outline toggle (aria-expanded,
-//     named "목차 접기" when open / "목차 펼치기" when closed), radiogroup "보기 방식" with radios
-//     "원본과 변환본 함께 보기" / "PDF 원본만 보기" / "변환본 텍스트만 보기" (visible 함께 보기 · 원본 ·
-//     변환본), and in 함께 보기 only radiogroup "분할 방향" ("좌우로 나누기" / "상하로 나누기") and
-//     button "원본과 변환본 위치 바꾸기". Selection = checked radio (aria-checked or native).
+// UI contract (UX10-DOC): the overlay contains the outline toggle, independent 원본 and 변환본
+// checkboxes, and, for desktop/tablet with both selected, the split direction and swap controls.
+// A fresh browser defaults to 원본; at least one checkbox remains selected.
 //   - outline panel: a non-modal FloatingSidePanel = role=dialog named "목차" (docked left of the
 //     split area on desktop, overlay on tablet, full-height on narrow screens); its header has a
 //     second "목차 접기" button. The existing tree "목차" lives inside it.
@@ -20,11 +17,9 @@
 //     "원본 n%, 변환본 m%".
 //   - a polite live region (aria-live or role=status) announces a swap ("변환본이 왼쪽, 원본이
 //     오른쪽에 있습니다", 상하: 위/아래).
-//   - narrow screens (< 768px): group "보기 선택" with exactly two aria-pressed buttons 원본 / 변환본
-//     plus a "목차" button.
-//   - the PDF pane body is DOC-02's continuous-scroll viewer ("현재 페이지" field, the labelled
-//     source highlight "원문 위치"); the 변환본 pane holds DOC-02's `N쪽` page groups and question
-//     cards. There is no outline toggle in the PDF toolbar any more (DOC-02-AC06 retired).
+//   - narrow screens (< 768px): both selected panes are stacked vertically and share a splitter.
+//   - the PDF toolbar is part of the overlay; the pane contains the continuous PDF pages and
+//     source highlight. The converted-text pane contains page groups and question cards.
 //
 // Settings live only in `localStorage["quiz.documentViewer.v1"]` as JSON
 // `{mode: both|pdf|text, orientation: horizontal|vertical, order: pdf-first|text-first,
@@ -54,17 +49,11 @@ export interface ViewerSettings {
 }
 
 export const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
-  mode: 'both',
+  mode: 'pdf',
   orientation: 'horizontal',
   order: 'pdf-first',
   pdfRatio: 50,
   outlineOpen: true,
-};
-
-const MODE_NAMES: Readonly<Record<ViewMode, RegExp>> = {
-  both: /^(원본과 변환본 함께 보기|함께 보기|both|show both|side by side)$/i,
-  pdf: /^(PDF 원본만 보기|원본|PDF only|original( only)?|original PDF only)$/i,
-  text: /^(변환본 텍스트만 보기|변환본|converted( text)?( only)?|text only)$/i,
 };
 
 const ORIENTATION_NAMES: Readonly<Record<SplitOrientation, RegExp>> = {
@@ -102,9 +91,11 @@ export const viewerUi = {
   outlineItem: (page: Page, title: string) =>
     viewerUi.outlinePanel(page).getByRole('treeitem', { name: title, exact: true }),
   modeGroup: (page: Page) =>
-    viewerUi.settingsBar(page).getByRole('radiogroup', { name: /^(보기 방식|view mode)$/i }),
+    viewerUi.settingsBar(page).getByRole('group', { name: /^(보기 선택|choose view)$/i }),
   mode: (page: Page, mode: ViewMode) =>
-    viewerUi.modeGroup(page).getByRole('radio', { name: MODE_NAMES[mode] }),
+    viewerUi.modeGroup(page).getByRole('checkbox', {
+      name: mode === 'pdf' ? /^(원본|original)$/i : /^(변환본|converted)$/i,
+    }),
   orientationGroup: (page: Page) =>
     viewerUi.settingsBar(page).getByRole('radiogroup', {
       name: /^(분할 방향|split direction|split orientation)$/i,
@@ -125,15 +116,15 @@ export const viewerUi = {
   /** Narrow screens: the one-pane switch "보기 선택" (aria-pressed buttons 원본 / 변환본). */
   narrowSwitch: (page: Page) => page.getByRole('group', { name: /^(보기 선택|choose view)$/i }),
   narrowView: (page: Page, pane: PaneId) =>
-    viewerUi.narrowSwitch(page).getByRole('button', {
+    viewerUi.narrowSwitch(page).getByRole('checkbox', {
       name: pane === 'pdf' ? /^(원본|original)$/i : /^(변환본|converted)$/i,
     }),
   narrowOutlineButton: (page: Page) =>
     viewerUi
       .settingsBar(page)
-      .getByRole('button', { name: /^(목차|목차 열기|outline|open outline|contents)$/i }),
+      .getByRole('button', { name: /^(목차 펼치기|목차 접기|show outline|hide outline)$/i }),
   /** Inside the PDF pane (DOC-02): the "현재 페이지" field and the labelled source highlight. */
-  currentPage: (page: Page) => viewerUi.pane(page, 'pdf').getByLabel(/현재 페이지|current page/i),
+  currentPage: (page: Page) => page.getByLabel(/현재 페이지|current page/i),
   highlight: (page: Page) =>
     viewerUi.pane(page, 'pdf').getByLabel(/원문 위치|출처 위치|source (location|highlight)/i),
   /** The converted-text pane's current block (aria-current="true", DOC-02). */
@@ -463,21 +454,17 @@ export async function expectDropHint(page: Page, target: Locator): Promise<void>
   await targetHandle?.dispose();
 }
 
-/**
- * The document screen fits the viewport: the split area takes the height the rest of the page
- * leaves, so the page itself never scrolls (only the panes do).
- */
+/** The full-height viewer locks page scrolling while its reading panes scroll independently. */
 export async function expectFitsViewport(page: Page): Promise<void> {
   await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const root = document.scrollingElement ?? document.documentElement;
-          return root.scrollHeight - window.innerHeight;
-        }),
-      { message: 'page overflow below the viewport (px)' },
-    )
-    .toBeLessThanOrEqual(0);
+    .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).overflow), {
+      message: 'the document viewport locks page scrolling',
+    })
+    .toBe('hidden');
+  const pane = page.getByRole('region', { name: PANE_NAMES.pdf });
+  const bounds = await boxOf(pane);
+  expect(bounds.y).toBeGreaterThanOrEqual(0);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual((page.viewportSize()?.height ?? 0) + 1);
 }
 
 export interface ViewerFit {

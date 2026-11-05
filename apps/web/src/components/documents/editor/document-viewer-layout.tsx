@@ -24,7 +24,6 @@ import {
   firstPaneRatio,
   isOverOtherPane,
   layoutAnnouncement,
-  narrowInitialPane,
   paneOrder,
   pdfRatioFromFirst,
   splitValueText,
@@ -37,8 +36,8 @@ import {
   type ViewerWidth,
   type ViewMode,
 } from '@/lib/documents/viewer-settings';
-import { fitAreaToViewport } from './viewer-fit';
 import styles from './viewer-layout.module.css';
+import { ViewerToolbarContext } from './viewer-toolbar-context';
 
 // --- width class ---------------------------------------------------------------------------------
 
@@ -71,19 +70,19 @@ export interface DocumentViewer {
   readonly textVisible: boolean;
   /** A splitter drag is in progress (the PDF canvas waits for the release to redraw). */
   readonly resizing: boolean;
-  /** Call after an outline jump: tablets fold the panel, narrow screens close it and show 원본. */
+  /** Call after an outline jump to close the tablet or mobile outline. */
   outlineChosen(): void;
-  /** Call after a text block was chosen: narrow screens switch to 원본. */
+  /** Called after a text block was chosen; both selected panes remain visible. */
   blockChosen(): void;
   /** Internal state for DocumentViewerLayout. */
   readonly internal: ViewerInternal;
 }
 
 interface ViewerInternal {
-  readonly narrowPane: PaneId;
-  setNarrowPane(pane: PaneId): void;
   readonly outlineOpen: boolean;
   setOutlineOpen(open: boolean): void;
+  readonly mobileRatio: number;
+  setMobileRatio(ratio: number): void;
   readonly liveRatio: number | null;
   setLiveRatio(ratio: number | null): void;
 }
@@ -97,22 +96,20 @@ export function useDocumentViewer(): DocumentViewer {
   );
   const width = useSyncExternalStore(subscribeWidth, currentWidth, serverWidth);
   // Narrow-screen and tablet state is never saved; it starts over whenever the width class changes.
-  const [narrowPane, setNarrowPane] = useState<PaneId | null>(null);
   const [tabletOutlineOpen, setTabletOutlineOpen] = useState(false);
   const [narrowOutlineOpen, setNarrowOutlineOpen] = useState(false);
   const [seenWidth, setSeenWidth] = useState(width);
   if (seenWidth !== width) {
     setSeenWidth(width);
-    setNarrowPane(null);
     setTabletOutlineOpen(false);
     setNarrowOutlineOpen(false);
   }
   const [liveRatio, setLiveRatio] = useState<number | null>(null);
+  const [mobileRatio, setMobileRatio] = useState(50);
 
-  const mode: ViewMode = settings?.mode ?? 'both';
-  const shownNarrow = narrowPane ?? narrowInitialPane(mode);
-  const pdfVisible = width === 'narrow' ? shownNarrow === 'pdf' : mode !== 'text';
-  const textVisible = width === 'narrow' ? shownNarrow === 'text' : mode !== 'pdf';
+  const mode: ViewMode = settings?.mode ?? 'pdf';
+  const pdfVisible = mode !== 'text';
+  const textVisible = mode !== 'pdf';
   const outlineOpen =
     width === 'desktop'
       ? (settings?.outlineOpen ?? false)
@@ -133,13 +130,10 @@ export function useDocumentViewer(): DocumentViewer {
     if (width === 'tablet') setTabletOutlineOpen(false);
     if (width === 'narrow') {
       setNarrowOutlineOpen(false);
-      setNarrowPane('pdf');
     }
   }, [width]);
 
-  const blockChosen = useCallback(() => {
-    if (width === 'narrow') setNarrowPane('pdf');
-  }, [width]);
+  const blockChosen = useCallback(() => undefined, []);
 
   return {
     settings,
@@ -150,12 +144,12 @@ export function useDocumentViewer(): DocumentViewer {
     outlineChosen,
     blockChosen,
     internal: {
-      narrowPane: shownNarrow,
-      setNarrowPane,
       outlineOpen,
       setOutlineOpen,
       liveRatio,
       setLiveRatio,
+      mobileRatio,
+      setMobileRatio,
     },
   };
 }
@@ -164,6 +158,8 @@ export function useDocumentViewer(): DocumentViewer {
 
 export interface DocumentViewerLayoutProps {
   readonly viewer: DocumentViewer;
+  readonly chrome?: ReactNode;
+  readonly preventAutoHide?: boolean;
   /** The outline content (nav + DocumentOutlineTree, or a loading/empty note). */
   readonly outline: ReactNode;
   /** The 원본 pane body (PdfViewer). */
@@ -176,12 +172,6 @@ export interface DocumentViewerLayoutProps {
 
 const PANE_TITLE: Record<PaneId, string> = { pdf: '원본', text: '변환본' };
 const PANE_REGION: Record<PaneId, string> = { pdf: 'PDF 원본', text: '변환본 텍스트' };
-
-const MODE_OPTIONS: readonly RadioOption<ViewMode>[] = [
-  { value: 'both', label: '함께 보기', name: '원본과 변환본 함께 보기' },
-  { value: 'pdf', label: '원본', name: 'PDF 원본만 보기' },
-  { value: 'text', label: '변환본', name: '변환본 텍스트만 보기' },
-];
 
 const ORIENTATION_OPTIONS: readonly RadioOption<SplitOrientation>[] = [
   { value: 'horizontal', label: '좌우', name: '좌우로 나누기' },
@@ -203,6 +193,8 @@ interface HeaderDrag {
 
 export function DocumentViewerLayout({
   viewer,
+  chrome,
+  preventAutoHide = false,
   outline,
   pdf,
   text,
@@ -211,8 +203,146 @@ export function DocumentViewerLayout({
   const { settings, width, internal } = viewer;
   const panelId = useId();
   const [host, setHost] = useState<HTMLDivElement | null>(null);
-  // The split area fills the viewport height the rest of the page leaves (viewer-fit.ts).
-  useEffect(() => (host ? fitAreaToViewport(host) : undefined), [host]);
+  const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const showToolsRef = useRef<HTMLButtonElement>(null);
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const [chromeFocused, setChromeFocused] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [activity, setActivity] = useState(0);
+  const showChrome = useCallback(() => {
+    setChromeVisible(true);
+    setActivity((n) => n + 1);
+  }, []);
+  useEffect(() => {
+    if (!preventAutoHide && !alertVisible) return undefined;
+    const timer = window.setTimeout(showChrome, 0);
+    return () => window.clearTimeout(timer);
+  }, [preventAutoHide, alertVisible, showChrome]);
+  useEffect(() => {
+    if (preventAutoHide || alertVisible || chromeFocused) return undefined;
+    let timer: number;
+    const hide = () => {
+      if (
+        document.querySelector(
+          '[role="menu"], [role="dialog"]:not([data-modal="false"]), [role="alertdialog"]',
+        )
+      ) {
+        timer = window.setTimeout(hide, 300);
+      } else {
+        setChromeVisible(false);
+      }
+    };
+    timer = window.setTimeout(hide, 3000);
+    return () => window.clearTimeout(timer);
+  }, [activity, preventAutoHide, alertVisible, chromeFocused]);
+  useEffect(() => {
+    const root = viewerRef.current;
+    if (!host || !root) return undefined;
+    const update = () =>
+      setAlertVisible(
+        Array.from(root.querySelectorAll('[role="alert"]')).some(
+          (alert) => !alert.closest('[hidden]'),
+        ),
+      );
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['hidden', 'role'],
+    });
+    return () => observer.disconnect();
+  }, [host]);
+  useEffect(() => {
+    const root = viewerRef.current;
+    if (!host || !root) return undefined;
+    const original = new Map<HTMLElement, boolean>();
+    const parents: HTMLElement[] = [];
+    let child: HTMLElement = root;
+    while (child.parentElement) {
+      const parent = child.parentElement;
+      parents.push(parent);
+      child = parent;
+    }
+    let initialized = false;
+    const sync = () => {
+      let current: HTMLElement = root;
+      for (const parent of parents) {
+        for (const sibling of parent.children) {
+          if (
+            !(sibling instanceof HTMLElement) ||
+            sibling === current ||
+            sibling.matches(
+              'script, style, link, [data-radix-portal], [data-radix-focus-guard], [aria-live], [role="status"], [role="alert"]',
+            )
+          )
+            continue;
+          // Portalled menus and dialogs are appended to body after the viewer mounts.
+          if (parent === document.body && initialized && !original.has(sibling)) continue;
+          if (!original.has(sibling)) original.set(sibling, sibling.inert);
+          if (sibling.contains(document.activeElement)) showToolsRef.current?.focus();
+          sibling.inert = true;
+        }
+        current = parent;
+      }
+      initialized = true;
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    parents.forEach((parent) => observer.observe(parent, { childList: true }));
+    return () => {
+      observer.disconnect();
+      original.forEach((inert, element) => {
+        element.inert = inert;
+      });
+    };
+  }, [host]);
+  useEffect(() => {
+    const chrome = chromeRef.current;
+    if (!host || !chrome) return undefined;
+    const update = () =>
+      host.style.setProperty('--viewer-chrome-height', `${chrome.offsetHeight}px`);
+    update();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(update);
+    observer.observe(chrome);
+    return () => observer.disconnect();
+  }, [host]);
+  useEffect(() => {
+    if (!toolbarHost) return undefined;
+    const onFocus = (event: FocusEvent) => {
+      setChromeFocused(true);
+      showChrome();
+      (event.target as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+    const onBlur = (event: FocusEvent) => {
+      if (!toolbarHost.contains(event.relatedTarget as Node | null)) setChromeFocused(false);
+    };
+    toolbarHost.addEventListener('focusin', onFocus);
+    toolbarHost.addEventListener('focusout', onBlur);
+    toolbarHost.addEventListener('pointerdown', showChrome);
+    toolbarHost.addEventListener('pointermove', showChrome);
+    return () => {
+      toolbarHost.removeEventListener('focusin', onFocus);
+      toolbarHost.removeEventListener('focusout', onBlur);
+      toolbarHost.removeEventListener('pointerdown', showChrome);
+      toolbarHost.removeEventListener('pointermove', showChrome);
+    };
+  }, [toolbarHost, showChrome]);
+  useEffect(() => {
+    const onPointer = (event: globalThis.PointerEvent) => {
+      if (event.clientY <= 48) showChrome();
+    };
+    window.addEventListener('pointermove', onPointer);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('pointermove', onPointer);
+      window.removeEventListener('pointerdown', onPointer);
+    };
+  }, [showChrome]);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const outlineBodyRef = useRef<HTMLDivElement>(null);
   const paneRefs = useRef<Record<PaneId, HTMLElement | null>>({ pdf: null, text: null });
@@ -224,15 +354,17 @@ export function DocumentViewerLayout({
   const refocusHandleRef = useRef<PaneId | null>(null);
 
   const order = settings?.order ?? 'pdf-first';
-  const orientation = settings?.orientation ?? 'horizontal';
-  const both = width !== 'narrow' && settings?.mode === 'both';
+  const orientation = width === 'narrow' ? 'vertical' : (settings?.orientation ?? 'horizontal');
+  const both = settings?.mode === 'both';
 
   const swap = useCallback(() => {
     const current = viewerSettingsStore.getSnapshot();
     const next = swappedOrder(current.order);
     viewerSettingsStore.update({ order: next });
-    setAnnouncement(layoutAnnouncement(current.orientation, next));
-  }, []);
+    setAnnouncement(
+      layoutAnnouncement(width === 'narrow' ? 'vertical' : current.orientation, next),
+    );
+  }, [width]);
 
   // A swap started from a pane handle keeps focus on that handle after its pane moved.
   useEffect(() => {
@@ -264,14 +396,14 @@ export function DocumentViewerLayout({
   const [firstPane, secondPane] = paneOrder(order);
   const visible: 'both' | 'first' | 'second' = both
     ? 'both'
-    : width === 'narrow'
-      ? internal.narrowPane === firstPane
-        ? 'first'
-        : 'second'
-      : settings.mode === firstPane
-        ? 'first'
-        : 'second';
-  const ratio = internal.liveRatio ?? firstPaneRatio(order, settings.pdfRatio);
+    : settings.mode === firstPane
+      ? 'first'
+      : 'second';
+  const ratio =
+    internal.liveRatio ??
+    (width === 'narrow'
+      ? firstPaneRatio(order, internal.mobileRatio)
+      : firstPaneRatio(order, settings.pdfRatio));
 
   /** The pointer is over the other pane (or in the gap past the separator towards it). */
   const overOther = (pane: PaneId, x: number, y: number): boolean => {
@@ -410,83 +542,98 @@ export function DocumentViewerLayout({
   );
 
   return (
-    <div className={styles.viewer} data-width={width}>
-      <div role="group" aria-label="보기 설정" className={styles.bar}>
-        {width === 'narrow' ? (
-          <>
-            <div role="group" aria-label="보기 선택" className={styles.segmented}>
-              {(['pdf', 'text'] as const).map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`${styles.segment} qz-focus-ring`}
-                  aria-pressed={internal.narrowPane === id}
-                  onClick={() => internal.setNarrowPane(id)}
-                >
+    <div
+      ref={viewerRef}
+      className={styles.viewer}
+      data-width={width}
+      data-chrome-pinned={preventAutoHide || alertVisible || undefined}
+    >
+      <button
+        ref={showToolsRef}
+        type="button"
+        className="qz-visually-hidden"
+        onFocus={showChrome}
+        onClick={showChrome}
+      >
+        보기 도구 표시
+      </button>
+      {/* Activity tracking does not make the chrome itself an interactive control. */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+      <div
+        ref={chromeRef}
+        className={styles.chrome}
+        data-hidden={
+          !(chromeVisible || preventAutoHide || alertVisible || chromeFocused) || undefined
+        }
+        onPointerDown={showChrome}
+        onPointerMove={showChrome}
+        onKeyDown={showChrome}
+        onFocus={(event) => {
+          setChromeFocused(true);
+          showChrome();
+          event.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setChromeFocused(false);
+        }}
+      >
+        {chrome}
+        <div role="group" aria-label="보기 설정" className={styles.bar}>
+          <button
+            ref={toggleRef}
+            type="button"
+            className={`${styles.barButton} qz-focus-ring`}
+            aria-expanded={outlineOpen}
+            aria-label={outlineOpen ? '목차 접기' : '목차 펼치기'}
+            aria-controls={panelId}
+            onClick={() => internal.setOutlineOpen(!outlineOpen)}
+          >
+            목차
+          </button>
+          <div role="group" aria-label="보기 선택" className={styles.segmented}>
+            {(['pdf', 'text'] as const).map((id) => {
+              const checked = settings.mode === 'both' || settings.mode === id;
+              return (
+                <label key={id} className={styles.segment}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      if (checked && settings.mode !== 'both') {
+                        setAnnouncement('하나 이상 선택하세요');
+                        return;
+                      }
+                      viewerSettingsStore.update({
+                        mode: checked ? (id === 'pdf' ? 'text' : 'pdf') : 'both',
+                      });
+                    }}
+                  />{' '}
                   {PANE_TITLE[id]}
-                </button>
-              ))}
-            </div>
-            <button
-              ref={toggleRef}
-              type="button"
-              className={`${styles.barButton} qz-focus-ring`}
-              aria-expanded={outlineOpen}
-              aria-controls={panelId}
-              onClick={() => internal.setOutlineOpen(!outlineOpen)}
-            >
-              목차
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              ref={toggleRef}
-              type="button"
-              className={`${styles.barButton} qz-focus-ring`}
-              aria-expanded={outlineOpen}
-              aria-controls={panelId}
-              aria-label={outlineOpen ? '목차 접기' : '목차 펼치기'}
-              onClick={() => internal.setOutlineOpen(!outlineOpen)}
-            >
-              <span aria-hidden="true" className={styles.outlineIcon} data-open={outlineOpen} />
-              목차
-            </button>
-            <SegmentedRadioGroup
-              label="보기 방식"
-              options={MODE_OPTIONS}
-              value={settings.mode}
-              onChange={(mode) => viewerSettingsStore.update({ mode })}
-            />
-            {both ? (
-              <>
-                <SegmentedRadioGroup
-                  label="분할 방향"
-                  options={ORIENTATION_OPTIONS}
-                  value={orientation}
-                  onChange={(next) => viewerSettingsStore.update({ orientation: next })}
-                />
-                <button
-                  type="button"
-                  className={`${styles.barButton} qz-focus-ring`}
-                  aria-label="원본과 변환본 위치 바꾸기"
-                  onClick={swap}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={styles.swapIcon}
-                    data-orientation={orientation}
-                  >
-                    ⇄
-                  </span>
-                  위치 바꾸기
-                </button>
-              </>
-            ) : null}
-          </>
-        )}
+                </label>
+              );
+            })}
+          </div>
+          {both && width !== 'narrow' ? (
+            <>
+              <SegmentedRadioGroup
+                label="분할 방향"
+                options={ORIENTATION_OPTIONS}
+                value={orientation}
+                onChange={(next) => viewerSettingsStore.update({ orientation: next })}
+              />
+              <button
+                type="button"
+                className={`${styles.barButton} qz-focus-ring`}
+                aria-label="원본과 변환본 위치 바꾸기"
+                onClick={swap}
+              >
+                위치 바꾸기
+              </button>
+            </>
+          ) : null}
+        </div>
+        <div ref={setToolbarHost} hidden={!viewer.pdfVisible} />
       </div>
-
       <div
         ref={setHost}
         className={styles.area}
@@ -494,22 +641,25 @@ export function DocumentViewerLayout({
         // effect), so the panes never keep the inset for a frame after the panel folded.
         data-qz-dock-inset={width === 'desktop' && outlineOpen ? 'start' : undefined}
       >
-        <SplitView
-          className={styles.split}
-          orientation={orientation}
-          ratio={ratio}
-          minSize={SPLIT_MIN_SIZE}
-          separatorLabel="원본과 변환본 크기 조절"
-          valueText={(first) => splitValueText(order, first)}
-          visible={visible}
-          onRatioChange={internal.setLiveRatio}
-          onRatioCommit={(first) => {
-            internal.setLiveRatio(null);
-            viewerSettingsStore.update({ pdfRatio: pdfRatioFromFirst(order, first) });
-          }}
-        >
-          {[firstPaneNode, secondPaneNode]}
-        </SplitView>
+        <ViewerToolbarContext.Provider value={toolbarHost}>
+          <SplitView
+            className={styles.split}
+            orientation={orientation}
+            ratio={ratio}
+            minSize={width === 'narrow' ? { horizontal: 0, vertical: 112 } : SPLIT_MIN_SIZE}
+            separatorLabel="원본과 변환본 크기 조절"
+            valueText={(first) => splitValueText(order, first)}
+            visible={visible}
+            onRatioChange={internal.setLiveRatio}
+            onRatioCommit={(first) => {
+              internal.setLiveRatio(null);
+              if (width === 'narrow') internal.setMobileRatio(pdfRatioFromFirst(order, first));
+              else viewerSettingsStore.update({ pdfRatio: pdfRatioFromFirst(order, first) });
+            }}
+          >
+            {[firstPaneNode, secondPaneNode]}
+          </SplitView>
+        </ViewerToolbarContext.Provider>
         {outlinePanel}
       </div>
 

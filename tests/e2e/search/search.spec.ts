@@ -224,6 +224,7 @@ test(
     );
     await expect(editorUi.currentPage(page)).toHaveValue(String(CHLORINE_PAGE));
     await expect(editorUi.highlight(page)).toBeVisible();
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expect(editorUi.currentBlock(page)).toContainText(CHLORINE_EN.text.slice(0, 40));
   },
 );

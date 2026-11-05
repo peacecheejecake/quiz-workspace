@@ -382,7 +382,7 @@ export const editorUi = {
   outlineItem: (page: Page, title: string) =>
     editorUi.outline(page).getByRole('treeitem', { name: title }),
   viewer: (page: Page) => page.getByRole('region', { name: /pdf/i }),
-  currentPage: (page: Page) => editorUi.viewer(page).getByLabel(/현재 페이지|current page/i),
+  currentPage: (page: Page) => page.getByLabel(/현재 페이지|current page/i),
   highlight: (page: Page) =>
     editorUi.viewer(page).getByLabel(/원문 위치|출처 위치|source (location|highlight)/i),
   textPanel: (page: Page) => page.getByRole('region', { name: /원문|텍스트|canonical|text/i }),

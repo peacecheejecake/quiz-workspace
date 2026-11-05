@@ -257,9 +257,10 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'search-excerpt');
 
-    // DOCVIEW-01 default layout (함께 보기 · 좌우; docked outline on desktop, collapsed on iPad).
+    // DOCVIEW-01 with both panes (docked outline on desktop, collapsed on iPad).
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
     await expect(viewerUi.settingsBar(page)).toBeVisible();
+    await viewerUi.mode(page, 'text').check();
     await expect(editorUi.textPanel(page)).toBeVisible();
     await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
     await expectFitsViewport(page);
@@ -360,6 +361,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
     await expect(viewerUi.settingsBar(page)).toBeVisible();
+    await viewerUi.mode(page, 'text').check();
     const pdfReady = async () => {
       await expect(editorUi.textPanel(page)).toBeVisible();
       await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
@@ -367,7 +369,7 @@ test(
       await page.mouse.move(0, 0);
     };
 
-    // Default layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
+    // Selected layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
     // on desktop; on the iPad (tablet width) it starts collapsed and opens as an opaque overlay.
     const toggle = viewerUi.outlineToggle(page);
     if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();

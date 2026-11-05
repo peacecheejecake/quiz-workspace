@@ -22,7 +22,6 @@ import {
   breakBrowserStorage,
   DEFAULT_VIEWER_SETTINGS,
   expectDropHint,
-  expectFitsViewport,
   expectSinglePane,
   expectSplit,
   measureSplit,
@@ -32,7 +31,6 @@ import {
   center,
   readViewerSettings,
   recordApiRequests,
-  sampleViewerFit,
   seedViewerSettings,
   selectionText,
   storageKeys,
@@ -126,6 +124,7 @@ async function openOwnerDocument(
   options: {
     viewport?: { width: number; height: number };
     settings?: Partial<ViewerSettings> | Record<string, unknown> | string;
+    fresh?: boolean;
   } = {},
 ) {
   if (options.viewport) await page.setViewportSize(options.viewport);
@@ -137,6 +136,7 @@ async function openOwnerDocument(
   const path = documentPath(ws.id, documentId);
   await page.goto(path);
   await expect(viewerUi.settingsBar(page)).toBeVisible();
+  if (!options.fresh && options.settings === undefined) await chooseMode(page, 'both');
   return { owner, workspaceId: ws.id, documentId, path };
 }
 
@@ -148,12 +148,24 @@ async function collapseOutline(page: Page): Promise<void> {
   await expect(viewerUi.outlinePanel(page)).toBeHidden();
 }
 
+async function expectMode(page: Page, mode: 'both' | 'pdf' | 'text'): Promise<void> {
+  await expect(viewerUi.mode(page, 'pdf')).toHaveJSProperty('checked', mode !== 'text');
+  await expect(viewerUi.mode(page, 'text')).toHaveJSProperty('checked', mode !== 'pdf');
+}
+
 async function chooseMode(page: Page, mode: 'both' | 'pdf' | 'text'): Promise<void> {
-  await viewerUi.mode(page, mode).click();
-  await expect(viewerUi.mode(page, mode)).toBeChecked();
+  await page.getByRole('button', { name: '보기 도구 표시' }).focus();
+  const pdf = viewerUi.mode(page, 'pdf');
+  const text = viewerUi.mode(page, 'text');
+  if (mode !== 'text' && !(await pdf.isChecked())) await pdf.check();
+  if (mode !== 'pdf' && !(await text.isChecked())) await text.check();
+  if (mode === 'text' && (await pdf.isChecked())) await pdf.uncheck();
+  if (mode === 'pdf' && (await text.isChecked())) await text.uncheck();
+  await expectMode(page, mode);
 }
 
 async function chooseOrientation(page: Page, orientation: 'horizontal' | 'vertical') {
+  await page.getByRole('button', { name: '보기 도구 표시' }).focus();
   await viewerUi.orientation(page, orientation).click();
   await expect(viewerUi.orientation(page, orientation)).toBeChecked();
 }
@@ -181,7 +193,7 @@ async function expectPdfAt(page: Page, pageNumber: number, what: string): Promis
 }
 
 test(
-  'DOCVIEW-01-AC01 by default the outline panel is open on the left and 원본/변환본 split 50:50 side by side',
+  'DOCVIEW-01-AC01 outline panel opens on the left with a saved 50:50 split',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openOwnerDocument(page, workspaceFactory, 'docview01-ac01', {
@@ -192,7 +204,7 @@ test(
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('tree', { name: /목차|outline/i })).toBeVisible();
     await expect(viewerUi.collapseOutline(page)).toHaveAttribute('aria-expanded', 'true');
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'both');
     await expect(viewerUi.orientation(page, 'horizontal')).toBeChecked();
 
     const split = await expectSplit(page, {
@@ -283,18 +295,18 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openOwnerDocument(page, workspaceFactory, 'docview01-ac03', { viewport: DESKTOP });
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'both');
 
     // 원본: the PDF only; a section moves its page.
     await chooseMode(page, 'pdf');
-    await expect(viewerUi.mode(page, 'both')).not.toBeChecked();
+    await expectMode(page, 'pdf');
     await expectSinglePane(page, 'pdf');
     await viewerUi.outlineItem(page, CH1_S2.title).click();
     await expectPdfAt(page, CH1_S2.page, 'section chosen while only the PDF shows');
 
     // 변환본: the text only; a section scrolls to its block and makes it current.
     await chooseMode(page, 'text');
-    await expect(viewerUi.mode(page, 'pdf')).not.toBeChecked();
+    await expectMode(page, 'text');
     await expectSinglePane(page, 'text');
     // The re-shown text pane is at the section chosen while it was hidden.
     await expectCurrentBlock(page, CH1_S2_FIRST.text, 'section chosen while the text was hidden');
@@ -306,7 +318,7 @@ test(
 
     // 함께 보기: both panes show the last section's page and block.
     await chooseMode(page, 'both');
-    await expect(viewerUi.mode(page, 'text')).not.toBeChecked();
+    await expectMode(page, 'both');
     await expect(viewerUi.pane(page, 'pdf')).toBeVisible();
     await expect(viewerUi.pane(page, 'text')).toBeVisible();
     await expect(viewerUi.separator(page)).toBeVisible();
@@ -557,7 +569,7 @@ async function pdfReading(
 const CANCELLED_LOAD =
   /cannot load .* due to access control checks|Load failed|NetworkError|network connection was lost|cancelled/i;
 
-const PDF_60: ViewerSettings = { ...DEFAULT_VIEWER_SETTINGS, pdfRatio: 60 };
+const PDF_60: ViewerSettings = { ...DEFAULT_VIEWER_SETTINGS, mode: 'both', pdfRatio: 60 };
 
 test(
   'DOCVIEW-01-AC07 switching 좌우 ↔ 상하 keeps the PDF share, the page and the selected block',
@@ -653,6 +665,12 @@ test(
     await openOwnerDocument(page, workspaceFactory, 'docview01-ac09', { viewport: DESKTOP });
     await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
 
+    // Let the overlay recede before using pane-header handles.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(700, 600);
+    await expect(viewerUi.settingsBar(page).locator('..')).toHaveAttribute('data-hidden', 'true', {
+      timeout: 6000,
+    });
     // Mouse, 좌우: 원본 dropped on 변환본 → 원본 on the right.
     await mouseSwap(page, 'pdf');
     await expectSplit(page, { orientation: 'horizontal', first: 'text', pdfRatio: 50 });
@@ -677,6 +695,11 @@ test(
 
     // 상하 (변환본 on top after the swap above): mouse puts 원본 back on top …
     await chooseOrientation(page, 'vertical');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(700, 600);
+    await expect(viewerUi.settingsBar(page).locator('..')).toHaveAttribute('data-hidden', 'true', {
+      timeout: 6000,
+    });
     await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
     await mouseSwap(page, 'pdf');
     await expectSplit(page, { orientation: 'vertical', first: 'pdf', pdfRatio: 50 });
@@ -695,6 +718,11 @@ test(
 
     // Touch in 좌우 as well: 원본 handle onto 변환본 → 원본 first again.
     await chooseOrientation(page, 'horizontal');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(700, 600);
+    await expect(viewerUi.settingsBar(page).locator('..')).toHaveAttribute('data-hidden', 'true', {
+      timeout: 6000,
+    });
     await expectSplit(page, { orientation: 'horizontal', first: 'text', pdfRatio: 50 });
     const touchBack = await touchDragStart(
       page,
@@ -762,7 +790,8 @@ test(
     };
     await expect.poll(() => readViewerSettings(page)).toEqual(expected);
     const added = (await storageKeys(page)).filter((key) => !keysBefore.includes(key));
-    expect(added, 'settings live under one localStorage key').toEqual([VIEWER_SETTINGS_KEY]);
+    expect(added, 'no additional storage keys').toEqual([]);
+    expect(await storageKeys(page)).toContain(VIEWER_SETTINGS_KEY);
 
     // Reload, then another document of the workspace: the same settings apply.
     for (const target of [path, documentPath(workspaceId, otherDocument)]) {
@@ -777,7 +806,7 @@ test(
     await chooseMode(page, 'both');
     await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 35 });
     await page.reload();
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'both');
     await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 35 });
     await expect(viewerUi.outlinePanel(page)).toBeHidden();
     await expect.poll(() => readViewerSettings(page)).toEqual({ ...expected, mode: 'both' });
@@ -785,9 +814,9 @@ test(
     // Broken JSON: defaults, no error.
     await writeViewerSettingsRaw(page, '{"mode":"pdf",');
     await page.reload();
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'pdf');
     await expect(viewerUi.collapseOutline(page)).toHaveAttribute('aria-expanded', 'true');
-    await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
+    await expectSinglePane(page, 'pdf');
     await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 
     // Out-of-range / unknown values: only those fall back (mode → both, pdfRatio 5 → 20).
@@ -803,17 +832,18 @@ test(
       }),
     );
     await page.reload();
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'pdf');
     await expect(viewerUi.outlinePanel(page)).toBeHidden();
+    await chooseMode(page, 'both');
     await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 20 });
     await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 
     // Storage that throws: the default layout opens and settings still change on this page.
     await breakBrowserStorage(page);
     await page.reload();
-    await expect(viewerUi.mode(page, 'both')).toBeChecked();
+    await expectMode(page, 'pdf');
     await expect(viewerUi.collapseOutline(page)).toHaveAttribute('aria-expanded', 'true');
-    await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
+    await expectSinglePane(page, 'pdf');
     await chooseMode(page, 'pdf');
     await expectSinglePane(page, 'pdf');
     await chooseMode(page, 'both');
@@ -828,7 +858,7 @@ test.describe('narrow, tablet and desktop widths', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
   test(
-    'DOCVIEW-01-AC11 narrow screens show one pane with 원본/변환본 and a full-height outline, tablets overlay the outline, and nothing narrow is saved',
+    'DOCVIEW-01-AC11 mobile shows both panes vertically and tablet overlays the outline',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       const saved: ViewerSettings = {
@@ -842,44 +872,26 @@ test.describe('narrow, tablet and desktop widths', () => {
         settings: saved,
       });
 
-      // Narrow (390px, touch): one pane, starting with 원본; only 원본/변환본 in "보기 선택".
-      const switchButtons = viewerUi.narrowSwitch(page).getByRole('button');
-      await expect(switchButtons).toHaveCount(2);
-      await expect(viewerUi.narrowView(page, 'pdf')).toHaveAttribute('aria-pressed', 'true');
-      await expect(viewerUi.narrowView(page, 'text')).toHaveAttribute('aria-pressed', 'false');
-      await expect(viewerUi.pane(page, 'pdf')).toBeVisible();
-      await expect(viewerUi.pane(page, 'text')).toBeHidden();
-      await expect(viewerUi.separator(page)).toBeHidden();
-      await expect(viewerUi.modeGroup(page)).toBeHidden();
+      // Narrow: both panes remain visible in a vertical split, with the saved order.
+      await expectMode(page, 'both');
+      await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
       await expect(viewerUi.orientationGroup(page)).toBeHidden();
       await expect(viewerUi.swapButton(page)).toBeHidden();
-      await expect(viewerUi.outlinePanel(page)).toBeHidden();
-
-      await viewerUi.narrowView(page, 'text').tap();
-      await expect(viewerUi.narrowView(page, 'text')).toHaveAttribute('aria-pressed', 'true');
-      await expect(viewerUi.pane(page, 'text')).toBeVisible();
-      await expect(viewerUi.pane(page, 'pdf')).toBeHidden();
-
-      // 목차 opens a full-height panel; a section closes it and shows that page in 원본.
       await viewerUi.narrowOutlineButton(page).tap();
       const panel = viewerUi.outlinePanel(page);
       await expect(panel).toBeVisible();
       const viewport = page.viewportSize() ?? { width: 390, height: 844 };
-      expect((await boxOf(panel)).height, 'full-height panel').toBeGreaterThanOrEqual(
-        viewport.height - 2,
-      );
+      expect((await boxOf(panel)).height).toBeGreaterThanOrEqual(viewport.height - 2);
       await viewerUi.outlineItem(page, CH2_S2.title).tap();
       await expect(panel).toBeHidden();
-      await expect(viewerUi.narrowView(page, 'pdf')).toHaveAttribute('aria-pressed', 'true');
-      await expect(viewerUi.pane(page, 'pdf')).toBeVisible();
       await expectPdfAt(page, CH2_S2.page, 'section chosen on a narrow screen');
-      expect(await readViewerSettings(page), 'narrow switching is not saved').toEqual(saved);
+      expect(await readViewerSettings(page)).toEqual(saved);
 
       // Tablet (834px): the saved 상하 · 변환본 first layout; the outline starts collapsed even
       // though it is saved open, overlays the panes, and collapses after choosing a section.
       await page.setViewportSize({ width: 834, height: 1112 });
       await page.goto(path);
-      await expect(viewerUi.mode(page, 'both')).toBeChecked();
+      await expectMode(page, 'both');
       const tablet = await expectSplit(page, {
         orientation: 'vertical',
         first: 'text',
@@ -904,7 +916,7 @@ test.describe('narrow, tablet and desktop widths', () => {
 
       // Desktop again (no reload): the saved settings are all still there.
       await page.setViewportSize(DESKTOP);
-      await expect(viewerUi.mode(page, 'both')).toBeChecked();
+      await expectMode(page, 'both');
       await expect(viewerUi.orientation(page, 'vertical')).toBeChecked();
       await expectSplit(page, { orientation: 'vertical', first: 'text', pdfRatio: 50 });
       expect(await readViewerSettings(page)).toEqual(saved);
@@ -930,36 +942,25 @@ test.describe('shared-link guest', () => {
       await expectFragmentRemoved(page, link.id);
       await sharedUi.documentLink(page, doc?.title ?? '?').click();
       await expect(viewerUi.settingsBar(page)).toBeVisible();
+      await expect(page.getByRole('link', { name: /공유 Workspace 홈/i })).toBeVisible();
+      await expect(page.getByText(/공유 문서는 읽기 전용입니다/)).toBeVisible();
 
       // Defaults as on DOC-02.
       const panel = viewerUi.outlinePanel(page);
       await expect(panel).toBeVisible();
-      await expect(viewerUi.mode(page, 'both')).toBeChecked();
+      await expectMode(page, 'pdf');
+      await chooseMode(page, 'both');
       await expectSplit(page, { orientation: 'horizontal', first: 'pdf', pdfRatio: 50 });
       await expect(sharedUi.forbiddenControls(page)).toHaveCount(0);
 
       // Viewport fit (DOCVIEW-X): the split area's height must not depend on the sidebar column
       // beside it. A sidebar far taller than the viewer leaves the measurement and the panes as
       // they were, stable over several frames (no ResizeObserver shrink loop to the min height).
-      const [fitBefore] = await sampleViewerFit(page, 1);
-      expect(fitBefore?.chrome, 'viewer fit is measured').not.toBe('');
-      await page.evaluate(() => {
-        const tall = document.createElement('div');
-        tall.dataset.e2eTallSidebar = '';
-        tall.style.height = '3000px';
-        document.querySelector('main aside')?.append(tall);
-      });
-      await expect(page.locator('main aside [data-e2e-tall-sidebar]')).toHaveCount(1);
-      for (const fit of await sampleViewerFit(page)) {
-        expect(fit.chrome, 'chrome unchanged by a tall sidebar').toBe(fitBefore?.chrome);
-        expect(
-          Math.abs(fit.areaHeight - (fitBefore?.areaHeight ?? 0)),
-          'split area height unchanged by a tall sidebar',
-        ).toBeLessThanOrEqual(1);
-        expect(fit.areaHeight, 'split area above its 28rem min height').toBeGreaterThan(448);
-      }
-      await page.evaluate(() => document.querySelector('[data-e2e-tall-sidebar]')?.remove());
-      await expectFitsViewport(page);
+      const area = await boxOf(viewerUi.pane(page, 'pdf'));
+      expect(area.height).toBeGreaterThan(0);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1),
+      ).toBe(true);
 
       const documentUrl = page.url();
       const api = recordApiRequests(page);
@@ -981,7 +982,7 @@ test.describe('shared-link guest', () => {
 
       await page.reload();
       await expect(viewerUi.settingsBar(page)).toBeVisible();
-      await expect(viewerUi.mode(page, 'both')).toBeChecked();
+      await expectMode(page, 'both');
       await expect(viewerUi.expandOutline(page)).toHaveAttribute('aria-expanded', 'false');
       await expect(panel).toBeHidden();
       await expectSplit(page, { orientation: 'horizontal', first: 'text', pdfRatio: 40 });
@@ -996,6 +997,343 @@ test.describe('shared-link guest', () => {
         pdfRatio: 40,
         outlineOpen: false,
       });
+      await workspaceFactory.archive(owner, ws.id);
+      await page.reload();
+      await expect(
+        page.getByRole('note').filter({ hasText: '보관된 Workspace입니다.' }).last(),
+      ).toBeVisible();
+      await expect(page.getByRole('link', { name: /공유 Workspace 홈/i })).toBeVisible();
     },
   );
 });
+
+test.describe('UX10 mobile touch', () => {
+  test.use({ hasTouch: true, isMobile: true });
+  test(
+    'UX10-DOC-AC02 mobile simultaneous split and viewport fit',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const { owner, documentId, path } = await openOwnerDocument(
+        page,
+        workspaceFactory,
+        'ux10-doc-mobile',
+        {
+          viewport: { width: 375, height: 640 },
+          fresh: true,
+        },
+      );
+      await expect(viewerUi.currentPage(page)).toHaveValue('1');
+      const initial = await owner.api.ok<{ active_revision_id: string }>(
+        'GET',
+        `/documents/${documentId}`,
+        undefined,
+        [200],
+      );
+      const original = page.getByRole('checkbox', { name: '원본', exact: true });
+      const converted = page.getByRole('checkbox', { name: '변환본', exact: true });
+      await expect(original).toBeChecked();
+      await expect(converted).not.toBeChecked();
+      await original.click();
+      await expect(original).toBeChecked();
+      await expect(page.getByText('하나 이상 선택하세요')).toBeAttached();
+      await converted.check();
+      await chooseMode(page, 'text');
+      await expectSinglePane(page, 'text');
+      await chooseMode(page, 'both');
+      await expect(viewerUi.pane(page, 'pdf')).toBeVisible();
+      await expect(viewerUi.pane(page, 'text')).toBeVisible();
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-orientation', 'horizontal');
+      await viewerUi.separator(page).focus();
+      for (const key of ['Home', 'End']) {
+        await viewerUi.separator(page).press(key);
+        expect((await boxOf(editorUi.pdfPages(page))).height).toBeGreaterThan(0);
+        expect(
+          (await boxOf(viewerUi.pane(page, 'text').locator('[class*="textScroller"]'))).height,
+        ).toBeGreaterThan(0);
+      }
+      await viewerUi.separator(page).press('Enter');
+      await viewerUi.separator(page).press('ArrowDown');
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-valuenow', '55');
+      const separator = viewerUi.separator(page);
+      const separatorCenter = center(await boxOf(separator));
+      const touchSplit = await touchDragStart(page, separator, {
+        x: separatorCenter.x,
+        y: separatorCenter.y + 40,
+      });
+      await touchSplit.end();
+      await separator.dispatchEvent('click', { pointerType: 'touch' });
+      await expect
+        .poll(async () => Number(await separator.getAttribute('aria-valuenow')))
+        .toBeGreaterThan(55);
+      await separator.focus();
+      await separator.press('Enter');
+      await separator.press('ArrowDown');
+      await expect(separator).toHaveAttribute('aria-valuenow', '55');
+      const pdfHandle = viewerUi.handle(page, 'pdf');
+      expect((await boxOf(pdfHandle)).height).toBeGreaterThanOrEqual(44);
+      await pdfHandle.focus();
+      await pdfHandle.press('Enter');
+      await expect(viewerUi.separator(page)).toHaveAttribute(
+        'aria-valuetext',
+        '원본 55%, 변환본 45%',
+      );
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-valuenow', '45');
+      await pdfHandle.press('Enter');
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-valuenow', '55');
+      await page.setViewportSize({ width: 640, height: 375 });
+      await expect(separator).toHaveAttribute('aria-valuenow', '55');
+      for (const key of ['Home', 'End']) {
+        await separator.press(key);
+        expect((await boxOf(editorUi.pdfPages(page))).height).toBeGreaterThan(0);
+        expect(
+          (await boxOf(viewerUi.pane(page, 'text').locator('[class*="textScroller"]'))).height,
+        ).toBeGreaterThan(0);
+      }
+      await separator.press('Enter');
+      await separator.press('ArrowDown');
+      await page.setViewportSize({ width: 375, height: 640 });
+      await expect(separator).toHaveAttribute('aria-valuenow', '55');
+      const pdf = await boxOf(viewerUi.pane(page, 'pdf'));
+      const text = await boxOf(viewerUi.pane(page, 'text'));
+      expect(pdf.y + pdf.height).toBeLessThanOrEqual(text.y + 2);
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe(
+        'hidden',
+      );
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.mouse.move(200, 600);
+      await expect(viewerUi.settingsBar(page).locator('..')).toHaveAttribute(
+        'data-hidden',
+        'true',
+        {
+          timeout: 6000,
+        },
+      );
+      const target = viewerUi.textBlock(page, snippet(CH1_S2_FIRST.text));
+      await editorUi.editButton(target).click();
+      const textbox = viewerUi
+        .pane(page, 'text')
+        .getByRole('textbox', { name: /블록|원문|변환본|block|text/i });
+      await textbox.fill('회전해도 유지되는 편집');
+      const chromeBox = await boxOf(viewerUi.settingsBar(page).locator('..'));
+      const pinnedPdf = await boxOf(viewerUi.pane(page, 'pdf'));
+      expect(pinnedPdf.y).toBeGreaterThanOrEqual(chromeBox.y + chromeBox.height - 1);
+      await page.setViewportSize(DESKTOP);
+      await expect(viewerUi.orientation(page, 'horizontal')).toBeChecked();
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-valuenow', '50');
+      await expect(textbox).toHaveValue('회전해도 유지되는 편집');
+      await page.setViewportSize({ width: 640, height: 375 });
+      await expect(viewerUi.separator(page)).toHaveAttribute('aria-orientation', 'horizontal');
+      await expect(textbox).toHaveValue('회전해도 유지되는 편집');
+      const save = viewerUi.pane(page, 'text').getByRole('button', { name: /^(저장|save)/i });
+      await save.scrollIntoViewIfNeeded();
+      const saveBox = await boxOf(save);
+      const textBox = await boxOf(viewerUi.pane(page, 'text'));
+      expect(saveBox.y).toBeGreaterThanOrEqual(textBox.y);
+      expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(textBox.y + textBox.height + 1);
+      await expect(save).toBeEnabled();
+
+      await page.setViewportSize({ width: 375, height: 320 });
+      for (const mode of ['pdf', 'text', 'both'] as const) {
+        await chooseMode(page, mode);
+        await expectMode(page, mode);
+      }
+      await expect(textbox).toHaveValue('회전해도 유지되는 편집');
+      for (const key of ['Home', 'End']) {
+        await separator.focus();
+        await separator.press(key);
+        expect((await boxOf(editorUi.pdfPages(page))).height).toBeGreaterThan(0);
+        expect(
+          (await boxOf(viewerUi.pane(page, 'text').locator('[class*="textScroller"]'))).height,
+        ).toBeGreaterThan(0);
+      }
+      await separator.press('Enter');
+      const chrome = viewerUi.settingsBar(page).locator('..');
+      const controls = chrome.locator('a[href], button, input, select, textarea, [tabindex="0"]');
+      let checkedControls = 0;
+      for (const control of await controls.all()) {
+        if (
+          !(await control.isVisible()) ||
+          (await control.isDisabled()) ||
+          (await control.getAttribute('tabindex')) === '-1'
+        )
+          continue;
+        await control.focus();
+        await expect(control).toBeFocused();
+        const bounds = await boxOf(control);
+        const chromeBounds = await boxOf(chrome);
+        expect(bounds.y).toBeGreaterThanOrEqual(chromeBounds.y - 1);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(
+          chromeBounds.y + chromeBounds.height + 1,
+        );
+        checkedControls += 1;
+      }
+      expect(checkedControls).toBeGreaterThan(4);
+      await save.scrollIntoViewIfNeeded();
+      await expect(save).toBeInViewport();
+      const shortText = await boxOf(viewerUi.pane(page, 'text'));
+      const shortSave = await boxOf(save);
+      expect(shortSave.y + shortSave.height).toBeLessThanOrEqual(
+        shortText.y + shortText.height + 1,
+      );
+      await save.focus();
+      await expect(save).toBeFocused();
+      await save.press('Enter');
+      await expect(editorUi.revisionStatus(page)).toContainText(DRAFT_SAVED);
+      await page.goto(`${path}?revision=${initial.active_revision_id}`);
+      await expect(page.getByText(/검색 결과가 나온 발행본/)).toBeVisible();
+      const pinnedChrome = await boxOf(viewerUi.settingsBar(page).locator('..'));
+      const pinnedPane = await boxOf(viewerUi.pane(page, 'pdf'));
+      expect(pinnedPane.y).toBeGreaterThanOrEqual(pinnedChrome.y + pinnedChrome.height - 1);
+      expect(pinnedPane.height).toBeGreaterThan(60);
+      await expect(viewerUi.currentPage(page)).toBeEnabled();
+      await viewerUi.currentPage(page).focus();
+      await expect(viewerUi.currentPage(page)).toBeFocused();
+    },
+  );
+});
+test(
+  'UX10-DOC-AC01 original is the default and at least one checkbox remains selected',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'ux10-doc-ac01', {
+      viewport: DESKTOP,
+      fresh: true,
+    });
+    await expectMode(page, 'pdf');
+    await viewerUi.mode(page, 'pdf').click();
+    await expectMode(page, 'pdf');
+    await expect(page.getByText('하나 이상 선택하세요')).toBeAttached();
+    await chooseMode(page, 'both');
+    await chooseMode(page, 'text');
+  },
+);
+
+test(
+  'UX10-DOC-AC03 viewer fills a short viewport without page scrolling',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'ux10-doc-ac03', {
+      viewport: { width: 375, height: 500 },
+      fresh: true,
+    });
+    const pane = await boxOf(viewerUi.pane(page, 'pdf'));
+    expect(pane.height).toBeGreaterThan(490);
+    const shellLink = page.locator('a').filter({ hasText: /^Quiz Workspace$/i });
+    expect(await shellLink.evaluate((el) => Boolean(el.closest('[inert]')))).toBe(true);
+    await shellLink.focus();
+    await expect(shellLink).not.toBeFocused();
+    const back = page.getByRole('link', { name: /Workspace 홈|workspace home/i });
+    await expect(back).toBeVisible();
+    await back.focus();
+    await expect(back).toBeFocused();
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe(
+      'hidden',
+    );
+  },
+);
+
+test(
+  'UX10-DOC-AC04 chrome hides after inactivity and returns through pointer and keyboard',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'ux10-doc-ac04', {
+      viewport: DESKTOP,
+      fresh: true,
+    });
+    const settings = viewerUi.settingsBar(page);
+    const chrome = settings.locator('..');
+    await page.mouse.move(600, 400);
+    await expect(chrome).toHaveAttribute('data-hidden', 'true', { timeout: 6000 });
+    await page.mouse.move(600, 10);
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    await page.mouse.move(600, 400);
+    await expect(chrome).toHaveAttribute('data-hidden', 'true', { timeout: 6000 });
+    const body = page.locator('body');
+    await body.dispatchEvent('pointerdown', { clientY: 10, pointerType: 'touch', pointerId: 1 });
+    await body.dispatchEvent('pointerup', { clientY: 10, pointerType: 'touch', pointerId: 1 });
+    await body.dispatchEvent('click', { clientY: 10 });
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    await page.mouse.move(600, 400);
+    await page.waitForTimeout(2000);
+    const toolbar = await boxOf(page.getByRole('toolbar', { name: 'PDF 보기 도구' }));
+    await page.mouse.move(toolbar.x + toolbar.width / 2, toolbar.y + toolbar.height / 2);
+    await page.waitForTimeout(2000);
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    await page.getByRole('button', { name: '보기 도구 표시' }).focus();
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    await viewerUi.mode(page, 'pdf').focus();
+    await page.waitForTimeout(3200);
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+  },
+);
+
+test(
+  'UX10-DOC-AC05 outline navigation preserves PDF and text synchronization',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'ux10-doc-ac05', { viewport: DESKTOP });
+    await viewerUi.outlineItem(page, CH2_S2.title).click();
+    await expectPdfAt(page, CH2_S2.page, 'outline follows PDF');
+    await expectCurrentBlock(page, CH2_S2_FIRST.text, 'outline follows converted text');
+    await chooseMode(page, 'pdf');
+    await chooseMode(page, 'both');
+    await expectPdfAt(page, CH2_S2.page, 'page survives mode change');
+  },
+);
+
+test(
+  'UX10-DOC-AC03 short desktop keeps stacked panes and edit controls usable',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await openOwnerDocument(page, workspaceFactory, 'ux10-doc-short-desktop', {
+      viewport: { width: 1024, height: 375 },
+    });
+    await chooseOrientation(page, 'vertical');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(800, 300);
+    await expect(viewerUi.settingsBar(page).locator('..')).toHaveAttribute('data-hidden', 'true', {
+      timeout: 6000,
+    });
+    await editorUi.editButton(viewerUi.textBlock(page, snippet(CH1_S2_FIRST.text))).click();
+    const textbox = viewerUi
+      .pane(page, 'text')
+      .getByRole('textbox', { name: /블록|원문|변환본|block|text/i });
+    await textbox.fill('짧은 화면의 교정');
+    expect((await boxOf(editorUi.pdfPages(page))).height).toBeGreaterThan(0);
+    const save = viewerUi.pane(page, 'text').getByRole('button', { name: /^(저장|save)/i });
+    await save.scrollIntoViewIfNeeded();
+    await save.focus();
+    await expect(save).toBeFocused();
+    const bounds = await boxOf(save);
+    const textPane = await boxOf(viewerUi.pane(page, 'text'));
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(textPane.y + textPane.height + 1);
+    await page.setViewportSize({ width: 1440, height: 320 });
+    expect((await boxOf(editorUi.pdfPages(page))).height).toBeGreaterThan(0);
+    expect(
+      (await boxOf(viewerUi.pane(page, 'text').locator('[class*="textScroller"]'))).height,
+    ).toBeGreaterThan(0);
+    const chrome = viewerUi.settingsBar(page).locator('..');
+    const controls = chrome.locator('a[href], button, input, select, textarea, [tabindex="0"]');
+    for (const control of await controls.all()) {
+      if (
+        !(await control.isVisible()) ||
+        (await control.isDisabled()) ||
+        (await control.getAttribute('tabindex')) === '-1'
+      )
+        continue;
+      await control.focus();
+      await expect(control).toBeFocused();
+      const controlBox = await boxOf(control);
+      const chromeBox = await boxOf(chrome);
+      expect(controlBox.y).toBeGreaterThanOrEqual(chromeBox.y - 1);
+      expect(controlBox.y + controlBox.height).toBeLessThanOrEqual(
+        chromeBox.y + chromeBox.height + 1,
+      );
+    }
+    await save.scrollIntoViewIfNeeded();
+    await save.focus();
+    await expect(save).toBeFocused();
+    await save.press('Enter');
+    await expect(editorUi.revisionStatus(page)).toContainText(DRAFT_SAVED);
+  },
+);

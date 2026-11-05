@@ -264,6 +264,10 @@ export function SharedWorkspaceView({
               shareId={shareId}
               client={client}
               documentId={view.documentId}
+              archived={workspace.workspace.archived}
+              expiryLabel={
+                workspace.expires_at ? `링크 만료: ${formatExpiry(workspace.expires_at)}` : null
+              }
               summary={openDocument}
               page={view.page}
               blockId={view.blockId}

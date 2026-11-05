@@ -17,6 +17,7 @@ import { Button, IconButton } from '@quiz/ui';
 import {
   memo,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -24,6 +25,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import {
   attachedRange,
@@ -49,6 +51,7 @@ import {
   type PdfRenderTask,
 } from '@/lib/documents/pdfjs';
 import styles from './editor.module.css';
+import { ViewerToolbarContext } from './viewer-toolbar-context';
 
 /** Why the viewer changed the page: the reader scrolled, or used the toolbar. */
 export type PageChangeReason = 'scroll' | 'navigate';
@@ -174,6 +177,7 @@ export function PdfViewer({
   deferResize = false,
   className,
 }: PdfViewerProps) {
+  const toolbarHost = useContext(ViewerToolbarContext);
   const [attempt, setAttempt] = useState(0);
   // Result of the download/open for one attempt; any other attempt is still loading.
   const [loaded, setLoaded] = useState<{ attempt: number; state: LoadState } | null>(null);
@@ -612,68 +616,76 @@ export function PdfViewer({
     highlightRef.current = element;
   }, []);
 
+  const toolbar = (
+    <div className={styles.viewerToolbar} role="toolbar" aria-label="PDF 보기 도구">
+      <div className={styles.toolbarGroup}>
+        <IconButton
+          label="이전 페이지"
+          icon={<span aria-hidden="true">‹</span>}
+          onClick={() => goTo(page - 1)}
+          disabled={pageCount === null || page <= 1}
+        />
+        <label className={styles.pageField}>
+          <span className="qz-visually-hidden">현재 페이지</span>
+          <input
+            className={styles.pageInput}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={pageInput}
+            aria-describedby="pdf-page-count"
+            onChange={(event) => setPageDraft(event.target.value)}
+            onBlur={commitPageInput}
+            onKeyDown={onPageKey}
+            disabled={pageCount === null}
+          />
+        </label>
+        <span id="pdf-page-count" className={styles.pageCount}>
+          / {pageCount ?? '–'}쪽
+        </span>
+        <IconButton
+          label="다음 페이지"
+          icon={<span aria-hidden="true">›</span>}
+          onClick={() => goTo(page + 1)}
+          disabled={pageCount === null || page >= pageCount}
+        />
+      </div>
+      <div className={styles.toolbarGroup}>
+        <IconButton
+          label="축소"
+          icon={<span aria-hidden="true">−</span>}
+          onClick={() => setZoom(nextZoom(currentZoom, -1))}
+          disabled={load.status !== 'ready' || currentZoom <= MIN_ZOOM + 0.01}
+        />
+        <span className={styles.zoomValue} aria-label={`확대 비율 ${zoomPercent}`}>
+          {zoomPercent}
+        </span>
+        <IconButton
+          label="확대"
+          icon={<span aria-hidden="true">+</span>}
+          onClick={() => setZoom(nextZoom(currentZoom, 1))}
+          disabled={load.status !== 'ready' || currentZoom >= MAX_ZOOM - 0.01}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setZoom('fit')}
+          disabled={zoom === 'fit'}
+          aria-pressed={zoom === 'fit'}
+        >
+          폭 맞춤
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className={`${styles.viewer} ${className ?? ''}`}>
-      <div className={styles.viewerToolbar} role="toolbar" aria-label="PDF 보기 도구">
-        <div className={styles.toolbarGroup}>
-          <IconButton
-            label="이전 페이지"
-            icon={<span aria-hidden="true">‹</span>}
-            onClick={() => goTo(page - 1)}
-            disabled={pageCount === null || page <= 1}
-          />
-          <label className={styles.pageField}>
-            <span className="qz-visually-hidden">현재 페이지</span>
-            <input
-              className={styles.pageInput}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={pageInput}
-              aria-describedby="pdf-page-count"
-              onChange={(event) => setPageDraft(event.target.value)}
-              onBlur={commitPageInput}
-              onKeyDown={onPageKey}
-              disabled={pageCount === null}
-            />
-          </label>
-          <span id="pdf-page-count" className={styles.pageCount}>
-            / {pageCount ?? '–'}쪽
-          </span>
-          <IconButton
-            label="다음 페이지"
-            icon={<span aria-hidden="true">›</span>}
-            onClick={() => goTo(page + 1)}
-            disabled={pageCount === null || page >= pageCount}
-          />
-        </div>
-        <div className={styles.toolbarGroup}>
-          <IconButton
-            label="축소"
-            icon={<span aria-hidden="true">−</span>}
-            onClick={() => setZoom(nextZoom(currentZoom, -1))}
-            disabled={load.status !== 'ready' || currentZoom <= MIN_ZOOM + 0.01}
-          />
-          <span className={styles.zoomValue} aria-label={`확대 비율 ${zoomPercent}`}>
-            {zoomPercent}
-          </span>
-          <IconButton
-            label="확대"
-            icon={<span aria-hidden="true">+</span>}
-            onClick={() => setZoom(nextZoom(currentZoom, 1))}
-            disabled={load.status !== 'ready' || currentZoom >= MAX_ZOOM - 0.01}
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setZoom('fit')}
-            disabled={zoom === 'fit'}
-            aria-pressed={zoom === 'fit'}
-          >
-            폭 맞춤
-          </Button>
-        </div>
-      </div>
+      {toolbarHost === undefined
+        ? toolbar
+        : toolbarHost
+          ? createPortal(toolbar, toolbarHost)
+          : null}
 
       <div
         ref={scrollRef}

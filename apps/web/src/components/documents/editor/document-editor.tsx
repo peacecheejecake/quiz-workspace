@@ -663,85 +663,95 @@ export function DocumentEditor({
 
   return (
     <div className={styles.screen}>
-      <PageHeader
-        title={document.title}
-        back={<WorkspaceBackLink workspaceId={workspaceId} />}
-        breadcrumb={
-          <WorkspaceBreadcrumb
-            workspace={{ id: workspaceId, name: workspaceName }}
-            trail={[{ label: '문서 관리', href: documentsDialogPath }, { label: document.title }]}
-          />
-        }
-        description={document.filename !== document.title ? document.filename : undefined}
-        actions={
-          summaryLink || textExport ? (
-            <>
-              {summaryLink}
-              {textExport}
-            </>
-          ) : undefined
-        }
-      />
-
-      <PublishBar
-        statusText={statusText}
-        canEdit={editable && ready}
-        hasDraft={draft !== null}
-        publish={publish}
-        editing={editState.phase !== 'idle'}
-        revisions={revisions}
-        restoring={restoring}
-        onPublish={() => void onPublish()}
-        onRestore={onRestore}
-        onOpenHistory={() => void refreshRevisions()}
-      />
-
-      {pinned ? (
-        <div role="note" className={styles.note}>
-          <p>
-            {content?.revision && !content.revision.is_active
-              ? '검색 결과가 나온 이전 발행본을 보고 있습니다. 그 뒤에 새 버전이 발행되어 현재 원문과 다를 수 있습니다.'
-              : canEdit
-                ? '검색 결과가 나온 발행본을 보고 있습니다. 아직 발행하지 않은 초안의 내용과 다를 수 있습니다.'
-                : '검색 결과가 나온 발행본을 보고 있습니다.'}
-          </p>
-          <Link href={`${documentPath}${viewerSearch('', page, linkedBlockId)}`}>
-            {canEdit ? '최신 원문 보기·교정하기' : '최신 원문 보기'}
-          </Link>
-        </div>
-      ) : null}
-      {readOnlyReason ? (
-        <p role="note" className={styles.note}>
-          {readOnlyReason}
-        </p>
-      ) : null}
-      {notice ? (
-        <p role="alert" className={styles.noticeAlert}>
-          {notice}
-        </p>
-      ) : null}
-      {staleContent ? (
-        <div role="alert" className={styles.publishAlert}>
-          <p>
-            수정 내용은 초안에 저장되었지만 최신 원문을 다시 불러오지 못했습니다. 목차와 원문이
-            최신이 아닐 수 있습니다.
-          </p>
-          <Button size="sm" onClick={() => void refreshContent()}>
-            원문 다시 불러오기
-          </Button>
-        </div>
-      ) : null}
-      {!ready ? (
-        <p role="note" className={styles.note}>
-          {document.status === 'failed'
-            ? `문서 처리에 실패했습니다.${document.last_error ? ` (${document.last_error})` : ''} 문서 목록에서 다시 시도할 수 있습니다.`
-            : '문서를 처리하는 중입니다. 처리가 끝나면 목차와 원문 텍스트가 표시됩니다.'}{' '}
-          <Link href={documentsDialogPath}>문서 목록으로</Link>
-        </p>
-      ) : null}
-
       <DocumentViewerLayout
         viewer={viewer}
+        chrome={
+          <>
+            <PageHeader
+              title={document.title}
+              back={<WorkspaceBackLink workspaceId={workspaceId} />}
+              breadcrumb={
+                <WorkspaceBreadcrumb
+                  workspace={{ id: workspaceId, name: workspaceName }}
+                  trail={[
+                    { label: '문서 관리', href: documentsDialogPath },
+                    { label: document.title },
+                  ]}
+                />
+              }
+              description={document.filename !== document.title ? document.filename : undefined}
+              actions={
+                summaryLink || textExport ? (
+                  <>
+                    {summaryLink}
+                    {textExport}
+                  </>
+                ) : undefined
+              }
+            />
+            <PublishBar
+              statusText={statusText}
+              canEdit={editable && ready}
+              hasDraft={draft !== null}
+              publish={publish}
+              editing={editState.phase !== 'idle'}
+              revisions={revisions}
+              restoring={restoring}
+              onPublish={() => void onPublish()}
+              onRestore={onRestore}
+              onOpenHistory={() => void refreshRevisions()}
+            />
+            {pinned ? (
+              <div role="note" className={styles.note}>
+                <p>
+                  {content?.revision && !content.revision.is_active
+                    ? '검색 결과가 나온 이전 발행본을 보고 있습니다. 그 뒤에 새 버전이 발행되어 현재 원문과 다를 수 있습니다.'
+                    : canEdit
+                      ? '검색 결과가 나온 발행본을 보고 있습니다. 아직 발행하지 않은 초안의 내용과 다를 수 있습니다.'
+                      : '검색 결과가 나온 발행본을 보고 있습니다.'}
+                </p>
+                <Link href={`${documentPath}${viewerSearch('', page, linkedBlockId)}`}>
+                  {canEdit ? '최신 원문 보기·교정하기' : '최신 원문 보기'}
+                </Link>
+              </div>
+            ) : null}
+            {readOnlyReason ? (
+              <p role="note" className={styles.note}>
+                {readOnlyReason}
+              </p>
+            ) : null}
+            {notice ? (
+              <p role="alert" className={styles.noticeAlert}>
+                {notice}
+              </p>
+            ) : null}
+            {staleContent ? (
+              <div role="alert" className={styles.publishAlert}>
+                <p>
+                  수정 내용은 초안에 저장되었지만 최신 원문을 다시 불러오지 못했습니다. 목차와
+                  원문이 최신이 아닐 수 있습니다.
+                </p>
+                <Button size="sm" onClick={() => void refreshContent()}>
+                  원문 다시 불러오기
+                </Button>
+              </div>
+            ) : null}
+            {!ready ? (
+              <p role="note" className={styles.note}>
+                {document.status === 'failed'
+                  ? `문서 처리에 실패했습니다.${document.last_error ? ` (${document.last_error})` : ''} 문서 목록에서 다시 시도할 수 있습니다.`
+                  : '문서를 처리하는 중입니다. 처리가 끝나면 목차와 원문 텍스트가 표시됩니다.'}{' '}
+                <Link href={documentsDialogPath}>문서 목록으로</Link>
+              </p>
+            ) : null}
+          </>
+        }
+        preventAutoHide={
+          editState.phase !== 'idle' ||
+          publish.phase === 'failed' ||
+          contentState.status === 'error' ||
+          Boolean(notice || staleContent || pinned || readOnlyReason || !ready)
+        }
         outline={
           contentState.status === 'ready' ? (
             <OutlineTree
