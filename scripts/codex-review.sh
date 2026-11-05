@@ -14,7 +14,8 @@
 # in AGENTS.md ("Review guidelines"), which codex loads automatically.
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 SELF="$ROOT/scripts/codex-review.sh"
 REVIEW_DIR="$ROOT/.reviews"
 PANE_FILE="$REVIEW_DIR/.pane-id"

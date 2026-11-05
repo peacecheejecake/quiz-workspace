@@ -1,7 +1,14 @@
 'use client';
 
 import { Dialog } from 'radix-ui';
-import { useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
@@ -11,7 +18,9 @@ import { useModalStackEntry } from '../internal/modal-stack';
 import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { handlesOwnEscape } from '../internal/own-escape';
+import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
+import { useSwipeDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
 
@@ -76,7 +85,11 @@ export function ModalDialog({
   const animateHeight = useAnimatedHeight<HTMLDivElement>();
   // Radix's modal scroll lock covers this too; the guard keeps every overlay alike (UX9-SCROLL).
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
-  const surfaceRef = useMergedRefs(animateHeight, guardOverscroll);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(watchOpeners, []);
+  const guardedRef = useMergedRefs(animateHeight, guardOverscroll);
+  const surfaceRef = useMergedRefs(guardedRef, contentRef);
   // Uncontrolled dialogs too must close from the backdrop, so the open state is mirrored here.
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
   const isOpen = open ?? uncontrolledOpen;
@@ -89,6 +102,7 @@ export function ModalDialog({
   // One stacking order with the panels (UX9, HOMEDLG-01): the layer opened later is on top,
   // whether a centered dialog or a side panel.
   const layer = useFloatingLayer(isOpen);
+  const swipe = useSwipeDismiss(contentRef, layer.rank, true, 'bottom', () => changeOpen(false));
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirty && !registry.dirty, () =>
     changeOpen(false),
   );
@@ -111,8 +125,20 @@ export function ModalDialog({
           style={{ zIndex: layer.zIndex }}
           className={cx('qz-modal', className)}
           {...(description ? {} : { 'aria-describedby': undefined })}
-          onOpenAutoFocus={onOpenAutoFocus}
-          onCloseAutoFocus={onCloseAutoFocus}
+          onOpenAutoFocus={(event) => {
+            returnFocusRef.current = currentOpener();
+            onOpenAutoFocus?.(event);
+          }}
+          onCloseAutoFocus={(event) => {
+            onCloseAutoFocus?.(event);
+            if (event.defaultPrevented) return;
+            const target = returnFocusRef.current;
+            returnFocusRef.current = null;
+            if (target?.isConnected) {
+              event.preventDefault();
+              target.focus({ preventScroll: true });
+            }
+          }}
           onPointerDownOutside={(event) => {
             // The backdrop's click closes it instead (useBackdropClose).
             event.preventDefault();
@@ -124,7 +150,7 @@ export function ModalDialog({
         >
           <LayerProvider value={layer.zIndex}>
             <DirtyProvider value={registry.report}>
-              <div className="header">
+              <div className="header" onPointerDown={swipe}>
                 <div className="heading">
                   <Dialog.Title className="title">{title}</Dialog.Title>
                   {description ? (
