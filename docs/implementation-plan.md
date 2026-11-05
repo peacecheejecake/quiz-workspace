@@ -357,7 +357,7 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | UX10-DOC | checkbox·모바일 함께 보기·전체 높이 | UI | doc.md AC01~05 GREEN·독립 리뷰 |
 | UX10-QA | 교차 QA·PR·CI·병합·배포 | 전체 구현 | qa.md AC01~05·CI GREEN·production smoke |
 
-Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase는 main thread가 통합한다. 독립 scope의 DOC만 병렬 가능하며 반드시 별도 worktree를 쓴다.
+Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase는 main thread가 통합한다. 독립 scope의 UI/QVIEW/DOC는 SPEC 기준 별도 worktree에서 구현 가능하며, 통합 순서와 의존 Task 통합 후 재검증은 유지한다.
 
 ## 4. Task 의존 그래프
 
@@ -1059,4 +1059,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
 
 | UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
-| UX10-UI·QVIEW·HOME·PLAY·AI·DOC·QA | ☐ 대기 | — | 각 Task 문서 기준으로 순차 착수 |
+| UX10-UI | ◐ 구현·로컬 검증 | task/UX10-UI | terra 1:1 agent, 독립 리뷰 대기 |
+| UX10-QVIEW | ◐ 구현·로컬 검증 | task/UX10-QVIEW | terra 1:1 agent, reset 조회 경로·경합 검증 |
+| UX10-DOC | ◐ 구현·로컬 검증 | task/UX10-DOC | terra 1:1 agent, 원본 기본 RED 확인 |
+| UX10-HOME·PLAY·AI·QA | ☐ 대기 | — | 각 Task 문서 기준으로 착수 |

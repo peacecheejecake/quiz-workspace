@@ -24,7 +24,7 @@
 | UX10-DOC | [문서 뷰어](doc.md) | UI | document-viewer-layout, viewer-settings, 문서 페이지 shell·공유 문서 |
 | UX10-QA | [통합 QA](qa.md) | 전체 구현 | 교차 검증·테스트, 수정은 원 소유 Task agent |
 
-UI → QVIEW → HOME → PLAY → AI를 순차 통합하고 DOC는 UI 통합 후 독립 worktree에서 진행할 수 있다. scope가 겹치면 직렬로 수행한다. migration·OpenAPI 생성물·trace registry·CI phase는 통합자가 조정한다.
+통합 순서는 UI → QVIEW → HOME → PLAY → AI이며 DOC는 UI 뒤에 통합한다. 파일 scope가 겹치지 않는 UI/QVIEW/DOC는 SPEC 기준 독립 worktree에서 먼저 구현할 수 있으나, 의존 Task 통합 뒤 반드시 재검증한다. scope가 겹치면 직렬로 수행한다. migration·OpenAPI 생성물·trace registry·CI phase는 통합자가 조정한다.
 
 ## 기존 명세 변경 매핑
 
