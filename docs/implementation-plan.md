@@ -361,7 +361,7 @@ Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase
 
 ### UX11 — 추가 피드백 Task
 
-[세부 구현 기준](implementation/ux11/index.md). UX10을 취소하지 않으며 같은 최종 feature PR/CI/배포 범위에 포함한다. 신규 구현 agent를 Task별 terra 기본 effort로 배정한다. UX11-STEM은 기존 active scope와 독립이므로 즉시 시작하고, AI prompt는 독립·composer는 UX10-AI 이후, 복귀 provider는 독립·풀이 viewer 연결은 UX10-QVIEW/PLAY 이후다. 실패 복구 규칙과 다시 풀기 단위는 사용자 확인 중이며 확정 후 해당 문서·원본 AC를 갱신한다.
+[세부 구현 기준](implementation/ux11/index.md). UX10을 취소하지 않으며 같은 최종 feature PR/CI/배포 범위에 포함한다. 신규 구현 agent를 Task별 terra 기본 effort로 배정한다. UX11-STEM은 기존 active scope와 독립이므로 즉시 시작하고, AI prompt는 독립·composer는 UX10-AI 이후, 복귀 provider는 독립·풀이 viewer 연결은 UX10-QVIEW/PLAY 이후다. 사용자 확정: 실패 전송 입력은 새 draft가 없으면 복구·새 draft는 보존, 다시 풀기는 현재 문제만 새 시도·이력 유지. 범위/모의고사 회차 결과 반영 방식만 추가 확인 중이다.
 
 | ID | 내용 | 의존 | DoD |
 |---|---|---|---|
@@ -1083,6 +1083,6 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
-| UX11-AI-DIRECT | ☐ 명세·사용자 결정 대기 | — | prompt 독립 가능, composer는 UX10-AI 인계 후 |
-| UX11-RETURN | ☐ 명세·사용자 결정 대기 | — | provider 독립 가능, viewer 연결은 선행 Task 인계 후 |
+| UX11-AI-DIRECT | ◐ 신규 terra agent 구현 | task/UX11-AI-DIRECT | prompt RED→GREEN 18개, composer는 UX10-AI 인계 후; 실패 복구 사용자 확정 |
+| UX11-RETURN | ☐ 신규 agent 대기 | — | 현재 문제 새 시도·이력 보존 확정, 회차 결과 반영만 확인 중 |
 | UX11-STEM | ◐ 신규 agent 배정 | — | 사용자 제공 3가지 발문 회귀 사례·보수적 문단 파싱 |
