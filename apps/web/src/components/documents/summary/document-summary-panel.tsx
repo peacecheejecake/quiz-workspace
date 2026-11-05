@@ -310,20 +310,21 @@ function SummaryPanelBody({
 
   const model = summaryPanelModel(state, { canEdit, questionPaper });
   const summary = state.summary;
-  const createButton = (ref?: Ref<HTMLButtonElement>) => (
-    <Button
-      ref={ref}
-      variant="primary"
-      loading={pending === 'create'}
-      aria-disabled={model.unavailable || undefined}
-      aria-describedby={model.unavailable ? reasonId : undefined}
-      data-unavailable={model.unavailable || undefined}
-      className={styles.action}
-      onClick={create}
-    >
-      요약 만들기
-    </Button>
-  );
+  const createButton = (ref?: Ref<HTMLButtonElement>) =>
+    model.unavailable ? null : (
+      <Button
+        ref={ref}
+        variant="primary"
+        loading={pending === 'create'}
+        aria-disabled={model.unavailable || undefined}
+        aria-describedby={model.unavailable ? reasonId : undefined}
+        data-unavailable={model.unavailable || undefined}
+        className={styles.action}
+        onClick={create}
+      >
+        요약 만들기
+      </Button>
+    );
   const reason = model.unavailable ? (
     <p id={reasonId} className={styles.hint}>
       {SUMMARY_UNAVAILABLE_REASON}
@@ -373,7 +374,7 @@ function SummaryPanelBody({
 
       {model.retry || model.createInEmpty || model.auto ? (
         <div className={styles.actions}>
-          {model.retry ? (
+          {model.retry && !model.unavailable ? (
             <Button variant="primary" loading={pending === 'retry'} onClick={retry}>
               다시 시도
             </Button>

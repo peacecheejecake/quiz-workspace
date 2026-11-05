@@ -4,6 +4,7 @@
 
 | ID | Screen | Route | Requirements |
 |---|---|---|---|
+| UX10-AI | AI 가용성·저장 해설 | 공통 AI 화면 | [ux10-ai.md](ux10-ai.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |
 | AUTH-01 | 로그인 | `/login` | [auth-login.md](auth-login.md) |
 | AUTH-02 | 회원가입 | `/signup` | [auth-signup.md](auth-signup.md) |

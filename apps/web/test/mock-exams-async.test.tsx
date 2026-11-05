@@ -172,6 +172,34 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0]?.[0].range).toEqual(saved);
   });
+  it('UX10-AI-AC01 normalizes saved AI types when the LLM is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(overview())),
+    );
+    render(
+      <MockExamForm
+        workspaceId={WS}
+        mode="settings"
+        initial={{
+          title: '중간 점검',
+          types: ['PARAPHRASE'],
+          count: '3',
+          wholeRange: false,
+          difficulty: null,
+        }}
+        initialRange={{ all: true, chapter_ids: [], question_ids: [], excluded_question_ids: [] }}
+        llmAvailable={false}
+        busy={false}
+        error={null}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: /발문/ })).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: '다음' }));
+    expect(await screen.findByRole('button', { name: '다시 만들기' })).toBeInTheDocument();
+  });
 });
 
 function exam(id: string): MockExam {

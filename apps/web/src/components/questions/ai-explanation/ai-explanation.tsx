@@ -6,8 +6,8 @@
 // `view: detail`) and `manage(mock)` (`view: manage`) without one. A region named by its h3.
 //   layout    a group `AI 해설`: a toolbar (`AI 해설` generate button + `AI 질문하기`) and, only when
 //             there is something to show, the region below (none: no region at all)
-//   none      the `AI 해설` button + the send notice; feature off / archived: the reason instead
-//   cached    a collapsed disclosure `AI 해설 보기` (the result stays in view); opening it reads
+//   none      the `AI 해설` button; feature off / archived: the reason instead
+//   cached    an open disclosure `AI 해설 보기` (the result stays in view); it reads
 //             the stored one, no generation
 //   making    "AI 해설을 만드는 중" and the text so far (SSE, ASK-W's Markdown and number chips),
 //             aria-busy; also joined when someone else started it (the same stream from seq 0)
@@ -115,7 +115,7 @@ function AiExplanationArea({
 
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [live, setLive] = useState<LiveText | null>(null);
   const [announcement, setAnnouncement] = useState('');
   // The status region joins the area once a generation is asked for or followed (before its first
@@ -357,7 +357,7 @@ function AiExplanationArea({
         <div role="alert" className={styles.alert}>
           <p className={styles.text}>{endedHere.text}</p>
         </div>
-        {endedHere.action ? (
+        {endedHere.action && (endedHere.action !== 'create' || state.available) ? (
           <div className={styles.row}>
             <Button
               size="sm"
@@ -467,7 +467,6 @@ function AiExplanationArea({
           {EXPL_TEXT.ask}
         </AskQuestionButton>
       </div>
-      {mode === 'create' ? <p className={styles.hint}>{EXPL_TEXT.sendNotice}</p> : null}
       {mode === 'disabled' || mode === 'archived' ? (
         <p className={styles.hint}>
           {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}

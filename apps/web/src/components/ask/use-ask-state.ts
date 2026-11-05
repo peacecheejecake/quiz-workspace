@@ -1,8 +1,7 @@
 'use client';
 
 // Whether the workspace takes new AI questions (ASK-01 GET /workspaces/{id}/ask), read once per
-// home. Until it answers, only an archived workspace counts as unavailable; the panel shows the
-// server's reason either way.
+// home. Callers hide new-action entry points until the current workspace state is known.
 import { useEffect, useMemo, useState } from 'react';
 import { createAskClient, type AskClient, type AskState } from '@/lib/ask/client';
 
@@ -11,14 +10,17 @@ export function useAskState(workspaceId: string): {
   readonly client: AskClient;
 } {
   const client = useMemo(() => createAskClient(), []);
-  const [state, setState] = useState<AskState | null>(null);
+  const [result, setResult] = useState<{ workspaceId: string; state: AskState } | null>(null);
   useEffect(() => {
+    setResult(null);
     const controller = new AbortController();
     client.state(workspaceId, controller.signal).then(
-      (next) => setState(next),
-      () => undefined, // The panel re-reads it; entry points stay usable meanwhile.
+      (next) => {
+        if (!controller.signal.aborted) setResult({ workspaceId, state: next });
+      },
+      () => undefined, // Unknown capability keeps new-action entry points hidden.
     );
     return () => controller.abort();
   }, [client, workspaceId]);
-  return { state, client };
+  return { state: result?.workspaceId === workspaceId ? result.state : null, client };
 }

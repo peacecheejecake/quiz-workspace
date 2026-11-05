@@ -31,6 +31,57 @@ afterEach(() => {
 });
 
 describe('ContentSearchPage', () => {
+  it('UX10-AI-AC01 hides the ask action until the server allows it', async () => {
+    let resolveState!: (response: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveState = resolve;
+          }),
+      ),
+    );
+    render(
+      <ContentSearchPage
+        workspace={{ id: WS, name: '물', archived: false }}
+        documents={[]}
+        documentsLoadFailed={false}
+        searchable={false}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /AI에게 묻기/ })).toBeNull();
+    resolveState(
+      new Response(JSON.stringify({ available: false, reason: 'disabled' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: /AI에게 묻기/ })).toBeNull());
+  });
+
+  it('shows the search ask action when the server allows it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ available: true, reason: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    render(
+      <ContentSearchPage
+        workspace={{ id: WS, name: '물', archived: false }}
+        documents={[]}
+        documentsLoadFailed={false}
+        searchable={false}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: /AI에게 묻기/ })).toBeEnabled();
+  });
+
   it('"검색 결과 지우기" removes the query only; the options stay in the URL', async () => {
     const fetchSpy = vi.fn(
       async () =>

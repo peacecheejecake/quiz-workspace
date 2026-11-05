@@ -495,12 +495,10 @@ describe('DocumentSummaryPanel', () => {
     expect(within(panel).getByText('AI 생성')).toBeTruthy();
   });
 
-  it('keeps 요약 만들기 focusable but aria-disabled with its reason when unavailable', async () => {
+  it('UX10-AI-AC01 hides summary creation when unavailable', async () => {
     const { panel, client } = renderPanel(state({ available: false }));
-    const create = await within(panel).findByRole('button', { name: '요약 만들기' });
-    expect(create.getAttribute('aria-disabled')).toBe('true');
-    expect(create).toHaveAccessibleDescription('이 환경에서는 AI 요약을 사용할 수 없습니다.');
-    await userEvent.setup().click(create);
+    await within(panel).findByText('이 환경에서는 AI 요약을 사용할 수 없습니다.');
+    expect(within(panel).queryByRole('button', { name: '요약 만들기' })).toBeNull();
     expect(client.create).not.toHaveBeenCalled();
   });
 
