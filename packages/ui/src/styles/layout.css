@@ -218,6 +218,10 @@
   }
 }
 
+button.qz-back-link {
+  border: 1px solid var(--color-border);
+}
+
 /* BackLink: ghost-button-like arrow + label. */
 .qz-back-link {
   box-sizing: border-box;

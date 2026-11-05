@@ -3,7 +3,7 @@ import type { Locator } from '@playwright/test';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-async function swipe(target: Locator, dx: number, dy: number) {
+async function swipe(target: Locator, dx: number, dy: number, pointerType = 'touch') {
   await target.evaluate(
     (element, delta) => {
       const rect = element.getBoundingClientRect();
@@ -12,7 +12,7 @@ async function swipe(target: Locator, dx: number, dy: number) {
       const init = {
         bubbles: true,
         pointerId: 1,
-        pointerType: 'touch',
+        pointerType: delta.pointerType,
         isPrimary: true,
         clientX: x,
         clientY: y,
@@ -22,7 +22,7 @@ async function swipe(target: Locator, dx: number, dy: number) {
         new PointerEvent('pointerup', { ...init, clientX: x + delta.dx, clientY: y + delta.dy }),
       );
     },
-    { dx, dy },
+    { dx, dy, pointerType },
   );
 }
 
@@ -52,6 +52,24 @@ test(
           }).length,
       );
       expect(invisible).toBe(0);
+    }
+    await page.goto('/workspaces');
+    const tabs = page.getByRole('tab');
+    await expect(tabs.first()).toBeVisible();
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (value) => document.documentElement.setAttribute('data-theme', value),
+        theme,
+      );
+      for (const tab of await tabs.all()) {
+        const style = await tab.evaluate((element) => {
+          const css = getComputedStyle(element);
+          return { border: css.borderStyle, color: css.borderColor, boxSizing: css.boxSizing };
+        });
+        expect(style.border).not.toBe('none');
+        expect(style.color).not.toBe('rgba(0, 0, 0, 0)');
+        expect(style.boxSizing).toBe('border-box');
+      }
     }
   },
 );
@@ -84,6 +102,7 @@ test(
     const member = await workspaceFactory.member('ux10-ui-03');
     await signInAs(page, member.user);
     await page.goto('/workspaces');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     const opener = wsUi.createButton(page);
     await opener.click();
     const dialog = wsUi.createDialog(page);
@@ -104,6 +123,7 @@ test(
       dialog.locator(':scope > .header'),
       edge === 0 ? -80 : edge === 1 ? 80 : 0,
       edge === 2 ? -80 : edge === 3 ? 80 : 0,
+      'pen',
     );
     await expect(dialog).toBeHidden();
     await expect(opener).toBeFocused();

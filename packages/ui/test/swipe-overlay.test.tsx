@@ -111,3 +111,59 @@ it('UX10-UI-AC03 only the top overlay handles a swipe', () => {
   expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   expect(screen.getByRole('dialog', { name: '바깥' })).toBeInTheDocument();
 });
+
+it('UX10-UI-AC04 resize cancels an active pen gesture', () => {
+  render(<Example />);
+  const dialog = screen.getByRole('dialog');
+  vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
+    left: 100,
+    right: 900,
+    top: 100,
+    bottom: 668,
+    width: 800,
+    height: 568,
+    x: 100,
+    y: 100,
+    toJSON() {
+      return {};
+    },
+  });
+  const header = dialog.querySelector('.header');
+  if (!header) throw new Error('missing header');
+  pointer(header, 'pointerdown', { pointerType: 'pen' });
+  fireEvent(window, new Event('resize'));
+  pointer(window, 'pointerup', { pointerType: 'pen', clientY: 100 });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+});
+
+it('UX10-UI-AC03 pen gesture closes under reduced motion', () => {
+  const original = window.matchMedia;
+  window.matchMedia = (query) => ({
+    ...original(query),
+    matches: query.includes('prefers-reduced-motion'),
+  });
+  try {
+    render(<Example />);
+    const dialog = screen.getByRole('dialog');
+    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      right: 900,
+      top: 100,
+      bottom: 668,
+      width: 800,
+      height: 568,
+      x: 100,
+      y: 100,
+      toJSON() {
+        return {};
+      },
+    });
+    const header = dialog.querySelector('.header');
+    if (!header) throw new Error('missing header');
+    pointer(header, 'pointerdown', { pointerType: 'pen' });
+    pointer(window, 'pointerup', { pointerType: 'pen', clientY: 100 });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  } finally {
+    window.matchMedia = original;
+  }
+});
