@@ -153,7 +153,7 @@ export function ContentSearchPage({
         <ContentSearchResults workspaceId={workspace.id} search={content} onClose={clear} />
       ) : null}
       <AskPanel
-        key={askSession}
+        key={`${askSession}:${ask.identityGeneration}`}
         open={askOpen}
         onOpenChange={setAskOpen}
         container={null}
@@ -161,6 +161,7 @@ export function ContentSearchPage({
         archived={workspace.archived}
         askState={ask.state}
         client={ask.client}
+        recovery={ask.recovery}
         conversationId={askConversation}
         onNavigate={(conversationId) => setAskConversation(conversationId)}
         documents={documents}

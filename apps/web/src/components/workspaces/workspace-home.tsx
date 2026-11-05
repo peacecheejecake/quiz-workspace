@@ -1141,7 +1141,7 @@ function WorkspaceHomeContent({
             onActivity={summaryActivity.report}
           />
           <AskPanel
-            key={askSession}
+            key={`${askSession}:${ask.identityGeneration}`}
             open={shows(ASK_PANEL)}
             onOpenChange={(open) => setPanel(ASK_PANEL, open)}
             container={host}
@@ -1149,6 +1149,7 @@ function WorkspaceHomeContent({
             archived={workspace.archived}
             askState={ask.state}
             client={ask.client}
+            recovery={ask.recovery}
             conversationId={askConversation}
             onNavigate={navigateAsk}
             documents={searchDocuments}

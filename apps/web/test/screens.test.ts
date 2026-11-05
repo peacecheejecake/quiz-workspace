@@ -22,7 +22,7 @@ function parseScreensIndex(markdown: string): DocScreen[] {
   const rows: DocScreen[] = [];
   for (const line of markdown.split(/\r?\n/)) {
     const m =
-      /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+|UX1[01]-[A-Z]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(
+      /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+|UX1[01]-[A-Z]+(?:-[A-Z]+)*)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(
         line,
       );
     if (!m) continue;
