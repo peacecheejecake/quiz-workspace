@@ -5,8 +5,8 @@
 // fingerprints, search and editor values keep the original text.
 //
 // Rules: labels of one family and one format, consecutive from the family's first label, at least
-// two; any such label of the paragraph out of order (or one of the family in another format inside
-// the list) means no list in that paragraph. Spaces inside brackets are ignored. A label starts the
+// two; any label of that family in the paragraph (any format, the lead included) outside that 1..n
+// sequence means no list in that paragraph. Spaces inside brackets are ignored. A label starts the
 // text or follows whitespace and is followed by whitespace and content (so "(가)와 (나)에 …" is a
 // mention, not a list). Option labels (①~⑳, ❶~❿, ➀~➓) and "1." are never
 // item labels. A question sentence before the first item must end with ? . : ) 」 > (or fullwidth
@@ -181,23 +181,15 @@ function has(label: Label, family: number, format: Format, index?: number): bool
 }
 
 /**
- * The list of `family`/`format` in one block's labels: every such label must run 1..n in order
- * (none missing, skipped or swapped) with no label of the same family in another format between
- * them, at least two; otherwise none.
+ * The list of `family`/`format` in one block's labels: every label of the family in the block, in
+ * any format and wherever it is (the lead sentence included), must be exactly the 1..n sequence in
+ * that one format, at least two; otherwise none (a stray, repeated or mixed-format label means no
+ * list rather than a partial one).
  */
 function strictList(labels: readonly Label[], family: number, format: Format): Label[] | null {
-  const list = labels.filter((l) => has(l, family, format));
+  const list = labels.filter((l) => l.readings.some((r) => r.family === family));
   if (list.length < 2 || !list.every((l, k) => has(l, family, format, k))) return null;
-  const first = (list[0] as Label).start;
-  const last = (list[list.length - 1] as Label).start;
-  const interrupted = labels.some(
-    (l) =>
-      l.start > first &&
-      l.start < last &&
-      !has(l, family, format) &&
-      l.readings.some((r) => r.family === family),
-  );
-  return interrupted ? null : list;
+  return list;
 }
 
 /**
