@@ -241,12 +241,37 @@ export function PdfViewer({
     };
   }, [source, attempt]);
 
+  const scale = useMemo(() => {
+    if (zoom !== 'fit') return zoom;
+    if (!firstPage) return 1;
+    const available = Math.max(containerWidth - 2 * PAGE_PADDING, 200);
+    return available / firstPage.width;
+  }, [containerWidth, firstPage, zoom]);
+  const scaleRef = useRef(scale);
+  useLayoutEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+
   // Fit-to-width follows the pane's width. A hidden pane (a DOCVIEW-01 view mode, the other pane
   // on a phone) measures 0 and keeps the last width; when it shows again, the reading spot is
   // restored (its scroll position may have been reset while hidden). Any size change — also a
   // height-only one (상하 split) — re-reads the viewport: the pages in view and the page at the
   // reading line. While the splitter is dragged that waits for the release (deferResize).
   const hidden = useRef(false);
+  const selectedLocation = useRef<ContentBlock['locations'][number] | null>(null);
+  const lastViewport = useRef<{
+    layout: PageLayout;
+    scrollTop: number;
+    height: number;
+    scale: number;
+  } | null>(null);
+  const pendingVisibleHighlight = useRef<ContentBlock['locations'][number] | null>(null);
+  useLayoutEffect(() => {
+    const next =
+      highlights.find((location) => location.bbox !== null && location.page >= 1) ?? null;
+    if (selectedLocation.current !== next) pendingVisibleHighlight.current = null;
+    selectedLocation.current = next;
+  }, [highlights]);
   const restoreAnchor = useRef<() => void>(() => undefined);
   const refreshViewport = useRef<() => void>(() => undefined);
   const deferResizeRef = useRef(deferResize);
@@ -270,22 +295,39 @@ export function PdfViewer({
         hidden.current = false;
         restoreAnchor.current();
       }
+      // A width change in fit mode will replace the page layout. Keep the old reading anchor
+      // until that layout arrives; re-reading with the new height and old scale would move it.
+      const pendingFitScale =
+        zoom === 'fit' &&
+        firstPage !== null &&
+        Math.abs(
+          Math.max(element.clientWidth - 2 * PAGE_PADDING, 200) / firstPage.width -
+            scaleRef.current,
+        ) > 0.000001;
+      if (pendingFitScale) {
+        pendingVisibleHighlight.current = null;
+        const previous = lastViewport.current;
+        const location = selectedLocation.current;
+        const pageTop = location ? previous?.layout.tops[location.page - 1] : undefined;
+        if (previous && location?.bbox && pageTop !== undefined) {
+          const top = pageTop + location.bbox.y0 * previous.scale;
+          const bottom = pageTop + location.bbox.y1 * previous.scale;
+          pendingVisibleHighlight.current =
+            top < previous.scrollTop + previous.height && bottom > previous.scrollTop
+              ? location
+              : null;
+        }
+      }
       if (deferResizeRef.current) viewportStale.current = true;
-      else refreshViewport.current();
+      else if (!pendingFitScale) refreshViewport.current();
     };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [load.status]);
+  }, [firstPage, load.status, zoom]);
 
-  const scale = useMemo(() => {
-    if (zoom !== 'fit') return zoom;
-    if (!firstPage) return 1;
-    const available = Math.max(containerWidth - 2 * PAGE_PADDING, 200);
-    return available / firstPage.width;
-  }, [containerWidth, firstPage, zoom]);
   // Pages are drawn at a settled scale: while the width is still changing, the boxes follow it
   // and the last drawing is stretched.
   const [renderScale, setRenderScale] = useState(scale);
@@ -300,12 +342,10 @@ export function PdfViewer({
     [firstPage, pageCount, scale, sizes],
   );
   const layoutRef = useRef(layout);
-  const scaleRef = useRef(scale);
   const sizesRef = useRef(sizes);
   const firstPageRef = useRef(firstPage);
   useLayoutEffect(() => {
     layoutRef.current = layout;
-    scaleRef.current = scale;
     sizesRef.current = sizes;
     firstPageRef.current = firstPage;
   }, [firstPage, layout, scale, sizes]);
@@ -337,6 +377,12 @@ export function PdfViewer({
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
       scrollHeight: scroller.scrollHeight,
+    };
+    lastViewport.current = {
+      layout: current,
+      scrollTop: view.scrollTop,
+      height: view.clientHeight,
+      scale: scaleRef.current,
     };
     const visible = visiblePages(current, view);
     setRange((prev) =>
@@ -370,6 +416,7 @@ export function PdfViewer({
       ownScroll.current = null;
       if (Math.abs(read.view.scrollTop - own) <= 2) return;
     }
+    pendingVisibleHighlight.current = null;
     reportCurrent(read);
   }, [readViewport, reportCurrent]);
 
@@ -391,6 +438,21 @@ export function PdfViewer({
     const { page: n, fraction } = anchor.current;
     const top = (current.tops[n - 1] ?? 0) + fraction * (current.heights[n - 1] ?? 0);
     scrollToTop(top - scroller.clientHeight * READING_LINE);
+    const visibleHighlight = pendingVisibleHighlight.current;
+    pendingVisibleHighlight.current = null;
+    if (visibleHighlight?.bbox) {
+      const pageTop = current.tops[visibleHighlight.page - 1];
+      if (pageTop !== undefined) {
+        const markTop = pageTop + visibleHighlight.bbox.y0 * scaleRef.current;
+        const markBottom = pageTop + visibleHighlight.bbox.y1 * scaleRef.current;
+        if (
+          markTop >= scroller.scrollTop + scroller.clientHeight ||
+          markBottom <= scroller.scrollTop
+        ) {
+          scrollToTop(markTop - scroller.clientHeight * READING_LINE);
+        }
+      }
+    }
     readViewport();
   }, [readViewport, scrollToTop]);
   useLayoutEffect(() => {
