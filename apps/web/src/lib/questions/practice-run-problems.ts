@@ -13,6 +13,7 @@ export type RunFailureKind =
   | 'rangeInvalid'
   | 'finished'
   | 'alreadySubmitted'
+  | 'reset'
   | 'invalid'
   | 'unavailable';
 
@@ -29,6 +30,7 @@ export const RUN_FAILURE_MESSAGES: Readonly<Record<RunFailureKind, string>> = {
   rangeInvalid: '고른 문제 중 더 이상 풀 수 없는 문제가 있습니다. 범위를 다시 골라 주세요.',
   finished: '끝난 풀이입니다. 처음부터 다시 풀어 주세요.',
   alreadySubmitted: '이미 제출한 문제입니다.',
+  reset: '이 문제의 기록이 초기화되었습니다. 새 풀이를 시작해 주세요.',
   invalid: '입력한 내용을 확인해 주세요.',
   unavailable: '일시적인 오류로 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
@@ -39,6 +41,7 @@ const RUN_PROBLEMS = {
   rangeInvalid: 'urn:quiz-workspace:problem:range-invalid',
   finished: 'urn:quiz-workspace:problem:practice-run-finished',
   alreadySubmitted: 'urn:quiz-workspace:problem:already-submitted',
+  reset: 'urn:quiz-workspace:problem:practice-session-reset',
 } as const;
 
 function problemType(body: unknown): string | undefined {
@@ -58,6 +61,7 @@ export function classifyRunFailure(status: number, body: unknown): RunFailureKin
     if (type === RUN_PROBLEMS.noMatching) return 'noMatching';
     if (type === RUN_PROBLEMS.finished) return 'finished';
     if (type === RUN_PROBLEMS.alreadySubmitted) return 'alreadySubmitted';
+    if (type === RUN_PROBLEMS.reset) return 'reset';
     return 'unavailable';
   }
   if (status === 422) {

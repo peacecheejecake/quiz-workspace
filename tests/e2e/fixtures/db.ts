@@ -18,6 +18,7 @@
 //   7. Stamping extractor validations on import drafts that the APP_ENV=test (rule-based, no LLM)
 //      extraction never produces, e.g. `llm_unavailable` from a failing LLM provider
 //      (QIMPORT-01-AC09, QIMP-SELECT-FIX).
+//   8. Reading the test user's practice session IDs to prove cache reuse (QPLAY-01-AC06).
 // The URL is loopback-checked; ids are validated before they are inlined into SQL.
 import { execFileSync } from 'node:child_process';
 import { localDbAdminUrl } from './local-env.ts';
@@ -80,6 +81,16 @@ export function seedGradedAttempt(
       `select workspace_id, question_id, question_revision_id, id, user_id, '{}'::jsonb, ` +
       `'correct', 'auto', now() from s returning id`,
   ).trim();
+}
+
+/** Session identities for the cache-reuse acceptance test (no test-only API). */
+export function practiceSessionIds(userId: string, questionId: string): string[] {
+  const [user, question] = [uuidList([userId]), uuidList([questionId])];
+  const output = psql(
+    `select id from public.practice_sessions where user_id = ${user} ` +
+      `and question_id = ${question} order by id`,
+  ).trim();
+  return output ? output.split('\n') : [];
 }
 
 export interface AttemptRevision {

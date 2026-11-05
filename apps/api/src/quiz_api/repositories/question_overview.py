@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from quiz_api.question_rules import QuestionType
 from quiz_api.question_status import LastGradedResult
+from quiz_api.repositories.practice_epoch import current_session
 from quiz_api.repositories.questions import UNNUMBERED
 from quiz_api.repositories.tables import (
     chapters,
@@ -129,6 +130,7 @@ def overview_statement(
             practice_sessions.c.user_id == user_id,
             practice_sessions.c.question_id == any_(merged_members(workspace_id)),
             practice_sessions.c.submitted_at.is_not(None),
+            current_session(),
         )
         .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
         .limit(1)

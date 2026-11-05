@@ -10,7 +10,7 @@ select tables_are(
   array['profiles', 'workspaces', 'workspace_memberships', 'activity_events', 'async_jobs',
         -- M4.1 question domain
         'questions', 'question_revisions', 'question_sources', 'question_user_states',
-        'practice_sessions', 'question_attempts', 'question_lineage', 'question_generation_runs',
+        'practice_sessions', 'practice_reset_epochs', 'question_attempts', 'question_lineage', 'question_generation_runs',
         'question_import_runs', 'question_drafts',
         -- M3.1a Idempotency-Key replay store
         'idempotency_keys',

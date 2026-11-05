@@ -171,6 +171,7 @@ describe('run labels and failures', () => {
     expect(classifyRunFailure(403, p('workspace-archived'))).toBe('archived');
     expect(classifyRunFailure(409, p('no-matching-questions'))).toBe('noMatching');
     expect(classifyRunFailure(409, p('already-submitted'))).toBe('alreadySubmitted');
+    expect(classifyRunFailure(409, p('practice-session-reset'))).toBe('reset');
     expect(classifyRunFailure(409, p('practice-run-finished'))).toBe('finished');
     expect(classifyRunFailure(422, p('practice-run-too-large'))).toBe('tooLarge');
     expect(classifyRunFailure(422, p('range-invalid'))).toBe('rangeInvalid');

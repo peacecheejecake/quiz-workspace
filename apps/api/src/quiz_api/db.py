@@ -8,8 +8,10 @@ the Mac staging stack, a few ms from Railway), so the per-request overhead is ke
     connection is pinged only after it sat idle for `PING_AFTER_IDLE_SECONDS`, when a server or
     pooler timeout may have closed it; a failed ping replaces it (SQLAlchemy's documented
     "pessimistic" checkout handler).
-  * Safe methods (GET/HEAD) run in autocommit: no `BEGIN` before the first statement and no
-    `ROLLBACK` when the session ends. Their routes only read without row locks, and at READ
+  * Safe methods (GET/HEAD) normally run in autocommit: no `BEGIN` before the first statement
+    and no `ROLLBACK` when the session ends. Reset-sensitive practice reads use a transaction
+    to hold their advisory lock until the payload is assembled. Other routes read without row locks,
+    and at READ
     COMMITTED every statement takes its own snapshot inside a transaction too, so they see the
     same data. The one GET that writes (`GET /me` creating the profile) is a single
     idempotent statement. Unsafe methods keep one transaction per request, as before.
@@ -17,6 +19,7 @@ the Mac staging stack, a few ms from Railway), so the per-request overhead is ke
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -33,6 +36,11 @@ from quiz_api.settings import Settings
 # A pooled connection idle for longer than this is pinged before reuse.
 PING_AFTER_IDLE_SECONDS = 30.0
 READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
+# These reads hold a transaction-scoped advisory lock through authorization and payload assembly.
+_TRANSACTIONAL_READ = re.compile(
+    r"^/api/v1/(?:practice-sessions/[^/]+|questions/[^/]+/practice-recent|"
+    r"practice-runs/[^/]+/items/[^/]+)$"
+)
 _IDLE_SINCE = "quiz_idle_since"
 
 SessionFactory = sessionmaker[Session]
@@ -96,13 +104,13 @@ def install_idle_ping(engine: Engine, idle_seconds: float = PING_AFTER_IDLE_SECO
 def get_db_session(request: Request) -> Iterator[Session]:
     """FastAPI dependency: one session per request, rolled back on error, always closed.
 
-    GET/HEAD get an autocommit session (module docstring); other methods one transaction."""
+    GET/HEAD normally use autocommit; reset-sensitive reads and writes use a transaction."""
     database: Database | None = request.app.state.database
     if database is None:
         raise HTTPException(status_code=503, detail="Database is not configured.")
-    factory = (
-        database.read_sessionmaker if request.method in READ_ONLY_METHODS else database.sessionmaker
-    )
+    path = getattr(request, "scope", {}).get("path", "")
+    use_autocommit = request.method in READ_ONLY_METHODS and not _TRANSACTIONAL_READ.fullmatch(path)
+    factory = database.read_sessionmaker if use_autocommit else database.sessionmaker
     with factory() as session:
         try:
             yield session

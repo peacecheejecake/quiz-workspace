@@ -65,6 +65,12 @@ import {
   type RunUrlState,
 } from '@/lib/questions/practice-runs';
 import type { QuestionOverview } from '@/lib/questions/overview-data';
+import {
+  observedPracticeEpoch,
+  practiceResetVersion,
+  rememberPracticeEpoch,
+  subscribePracticeResets,
+} from '@/lib/questions/practice-reset-events';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
   canSubmit,
@@ -131,6 +137,7 @@ export interface RunClient {
     runId: string,
     position: number,
     key: string,
+    expectedResetEpoch?: number | null,
   ): Promise<RunActionResult<PracticeSession>>;
   submit(sessionId: string, answer: PracticeSubmission): Promise<StudyActionResult<SubmitResult>>;
   selfGrade(sessionId: string, grade: GradeResult): Promise<StudyActionResult<SelfGradeResult>>;
@@ -149,8 +156,8 @@ export function bankRunClient(workspaceId: string): RunClient {
     create: (range, randomOrder, key) => api.create(range, randomOrder, key),
     getRun: (runId) => api.getRun(runId),
     getItem: (runId, position) => api.getItem(runId, position),
-    openSession: (questionId, runId, position, key) =>
-      api.openSession(questionId, runId, position, key),
+    openSession: (questionId, runId, position, key, epoch) =>
+      api.openSession(questionId, runId, position, key, epoch),
     submit: (sessionId, answer) => submitPracticeAction(workspaceId, sessionId, answer),
     selfGrade: (sessionId, grade) => selfGradePracticeAction(workspaceId, sessionId, grade),
     finish: (runId) => api.finish(runId),
@@ -165,7 +172,16 @@ export function bankRunClient(workspaceId: string): RunClient {
         is_pending_grading: found.data.item.is_pending_grading,
       };
     },
-    setFlags: (questionId, flags) => setMyStateAction(workspaceId, questionId, flags),
+    setFlags: (questionId, flags) => {
+      const epoch = observedPracticeEpoch(workspaceId, questionId);
+      return epoch === undefined
+        ? Promise.resolve({
+            ok: false,
+            kind: 'unavailable',
+            message: QUESTION_FAILURE_MESSAGES.unavailable,
+          })
+        : setMyStateAction(workspaceId, questionId, flags, epoch);
+    },
   };
 }
 
@@ -299,6 +315,11 @@ export function SequenceViewer({
   if (state && state !== shown) setShown(state);
   const view = state ?? shown;
   const open = state !== null;
+  const [resetVersion, setResetVersion] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || source !== 'bank') return;
+    return subscribePracticeResets(workspaceId, () => setResetVersion((n) => n + 1));
+  }, [open, source, workspaceId]);
 
   const titleRef = useRef<HTMLHeadingElement>(null);
   const stepKey =
@@ -325,6 +346,7 @@ export function SequenceViewer({
 
   const picker = usePickerStep({
     active: open && view?.step === 'picker',
+    resetVersion,
     client,
     source,
     onStarted: (runId) => onNavigate({ step: 'solve', runId, position: 1 }, 'replace'),
@@ -333,6 +355,7 @@ export function SequenceViewer({
     workspaceId,
     view: view?.step === 'solve' ? view : null,
     runVersion,
+    resetVersion,
     open,
     client,
     source,
@@ -346,8 +369,10 @@ export function SequenceViewer({
   });
   const results = useResultsStep({
     runId: open && view?.step === 'results' ? view.runId : null,
+    resetVersion,
     client,
     source,
+    invalidated,
     onNavigate,
     onClose,
   });
@@ -428,11 +453,13 @@ function NotFound() {
 
 function usePickerStep({
   active,
+  resetVersion,
   client,
   source,
   onStarted,
 }: {
   readonly active: boolean;
+  readonly resetVersion: number;
   readonly client: RunClient;
   readonly source: RunSource;
   readonly onStarted: (runId: string) => void;
@@ -459,25 +486,31 @@ function usePickerStep({
   }
 
   const filtersKey = JSON.stringify(filters);
-  const load = useKeyedLoad(active ? `${opening}:${filtersKey}:${retry}` : null, () =>
-    client.listRange(filters),
+  const load = useKeyedLoad(
+    active ? `${opening}:${filtersKey}:${retry}:${resetVersion}` : null,
+    () => client.listRange(filters),
   );
   // The last groups stay shown while the next filters load.
-  const [groups, setGroups] = useState<{ opening: number; groups: RangeGroup[] } | null>(null);
+  const [groups, setGroups] = useState<{
+    opening: number;
+    resetVersion: number;
+    groups: RangeGroup[];
+  } | null>(null);
   const [seenLoad, setSeenLoad] = useState(load);
   if (load !== seenLoad) {
     setSeenLoad(load);
     if (load?.status === 'ready') {
       const next = rangeGroups(load.data, source);
       const first = groups?.opening !== opening;
-      setGroups({ opening, groups: next });
+      setGroups({ opening, resetVersion, groups: next });
       // A filter hides questions: they leave the selection. A mock exam starts all selected.
       setSelected((prev) =>
         first && source === 'mock' ? new Set(allIds(next)) : keepVisible(prev, next),
       );
     }
   }
-  const shownGroups = groups?.opening === opening ? groups.groups : null;
+  const shownGroups =
+    groups?.opening === opening && groups.resetVersion === resetVersion ? groups.groups : null;
   const busy = load?.status === 'loading';
 
   const request = shownGroups ? rangeRequest(shownGroups, selected, filters, source) : null;
@@ -609,6 +642,7 @@ function useSolveStep({
   workspaceId,
   view,
   runVersion,
+  resetVersion,
   open,
   client,
   source,
@@ -624,6 +658,7 @@ function useSolveStep({
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
   /** Bumped when the run may have changed elsewhere (finished by its results step). */
   readonly runVersion: number;
+  readonly resetVersion: number;
   readonly open: boolean;
   readonly client: RunClient;
   readonly source: RunSource;
@@ -645,13 +680,19 @@ function useSolveStep({
   const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
   const invalidating = invalidated !== seenInvalidation;
 
-  const runLoad = useKeyedLoad(active && runId ? `${runId}:${runVersion}:${runSeq}` : null, () =>
-    client.getRun(runId ?? ''),
+  const runLoad = useKeyedLoad(
+    active && runId ? `${runId}:${runVersion}:${runSeq}:${resetVersion}` : null,
+    () => client.getRun(runId ?? ''),
   );
   const run = runLoad?.status === 'ready' ? runLoad.data : null;
-  const itemKey = active && runId ? `${runId}:${position}:${itemSeq}` : null;
+  const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
+  useLayoutEffect(() => {
+    if (source === 'bank' && item?.question_id && item.reset_epoch != null) {
+      rememberPracticeEpoch(workspaceId, item.question_id, item.reset_epoch);
+    }
+  }, [source, item, workspaceId]);
   if (invalidating) {
     setSeenInvalidation(invalidated);
     if (invalidated && item?.question_id?.toLowerCase() === invalidated.questionId.toLowerCase()) {
@@ -681,7 +722,14 @@ function useSolveStep({
   const [sessionRetry, setSessionRetry] = useState(0);
   const sessionLoad = useKeyedLoad(
     opening ? `${opening.itemKey}:${opening.key}:${sessionRetry}` : null,
-    () => client.openSession(questionId ?? '', runId ?? '', position, opening?.key ?? ''),
+    () =>
+      client.openSession(
+        questionId ?? '',
+        runId ?? '',
+        position,
+        opening?.key ?? '',
+        item?.reset_epoch,
+      ),
   );
   const session = sessionLoad?.status === 'ready' ? sessionLoad.data : null;
   const sessionId = session?.id ?? null;
@@ -748,6 +796,7 @@ function useSolveStep({
         prev?.questionId !== qid ? prev : { questionId: qid, flags: event.flags },
       );
     },
+    workspaceId,
   );
   // The last graded result of the question on screen: read with the flags, replaced by a result
   // graded here. An incorrect one also turns the flag off (the server does).
@@ -785,7 +834,7 @@ function useSolveStep({
   }
   const flagsWanted = source === 'bank' && !archived && client.flags ? questionId : null;
   const flagsLoad = useKeyedLoad(
-    flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}` : null,
+    flagsWanted ? `${flagsWanted}:${itemSeq}:${flagsSeq}:${resetVersion}` : null,
     async () => {
       const started = gradeGen.current;
       const found = (await client.flags?.(flagsWanted ?? '')) ?? null;
@@ -846,6 +895,7 @@ function useSolveStep({
     if (!session || !workId || work.busy || work.outcome || archived) return;
     if (!canSubmit(session, work.answer)) return;
     const qid = session.question_id;
+    const version = practiceResetVersion(workspaceId, qid);
     updateWork(workId, () => ({ busy: 'submit', error: null }));
     let result: StudyActionResult<SubmitResult>;
     try {
@@ -853,6 +903,7 @@ function useSolveStep({
     } catch {
       result = { ok: false, kind: 'unavailable', message: '제출하지 못했습니다. 다시 시도하세요.' };
     }
+    if (practiceResetVersion(workspaceId, qid) !== version) return;
     if (result.ok) {
       if (result.data.result === 'pending') pendingHere(qid);
       else gradedHere(qid, result.data.result);
@@ -889,6 +940,7 @@ function useSolveStep({
   async function selfGrade(grade: GradeResult) {
     if (!pendingSessionId || !workId || work.busy || !questionId) return;
     const qid = questionId;
+    const version = practiceResetVersion(workspaceId, qid);
     updateWork(workId, () => ({ busy: 'grade', error: null }));
     let ok = false;
     let message: string = QUESTION_FAILURE_MESSAGES.unavailable;
@@ -899,6 +951,7 @@ function useSolveStep({
     } catch {
       // network failure: keep the pending result and let the user try again
     }
+    if (practiceResetVersion(workspaceId, qid) !== version) return;
     if (ok) gradedHere(qid, grade);
     if (ok) onGraded?.(qid, grade);
     updateWork(workId, () =>
@@ -1009,14 +1062,24 @@ function useSolveStep({
       ) : (
         <div role="alert" className={styles.error}>
           <p>{failure?.status === 'error' ? failure.message : RUN_FAILURE_MESSAGES.unavailable}</p>
-          <Button
-            onClick={() => {
-              setRunSeq((n) => n + 1);
-              setItemSeq((n) => n + 1);
-            }}
-          >
-            다시 시도
-          </Button>
+          {failure?.status === 'error' && failure.kind === 'reset' ? (
+            <Button
+              onClick={() =>
+                onNavigate({ step: 'picker', source: 'bank', mockExamId: null }, 'replace')
+              }
+            >
+              새 풀이 시작
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setRunSeq((n) => n + 1);
+                setItemSeq((n) => n + 1);
+              }}
+            >
+              다시 시도
+            </Button>
+          )}
         </div>
       );
   } else if (!item || !run) {
@@ -1046,7 +1109,17 @@ function useSolveStep({
         sessionKind !== 'finished' ? (
           <div role="alert" className={styles.error}>
             <p>{sessionLoad.message}</p>
-            <Button onClick={() => setSessionRetry((n) => n + 1)}>다시 시도</Button>
+            {sessionKind === 'reset' ? (
+              <Button
+                onClick={() =>
+                  onNavigate({ step: 'picker', source: 'bank', mockExamId: null }, 'replace')
+                }
+              >
+                새 풀이 시작
+              </Button>
+            ) : (
+              <Button onClick={() => setSessionRetry((n) => n + 1)}>다시 시도</Button>
+            )}
           </div>
         ) : null}
         {item.question_id ? (
@@ -1203,24 +1276,41 @@ async function readResults(
 
 function useResultsStep({
   runId,
+  resetVersion,
   client,
   source,
+  invalidated,
   onNavigate,
   onClose,
 }: {
   readonly runId: string | null;
+  readonly resetVersion: number;
   readonly client: RunClient;
   readonly source: RunSource;
+  readonly invalidated: Invalidation | null;
   readonly onNavigate: (state: RunUrlState, how: 'push' | 'replace') => void;
   readonly onClose: () => void;
 }): { body: ReactNode; footer: ReactNode } {
   const [retry, setRetry] = useState(0);
-  const load = useKeyedLoad(runId ? `${runId}:${retry}` : null, () =>
-    readResults(client, runId ?? ''),
+  const invalidationSeq = source === 'bank' ? (invalidated?.seq ?? 0) : 0;
+  const load = useKeyedLoad(
+    runId ? `${runId}:${retry}:${invalidationSeq}:${resetVersion}` : null,
+    () => readResults(client, runId ?? ''),
   );
   const data = load?.status === 'ready' ? load.data : null;
-  const [more, setMore] = useState<{ runId: string; items: RunResultItem[] } | null>(null);
-  const extra = more && more.runId === runId ? more.items : [];
+  const [more, setMore] = useState<{
+    runId: string;
+    seq: number;
+    resetVersion: number;
+    items: RunResultItem[];
+  } | null>(null);
+  const extra =
+    more &&
+    more.runId === runId &&
+    more.seq === invalidationSeq &&
+    more.resetVersion === resetVersion
+      ? more.items
+      : [];
   const items = data ? [...data.items, ...extra] : [];
   const [loadingMore, setLoadingMore] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -1251,7 +1341,8 @@ function useResultsStep({
     const page = await client.results(runId, items.length).catch(() => null);
     if (liveVisit.current !== token) return;
     setLoadingMore(false);
-    if (page?.ok) setMore({ runId, items: [...extra, ...page.data.items] });
+    if (page?.ok)
+      setMore({ runId, seq: invalidationSeq, resetVersion, items: [...extra, ...page.data.items] });
     else setError(page?.message ?? RUN_FAILURE_MESSAGES.unavailable);
   }
 

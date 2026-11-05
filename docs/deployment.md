@@ -224,3 +224,11 @@ PR opened
 - Fork는 Celery 비동기 작업으로 immutable published snapshot을 독립 복제한다. 대상 Workspace는 완료 전 숨기고, 취소·실패 시 객체 스토리지 임시 복제본도 정리한다.
 - CORS/CSRF, rate limit, 다운로드 비용 및 Fork quota, per-Workspace DB·Qdrant 필터를 검증한다. 공유 데이터의 저작권/재배포 책임을 Owner UI에 안내한다.
 - staging E2E에 비로그인 읽기, revoke/expire, Fork ON/OFF, 재시도·동시성·Storage ID 격리 시나리오를 추가한다. 상세: [workspace-sharing.md](workspace-sharing.md).
+
+
+### 개인 풀이 초기화 보관
+
+문제 풀이 초기화는 `practice_reset_epochs`의 사용자·문제 경계를 증가시킨다. 초기화 전
+`question_attempts`는 감사와 참조 무결성을 위해 물리적으로 보관하지만 사용자 이력·결과·집계에는
+포함하지 않는다. 복구와 재색인 중 이 경계를 함께 보존해야 하며, 초기화 전 session은 다시 제출하거나
+결과를 열 수 없다.

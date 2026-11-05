@@ -119,7 +119,7 @@ DEFAULT_RESULTS_PAGE = 200
 MAX_RESULTS_PAGE = 200
 
 RunSource = Literal["bank", "mock"]
-PositionResult = Literal["correct", "incorrect", "pending", "skipped"]
+PositionResult = Literal["correct", "incorrect", "pending", "skipped", "reset"]
 SessionState = Literal["open", "pending_grade", "graded"]
 
 
@@ -212,6 +212,7 @@ class RunItem(BaseModel):
     )
     practice_session_id: uuid.UUID | None = Field(description="This position's session, if any.")
     session_state: SessionState | None
+    reset_epoch: int | None = None
     attempt: RunAttempt | None
 
 
@@ -373,6 +374,8 @@ def run_summary(run: RunRecord, progress: RunProgress) -> RunSummary:
 def position_result(
     run: RunRecord, reached: int, position: int, state: str | None, result: str | None
 ) -> PositionResult | None:
+    if state == "reset":
+        return "reset"
     if state == "pending_grade":
         return "pending"
     if state == "graded" and result in ("correct", "incorrect"):
@@ -589,7 +592,14 @@ def get_practice_run_item(
     live = runs.live_question(run.workspace_id, question_id) if question_id else None
     if live is None:
         return _unavailable(position, run.total)
+    epoch = practice.lock_epoch(run.user_id, live.id)
     session = practice.run_session(run.id, position, run.user_id)
+    if session is not None and session.reset_epoch != epoch:
+        raise ProblemException(
+            409,
+            ProblemType.PRACTICE_SESSION_RESET,
+            detail="This practice session was reset. Start a new run.",
+        )
     if session is not None:
         texts = {o["id"]: o["text"] for o in session.revision.options}
         options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
@@ -613,6 +623,7 @@ def get_practice_run_item(
         options=options,
         practice_session_id=session.id if session else None,
         session_state=session.state if session else None,  # type: ignore[arg-type]
+        reset_epoch=epoch,
         attempt=_attempt_out(session, practice) if session else None,
     )
 

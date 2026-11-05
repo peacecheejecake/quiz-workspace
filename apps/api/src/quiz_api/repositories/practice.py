@@ -42,9 +42,11 @@ from quiz_api.authz.repository import MembershipRecord, membership_record, membe
 from quiz_api.practice_grading import AttemptResult, GradedResult
 from quiz_api.question_rules import QuestionType
 from quiz_api.question_status import LastGradedResult
+from quiz_api.repositories.practice_epoch import current_session
 from quiz_api.repositories.questions import RevisionRecord
 from quiz_api.repositories.tables import (
     activity_events,
+    practice_reset_epochs,
     practice_sessions,
     question_attempts,
     question_merged_user_states,
@@ -78,6 +80,7 @@ class SessionRecord:
     # QVIEW-B: the run position this session practises (None outside a run).
     practice_run_id: uuid.UUID | None = None
     run_position: int | None = None
+    reset_epoch: int = 0
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,7 @@ _SESSION_COLUMNS = (
     practice_sessions.c.question_id,
     practice_sessions.c.user_id,
     practice_sessions.c.displayed_option_ids,
+    practice_sessions.c.reset_epoch,
     practice_sessions.c.state,
     practice_sessions.c.opened_at,
     practice_sessions.c.submitted_at,
@@ -200,6 +204,7 @@ def _session(row: Any) -> SessionRecord:
         ),
         practice_run_id=row.practice_run_id,
         run_position=row.run_position,
+        reset_epoch=row.reset_epoch,
     )
 
 
@@ -231,6 +236,72 @@ class PracticeRepository:
         self._session.rollback()
 
     # --- sessions --------------------------------------------------------------------------------
+
+    def lock_epoch(self, user_id: uuid.UUID, question_id: uuid.UUID) -> int:
+        """Serialize all mutations for one user's physical question before session locks."""
+        key = f"practice-reset:{user_id}:{question_id}"
+        self._session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
+        self._session.execute(
+            pg_insert(practice_reset_epochs)
+            .values(user_id=user_id, question_id=question_id, epoch=0)
+            .on_conflict_do_nothing()
+        )
+        return int(
+            self._session.execute(
+                select(practice_reset_epochs.c.epoch).where(
+                    practice_reset_epochs.c.user_id == user_id,
+                    practice_reset_epochs.c.question_id == question_id,
+                )
+            ).scalar_one()
+        )
+
+    def reset_since_transaction(self, user_id: uuid.UUID, question_id: uuid.UUID) -> bool:
+        return bool(
+            self._session.execute(
+                select(practice_reset_epochs.c.reset_at > func.transaction_timestamp()).where(
+                    practice_reset_epochs.c.user_id == user_id,
+                    practice_reset_epochs.c.question_id == question_id,
+                )
+            ).scalar_one_or_none()
+        )
+
+    def session_question(self, session_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+        return self._session.execute(
+            select(practice_sessions.c.question_id).where(
+                practice_sessions.c.id == session_id, practice_sessions.c.user_id == user_id
+            )
+        ).scalar_one_or_none()
+
+    def reset(self, user_id: uuid.UUID, question_id: uuid.UUID) -> dict[str, int]:
+        members = sorted(set(self._session.execute(self._members(question_id)).scalars()), key=str)
+        for member in members:
+            self.lock_epoch(user_id, member)
+        epochs = self._session.execute(
+            update(practice_reset_epochs)
+            .where(
+                practice_reset_epochs.c.user_id == user_id,
+                practice_reset_epochs.c.question_id.in_(members),
+            )
+            .values(epoch=practice_reset_epochs.c.epoch + 1, reset_at=func.clock_timestamp())
+            .returning(practice_reset_epochs.c.question_id, practice_reset_epochs.c.epoch)
+        ).all()
+        self._session.execute(
+            update(question_user_states)
+            .where(
+                question_user_states.c.user_id == user_id,
+                question_user_states.c.question_id.in_(members),
+            )
+            .values(
+                first_viewed_at=None,
+                last_viewed_at=None,
+                last_graded_result=None,
+                last_graded_attempt_id=None,
+                is_favorite=False,
+                needs_retry=False,
+            )
+        )
+
+        return {str(question_id): epoch for question_id, epoch in epochs}
 
     def session_membership(
         self, session_id: uuid.UUID, user_id: uuid.UUID, lock: LockMode
@@ -273,6 +344,35 @@ class PracticeRepository:
         ).one_or_none()
         return _session(row) if row is not None else None
 
+    def initial_attempt(self, session_id: uuid.UUID, user_id: uuid.UUID) -> AttemptRecord | None:
+        row = self._session.execute(
+            self._attempt_select()
+            .where(
+                question_attempts.c.practice_session_id == session_id,
+                question_attempts.c.user_id == user_id,
+                question_attempts.c.grades_attempt_id.is_(None),
+            )
+            .order_by(question_attempts.c.submitted_at, question_attempts.c.id)
+            .limit(1)
+        ).one_or_none()
+        return _attempt(row) if row is not None else None
+
+    def latest_submitted_session(
+        self, question_id: uuid.UUID, user_id: uuid.UUID
+    ) -> SessionRecord | None:
+        row = self._session.execute(
+            self._session_select()
+            .where(
+                practice_sessions.c.question_id == question_id,
+                practice_sessions.c.user_id == user_id,
+                practice_sessions.c.submitted_at.is_not(None),
+                current_session(),
+            )
+            .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
+            .limit(1)
+        ).one_or_none()
+        return _session(row) if row is not None else None
+
     def record_view(
         self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
@@ -305,6 +405,7 @@ class PracticeRepository:
         shuffle_seed: int | None,
         practice_run_id: uuid.UUID | None = None,
         run_position: int | None = None,
+        reset_epoch: int = 0,
     ) -> OpenedSession:
         """Insert the session and record the caller's view (`record_view`) in one statement."""
         opened = (
@@ -316,6 +417,7 @@ class PracticeRepository:
                 user_id=user_id,
                 displayed_option_ids=displayed_option_ids,
                 shuffle_seed=shuffle_seed,
+                reset_epoch=reset_epoch,
                 state="open",
                 practice_run_id=practice_run_id,
                 run_position=run_position,
@@ -503,6 +605,12 @@ class PracticeRepository:
         stmt = self._attempt_select().where(
             question_attempts.c.user_id == user_id,
             question_attempts.c.question_id.in_(self._members(question_id)),
+            select(practice_sessions.c.id)
+            .where(
+                practice_sessions.c.id == question_attempts.c.practice_session_id,
+                current_session(),
+            )
+            .exists(),
         )
         if after is not None:
             stmt = stmt.where(
@@ -680,6 +788,7 @@ class PracticeRepository:
                 practice_sessions.c.user_id == user_id,
                 practice_sessions.c.question_id.in_(self._members(question_id)),
                 practice_sessions.c.submitted_at.is_not(None),
+                current_session(),
             )
             .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
             .limit(1)

@@ -157,7 +157,9 @@ def test_idempotency_hash_ignores_client_identity_fields() -> None:
 
 
 def test_session_body_pairs_run_and_position() -> None:
-    assert PracticeSessionCreate.model_validate({}).model_dump(exclude_none=True) == {}
+    assert PracticeSessionCreate.model_validate({}).model_dump(exclude_none=True) == {
+        "shuffle_options": False
+    }
     PracticeSessionCreate.model_validate({"practice_run_id": str(uuid.uuid4()), "run_position": 1})
     for bad in (
         {"practice_run_id": str(uuid.uuid4())},

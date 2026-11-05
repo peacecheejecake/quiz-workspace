@@ -112,6 +112,7 @@ function sameFlags(a: StudyFlags, b: StudyFlags): boolean {
  */
 export class FlagSync<R extends StudyFlags> {
   private readonly entries = new Map<string, FlagEntry & { readonly saved: R | null }>();
+  private readonly generations = new Map<string, number>();
 
   constructor(
     private readonly send: (questionId: string, patch: FlagPatch) => Promise<FlagResult<R>>,
@@ -133,6 +134,12 @@ export class FlagSync<R extends StudyFlags> {
     if (before !== after) this.onBusyChange?.(after);
   }
 
+  /** Drop queued changes and ignore any response already in flight after a reset. */
+  invalidate(questionId: string): void {
+    this.generations.set(questionId, (this.generations.get(questionId) ?? 0) + 1);
+    this.update(() => this.entries.delete(questionId));
+  }
+
   /** The flags to show while a change of `questionId` is being saved (null: none). */
   active(questionId: string): StudyFlags | null {
     return this.entries.get(questionId)?.desired ?? null;
@@ -148,16 +155,17 @@ export class FlagSync<R extends StudyFlags> {
       else this.entries.delete(questionId);
     });
     this.onEvent(questionId, { type: 'change', flags: entry.desired });
-    if (send) void this.run(questionId, send);
+    if (send) void this.run(questionId, send, this.generations.get(questionId) ?? 0);
   }
 
-  private async run(questionId: string, patch: FlagPatch): Promise<void> {
+  private async run(questionId: string, patch: FlagPatch, generation: number): Promise<void> {
     let result: FlagResult<R>;
     try {
       result = await this.send(questionId, patch);
     } catch {
       result = { ok: false, message: this.failureMessage };
     }
+    if ((this.generations.get(questionId) ?? 0) !== generation) return;
     const entry = this.entries.get(questionId);
     if (!entry) return;
     const settled = settleFlags(
@@ -189,6 +197,6 @@ export class FlagSync<R extends StudyFlags> {
       // More to save, but the server changed a field the user did not touch: show it.
       this.onEvent(questionId, { type: 'change', flags });
     }
-    if (settled.send) void this.run(questionId, settled.send);
+    if (settled.send) void this.run(questionId, settled.send, generation);
   }
 }

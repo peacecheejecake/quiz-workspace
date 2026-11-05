@@ -19,11 +19,13 @@ from sqlalchemy.orm import Session
 
 from quiz_api.question_fingerprint import answer_key, fingerprint, model_answer_of
 from quiz_api.question_rules import QuestionType
+from quiz_api.repositories.practice_epoch import current_session
 from quiz_api.repositories.questions import UNNUMBERED
 from quiz_api.repositories.tables import (
     activity_events,
     chapters,
     documents,
+    practice_sessions,
     question_attempts,
     question_merges,
     question_revisions,
@@ -207,6 +209,9 @@ class QuestionDuplicateRepository:
             .where(
                 a.c.workspace_id == workspace_id,
                 a.c.result.in_(("correct", "incorrect")),
+                select(practice_sessions.c.id)
+                .where(practice_sessions.c.id == a.c.practice_session_id, current_session())
+                .exists(),
                 target.in_(ids),
             )
             .group_by(target)

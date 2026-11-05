@@ -146,7 +146,10 @@ class RelatedSourcesRepository:
                 "select s.question_revision_id as revision_id, exists (select 1 "
                 "from public.question_attempts a where a.practice_session_id = s.id "
                 "and a.user_id = s.user_id) as submitted from public.practice_sessions s "
-                "where s.id = :s and s.user_id = :u and s.question_id = :q"
+                "where s.id = :s and s.user_id = :u and s.question_id = :q "
+                "and not exists (select 1 from public.practice_reset_epochs e "
+                "where e.user_id = s.user_id and e.question_id = s.question_id "
+                "and e.epoch > s.reset_epoch)"
             ),
             {"s": session_id, "u": user_id, "q": question_id},
         ).one_or_none()

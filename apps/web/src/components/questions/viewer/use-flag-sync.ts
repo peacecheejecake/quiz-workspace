@@ -8,6 +8,7 @@ import {
   type FlagResult,
   type StudyFlags,
 } from '@/lib/questions/flag-sync';
+import { subscribePracticeResets } from '@/lib/questions/practice-reset-events';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 
 /**
@@ -19,6 +20,7 @@ import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 export function useFlagSync<R extends StudyFlags>(
   send: (questionId: string, patch: FlagPatch) => Promise<FlagResult<R>>,
   onEvent: (questionId: string, event: FlagEvent<R>) => void,
+  workspaceId?: string,
 ): FlagSync<R> {
   const latest = useRef({ send, onEvent });
   useLayoutEffect(() => {
@@ -42,5 +44,12 @@ export function useFlagSync<R extends StudyFlags>(
     return { sync, confirmLeave };
   });
   useEffect(() => () => window.removeEventListener('beforeunload', state.confirmLeave), [state]);
+  useEffect(
+    () =>
+      workspaceId
+        ? subscribePracticeResets(workspaceId, (id) => state.sync.invalidate(id))
+        : undefined,
+    [state, workspaceId],
+  );
   return state.sync;
 }

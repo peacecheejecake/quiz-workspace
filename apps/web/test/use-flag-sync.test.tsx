@@ -3,7 +3,8 @@
 // or reloading the page asks the browser's standard beforeunload confirmation; never otherwise.
 import './dom-setup';
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { publishPracticeReset } from '../src/lib/questions/practice-reset-events';
 import type { FlagResult, StudyFlags } from '../src/lib/questions/flag-sync';
 import { useFlagSync } from '../src/components/questions/viewer/use-flag-sync';
 
@@ -27,6 +28,30 @@ function setup() {
 }
 
 describe('useFlagSync beforeunload guard', () => {
+  it('invalidates in-flight saves on reset and accepts a new save afterward', async () => {
+    const held: ((r: FlagResult<StudyFlags>) => void)[] = [];
+    const events = vi.fn();
+    const hook = renderHook(() =>
+      useFlagSync<StudyFlags>(
+        () => new Promise((resolve) => held.push(resolve)),
+        events,
+        'workspace',
+      ),
+    );
+    act(() => hook.result.current.toggle('question', OFF, { is_favorite: true }));
+    act(() => publishPracticeReset('workspace', { question: 1 }));
+    expect(hook.result.current.active('question')).toBeNull();
+    act(() => hook.result.current.toggle('question', OFF, { needs_retry: true }));
+    const before = events.mock.calls.length;
+    await act(async () => held[0]?.({ ok: true, data: { ...OFF, is_favorite: true } }));
+    expect(events).toHaveBeenCalledTimes(before);
+    await act(async () => held[1]?.({ ok: true, data: { ...OFF, needs_retry: true } }));
+    expect(events.mock.calls.at(-1)?.[1]).toMatchObject({
+      type: 'saved',
+      flags: { needs_retry: true },
+    });
+  });
+
   it('asks to confirm leaving only while a save is in flight', async () => {
     const { held, hook } = setup();
     expect(leave()).toBe(false);

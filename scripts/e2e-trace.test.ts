@@ -284,13 +284,13 @@ describe('analyze + strict', () => {
 });
 
 describe('repository docs', () => {
-  it('declares 256 screen ACs in 40 screens and 3 API ACs after UX10-AI/DOC', () => {
+  it('declares 261 screen ACs in 41 screens and 3 API ACs after UX10-QVIEW/AI/DOC', () => {
     const report = loadReport(join(import.meta.dirname, '..'));
     const screens = report.screens.filter((s) => s.id !== 'AUTH-API');
-    assert.equal(screens.length, 40);
+    assert.equal(screens.length, 41);
     assert.equal(
       screens.reduce((n, s) => n + s.acs.length, 0),
-      256,
+      261,
     );
     assert.ok(screens.every((s) => s.testPath?.startsWith('tests/e2e/')));
     assert.deepEqual(report.screens.find((s) => s.id === 'AUTH-API')?.acs, [
