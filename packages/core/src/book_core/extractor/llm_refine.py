@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from book_core.llm import LLMRequest
 
 EXTRACT_TASK = "questions.extract"
-EXTRACT_PROMPT_VERSION = "questions.extract/v2"
+EXTRACT_PROMPT_VERSION = "questions.extract/v3"
 
 SYSTEM_PROMPT = """\
 You convert one printed exam question into structured data for a question bank.
@@ -24,6 +24,11 @@ You convert one printed exam question into structured data for a question bank.
 Rules:
 - Copy the stem and option texts exactly as printed (fix only broken line breaks and spacing).
   Do not paraphrase, translate, complete or correct them.
+- Stem layout: join a sentence wrapped over several printed lines with a space. When the stem
+  lists labelled items between the question sentence and the options (e.g. "(가) ...",
+  "ㄱ. ...", "(A) ...", "㉠ ...", "⑴ ..."), put a blank line after the question sentence and
+  each item on its own line, starting with its label as printed; a wrapped item line continues
+  its item with a space. A label mentioned inside a sentence ("(가)와 (나)에") is not an item.
 - Do not include the question number in the stem or the option labels in option texts.
 - question_type: MCQ when the question has options; ESSAY when it asks for a written
   explanation (e.g. 서술하시오, 설명하시오, explain, describe); otherwise SHORT_ANSWER.
@@ -53,7 +58,7 @@ class LLMAnswer(BaseModel):
 
 
 class LLMQuestion(BaseModel):
-    """Structured output schema of ``questions.extract/v2``."""
+    """Structured output schema of ``questions.extract/v3``."""
 
     model_config = ConfigDict(extra="forbid")
 
