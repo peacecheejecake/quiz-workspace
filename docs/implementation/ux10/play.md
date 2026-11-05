@@ -1,13 +1,14 @@
-# UX10-PLAY — 독립 풀이 화면·모의고사 개선
+# UX10-PLAY — 문제 풀기·모의고사 통합 및 이름 수정
 
 ## 변경 위치
 
-apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mock-exam-model,mock-exam-detail,mock-run}.tsx(ts), viewer/{sequence-viewer,question-range-picker}, lib/questions/practice-runs; practice_runs 결과 API/DTO·BFF, mock config/API/core planner·no-variation 생성 경로, rename-field. HOME의 dropdown 진입을 유지한다.
+apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mock-exam-model,mock-exam-detail,mock-run}.tsx(ts), viewer/{sequence-viewer,question-range-picker}, lib/questions/practice-runs; practice_runs 결과 API/DTO·BFF, 필요 시 mock config 검증, rename-field. HOME의 풀기 버튼을 통합 화면으로 연결한다.
 
 ## 화면·기록 경계 — 최종 사용자 변경
 
-- **문제 풀기·모의고사 통합은 취소한다.** HOME의 풀기 dropdown 두 항목에서 기존 독립 화면·route를 각각 연다. bank source=bank와 mock source=mock의 기록·권한·개인 상태 격리는 유지한다. 기존 딥링크·Back/Forward도 보존한다.
-- 모의고사 변형을 아무것도 선택하지 않은 경우는 원본 그대로 복사한 mock 문제로 저장한다(LLM 호출 0회). bank 풀이로 우회하지 않는다. API의 variation_types 빈 배열을 명시적으로 허용하고 core planner·저장·generation/job 경로에 original/no-variation 방식을 추가한다. 원본 순서·내용·stable option ID를 보존하고 mock 격리와 기존 검증을 적용한다. 기존 저장 config는 그대로 호환된다.
+- **최종 사용자 결정: 문제 풀기·모의고사 화면·진입점 통합을 다시 추진한다.** 홈 primary 풀기 버튼에서 통합 화면으로 진입하고 기존 문제 그대로 풀기와 변형 출제를 선택한다. 기존 bank/mock 데이터·권한·기록은 각각 유지하며 예전 딥링크·Back/Forward도 지원한다.
+- 변형을 아무것도 선택하지 않으면 원본 문제를 practice_runs source=bank로 실행한다. 보기 섞기만 또는 AI 변형을 선택하면 기존 mock 생성·풀기 경로를 사용한다. 변형 0개를 기존 mock API에 보내지 않으며 mock variation_types nonempty 계약은 유지한다. bank를 불필요하게 mock으로 복사하지 않는다.
+- 기존 모의고사 목록·상세·생성·풀기도 통합 화면 안에서 접근한다. 기존 모의고사 설정 바꾸기에서 변형 0개 선택은 새 bank 풀이 안내로 연결하고 기존 모의고사를 덮어쓰지 않는다. 보기 권한의 bank 풀이와 mock 만들기 editor 권한 구분, 보관 Workspace 제출 금지는 유지한다.
 - 모의고사 목록 및 상세의 이름 수정 UI는 입력 아래 동작 줄에 저장·취소를 함께 표시한다. 편집 중 같은 모의고사의 풀기 버튼은 native disabled로 렌더링하고 menu/keyboard로도 시작할 수 없게 한다. 다른 모의고사는 영향을 받지 않는다.
 - 저장 성공·취소 후 풀기는 원래 가용 상태로 복구한다. 저장 중은 중복 저장/취소 경합을 방지하고, 저장 실패는 입력·편집 상태·풀기 disabled를 유지하며 alert를 표시한다. Enter 저장·Escape 취소·focus 복귀를 유지한다.
 
@@ -27,7 +28,7 @@ apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mo
 
 ## 수용 기준
 
-- UX10-PLAY-AC01: 풀기 dropdown에서 기존 문제 풀기/모의고사 화면을 각각 열고 기록이 격리된다. 모의고사 변형 0개는 원본 그대로 mock 경로를 사용하며 LLM 호출이 없다.
+- UX10-PLAY-AC01: 풀기 버튼에서 통합 화면을 열고 변형 0개는 bank, 보기 섞기/AI 변형은 mock 경로를 사용하며 기록이 격리된다. 변형 0개와 보기 섞기는 LLM 호출이 없다.
 - UX10-PLAY-AC02: 변형 0개·보기 섞기만 모두 전체 범위 가능, 0건·상한·범위 축소를 UI/서버가 검증한다.
 - UX10-PLAY-AC03: 선택 단계는 단계 표시, 생성 중만 progressbar이며 desktop input 정렬·mobile 1열이 맞는다.
 - UX10-PLAY-AC04: 짧은 화면·모바일 키보드에서 하단 다음 버튼과 마지막 입력/범위가 접근 가능하다.
