@@ -21,7 +21,8 @@ interface DocScreen {
 function parseScreensIndex(markdown: string): DocScreen[] {
   const rows: DocScreen[] = [];
   for (const line of markdown.split(/\r?\n/)) {
-    const m = /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+|UX10-[A-Z]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
+    const m =
+      /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+|UX10-[A-Z]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
     if (!m) continue;
     const [, id, name, routeCell] = m as unknown as [string, string, string, string];
     const route = /^`(\/[^`]*)`$/.exec(routeCell)?.[1];

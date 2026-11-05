@@ -4,10 +4,11 @@
 // refresh overtaken by a newer save never brings back older text; and the `?page=`/`?block=`
 // address-bar state follows the selection.
 import './dom-setup';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { VIEWER_SETTINGS_KEY, viewerSettingsStore } from '../src/lib/documents/viewer-settings';
 import type { ContentBlock, DocumentDetail, RevisionInfo } from '../src/lib/documents/editor-api';
 
 // Stable like Next's app router instance.
@@ -106,6 +107,8 @@ function patchBodies(): { text: string; base_version: string }[] {
 }
 
 beforeEach(() => {
+  window.localStorage.setItem(VIEWER_SETTINGS_KEY, JSON.stringify({ mode: 'both' }));
+  act(() => viewerSettingsStore.reload());
   failBlockReads = false;
   blockReads = 0;
   heldReads = null;

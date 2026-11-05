@@ -237,6 +237,7 @@ test(
 
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
     await expect(editorUi.outline(page)).toBeVisible();
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expect(editorUi.textPanel(page)).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'document editor');

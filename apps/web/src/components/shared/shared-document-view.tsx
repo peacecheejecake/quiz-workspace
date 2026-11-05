@@ -35,6 +35,8 @@ export interface SharedDocumentViewProps {
   readonly shareId: string;
   readonly client: SharedClient;
   readonly documentId: string;
+  readonly archived: boolean;
+  readonly expiryLabel: string | null;
   /** The document's entry in the shared workspace; null when it is not shared (any more). */
   readonly summary: SharedDocumentSummary | null;
   /** `?page=` / `?block=` deep link (question sources, search hits). */
@@ -56,6 +58,8 @@ export function SharedDocumentView({
   shareId,
   client,
   documentId,
+  archived,
+  expiryLabel,
   summary,
   page: linkedPage,
   blockId: linkedBlockId,
@@ -227,38 +231,51 @@ export function SharedDocumentView({
     [blocks, outlineChosen, selectBlock],
   );
 
+  const header = (
+    <div className={styles.documentHeader}>
+      <nav aria-label="위치">
+        <Link href={sharePath(shareId)} className={`${styles.backLink} qz-focus-ring`}>
+          공유 Workspace 홈
+        </Link>
+      </nav>
+      <h2 id="shared-document-title" className={styles.documentTitle}>
+        {title}
+      </h2>
+      <p role="note">
+        공유 문서는 읽기 전용입니다. 발행된 문서와 문제만 볼 수 있고, 이 화면에서는 아무것도
+        저장되지 않습니다.
+      </p>
+      {archived ? <p role="note">보관된 Workspace입니다.</p> : null}
+      {expiryLabel ? <p>{expiryLabel}</p> : null}
+    </div>
+  );
+
   return (
     <section className={styles.document} aria-labelledby="shared-document-title">
-      <div className={styles.documentHeader}>
-        <nav aria-label="위치">
-          <Link href={sharePath(shareId)} className={`${styles.backLink} qz-focus-ring`}>
-            공유 Workspace 홈
-          </Link>
-        </nav>
-        <h2 id="shared-document-title" className={styles.documentTitle}>
-          {title}
-        </h2>
-      </div>
-
       {content.status === 'error' ? (
-        <div className={styles.alert} role="alert">
-          <p>{content.message}</p>
-          {content.missing ? null : (
-            <button
-              type="button"
-              className={`${editorStyles.linkButton} qz-focus-ring`}
-              onClick={() => {
-                setContent({ status: 'loading' });
-                setAttempt((n) => n + 1);
-              }}
-            >
-              다시 불러오기
-            </button>
-          )}
-        </div>
+        <>
+          {header}
+          <div className={styles.alert} role="alert">
+            <p>{content.message}</p>
+            {content.missing ? null : (
+              <button
+                type="button"
+                className={`${editorStyles.linkButton} qz-focus-ring`}
+                onClick={() => {
+                  setContent({ status: 'loading' });
+                  setAttempt((n) => n + 1);
+                }}
+              >
+                다시 불러오기
+              </button>
+            )}
+          </div>
+        </>
       ) : (
         <DocumentViewerLayout
           viewer={viewer}
+          chrome={header}
+          preventAutoHide={archived}
           headingLevel={3}
           outline={
             document ? (

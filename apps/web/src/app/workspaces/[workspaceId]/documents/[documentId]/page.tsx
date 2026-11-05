@@ -31,8 +31,9 @@ export default async function Page({
   const archived = workspace.status === 'archived';
   const viewer = workspace.role === 'viewer';
   const canEdit = !archived && !viewer;
-  const readOnlyReason =
-    viewer && !archived
+  const readOnlyReason = archived
+    ? '보관된 Workspace입니다. 읽기 전용이며, 소유자가 Workspace 홈에서 복원할 수 있습니다.'
+    : viewer
       ? '뷰어 권한으로는 원문을 볼 수만 있고 수정·발행할 수 없습니다.'
       : undefined;
   const rawBlock = Array.isArray(query.block) ? query.block[0] : query.block;

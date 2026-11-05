@@ -200,6 +200,122 @@ describe('SplitView minimum sizes', () => {
     expect(separator()).toHaveAttribute('aria-valuemax', '80');
   });
 
+  it('uses current pane geometry for keyboard bounds before the resize observer runs', () => {
+    let size = 640;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    const onCommit = vi.fn();
+    render(<Controlled orientation="vertical" initial={55} minSize={112} onCommit={onCommit} />);
+    expect(separator()).toHaveAttribute('aria-valuemin', '20');
+    size = 363;
+    fireEvent.keyDown(separator(), { key: 'Home' });
+    expect(onCommit).toHaveBeenLastCalledWith(31);
+    expect(separator()).toHaveAttribute('aria-valuenow', '31');
+    fireEvent.keyDown(separator(), { key: 'End' });
+    expect(onCommit).toHaveBeenLastCalledWith(69);
+  });
+
+  it('reports a controlled keyboard change against the expanded current range', () => {
+    let size = 448;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    const onCommit = vi.fn();
+    render(<Controlled orientation="vertical" initial={80} minSize={112} onCommit={onCommit} />);
+    expect(valueNow()).toBe(75);
+    size = 640;
+    fireEvent.keyDown(separator(), { key: 'ArrowUp' });
+    expect(onCommit).toHaveBeenLastCalledWith(75);
+    expect(valueNow()).toBe(75);
+  });
+
+  it('reports a reset against the expanded current range', () => {
+    let size = 224;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    const onCommit = vi.fn();
+    render(<Controlled orientation="vertical" initial={80} minSize={112} onCommit={onCommit} />);
+    expect(valueNow()).toBe(50);
+    size = 640;
+    fireEvent.doubleClick(separator());
+    expect(onCommit).toHaveBeenLastCalledWith(50);
+    expect(separator()).toHaveAttribute('aria-valuemax', '80');
+    expect(valueNow()).toBe(50);
+  });
+
+  it('clamps an active pointer drag when its pane space shrinks', () => {
+    let size = 640;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    const onCommit = vi.fn();
+    render(<Controlled orientation="vertical" initial={70} minSize={112} onCommit={onCommit} />);
+    const pointer = { pointerId: 7, pointerType: 'mouse', isPrimary: true, button: 0 };
+    fireEvent.pointerDown(separator(), { ...pointer, buttons: 1, clientY: 100 });
+    fireEvent.pointerMove(separator(), { ...pointer, buttons: 1, clientY: 132 });
+    size = 363;
+    fireEvent.pointerMove(separator(), { ...pointer, buttons: 1, clientY: 133 });
+    fireEvent.pointerUp(separator(), { ...pointer, buttons: 0, clientY: 133 });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenLastCalledWith(69);
+    expect(valueNow()).toBe(69);
+  });
+
+  it('uses fresh bounds for uncontrolled keyboard changes on expansion and shrink', () => {
+    let size = 448;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    render(
+      <SplitView separatorLabel={LABEL} orientation="vertical" defaultRatio={80} minSize={112}>
+        <p>원본</p>
+        <p>변환본</p>
+      </SplitView>,
+    );
+    expect(valueNow()).toBe(75);
+    size = 640;
+    fireEvent.keyDown(separator(), { key: 'ArrowUp' });
+    expect(valueNow()).toBe(75);
+    size = 363;
+    fireEvent.keyDown(separator(), { key: 'Home' });
+    expect(valueNow()).toBe(31);
+  });
+
+  it('uses the current clamped ratio as the pointer-drag origin after a resize', () => {
+    let size = 640;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const half = this.classList.contains('pane') ? size / 2 : 0;
+      return DOMRect.fromRect({ width: half, height: half });
+    });
+    const onCommit = vi.fn();
+    render(<Controlled orientation="vertical" initial={80} minSize={112} onCommit={onCommit} />);
+    size = 363;
+    const pointer = { pointerId: 7, pointerType: 'mouse', isPrimary: true, button: 0 };
+    fireEvent.pointerDown(separator(), { ...pointer, buttons: 1, clientY: 100 });
+    fireEvent.pointerMove(separator(), { ...pointer, buttons: 1, clientY: 64 });
+    fireEvent.pointerUp(separator(), { ...pointer, buttons: 0, clientY: 64 });
+    expect(onCommit).toHaveBeenLastCalledWith(59);
+  });
+
   it('a container smaller than both minimums pins the separator at 50', () => {
     mockPaneSpace(500);
     render(<Controlled initial={70} minSize={320} />);
