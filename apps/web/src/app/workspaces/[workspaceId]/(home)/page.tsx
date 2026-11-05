@@ -56,6 +56,7 @@ export default async function Page({
         viewerId={user?.id ?? null}
         filters={filters}
         overview={data.overview}
+        unfilteredOverview={data.unfilteredOverview}
         chapterChoices={data.chapterChoices}
         failure={data.failure}
         requested={data.requested}

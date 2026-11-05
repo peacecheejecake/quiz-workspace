@@ -94,6 +94,7 @@ export function useLiveQuery({
     if (handledExternalRef.current === external) return;
     handledExternalRef.current = external;
     cancel();
+    composingRef.current = false;
     committedRef.current = seen;
   }, [cancel, external, seen]);
 
@@ -112,9 +113,13 @@ export function useLiveQuery({
   const schedule = useCallback(
     (raw: string) => {
       cancel();
+      if (normalizeQuery(raw, max) === '') {
+        commit(raw);
+        return;
+      }
       timerRef.current = window.setTimeout(() => commit(raw), delayMs);
     },
-    [cancel, commit, delayMs],
+    [cancel, commit, delayMs, max],
   );
 
   return {
@@ -136,11 +141,16 @@ export function useLiveQuery({
         schedule(event.currentTarget.value);
       },
     },
-    flush: () => commit(value),
+    flush: () => {
+      if (composingRef.current) return;
+      commit(value);
+    },
     replace: (next) => {
       cancel();
       composingRef.current = false;
-      committedRef.current = normalizeQuery(next, max);
+      const normalized = normalizeQuery(next, max);
+      committedRef.current = normalized;
+      setSync((s) => ({ ...s, pending: addWrite(s.pending, normalized, s.seen) }));
       setValue(next);
     },
   };

@@ -716,20 +716,30 @@ test(
       await createQuestion(owner, ws.id, mcqInput(title, ['예', '아니오']));
     }
 
+    const overviewApi = `/api/workspaces/${ws.id}/questions/overview`;
+    const overviewRequests: string[] = [];
+    page.on('request', (req) => {
+      const url = new URL(req.url());
+      if (url.pathname === overviewApi) overviewRequests.push(url.search);
+    });
+
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
+    expect(overviewRequests).toHaveLength(0);
     const box = homeUi.questionSearch(page);
     const historyLength = await page.evaluate(() => window.history.length);
 
-    // Typed key by key, never Enter: the heatmap follows.
+    // Typed key by key, never Enter: debounced so intermediate keystrokes do not each fire a request.
     await box.pressSequentially('search01-ac12', { delay: 20 });
     await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12');
     await expect(overviewUi.dots(page)).toHaveCount(3);
+    expect(overviewRequests).toEqual(['?q=search01-ac12']);
     await box.pressSequentially(' chlorine', { delay: 20 });
     await expect(overviewUi.dots(page)).toHaveCount(1);
     await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 chlorine');
     await expect(box).toHaveValue('search01-ac12 chlorine');
+    expect(overviewRequests).toEqual(['?q=search01-ac12', '?q=search01-ac12+chlorine']);
 
     // Editing in the middle: the caret stays where the user typed while the heatmap re-reads.
     const caret = 'search01-ac12 '.length;
@@ -741,39 +751,75 @@ test(
     expect(await box.evaluate((el: HTMLInputElement) => el.selectionStart)).toBe(
       'search01-ac12 x'.length,
     );
+    const afterMiss = overviewRequests.length;
+    // Backspace returns to the cached query `search01-ac12 chlorine`: zero new BFF requests.
     await box.press('Backspace');
     await expect(overviewUi.dots(page)).toHaveCount(1);
+    expect(overviewRequests).toHaveLength(afterMiss);
 
-    // Fast typing never loses a character, and the last query wins over an answer that is late:
-    // the re-read for the shorter query is held back until after the longer one.
-    await box.fill('');
-    await expect(overviewUi.dots(page)).toHaveCount(3);
-    let held = 0;
-    await page.route(
-      (url) =>
-        url.pathname === `/workspaces/${ws.id}` && url.searchParams.get('q') === 'search01-ac12',
-      async (route) => {
-        held += 1;
-        await new Promise((resolve) => setTimeout(resolve, 1_500));
-        await route.continue().catch(() => undefined);
-      },
-    );
-    await box.pressSequentially('search01-ac12', { delay: 0 });
-    await expect.poll(() => held).toBeGreaterThan(0);
-    await box.pressSequentially(' 염소', { delay: 0 });
-    await expect(box).toHaveValue('search01-ac12 염소');
-    await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12 염소');
-    await expect(overviewUi.dots(page)).toHaveCount(1);
-    await page.waitForTimeout(2_000); // the held answer arrives (or is dropped) by now
-    await expect(overviewUi.dots(page)).toHaveCount(1);
-    await expect(box).toHaveValue('search01-ac12 염소');
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
-
-    // Clearing shows every question; typing never added history entries.
+    // Clearing (`fill('')`) restores every question immediately with zero new BFF requests.
     await box.fill('');
     await expect(overviewUi.dots(page)).toHaveCount(3);
     await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    expect(overviewRequests).toHaveLength(afterMiss);
+
+    // Re-applying a cached query and clearing via Backspace also hit cache with zero network calls.
+    await box.fill('search01-ac12 chlorine');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    expect(overviewRequests).toHaveLength(afterMiss);
+    await box.selectText();
+    await box.press('Backspace');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    expect(overviewRequests).toHaveLength(afterMiss);
+
+    // Fast typing / superseding: an earlier in-flight BFF request (`?q=염`) is aborted/superseded
+    // when a newer query (`?q=염소`) commits, so a late answer never wins.
+    let held = 0;
+    let aborted = 0;
+    await page.route(
+      (url) => url.pathname === overviewApi && url.searchParams.get('q') === '염',
+      async (route) => {
+        held += 1;
+        route.request().failure();
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        await route.continue().catch(() => {
+          aborted += 1;
+        });
+      },
+    );
+    page.on('requestfailed', (req) => {
+      const url = new URL(req.url());
+      if (url.pathname === overviewApi && url.searchParams.get('q') === '염') aborted += 1;
+    });
+    await box.fill('염');
+    await expect.poll(() => held).toBeGreaterThan(0);
+    await box.pressSequentially('소', { delay: 0 });
+    await expect(box).toHaveValue('염소');
+    await expect(page).toHaveURL((url) => url.searchParams.get('q') === '염소');
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect.poll(() => aborted).toBeGreaterThan(0);
+    await page.waitForTimeout(1_600);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    await expect(box).toHaveValue('염소');
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+
+    // Clearing shows every question from cache; typing never added history entries.
+    const beforeFinalClear = overviewRequests.length;
+    await box.fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    expect(overviewRequests).toHaveLength(beforeFinalClear);
     expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+
+    // Direct landing on `?q=염소`: SSR seeds unfilteredOverview, so clearing hits cache (0 fetches).
+    await page.goto(`${homePath(ws.id)}?q=${encodeURIComponent('염소')}`);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    const beforeLandingClear = overviewRequests.length;
+    await homeUi.questionSearch(page).fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
+    expect(overviewRequests).toHaveLength(beforeLandingClear);
   },
 );
 
@@ -789,14 +835,14 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
-    const home = `/workspaces/${ws.id}`;
-    // Hold every heatmap re-read for the searched query or the type filter until released.
+    const overviewApi = `/api/workspaces/${ws.id}/questions/overview`;
+    // Hold every overview BFF read for the searched query or the type filter until released.
     let release: () => void = () => undefined;
     const released = new Promise<void>((resolve) => (release = resolve));
     let held = 0;
     await page.route(
       (url) =>
-        url.pathname === home &&
+        url.pathname === overviewApi &&
         (url.searchParams.get('q') === 'search01-ac12 chlorine' || url.searchParams.has('type')),
       async (route) => {
         held += 1;
@@ -805,7 +851,7 @@ test(
       },
     );
 
-    // The 문제 search commits, its re-read is held, and the 문서 dialog opens meanwhile.
+    // The 문제 search commits, its BFF read is held, and the 문서 dialog opens meanwhile.
     await homeUi.questionSearch(page).fill('search01-ac12 chlorine');
     await expect.poll(() => held).toBeGreaterThan(0);
     await homeUi.documentsButton(page).click();
@@ -831,7 +877,7 @@ test(
     const typeReleased = new Promise<void>((resolve) => (releaseType = resolve));
     let typeHeld = 0;
     await page.route(
-      (url) => url.pathname === home && url.searchParams.get('type') === 'MCQ',
+      (url) => url.pathname === overviewApi && url.searchParams.get('type') === 'MCQ',
       async (route) => {
         typeHeld += 1;
         await typeReleased;
@@ -864,7 +910,7 @@ test(
 );
 
 test(
-  'SEARCH-01-AC12 the heatmap still filters when a dialog opened and then closed interrupts two re-reads',
+  'SEARCH-01-AC12 the heatmap still filters when a dialog is opened and closed while the overview load is in flight',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('search01-ac12-race2');
@@ -875,42 +921,30 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
-    const home = `/workspaces/${ws.id}`;
+    const overviewApi = `/api/workspaces/${ws.id}/questions/overview`;
     const QUERY = 'search01-ac12 chlorine';
-    const gate = () => {
-      let open: () => void = () => undefined;
-      const opened = new Promise<void>((resolve) => (open = resolve));
-      return { open, opened, held: 0 };
-    };
-    // 1st: the 문제 search's re-read (no dialog yet). 2nd: the retry of the same filters, read
-    // while the 문서 dialog is open.
-    const first = gate();
-    const second = gate();
+    let openGate: () => void = () => undefined;
+    const opened = new Promise<void>((resolve) => (openGate = resolve));
+    let held = 0;
     await page.route(
-      (url) => url.pathname === home && url.searchParams.get('q') === QUERY,
+      (url) => url.pathname === overviewApi && url.searchParams.get('q') === QUERY,
       async (route) => {
-        const withDialog = new URL(route.request().url()).searchParams
-          .getAll('panel')
-          .includes('documents');
-        const g = withDialog ? second : first;
-        g.held += 1;
-        await g.opened;
+        held += 1;
+        await opened;
         await route.continue().catch(() => undefined);
       },
     );
 
     await homeUi.questionSearch(page).fill(QUERY);
-    await expect.poll(() => first.held).toBeGreaterThan(0);
-    await homeUi.documentsButton(page).click(); // interrupts the 1st re-read
+    await expect.poll(() => held).toBeGreaterThan(0);
+    await homeUi.documentsButton(page).click();
     await expect(homeUi.documentsDialog(page)).toBeVisible();
-    first.open();
-    await expect.poll(() => second.held).toBeGreaterThan(0); // the retry, held in turn
     await homeUi
       .documentsDialog(page)
       .getByRole('button', { name: /문서 관리 닫기|close/i })
-      .click(); // interrupts the retry
+      .click();
     await expect(homeUi.documentsDialog(page)).toHaveCount(0);
-    second.open();
+    openGate();
 
     await expect(overviewUi.dots(page)).toHaveCount(1);
     await expect(page).toHaveURL(

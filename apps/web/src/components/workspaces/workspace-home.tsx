@@ -47,8 +47,9 @@
 // chapter header's `정리 노트` button opens it), and `question` (the practice panel). Dialogs and
 // panels open on a new history entry and closing one (its button or Back) drops those entries
 // (usePanelHistory, UX7-BACK/UX7-BACK-2: neither Back nor Forward reopens it; Next syncs
-// useSearchParams, no server round trip); filter and 문제 search changes write the URL at once and use router.replace (the server
-// re-reads the overview, rereadHeatmap; the 문제 search only once typing pauses).
+// useSearchParams, no server round trip); filter and 문제 search changes write the URL at once via
+// panelHistory.replace and serve from the in-memory OverviewCache or fetch the overview BFF route
+// (QSEARCH-CACHE; non-empty 문제 search debounced 350ms, clearing to empty restores in 0ms).
 import {
   Button,
   FloatingSidePanel,
@@ -63,7 +64,7 @@ import {
 } from '@quiz/ui';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -94,8 +95,10 @@ import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { useAskState } from '@/components/ask/use-ask-state';
 import { normalizeScope } from '@/lib/ask/client';
 import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
+import { loginRedirectPath } from '@/lib/auth/routes';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
+import { fetchQuestionOverview, OverviewCache } from '@/lib/questions/overview-cache';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
@@ -158,8 +161,27 @@ import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
-/** Re-reads of the same wanted heatmap filters after interrupted reads (see rereadHeatmap). */
-const MAX_HEATMAP_RETRIES = 3;
+
+function effectiveOverviewFilters(
+  params: Readonly<Record<string, string | string[] | undefined>> | URLSearchParams,
+): OverviewFilters {
+  const parsed = parseOverviewFilters(params);
+  return isChapterNoteOpen(params) ? { ...parsed, chapter: null } : parsed;
+}
+
+function seedOverviewCache(
+  workspaceId: string,
+  viewerId: string | null,
+  filters: OverviewFilters,
+  overview: QuestionOverview,
+  failure: QuestionFailureKind | null,
+  unfilteredOverview: QuestionOverview | null,
+): OverviewCache {
+  const seeded = new OverviewCache(workspaceId, viewerId);
+  if (unfilteredOverview) seeded.put(EMPTY_OVERVIEW_FILTERS, unfilteredOverview);
+  if (!failure) seeded.put(filters, overview);
+  return seeded;
+}
 
 export interface WorkspaceHomeProps {
   readonly workspace: {
@@ -173,6 +195,8 @@ export interface WorkspaceHomeProps {
   /** Heatmap filters the server rendered `overview` with (`q` = the 문제 search). */
   readonly filters: OverviewFilters;
   readonly overview: QuestionOverview;
+  /** Unfiltered heatmap when SSR loaded it alongside a filtered URL (QSEARCH-CACHE). */
+  readonly unfilteredOverview?: QuestionOverview | null;
   readonly chapterChoices: readonly ChapterChoice[];
   readonly failure: QuestionFailureKind | null;
   readonly requested: PlacedQuestion | null;
@@ -200,6 +224,7 @@ export function WorkspaceHome({
   viewerId,
   filters,
   overview,
+  unfilteredOverview = null,
   chapterChoices,
   failure,
   requested,
@@ -301,9 +326,10 @@ export function WorkspaceHome({
     const target = `${pathname}${next.search}`;
     panelHistory.push(target);
     if (view.chapter !== null) {
-      // The note takes over `chapter`: drop the heatmap's chapter filter with it (re-read).
-      setView((v) => ({ ...v, chapter: null }));
-      startNavigation(() => router.replace(target, { scroll: false }));
+      // The note takes over `chapter`: drop the heatmap's chapter filter with it.
+      const dropped = effectiveOverviewFilters(new URLSearchParams(next.search));
+      setView(dropped);
+      requestOverview(dropped);
     }
   }
   function closeNote() {
@@ -477,7 +503,217 @@ export function WorkspaceHome({
   // A move (or a move refused because questions changed) re-reads the heatmap and the notes. The
   // dialog's close replaces the URL, which can drop a refresh still in flight: it is redone then.
   const chaptersStale = useRef(false);
+  // --- heatmap filters + client cache (QSEARCH-CACHE) --------------------------------------
+  const ssrFiltersKey = overviewSearch(filters);
+  const urlFiltersKey = overviewSearch(effectiveOverviewFilters(searchParams));
+  const urlEffectiveFilters = useMemo(
+    () => parseOverviewFilters(new URLSearchParams(urlFiltersKey.slice(1))),
+    [urlFiltersKey],
+  );
+
+  const [cache, setCache] = useState(() =>
+    seedOverviewCache(workspace.id, viewerId, filters, overview, failure, unfilteredOverview),
+  );
+  const [shown, setShown] = useState<{
+    readonly overview: QuestionOverview;
+    readonly filters: OverviewFilters;
+    readonly filtersKey: string;
+    readonly failure: QuestionFailureKind | null;
+    readonly source: OverviewCache;
+  }>(() => ({
+    overview,
+    filters,
+    filtersKey: ssrFiltersKey,
+    failure,
+    source: cache,
+  }));
+  const [fetchingKey, setFetchingKey] = useState<string | null>(null);
+  const [view, setView] = useState(filters);
+
+  const [ssrSnapshot, setSsrSnapshot] = useState({
+    workspaceId: workspace.id,
+    viewerId,
+    filtersKey: ssrFiltersKey,
+    overview,
+    unfilteredOverview,
+    failure,
+  });
+  if (
+    ssrSnapshot.workspaceId !== workspace.id ||
+    ssrSnapshot.viewerId !== viewerId ||
+    ssrSnapshot.filtersKey !== ssrFiltersKey ||
+    ssrSnapshot.overview !== overview ||
+    ssrSnapshot.unfilteredOverview !== unfilteredOverview ||
+    ssrSnapshot.failure !== failure
+  ) {
+    setSsrSnapshot({
+      workspaceId: workspace.id,
+      viewerId,
+      filtersKey: ssrFiltersKey,
+      overview,
+      unfilteredOverview,
+      failure,
+    });
+    const freshCache = seedOverviewCache(
+      workspace.id,
+      viewerId,
+      filters,
+      overview,
+      failure,
+      unfilteredOverview,
+    );
+    setCache(freshCache);
+    if (urlFiltersKey === ssrFiltersKey) {
+      setView(filters);
+      setFetchingKey(null);
+      setShown({
+        overview,
+        filters,
+        filtersKey: ssrFiltersKey,
+        failure,
+        source: freshCache,
+      });
+    } else {
+      setView(urlEffectiveFilters);
+      const hit = freshCache.get(urlEffectiveFilters);
+      if (hit) {
+        setFetchingKey(null);
+        setShown({
+          overview: hit,
+          filters: urlEffectiveFilters,
+          filtersKey: urlFiltersKey,
+          failure: null,
+          source: freshCache,
+        });
+      }
+    }
+  }
+
+  const [seenUrlKey, setSeenUrlKey] = useState(urlFiltersKey);
+  if (seenUrlKey !== urlFiltersKey) {
+    setSeenUrlKey(urlFiltersKey);
+    const alreadyHandled =
+      fetchingKey === urlFiltersKey ||
+      (shown.filtersKey === urlFiltersKey && shown.source === cache);
+    if (!alreadyHandled) {
+      setView(urlEffectiveFilters);
+      const hit = cache.get(urlEffectiveFilters);
+      if (hit) {
+        setFetchingKey(null);
+        setShown({
+          overview: hit,
+          filters: urlEffectiveFilters,
+          filtersKey: urlFiltersKey,
+          failure: null,
+          source: cache,
+        });
+      }
+    }
+  }
+
+  const cacheRef = useRef(cache);
+  useEffect(() => {
+    cacheRef.current = cache;
+  }, [cache]);
+
+  const mutationEpochRef = useRef(0);
+  const invalidateOverviewCache = useCallback(() => {
+    mutationEpochRef.current += 1;
+    cacheRef.current.clear();
+  }, []);
+
+  const inFlightRef = useRef<{
+    controller: AbortController;
+    key: string;
+    source: OverviewCache;
+  } | null>(null);
+
+  const abortInFlight = useCallback(() => {
+    if (!inFlightRef.current) return;
+    inFlightRef.current.controller.abort();
+    inFlightRef.current = null;
+  }, []);
+  useEffect(() => abortInFlight, [abortInFlight]);
+
+  const requestOverview = useCallback(
+    (nextFilters: OverviewFilters, targetCache: OverviewCache = cacheRef.current) => {
+      const nextKey = overviewSearch(nextFilters);
+      const cached = targetCache.get(nextFilters);
+      if (cached !== null) {
+        abortInFlight();
+        setFetchingKey(null);
+        setShown({
+          overview: cached,
+          filters: nextFilters,
+          filtersKey: nextKey,
+          failure: null,
+          source: targetCache,
+        });
+        return;
+      }
+
+      abortInFlight();
+      const controller = new AbortController();
+      const epochAtStart = mutationEpochRef.current;
+      inFlightRef.current = { controller, key: nextKey, source: targetCache };
+      setFetchingKey(nextKey);
+      setShown((prev) => (prev.failure !== null ? { ...prev, failure: null } : prev));
+
+      void fetchQuestionOverview(workspace.id, nextFilters, controller.signal).then((result) => {
+        if (inFlightRef.current?.controller !== controller) return;
+        inFlightRef.current = null;
+        if (result.ok) {
+          setFetchingKey(null);
+          if (cacheRef.current === targetCache && mutationEpochRef.current === epochAtStart) {
+            targetCache.put(nextFilters, result.data);
+          }
+          setShown({
+            overview: result.data,
+            filters: nextFilters,
+            filtersKey: nextKey,
+            failure: null,
+            source: cacheRef.current,
+          });
+          return;
+        }
+        if (result.aborted) return;
+        setFetchingKey(null);
+        if (result.kind === 'unauthenticated') {
+          router.replace(loginRedirectPath(`${pathname}${window.location.search}`));
+          return;
+        }
+        setShown((prev) => ({
+          ...prev,
+          filters: nextFilters,
+          filtersKey: nextKey,
+          failure: result.kind,
+          source: cacheRef.current,
+        }));
+      });
+    },
+    [abortInFlight, pathname, router, workspace.id],
+  );
+
+  useEffect(() => {
+    if (inFlightRef.current && (fetchingKey === null || inFlightRef.current.source !== cache)) {
+      abortInFlight();
+    }
+    if (shown.filtersKey === urlFiltersKey && shown.source === cache) return;
+    if (inFlightRef.current?.key === urlFiltersKey && inFlightRef.current.source === cache) return;
+    requestOverview(urlEffectiveFilters, cache);
+  }, [
+    abortInFlight,
+    cache,
+    fetchingKey,
+    requestOverview,
+    shown.filtersKey,
+    shown.source,
+    urlEffectiveFilters,
+    urlFiltersKey,
+  ]);
+
   const onChaptersChanged = () => {
+    invalidateOverviewCache();
     chaptersStale.current = true;
     setQuestionsVersion((n) => n + 1);
     setNotesVersion((n) => n + 1);
@@ -497,76 +733,44 @@ export function WorkspaceHome({
   // Source titles of the 문제 상세 dialog (UX7-BANK-2).
   const documentTitles = library.documents.map((d) => ({ id: d.id, title: d.title }));
 
-  // --- heatmap filters ----------------------------------------------------------------------
-  // Filters as last chosen: quick successive changes build on each other before the URL (and the
-  // server render) catch up; a new server render with other filters resets them.
-  const filtersKey = overviewSearch(filters);
-  const [renderedKey, setRenderedKey] = useState(filtersKey);
-  const [view, setView] = useState(filters);
-  if (renderedKey !== filtersKey) {
-    setRenderedKey(filtersKey);
-    setView(filters);
-  }
-
   /**
-   * Writes `search` (new heatmap filters or the 문제 search) into the address bar at once, then
-   * has the server re-read the overview for it (UX7-SEARCH). Without the immediate write, a
-   * dialog opened while the re-read was loading pushed a URL without the new filters (its
-   * pushState also discards the pending navigation), or the navigation's URL, a snapshot from
-   * before, dropped the dialog's `panel`. Now later URL writes build on the new URL; a re-read
-   * discarded that way is redone by the reconciliation below. A newer re-read supersedes an older
-   * one, so a late answer never wins.
+   * Writes `search` (new heatmap filters or the 문제 search) into the address bar at once via
+   * `panelHistory.replace` (no extra history entry, no RSC page navigation), then serves the
+   * Heatmap from `OverviewCache` (`0ms` on cache hit, e.g. clearing `q`) or fetches the BFF
+   * overview endpoint with `AbortController` cancellation of superseded requests (QSEARCH-CACHE).
    */
-  function rereadHeatmap(search: string) {
+  function applyHeatmapUrl(search: string) {
     const target = `${pathname}${search}`;
     panelHistory.replace(target);
-    startNavigation(() => router.replace(target, { scroll: false }));
+    const nextFilters = effectiveOverviewFilters(new URLSearchParams(search));
+    setView(nextFilters);
+    requestOverview(nextFilters);
   }
 
-  // The heatmap filters the address bar asks for (as the page reads them: the open 정리 노트
-  // panel owns `chapter`). When they differ from what the server rendered and nothing is
-  // loading, a re-read was discarded (see rereadHeatmap): read the current URL again.
-  const urlFilters = parseOverviewFilters(searchParams);
-  const urlFiltersKey = overviewSearch(
-    isChapterNoteOpen(searchParams) ? { ...urlFilters, chapter: null } : urlFilters,
-  );
-  // Retries are tracked per wanted filters: a retry is tried once per navigation target (a retry
-  // that a later history change interrupted has a new target, e.g. a dialog closed meanwhile),
-  // and at most MAX_HEATMAP_RETRIES times in all, so a server that keeps failing never loops.
-  const healRef = useRef<{ key: string; targets: string[] } | null>(null);
-  useEffect(() => {
-    if (navigating) return;
-    if (urlFiltersKey === filtersKey) {
-      healRef.current = null;
+  function retryOverview() {
+    if (failure !== null && shown.filtersKey === ssrFiltersKey) {
+      startNavigation(() => router.refresh());
       return;
     }
-    const target = `${pathname}${window.location.search}`;
-    const heal =
-      healRef.current?.key === urlFiltersKey
-        ? healRef.current
-        : (healRef.current = { key: urlFiltersKey, targets: [] });
-    if (heal.targets.includes(target) || heal.targets.length >= MAX_HEATMAP_RETRIES) return;
-    heal.targets.push(target);
-    startNavigation(() => router.replace(target, { scroll: false }));
-  }, [filtersKey, navigating, pathname, router, searchParams, urlFiltersKey]);
+    requestOverview(urlEffectiveFilters, cache);
+  }
 
   function changeFilters(patch: Partial<OverviewFilters>) {
     const next = { ...view, ...patch };
     setView(next);
     const search = window.location.search;
-    rereadHeatmap(
+    applyHeatmapUrl(
       keepNoteChapter(search, mergeOverviewFilters(search, next), patch.chapter ?? null),
     );
   }
 
-  // --- 문제 search (SEARCH-01-AC12: live, debounced; `q`) ---------------------------------------
+  // --- 문제 search (SEARCH-01-AC12: live, 350ms debounced, 0ms on clear; `q`) -------------------
   const questionSearch = useLiveQuery({
     urlValue: (searchParams.get('q') ?? '').trim().slice(0, OVERVIEW_SEARCH_MAX),
     max: OVERVIEW_SEARCH_MAX,
     onCommit: (q) => {
-      setView((v) => ({ ...v, q }));
       // replaceState: typing never adds history entries.
-      rereadHeatmap(patchSearch(window.location.search, { q: q || null }));
+      applyHeatmapUrl(patchSearch(window.location.search, { q: q || null }));
     },
   });
 
@@ -579,7 +783,7 @@ export function WorkspaceHome({
       mergeOverviewFilters(search, EMPTY_OVERVIEW_FILTERS),
       null,
     );
-    rereadHeatmap(patchSearch(merged, { q: null }));
+    applyHeatmapUrl(patchSearch(merged, { q: null }));
   }
 
   const chapterOptions = [
@@ -597,7 +801,9 @@ export function WorkspaceHome({
             screenId={screenIds.search}
             query={questionSearch}
             max={OVERVIEW_SEARCH_MAX}
-            searchable={hasSearchableQuestions(hasQuestions)}
+            searchable={hasSearchableQuestions(
+              hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
+            )}
             settings={
               <div className={searchStyles.optionRow}>
                 <Select
@@ -687,13 +893,14 @@ export function WorkspaceHome({
         <QuestionsOverview
           workspaceId={workspace.id}
           readOnly={readOnly}
-          filters={filters}
+          filters={shown.filters}
           view={view}
-          navigating={navigating}
+          navigating={navigating || fetchingKey !== null}
           onFiltersChange={changeFilters}
           onResetFilters={resetAll}
-          overview={overview}
-          failure={failure}
+          overview={shown.overview}
+          failure={shown.failure}
+          onRetry={retryOverview}
           requested={requested}
           panelScreenId={screenIds.practice}
           practiceReturnFocusRef={practiceReturnFocusRef}
@@ -705,7 +912,11 @@ export function WorkspaceHome({
           dialogContainer={host}
           onCreateOpenChange={(open) => setPanel(QUESTION_CREATE_PANEL, open)}
           documents={documentTitles}
-          onQuestionsChanged={() => setQuestionsVersion((n) => n + 1)}
+          onQuestionsChanged={() => {
+            invalidateOverviewCache();
+            setQuestionsVersion((n) => n + 1);
+          }}
+          onStudyStateChanged={invalidateOverviewCache}
           chapterActions={(chapter) =>
             chapter.id === NO_CHAPTER_KEY ? (
               // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
@@ -773,7 +984,10 @@ export function WorkspaceHome({
               {shows(DUPLICATES_PANEL) ? (
                 <QuestionDuplicates
                   workspaceId={workspace.id}
-                  onMerged={() => setQuestionsVersion((n) => n + 1)}
+                  onMerged={() => {
+                    invalidateOverviewCache();
+                    setQuestionsVersion((n) => n + 1);
+                  }}
                 />
               ) : null}
             </FloatingSidePanel>
@@ -833,7 +1047,10 @@ export function WorkspaceHome({
             onOpenChange={(open) => (open ? undefined : closeNote())}
             container={host}
             chapterId={noteChapter ?? null}
-            chapterTitle={overview.chapters.find((c) => c.id === noteChapter)?.title}
+            chapterTitle={
+              shown.overview.chapters.find((c) => c.id === noteChapter)?.title ??
+              chapterChoices.find((c) => c.value === noteChapter)?.title
+            }
             canEdit={canEdit}
             screenId={screenIds.chapterNote}
             onOpenQuestion={openNoteQuestion}

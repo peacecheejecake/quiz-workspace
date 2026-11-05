@@ -40,6 +40,11 @@ export interface OverviewData {
    * something to search, SEARCH-01 UX6); null when that is unknown (a read failed).
    */
   readonly hasQuestions: boolean | null;
+  /**
+   * The unfiltered heatmap when known on SSR (QSEARCH-CACHE), so clearing a filter or `q` on
+   * direct landing (`/workspaces/:id?q=foo`) restores the full list from memory with no fetch.
+   */
+  readonly unfilteredOverview?: QuestionOverview | null;
 }
 
 const EMPTY: QuestionOverview = {
@@ -108,5 +113,12 @@ export async function loadOverview(
   }
   const unfilteredOverview = filtered ? unfiltered?.data : result?.data;
   const hasQuestions = unfilteredOverview ? unfilteredOverview.counts.total > 0 : null;
-  return { overview, chapterChoices: choices, failure, requested, hasQuestions };
+  return {
+    overview,
+    chapterChoices: choices,
+    failure,
+    requested,
+    hasQuestions,
+    unfilteredOverview: unfilteredOverview ?? null,
+  };
 }
