@@ -106,6 +106,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'RETRY.0': ['RETRY-01'],
   // STEM-ITEMS (2026-11-05): stem item lists one per line in a 제시 항목 box (QPLAY-01-AC14).
   'STEM.0': ['QPLAY-01'],
+  'UX11-STEM': ['UX11-STEM'],
   'UX10-UI.0': ['UX10-UI'],
   'UX10-DOC.0': ['UX10-DOC'],
   'UX10-AI.0': ['UX10-AI'],

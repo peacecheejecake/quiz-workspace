@@ -2,8 +2,13 @@
 // with its labelled items in a 제시 항목 box, shared by every screen that shows the full stem
 // (QuestionStem, draft review, source compare, mock question dialog, document question card).
 // One-line previews keep collapsing whitespace and do not use it.
-import { displayStem, stemParagraphs } from '@/lib/questions/display-stem';
-import { stemItems, type StemItem, type StemLayout } from '@/lib/questions/stem-items';
+import { displayStem } from '@/lib/questions/display-stem';
+import {
+  stemItems,
+  stemPassageParagraphs,
+  type StemItem,
+  type StemLayout,
+} from '@/lib/questions/stem-items';
 import styles from './stem-text.module.css';
 
 /** The item list: named 제시 항목 (apart from the 보기 option list), labels as printed. */
@@ -44,7 +49,7 @@ export function StemBlocks({ stem }: { readonly stem: string }) {
   if (layout) return <LayoutBlocks layout={layout} />;
   return (
     <>
-      {stemParagraphs(displayStem(stem)).map((paragraph, i) => (
+      {stemPassageParagraphs(stem).map((paragraph, i) => (
         <p key={i}>{paragraph}</p>
       ))}
     </>
@@ -63,7 +68,17 @@ export function StemText({
   readonly className?: string;
 }) {
   const layout = stemItems(stem);
-  if (!layout) return <p className={className}>{displayStem(stem)}</p>;
+  if (!layout) {
+    const paragraphs = stemPassageParagraphs(stem);
+    if (paragraphs.length === 1) return <p className={className}>{displayStem(stem)}</p>;
+    return (
+      <div className={className ? `${className} ${styles.stem}` : styles.stem}>
+        {paragraphs.map((paragraph, i) => (
+          <p key={i}>{paragraph}</p>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className={className ? `${className} ${styles.stem}` : styles.stem}>
       <LayoutBlocks layout={layout} />

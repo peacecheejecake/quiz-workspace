@@ -252,3 +252,61 @@ describe('stemItems', () => {
     expect(stemItems('첫 문단\n\n둘째 문단')).toBeNull();
   });
 });
+
+describe('UX11 stem layout', () => {
+  it('keeps range references outside the four labelled items', () => {
+    const text = '다음 (가) ~ (라)의 것은? ( ) (가) 첫째 (나) 둘째 (다) 셋째 (라) 넷째';
+    expect(stemItems(text)?.items.map((item) => item.label)).toEqual([
+      '(가)',
+      '(나)',
+      '(다)',
+      '(라)',
+    ]);
+    expect(stemItems(text)?.lead).toEqual(['다음 (가) ~ (라)의 것은?']);
+  });
+  it('keeps inline placeholders inside four bullets', () => {
+    const text =
+      '다음은? ( ) - 첫째 ( 가) 이내. - 둘째 ( 나)이 경과. - 셋째 ( 다)이다. - 넷째 ( 라) 이내.';
+    expect(stemItems(text)?.items.map((item) => item.text)).toEqual([
+      '첫째 ( 가) 이내.',
+      '둘째 ( 나)이 경과.',
+      '셋째 ( 다)이다.',
+      '넷째 ( 라) 이내.',
+    ]);
+  });
+});
+
+it('leaves a paragraph following bullets outside the list', () => {
+  const text = '다음은? ( ) - 갑이다. - 을이다.\n\n위 내용을 참고하시오.';
+  expect(stemItems(text)).toEqual({
+    lead: ['다음은?'],
+    items: [
+      { label: '-', text: '갑이다.' },
+      { label: '-', text: '을이다.' },
+    ],
+    trailing: ['위 내용을 참고하시오.'],
+  });
+});
+
+it('matches the shared bullet boundary matrix', async () => {
+  const { readFileSync } = await import('node:fs');
+  const cases = JSON.parse(readFileSync('../../tests/fixtures/ux11-bullets.json', 'utf8')) as {
+    stem: string;
+    normalized: string;
+    texts?: string[];
+    items: number;
+    lead: string[];
+    trailing: string[];
+  }[];
+  for (const example of cases) {
+    for (const text of [example.stem, example.normalized]) {
+      const layout = stemItems(text);
+      expect(layout?.items.length ?? 0).toBe(example.items);
+      if (layout) {
+        if (example.texts) expect(layout.items.map((item) => item.text)).toEqual(example.texts);
+        expect(layout.lead).toEqual(example.lead);
+        expect(layout.trailing).toEqual(example.trailing);
+      }
+    }
+  }
+});
