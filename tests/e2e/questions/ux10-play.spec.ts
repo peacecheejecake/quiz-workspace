@@ -70,20 +70,46 @@ test('UX10-PLAY-AC03 uses steps instead of a generation progressbar', async ({
   await expect(dialog.getByRole('progressbar')).toHaveCount(0);
 });
 
-test('UX10-PLAY-AC04 keeps the next action reachable in a short viewport', async ({
+test('UX10-PLAY-AC04 keeps action rows at the dialog bottom and fields reachable', async ({
   page,
   workspaceFactory,
 }) => {
-  await page.setViewportSize({ width: 390, height: 450 });
   const owner = await workspaceFactory.member('ux10-footer');
   const workspace = await workspaceFactory.create(owner);
+  await createNumberedQuestions(owner, workspace.id, 'footer', 1);
   await signInAs(page, owner.user);
-  await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
-  const next = dialog.getByRole('button', { name: /다음|next/i });
-  await expect(next).toBeInViewport();
-  await next.click();
-  await expect(dialog.getByRole('button', { name: /시작|start/i })).toBeInViewport();
+  for (const viewport of [
+    { width: 390, height: 812 },
+    { width: 1280, height: 900 },
+    { width: 390, height: 450 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
+    const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const next = dialog.getByRole('button', { name: /다음|next/i });
+    await expect(next).toBeInViewport();
+    const dialogBox = await dialog.boundingBox();
+    const footerBox = await next.locator('..').boundingBox();
+    if (!dialogBox || !footerBox) throw new Error('Dialog and footer must be visible');
+    expect(
+      Math.abs(dialogBox.y + dialogBox.height - (footerBox.y + footerBox.height)),
+    ).toBeLessThanOrEqual(2);
+    await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
+    await next.click();
+    const selectAll = dialog.getByRole('checkbox', { name: /^전체 선택|select all/i });
+    await selectAll.check();
+    await dialog.getByRole('button', { name: /챕터 없음.*펼치기/ }).click();
+    const lastQuestion = dialog.getByRole('checkbox', { name: /1번 · footer-1/ });
+    await lastQuestion.uncheck();
+    await lastQuestion.check();
+    const start = dialog.getByRole('button', { name: /시작|start/i });
+    await expect(start).toBeInViewport();
+    const rangeFooter = await start.locator('..').boundingBox();
+    if (!rangeFooter) throw new Error('Range footer must be visible');
+    expect(
+      Math.abs(dialogBox.y + dialogBox.height - (rangeFooter.y + rangeFooter.height)),
+    ).toBeLessThanOrEqual(2);
+  }
 });
 
 test('UX10-PLAY-AC05 groups results and returns to the same run position', async ({

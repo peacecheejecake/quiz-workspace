@@ -248,11 +248,6 @@
 }
 
 .footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  padding-block: var(--space-3) max(var(--space-3), env(safe-area-inset-bottom));
-  background: var(--color-surface);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -301,23 +296,48 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.body:has(.playForm),
+.form:has(.playForm),
+.playForm {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.form:has(.playForm),
+.playForm {
+  flex: 1 0 auto;
+}
+
+.playFooter {
+  position: sticky;
+  bottom: calc(-1 * var(--space-4));
+  z-index: 1;
+  margin-block-start: auto;
+  margin-block-end: calc(-1 * var(--space-4));
+  margin-inline: calc(-1 * var(--space-5));
+  padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom));
+  background: var(--color-surface);
+}
+
 @media (max-height: 500px) {
-  .form {
+  .playForm {
     padding-block-end: calc(5rem + env(safe-area-inset-bottom));
   }
 
-  .footer {
+  .playFooter {
     position: fixed;
     inset-block-end: 0;
     inset-inline-end: var(--space-4);
     box-sizing: border-box;
     width: min(var(--floating-panel-width), calc(100vw - 2 * var(--space-4)));
+    margin: 0;
     padding-inline: var(--space-4);
   }
 }
 
 @media (max-height: 500px) and (max-width: 600px) {
-  .footer {
+  .playFooter {
     inset-inline-end: 0;
     width: 100%;
   }

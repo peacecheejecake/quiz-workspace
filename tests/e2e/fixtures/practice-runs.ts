@@ -519,7 +519,8 @@ export const runUi = {
   filterToggle: rangePickerUi.filterToggle,
   filters: rangePickerUi.filters,
   incorrectFilter: rangePickerUi.incorrectFilter,
-  retryFilter: rangePickerUi.retryFilter,
+  retryFilter: (panel: Locator) =>
+    rangePickerUi.filters(panel).getByRole('button', { name: /^(다시 풀기만|retry only)$/i }),
   resetFilters: rangePickerUi.resetFilters,
   random: (panel: Locator) =>
     panel.getByRole('checkbox', { name: /^(무작위 순서|random order|shuffle)$/i }),
