@@ -3,6 +3,7 @@ import {
   bank,
   correctText,
   explainCalls,
+  EXPL_PROBLEMS,
   explMcq,
   explUi,
   getExplanation,
@@ -123,7 +124,7 @@ test('UX10-AI-AC04 off API rejects generation and retains cached reads', async (
     );
     expect(read.status).toBe(200);
     expect(read.body?.explanation).not.toBeNull();
-    const create = await off.request(
+    const create = await off.request<{ type: string }>(
       owner,
       'POST',
       `/questions/${question.id}/ai-explanation/regenerate`,
@@ -132,6 +133,7 @@ test('UX10-AI-AC04 off API rejects generation and retains cached reads', async (
       },
     );
     expect(create.status).toBe(409);
+    expect(create.body?.type).toBe(EXPL_PROBLEMS.disabled);
   } finally {
     await off.stop();
   }
