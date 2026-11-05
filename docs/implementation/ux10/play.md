@@ -14,7 +14,7 @@ apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mo
 
 ## 범위·폼
 
-변형 0개 및 보기 섞기만 선택했을 때 모두 전체 범위를 제공한다. 문항 수의 전체 범위 선택은 범위 picker의 전체 선택 checkbox와 다른 개념이며 label로 구분한다. 0개 결과는 시작 불가. bank는 최대 5,000·AI 변형은 기존 100 제한, 선택 범위 변경 시 실제 수를 재검증한다. 문제 무작위 순서와 보기 섞기를 구분한다.
+변형 0개 및 보기 섞기만 선택했을 때 모두 전체 범위를 제공한다. 문항 수의 전체 범위 선택은 범위 picker의 전체 선택 checkbox와 다른 개념이며 label로 구분한다. 0개 결과는 시작 불가. bank는 기존 **선택 후보 범위 5,000개 상한**을 유지한다. question_count로 일부만 풀더라도 후보 범위가 5,000개를 넘으면 기존과 같이 422로 거절하며, 이번 Task에서 대규모 범위 해석 용량을 확대하지 않는다. 문항 수 null/생략은 전체, 지정 수는 1~5,000 및 후보 수 이하로 검증한다. 무작위 순서가 꺼지면 Heatmap 순서의 앞 N개, 켜지면 seed로 후보를 섞은 뒤 앞 N개를 고른다. AI 변형은 기존 100 제한, 선택 범위 변경 시 실제 수를 재검증한다. 문제 무작위 순서와 보기 섞기를 구분한다.
 
 옵션/범위는 StepProgress 등 단계 표시만 사용하고 role=progressbar를 사용하지 않는다. 실제 생성 요청 후 진행에만 progressbar·aria-busy·진행 수치를 표시한다. 문항 수/난이도 field는 desktop 동일 1fr/1fr grid, label/help 공간을 맞춰 input 상단을 정렬한다. mobile은 1열. 변형이 없거나 보기 섞기만 선택한 경우 난이도가 원본을 바꾸지 않음을 명확히 하고 AI 전용 난이도 입력은 숨긴다.
 

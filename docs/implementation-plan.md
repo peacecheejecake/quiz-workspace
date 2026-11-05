@@ -886,6 +886,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 - 기존 QPLAY 보기 shuffle·QOV 빈 status=전체/접힘·MOCK 변형 1개 이상·DOCVIEW both 기본/모바일 단일 pane·AI off 비활성 UI·EXPL 접힘 기본을 [UX10 기준](implementation/ux10/index.md)으로 개정한다. 변형 0개는 bank 경로이므로 mock API nonempty 계약은 유지 가능하다.
 - 사용자 승인 실행: terra 기본 effort Task 1:1 → 독립 Codex 리뷰 → 커밋·main thread 통합 → QA(수정도 terra) → feature PR 하나·CI GREEN까지 수정 → develop 병합 → develop/main PR·병합 → production 배포. 로컬 검증은 생략하지 않는다.
 
+### UX10-PLAY 리뷰의 범위·상한 처리 — 2026-11-05
+
+180758 Codex 리뷰의 후보 5,000개 초과 시 count만 줄여 허용하라는 P2는 거절한다. main이 Task brief에서 승인한 범위는 기존 후보 범위 상한 보존이며, 작은 count로 대규모 후보 해석 용량을 확장하는 변경은 포함하지 않는다. [PLAY 기준](implementation/ux10/play.md)에 명시하고 5,001 후보·count10 거절 회귀를 유지한다. 홈 진입 연결 P2는 HOME 소유 dependency로 인계하며, 최종 HOME/PLAY 통합 QA에서 실제 primary 풀기 버튼→통합 form→bank/mock 시작을 검증하기 전 완료 처리하지 않는다. 생성 dialog/step 접근성 이름 변경에 따른 기존 MOCK fixture 수정은 PLAY가 수행한다.
+
 ### UX11 다시 풀기 기록 경계 — 2026-11-05
 
 사용자 확정: 현재 문제만 다시 풀며 과거 시도를 보존한다. 범위 풀이·모의고사의 원 회차 점수·결과는 그대로 두고 별도 연습 시도로 기록한다. UX10의 기록·Heatmap 초기화와 별개이며, 원 run 위치를 재제출하거나 결과를 덮어쓰지 않는다. mock 연습은 mock 기록 경계를 유지한다. [세부 기준](implementation/ux11/return.md).
@@ -1084,7 +1088,7 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 | UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
 | UX10-HOME | ◐ 독립 리뷰 중 | task/UX10-HOME | all/none·350ms debounce·메뉴/AI header guard 구현, web1275·API range21·양 브라우저12 및 경합회귀6 GREEN. root typecheck의 AI test 오류는 별도 수정 대기 |
-| UX10-PLAY | ◐ 분리 구현·인계 대기 | task/UX10-PLAY | 이름 수정·행별 비활성화·결과 그룹 단위 검증, AI/QVIEW 인계 후 통합 flow·bank 문항 수 구현 |
+| UX10-PLAY | ◐ 독립 리뷰·기존 fixture 수정 | task/UX10-PLAY | main mock20·group2·count1·실제 계약2·양 브라우저16 GREEN. 생성 dialog/steps legacy fixture P2 수정 중, HOME primary 연결은 통합 QA 필요 |
 | UX10-AI | ◐ 리뷰·통합 후 HOME 연결 QA 대기 | 09b04855 · 8ead4059 · merge f21eae93 | 원 agent가 typed 요청 본문·정확한 explanation-disabled 응답으로 QA 수정, 독립 리뷰 통과(175336 log). main 전체 typecheck(E2E·mypy373) GREEN. HOME header guard 연결 후 최종 QA |
 | UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC main 재검증 완료, UI agent 버튼 전수 점검·gesture 확대 검증. 전체 통합 후 Linux baseline·종합 QA |
 
