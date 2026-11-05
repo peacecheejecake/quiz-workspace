@@ -1,12 +1,13 @@
 /* Button / IconButton */
 .qz-button,
 .qz-icon-button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
   min-height: var(--control-height-md);
-  border: 1px solid transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-primary);
@@ -65,13 +66,13 @@
 
 /*
  * Toggle-like buttons (aria-pressed, or data-state="on"/"off" when the label flips instead):
- * no border and no fill while off; on = selected fill + semibold label (Button) or a filled icon
+ * a boundary and no fill while off; on = selected fill + semibold label (Button) or a filled icon
  * / changed label (IconButton), exposed as aria-pressed or the label, never by color alone.
  */
 :is(.qz-button, .qz-icon-button):is([aria-pressed], [data-state='on'], [data-state='off']):not(
     [data-variant='primary']
   ) {
-  border-color: transparent;
+  border-color: var(--color-border);
   background: transparent;
 }
 

@@ -38,6 +38,10 @@ export function useLayerStyle(): CSSProperties | undefined {
 // above `--z-modal` instead, in the same order, below `--z-toast`.
 
 const order: string[] = [];
+
+export function isTopFloatingLayer(rank: number): boolean {
+  return rank >= 0 && rank === order.length - 1;
+}
 const elevated = new Set<string>();
 const listeners = new Set<() => void>();
 

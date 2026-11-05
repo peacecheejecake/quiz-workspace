@@ -16,6 +16,7 @@ function Base({ children, ...props }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
+      style={{ display: 'block' }}
       {...props}
     >
       {children}
@@ -28,7 +29,7 @@ export function AskIcon(props: IconProps) {
   return (
     <Base {...props}>
       <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12Z" />
-      <path d="M12 8.5v3M10.5 10h3" />
+      <path d="M12 10.5v3M10.5 12h3" />
     </Base>
   );
 }
