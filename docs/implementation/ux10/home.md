@@ -4,6 +4,10 @@
 
 apps/web/src/components/workspaces/workspace-home.tsx 및 css, questions/overview/questions-overview.tsx 및 css, lib/questions/overview-{filters,data,cache}.ts, API question_overview 및 query parser. tests/e2e/questions/questions-overview.spec.ts와 기존 SEARCH-01 파일을 확인해 확장한다.
 
+## 구현 소유권 인계
+
+2026-11-05 통합 리뷰에 따라 홈 header의 primary 풀기 진입·순서·QuestionMenu 정리는 UX10-PLAY가 구현한다. HOME agent가 이미 만든 해당 hunk를 PLAY에 인계하고 HOME은 PLAY 통합 뒤 이를 상속·검증한다. HOME은 검색·상태 필터·count 및 AI header 가용성 guard를 계속 소유한다. WorkspaceHome 파일의 편집은 동시 진행하지 않고 PLAY 완료 뒤 HOME으로 돌려준다. 기존 range/result 공통 fixture는 PLAY가 맡고 HOME은 최종 keyboard/visual 흐름을 통합 후 검증한다.
+
 ## 설계
 
 - header 순서: 문서 버튼 → primary `풀기` 버튼 → 화살표 문제 dropdown. dropdown의 시각 문구 문제는 없애고 aria-label=문제 메뉴를 유지한다. AI 질문 메뉴 항목은 삭제한다. 독립 AI launcher는 UX10-AI 정책을 따른다.

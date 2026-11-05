@@ -351,9 +351,9 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | UX10-SPEC | 세부 설계·원본 명세 연결 | — | 문서·링크·충돌 결정 기록, 포맷 검증 |
 | UX10-UI | 공통 버튼·아이콘·swipe | SPEC | ui.md AC01~04 GREEN·독립 리뷰 |
 | UX10-QVIEW | 보기 순서·기존 결과·리셋 | SPEC·UI | qview.md AC01~05 GREEN·DB/격리 계약·독립 리뷰 |
-| UX10-HOME | header·검색·상태 필터 | UI·QVIEW | home.md AC01~05 GREEN·독립 리뷰 |
-| UX10-PLAY | 풀이 화면 통합·폼·결과·이름 수정 | HOME·QVIEW | play.md AC01~06 GREEN·독립 리뷰 |
-| UX10-AI | 가용성·해설 펼침·문구 | PLAY | ai.md AC01~04 GREEN·독립 리뷰 |
+| UX10-HOME | 검색·상태 필터·AI header guard·통합 header 검증 | UI·QVIEW·PLAY | home.md AC01~05 GREEN·독립 리뷰 |
+| UX10-PLAY | 홈 primary 진입·풀이 통합·폼·결과·이름 수정 | UI·QVIEW·AI | play.md AC01~06 GREEN·독립 리뷰 |
+| UX10-AI | 가용성·해설 펼침·문구 | UI (HOME header 검증은 HOME 이후) | ai.md AC01~04 GREEN·독립 리뷰 |
 | UX10-DOC | checkbox·모바일 함께 보기·전체 높이 | UI | doc.md AC01~05 GREEN·독립 리뷰 |
 | UX10-QA | 교차 QA·PR·CI·병합·배포 | 전체 구현 | qa.md AC01~05·CI GREEN·production smoke |
 
@@ -888,7 +888,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 ### UX10-PLAY 리뷰의 범위·상한 처리 — 2026-11-05
 
-180758 Codex 리뷰의 후보 5,000개 초과 시 count만 줄여 허용하라는 P2는 거절한다. main이 Task brief에서 승인한 범위는 기존 후보 범위 상한 보존이며, 작은 count로 대규모 후보 해석 용량을 확장하는 변경은 포함하지 않는다. [PLAY 기준](implementation/ux10/play.md)에 명시하고 5,001 후보·count10 거절 회귀를 유지한다. 홈 진입 연결 P2는 HOME 소유 dependency로 인계하며, 최종 HOME/PLAY 통합 QA에서 실제 primary 풀기 버튼→통합 form→bank/mock 시작을 검증하기 전 완료 처리하지 않는다. 생성 dialog/step 접근성 이름 변경에 따른 기존 MOCK fixture 수정은 PLAY가 수행한다.
+180758 Codex 리뷰의 후보 5,000개 초과 시 count만 줄여 허용하라는 P2는 거절한다. main이 Task brief에서 승인한 범위는 기존 후보 범위 상한 보존이며, 작은 count로 대규모 후보 해석 용량을 확장하는 변경은 포함하지 않는다. [PLAY 기준](implementation/ux10/play.md)에 명시하고 5,001 후보·count10 거절 회귀를 유지한다. 초기에는 홈 진입 연결을 HOME dependency로 인계했으나, 182307 리뷰에서 실제 production 진입 부재 P1과 Task 간 검증 순환이 확인되어 다음과 같이 소유권을 변경한다. PLAY가 HOME의 완성된 header/menu hunk를 받아 primary 진입·onBankStarted 및 실제 클릭 AC01을 구현한다. HOME은 PLAY 이후 필터·AI header guard와 최종 keyboard/visual 흐름을 검증한다. 의존 방향을 PLAY→HOME으로 고정하고 같은 파일을 동시에 편집하지 않는다. 생성 dialog/step 접근성 이름 변경에 따른 기존 MOCK fixture 수정은 PLAY가 수행한다.
 
 ### UX11 다시 풀기 기록 경계 — 2026-11-05
 
@@ -1088,9 +1088,9 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 | UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
 | UX10-HOME | ◐ 독립 리뷰 중 | task/UX10-HOME | all/none·350ms debounce·메뉴/AI header guard 구현, web1275·API range21·양 브라우저12 및 경합회귀6 GREEN. root typecheck의 AI test 오류는 별도 수정 대기 |
-| UX10-PLAY | ◐ 독립 리뷰·기존 fixture 수정 | task/UX10-PLAY | main mock20·group2·count1·실제 계약2·양 브라우저16 GREEN. 생성 dialog/steps legacy fixture P2 수정 중, HOME primary 연결은 통합 QA 필요 |
+| UX10-PLAY | ◐ 독립 리뷰·기존 fixture 수정 | task/UX10-PLAY | main mock20·group2·count1·실제 계약2·양 브라우저16 GREEN. 기존 MOCK 양 브라우저 통과, primary header/menu 구현을 HOME에서 인계해 P1 해결 중; 기존 QVIEW 결과 rows/OX fixture도 수정 |
 | UX10-AI | ◐ 리뷰·통합 후 HOME 연결 QA 대기 | 09b04855 · 8ead4059 · merge f21eae93 | 원 agent가 typed 요청 본문·정확한 explanation-disabled 응답으로 QA 수정, 독립 리뷰 통과(175336 log). main 전체 typecheck(E2E·mypy373) GREEN. HOME header guard 연결 후 최종 QA |
-| UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC main 재검증 완료, UI agent 버튼 전수 점검·gesture 확대 검증. 전체 통합 후 Linux baseline·종합 QA |
+| UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC/STEM main 재검증 완료, 공통 버튼·gesture 후속 통합. 별도 DB 전체 pgTAP1192 GREEN. 전체 통합 후 Linux baseline·종합 QA |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 

@@ -2,7 +2,7 @@
 
 ## 변경 위치
 
-apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mock-exam-model,mock-exam-detail,mock-run}.tsx(ts), viewer/{sequence-viewer,question-range-picker}, lib/questions/practice-runs; practice_runs 결과 API/DTO·BFF, 필요 시 mock config 검증, rename-field. HOME의 풀기 버튼을 통합 화면으로 연결한다.
+apps/web/src/components/questions/mock-exams/{mock-exams-panel,mock-exam-form,mock-exam-model,mock-exam-detail,mock-run}.tsx(ts), viewer/{sequence-viewer,question-range-picker}, lib/questions/practice-runs; practice_runs 결과 API/DTO·BFF, 필요 시 mock config 검증, rename-field. WorkspaceHome header의 primary 풀기 버튼·순서·QuestionMenu 정리 및 onBankStarted 연결도 PLAY가 소유한다(2026-11-05 HOME에서 인계). HOME의 필터 draft·상태·AI header guard는 수정하지 않는다. AC01은 deep link만으로 검증하지 않고 실제 홈 primary 버튼을 눌러 통합 화면과 bank/mock 시작까지 확인한다.
 
 ## 화면·기록 경계 — 최종 사용자 변경
 
