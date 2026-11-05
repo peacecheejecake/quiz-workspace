@@ -15,11 +15,6 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await page.getByRole('button', { name: /^풀기$/ }).click();
   const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
   await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
-  await page.getByRole('button', { name: /^풀기$/ }).click();
-  await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('checkbox', { name: /보기 섞기|shuffle/i })).not.toBeChecked();
   await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/i }).check();
   await dialog.getByRole('button', { name: /다음|next/i }).click();
@@ -33,6 +28,9 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   expect(body.question_count).toBeNull();
   await expect(page).toHaveURL(/practice=/);
   await expect(page.getByText(/ux10-play-1 문제/)).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: /1번/ })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
   const mocks = await owner.api.ok<{ items: unknown[] }>(
     'GET',
     `/workspaces/${workspace.id}/mock-exams`,

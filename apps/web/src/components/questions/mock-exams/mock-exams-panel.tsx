@@ -274,6 +274,8 @@ export function MockExamsPanel({
     onViewChange({ view: 'detail', mockExamId: result.data.id }, 'replace');
   }
 
+  const bankTransition = useRef(false);
+  const panelOpener = useRef<HTMLElement | null>(null);
   const bankKey = useRef<{ payload: string; key: string } | null>(null);
   async function startBank(range: RunRange, count: number | null, random: boolean) {
     if (creating) return;
@@ -298,6 +300,7 @@ export function MockExamsPanel({
       return;
     }
     bankKey.current = null;
+    bankTransition.current = true;
     if (onBankStarted) onBankStarted(result.data.id);
     else
       window.location.replace(
@@ -399,6 +402,18 @@ export function MockExamsPanel({
       onOpenChange={onOpenChange}
       container={container}
       title={view.view === 'create' ? '문제 풀기' : '모의고사'}
+      onOpenerResolved={(opener) => {
+        panelOpener.current = opener;
+      }}
+      onCloseAutoFocus={(event) => {
+        if (bankTransition.current) {
+          bankTransition.current = false;
+          event.preventDefault();
+          window.dispatchEvent(
+            new CustomEvent('quiz:bank-run-transition', { detail: panelOpener.current }),
+          );
+        }
+      }}
       titleRef={titleRef}
       closeLabel="모의고사 닫기"
       mobileLayout="full"

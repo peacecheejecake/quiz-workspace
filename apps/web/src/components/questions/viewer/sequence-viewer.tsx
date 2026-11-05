@@ -322,6 +322,7 @@ export function SequenceViewer({
   }, [open, source, workspaceId]);
 
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const bankReturnFocus = useRef<HTMLElement | null>(null);
   const stepKey =
     view === null
       ? 'closed'
@@ -334,6 +335,17 @@ export function SequenceViewer({
     // Every new step or position names itself: focus its title (QVIEW-01 접근성).
     if (open) titleRef.current?.focus();
   }, [open, stepKey]);
+
+  useEffect(() => {
+    if (!open || view?.step !== 'solve') return;
+    const focusTitle = (event: Event) => {
+      const opener = (event as CustomEvent<unknown>).detail;
+      bankReturnFocus.current = opener instanceof HTMLElement ? opener : null;
+      titleRef.current?.focus({ preventScroll: true });
+    };
+    window.addEventListener('quiz:bank-run-transition', focusTitle);
+    return () => window.removeEventListener('quiz:bank-run-transition', focusTitle);
+  }, [open, view?.step]);
 
   // The results step finishes the run: a position read afterwards reads the run again.
   const [runVersion, setRunVersion] = useState(0);
@@ -428,7 +440,25 @@ export function SequenceViewer({
       titleRef={titleRef}
       description={description}
       closeLabel="패널 닫기"
-      onCloseAutoFocus={onCloseAutoFocus}
+      onOpenAutoFocus={(event) => {
+        if (titleRef.current) {
+          event.preventDefault();
+          titleRef.current.focus({ preventScroll: true });
+        }
+      }}
+      onCloseAutoFocus={(event) => {
+        onCloseAutoFocus?.(event);
+        if (event.defaultPrevented) return;
+        const target = bankReturnFocus.current;
+        bankReturnFocus.current = null;
+        const active = document.activeElement;
+        const dialog = titleRef.current?.closest('[role=dialog]');
+        const focusLost = !active || active === document.body || !!dialog?.contains(active);
+        if (target?.isConnected && focusLost) {
+          event.preventDefault();
+          target.focus({ preventScroll: true });
+        }
+      }}
       headerActions={header}
       footer={footer ? <div className={styles.footer}>{footer}</div> : undefined}
     >
