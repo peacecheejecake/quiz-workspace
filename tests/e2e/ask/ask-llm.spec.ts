@@ -787,8 +787,8 @@ test(
     await workspaceFactory.archive(s.owner, s.workspaceId);
 
     await openHome(page, s.owner, s.workspaceId);
-    const panel = await openAskPanel(page);
-    await askUi.row(panel, QUESTION.slice(0, 40)).getByRole('button').first().click();
+    await page.goto(askPath(s.workspaceId, conversation));
+    const panel = askUi.panel(page);
     await expect(askUi.answers(panel)).toHaveCount(1);
     await expect(askUi.footnote(askUi.answers(panel).last(), 1)).toBeVisible();
     await expect(askUi.input(panel)).toHaveAttribute('aria-disabled', 'true');
@@ -846,14 +846,11 @@ test(
     try {
       const recordsBefore = new Set(recordedMessageIds());
       await openHome(page, s.owner, s.workspaceId, off.webUrl);
-      const panel = await openAskPanel(page);
-      for (const control of [askUi.input(panel), askUi.send(panel)]) {
-        await expect(control).toHaveAttribute('aria-disabled', 'true');
-        await control.focus();
-        await expect(control).toBeFocused();
-        await expect(control).toHaveAccessibleDescription(ASK_TEXT.disabled);
-      }
-      await askUi.row(panel, QUESTION.slice(0, 40)).getByRole('button').first().click();
+      await page.goto(`${off.webUrl}${askPath(s.workspaceId, conversation)}`);
+      const panel = askUi.panel(page);
+      await expect(askUi.input(panel)).toHaveAttribute('aria-disabled', 'true');
+      await expect(askUi.input(panel)).toHaveAccessibleDescription(ASK_TEXT.disabled);
+      await expect(askUi.send(panel)).toHaveCount(0);
       const answer = askUi.answers(panel).last();
       await expect(answer).toBeVisible();
       await askUi.footnote(answer, 1).click();
@@ -1262,71 +1259,24 @@ test.describe('ASK-01-AC10 touch', () => {
   );
 });
 
-/** The `문제` menu items in order, `AI 질문` last (ASK-01 "`문제` 메뉴 항목"). */
-const MENU_ORDER = [
-  /^(직접 추가|add question)$/i,
-  /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
-  /^(챕터 재분배|redistribute chapters)$/i,
-  /^(보관·초안 문제|archived and draft questions)$/i,
-  /^(모의고사|mock exams?)$/i,
-  /^(문제 풀기|practice questions?|start practice)$/i,
-  /^(AI 질문|ask ai)$/i,
-];
-
-/** The `문제` menu's `AI 질문` is disabled like the other disabled items, described by `reason`. */
-async function expectMenuItemDisabled(page: Page, reason: RegExp): Promise<void> {
-  const button = homeUi.questionMenuButton(page);
-  await button.focus();
-  await page.keyboard.press('Enter');
-  const menu = homeUi.questionMenu(page);
-  await expect(menu.getByRole('menuitem')).toHaveText(MENU_ORDER);
-  const item = askUi.menuItem(page);
-  await expect(item).toHaveAttribute('aria-disabled', 'true');
-  await expect(item).toHaveAccessibleDescription(reason);
-  await expect(menu.getByText(reason)).toBeVisible();
-  for (let i = 0; i < MENU_ORDER.length + 1; i += 1) {
-    await page.keyboard.press('ArrowDown');
-    await expect(item).not.toBeFocused();
-  }
-  await page.keyboard.press('Escape');
-  await button.click();
-  await expect(item).toBeInViewport();
-  await item.click({ force: true });
-  await expect(askUi.panel(page)).toHaveCount(0);
-  await page.keyboard.press('Escape');
-}
-
-/**
- * The 본문 search page's `AI에게 묻기` (SEARCH-02, UX9) is aria-disabled, focusable and described by
- * `reason`; then back to the home the search page was opened from.
- */
-async function expectSearchButtonDisabled(page: Page, reason: RegExp): Promise<void> {
+/** The search AI action is absent when new questions are unavailable. */
+async function expectSearchButtonHidden(page: Page): Promise<void> {
   await openContentSearch(page);
-  const button = askUi.searchButton(page);
-  await expect(button).toHaveAttribute('aria-disabled', 'true');
-  await button.focus();
-  await expect(button).toBeFocused();
-  await expect(button).toHaveAccessibleDescription(reason);
-  await button.click({ force: true });
-  await expect(askUi.panel(page)).toHaveCount(0);
+  await expect(askUi.searchButton(page)).toHaveCount(0);
   await page.goBack();
   await expect(homeUi.questionMenuButton(page)).toBeVisible();
 }
 
 test(
-  'ASK-01-AC11 the 문제 menu item and the 본문 search AI에게 묻기 open the same panel, prefill without sending and are disabled with reasons when archived or off',
+  'ASK-01-AC11 the header and search open AI 질문 when available; new actions are hidden when archived or off',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await askWorkspace(workspaceFactory, 'ask01-ac11');
     const viewer = await viewerOf(workspaceFactory, s, 'ask01-ac11-viewer');
     await openHome(page, viewer, s.workspaceId);
 
-    await homeUi.questionMenuButton(page).click();
-    await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText(MENU_ORDER);
-    const item = askUi.menuItem(page);
-    await expect(item).not.toHaveAttribute('aria-disabled', 'true');
-    await item.click();
-    await expect(askUi.panel(page)).toBeVisible();
+    const { conversation } = await askThroughApi(viewer, s.workspaceId, QUESTION);
+    await openAskPanel(page);
     expect(askParams(page).panels).toEqual(['ask']);
     await page.goBack();
     await expect(askUi.panel(page)).toHaveCount(0);
@@ -1351,7 +1301,9 @@ test(
     await expect(askUi.input(panel)).toHaveValue(PASSAGES.book);
     await expect(askUi.userMessages(panel)).toHaveCount(0);
     await expect(askUi.scopeText(panel)).toContainText(s.book.title);
-    expect((await listConversations(viewer, s.workspaceId)).body?.items ?? []).toEqual([]);
+    expect(
+      (await listConversations(viewer, s.workspaceId)).body?.items.map((item) => item.id),
+    ).toEqual([conversation]);
     expect(new URL(page.url()).searchParams.get('text')).toBe(textParam);
     await askUi.close(panel).click();
     // The modal panel hides the page from assistive technology: the search is checked once closed.
@@ -1360,32 +1312,47 @@ test(
     await expect(searchUi.resultItems(page).first()).toBeVisible();
     expect(new URL(page.url()).searchParams.get('text')).toBe(textParam);
 
-    // Feature off: both disabled with the environment reason; the header button still opens.
+    // Feature off: new entry points are absent; the stored conversation remains readable.
     const off = await startAskOffStack();
     try {
       await page.goto(`${off.webUrl}${homePath(s.workspaceId)}`);
       await expect(homeUi.questionMenuButton(page)).toBeVisible();
-      await expectMenuItemDisabled(page, ASK_TEXT.disabled);
-      await expectSearchButtonDisabled(page, ASK_TEXT.disabled);
-      await openAskPanel(page);
+      await expect(askUi.headerButton(page)).toHaveCount(0);
+      await homeUi.questionMenuButton(page).click();
+      await expect(askUi.menuItem(page)).toHaveCount(0);
+      await page.keyboard.press('Escape');
+      await expectSearchButtonHidden(page);
+      await page.goto(`${off.webUrl}${askPath(s.workspaceId, conversation)}`);
+      await expect(askUi.answers(askUi.panel(page))).toHaveCount(1);
+      await expect(askUi.send(askUi.panel(page))).toHaveCount(0);
+      const refused = await stackRequest(
+        off.apiUrl,
+        viewer,
+        'POST',
+        `/ask/conversations/${conversation}/messages`,
+        { question: QUESTION },
+      );
+      expect(refused.status).toBe(409);
+      expect((refused.body as { type?: string } | undefined)?.type).toBe(ASK_PROBLEMS.disabled);
     } finally {
       await off.stop();
     }
 
-    // Archived: both disabled with the archive reason (and the menu's read-only reason).
+    // Archived: stored content remains readable, but no new question entry point is offered.
     await workspaceFactory.archive(s.owner, s.workspaceId);
     await page.goto(homePath(s.workspaceId));
     await expect(homeUi.questionMenuButton(page)).toBeVisible();
-    await expectMenuItemDisabled(page, ASK_TEXT.archived);
+    await expect(askUi.headerButton(page)).toHaveCount(0);
     await homeUi.questionMenuButton(page).click();
-    await expect(
-      homeUi
-        .questionMenu(page)
-        .getByText(/보관된 workspace는 읽기 전용입니다|archived workspaces are read-only/i),
-    ).toBeVisible();
+    await expect(askUi.menuItem(page)).toHaveCount(0);
     await page.keyboard.press('Escape');
-    await expectSearchButtonDisabled(page, ASK_TEXT.archived);
-    await openAskPanel(page);
+    await expectSearchButtonHidden(page);
+    await page.goto(askPath(s.workspaceId, conversation));
+    await expect(askUi.answers(askUi.panel(page))).toHaveCount(1);
+    await expect(askUi.send(askUi.panel(page))).toHaveCount(0);
+    const refused = await requestMessage(viewer, conversation, { question: QUESTION });
+    expect(refused.status).toBe(403);
+    expect((refused.body as { type?: string } | undefined)?.type).toBe(ASK_PROBLEMS.archived);
   },
 );
 
