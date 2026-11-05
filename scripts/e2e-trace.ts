@@ -98,6 +98,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX9.0': ['CHREDIST-01', 'HILITE-01', 'CHNOTE-02', 'QIMPORT-02', 'SEARCH-02', 'HOMEDLG-01'],
   // ASK-SPEC (2026-11-01): ask the LLM, AI explanations and related passages after submission.
   'ASK.0': ['ASK-01'],
+  'UX11-AI-DIRECT': ['UX11-AI-DIRECT'],
   'EXPL.0': ['AIEXPL-01'],
   'RELSRC.0': ['RELSRC-01'],
   // QSRC-SPEC (2026-11-04): question source preview ("문제 원문 보기").

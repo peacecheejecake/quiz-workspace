@@ -327,3 +327,30 @@ def test_ask_01_c05_redis_down_still_stores_the_answer_for_polling(
     assert result["status"] == "succeeded"
     [finished] = store.finished
     assert "[1]" in finished.text
+
+
+def test_ux11_worker_keeps_latest_question_separate_from_attached_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from book_core.ask import hint_context
+
+    attachment = hint_context(
+        kind="question",
+        number="1",
+        chapter=None,
+        question_type="MCQ",
+        stem="문제 발문",
+        options=[{"id": "a", "text": "첫 보기"}],
+        displayed_option_ids=["a"],
+        selected_option_ids=[],
+    )
+    monkeypatch.setattr("quiz_worker.ask_job._attachment", lambda *_args: attachment)
+    store = FakeStore(_answer(), answer_question="첫 보기의 용어는 무슨 뜻인가요?")
+    fake = FakeAskAnswerer(sleep=lambda _s: None)
+    _run(store, fake)
+    request = fake.calls[0][1]
+    assert request.question == store.answer_question
+    assert request.prompt.count(store.answer_question) == 1
+    assert request.attachment == attachment
+    assert "문제 발문" in request.prompt
+    assert request.disclosure == "hint"

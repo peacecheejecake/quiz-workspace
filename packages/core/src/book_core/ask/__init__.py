@@ -2,7 +2,7 @@
 
 - ``models``: the attached question's DTO per disclosure level (``HintQuestionContext`` carries no
   answer-identifying field; ``FullQuestionContext``), passages and history turns;
-- ``prompts``: ``build_request`` (the `ask.answer/v1` request within the passage, context and
+- ``prompts``: ``build_request`` (the `ask.answer/v2` request within the passage, context and
   history budgets);
 - ``citations``: ``validate_citations`` (unknown tags dropped, renumbering, ``[NO_ANSWER]``,
   uncited answers);

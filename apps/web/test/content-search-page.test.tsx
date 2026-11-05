@@ -23,6 +23,14 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('../src/lib/supabase/client', () => ({
+  getSupabaseBrowserClient: () => ({
+    auth: {
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
+    },
+  }),
+}));
+
 const WS = 'ws-1';
 
 afterEach(() => {
@@ -35,11 +43,12 @@ describe('ContentSearchPage', () => {
     let resolveState!: (response: Response) => void;
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            resolveState = resolve;
-          }),
+      vi.fn((url: string) =>
+        url === '/api/auth/identity'
+          ? Promise.resolve(new Response(JSON.stringify({ id: 'viewer' })))
+          : new Promise<Response>((resolve) => {
+              resolveState = resolve;
+            }),
       ),
     );
     render(
@@ -64,11 +73,16 @@ describe('ContentSearchPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(
-        async () =>
-          new Response(JSON.stringify({ available: true, reason: null }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
+        async (url: string) =>
+          new Response(
+            JSON.stringify(
+              url === '/api/auth/identity' ? { id: 'viewer' } : { available: true, reason: null },
+            ),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
       ),
     );
     render(
@@ -93,7 +107,9 @@ describe('ContentSearchPage', () => {
     // The page also reads whether AI questions are available (`AI에게 묻기`, ASK-01).
     const askState = vi.fn(async () => new Response('{}', { status: 503 }));
     vi.stubGlobal('fetch', (input: RequestInfo | URL) =>
-      String(input).includes('/ask') ? askState() : fetchSpy(),
+      String(input).includes('/ask') || String(input).includes('/auth/identity')
+        ? askState()
+        : fetchSpy(),
     );
     window.history.replaceState(null, '', `/workspaces/${WS}/search?text=water&mode=keyword`);
 
