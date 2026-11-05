@@ -6,12 +6,12 @@
 //     the UX7-QDISPLAY result border with the 정답 / 내 선택 text mark (QPLAY-01-AC12).
 //   kind `revision` (manage, read-only): a revision with its correct options marked ("정답" text +
 //     check icon), accepted answers, rubric and explanation; no answer input at all.
-// The stem always goes through `displayStem` (QPLAY-01-AC13) and the 보기 label stays hidden, the
-// options' accessible name only.
+// The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
+// 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only.
 import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
 import type { Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
-import { displayStem, stemParagraphs } from '@/lib/questions/display-stem';
+import { StemBlocks } from '@/components/questions/stem/stem-text';
 import type { Question } from '@/lib/questions/form';
 import { ExplanationText, type ExplanationHighlighting } from './explanation-text';
 import {
@@ -58,14 +58,13 @@ export function QuestionBody(props: QuestionBodyProps) {
 
 /**
  * The displayed stem (UX9-QTYPE): one paragraph per blank-line-separated block, so the gap between
- * paragraphs is a spacing token rather than a full empty line.
+ * paragraphs is a spacing token rather than a full empty line; labelled stem items go in the
+ * 제시 항목 box between the question sentence and the options (STEM-ITEMS, QPLAY-01-AC14).
  */
 export function QuestionStem({ stem }: { readonly stem: string }) {
   return (
     <div className={styles.stem}>
-      {stemParagraphs(displayStem(stem)).map((paragraph, i) => (
-        <p key={i}>{paragraph}</p>
-      ))}
+      <StemBlocks stem={stem} />
     </div>
   );
 }

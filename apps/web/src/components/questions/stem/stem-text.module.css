@@ -1,0 +1,40 @@
+/* STEM-ITEMS (docs/questions.md §4 item 11, QPLAY-01-AC14): the stem's labelled items, one per
+   line in a box between the question sentence and the options. Semantic tokens only. */
+
+/* A host's one-paragraph stem class turned into a container of paragraphs and the box. */
+.stem {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.stem > p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.items {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+/* Hanging indent: the printed label in its own column, wrapped lines align after it. */
+.item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-2);
+}
+
+.text {
+  min-inline-size: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
