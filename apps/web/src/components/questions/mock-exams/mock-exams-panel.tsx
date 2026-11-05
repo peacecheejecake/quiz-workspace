@@ -29,7 +29,10 @@ import {
   Skeleton,
 } from '@quiz/ui';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { MockView } from '@/lib/workspaces/home';
+import { withoutMockExams, type MockView } from '@/lib/workspaces/home';
+import { withRunState } from '@/lib/questions/practice-runs';
+import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
+import type { RunRange } from '@/lib/questions/practice-runs';
 import { createMockExamApi, type MockExamApi } from './mock-exam-client';
 import { MockExamDetail } from './mock-exam-detail';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
@@ -70,9 +73,14 @@ export interface MockExamsPanelProps {
   readonly onViewChange: (view: MockView, how: 'push' | 'replace') => void;
   /** `풀기`: the run panel on this mock exam (QuestionViewer sequence, source=mock). */
   readonly onPractise: (exam: MockExam) => void;
+  readonly onBankStarted?: (runId: string) => void;
   readonly screenId?: string;
   /** Tests and stories: the API. */
   readonly api?: MockExamApi;
+}
+
+export function bankRunLocation(pathname: string, search: string, runId: string): string {
+  return `${pathname}${withRunState(withoutMockExams(search), { step: 'solve', runId, position: 1 })}`;
 }
 
 export function MockExamsPanel({
@@ -84,6 +92,7 @@ export function MockExamsPanel({
   view,
   onViewChange,
   onPractise,
+  onBankStarted,
   screenId,
   api: givenApi,
 }: MockExamsPanelProps) {
@@ -98,10 +107,12 @@ export function MockExamsPanel({
   const [createError, setCreateError] = useState<string | null>(null);
   /** The opening a creation may still show its answer in (null: not on 만들기). */
   const liveOpening = useRef<number | null>(null);
+  const liveFormOpening = useRef(formOpening);
   /** Whether the panel is open on `view` now (for answers that arrive later). */
   const liveView = useRef<{ open: boolean; view: MockView }>({ open, view });
   useLayoutEffect(() => {
     liveOpening.current = open && view.view === 'create' ? formOpening : null;
+    liveFormOpening.current = formOpening;
     liveView.current = { open, view };
   });
   const reload = () => setReads((n) => n + 1);
@@ -263,6 +274,37 @@ export function MockExamsPanel({
     onViewChange({ view: 'detail', mockExamId: result.data.id }, 'replace');
   }
 
+  const bankKey = useRef<{ payload: string; key: string } | null>(null);
+  async function startBank(range: RunRange, count: number | null, random: boolean) {
+    if (creating) return;
+    const opening = formOpening;
+    const startedView = liveView.current.view;
+    const payload = JSON.stringify([opening, startedView, range, count, random]);
+    const key = bankKey.current?.payload === payload ? bankKey.current.key : crypto.randomUUID();
+    bankKey.current = { payload, key };
+    setCreating(true);
+    setCreateError(null);
+    const result = await createPracticeRunApi(workspaceId).create(range, random, key, count);
+    const now = liveView.current;
+    if (
+      !now.open ||
+      JSON.stringify(now.view) !== JSON.stringify(startedView) ||
+      liveFormOpening.current !== opening
+    )
+      return;
+    setCreating(false);
+    if (!result.ok) {
+      setCreateError(result.message);
+      return;
+    }
+    bankKey.current = null;
+    if (onBankStarted) onBankStarted(result.data.id);
+    else
+      window.location.replace(
+        bankRunLocation(window.location.pathname, window.location.search, result.data.id),
+      );
+  }
+
   let heading: ReactNode = null;
   let body: ReactNode;
   if (view.view === 'list') {
@@ -297,7 +339,7 @@ export function MockExamsPanel({
       />
     );
   } else if (view.view === 'create') {
-    heading = '모의고사 만들기';
+    heading = '문제 풀기';
     body =
       list.status === 'loading' ? (
         <Loading />
@@ -307,7 +349,7 @@ export function MockExamsPanel({
           <p>{list.message}</p>
           <Button onClick={reload}>다시 시도</Button>
         </div>
-      ) : canEdit ? (
+      ) : (
         <MockExamForm
           key={formOpening}
           workspaceId={workspaceId}
@@ -317,9 +359,9 @@ export function MockExamsPanel({
           busy={creating}
           error={createError}
           onSubmit={(value) => void create(value)}
+          onBankSubmit={(range, count, random) => void startBank(range, count, random)}
+          canCreateMock={canEdit}
         />
-      ) : (
-        <p className={styles.text}>편집 권한이 있어야 모의고사를 만들 수 있습니다.</p>
       );
   } else if (view.view === 'detail') {
     body = (
@@ -335,6 +377,9 @@ export function MockExamsPanel({
         openSettings={settingsFor === view.mockExamId}
         onSettingsShown={() => setSettingsFor(null)}
         onPractise={onPractise}
+        onBankSubmit={(range, count, random) => void startBank(range, count, random)}
+        bankBusy={creating}
+        bankError={createError}
         onRename={rename}
         onDelete={(exam, trigger) => {
           deleteReturn.current = trigger;
@@ -353,7 +398,7 @@ export function MockExamsPanel({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
-      title="모의고사"
+      title={view.view === 'create' ? '문제 풀기' : '모의고사'}
       titleRef={titleRef}
       closeLabel="모의고사 닫기"
       mobileLayout="full"
@@ -518,7 +563,11 @@ function ListRow({
           {renaming ? (
             <RenameField
               initial={exam.title}
-              onSave={onRenamed}
+              onSave={async (title) => {
+                const failure = await onRenamed(title);
+                if (!failure) trigger.current?.focus();
+                return failure;
+              }}
               onCancel={() => {
                 onRenameCancel();
                 trigger.current?.focus();
@@ -545,7 +594,7 @@ function ListRow({
       </div>
       <div className={styles.itemActions}>
         {canPractise(exam) ? (
-          <Button size="sm" onClick={onPractise}>
+          <Button size="sm" onClick={onPractise} disabled={renaming}>
             풀기
           </Button>
         ) : null}

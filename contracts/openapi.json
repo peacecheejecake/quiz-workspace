@@ -7235,6 +7235,19 @@
             ],
             "title": "Mock Exam Id"
           },
+          "question_count": {
+            "anyOf": [
+              {
+                "maximum": 5000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Count"
+          },
           "random_order": {
             "default": false,
             "title": "Random Order",

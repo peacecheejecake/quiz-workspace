@@ -112,6 +112,7 @@ const base: Props = {
   view: { view: 'list' },
   onViewChange: noop,
   onPractise: noop,
+  onBankStarted: noop,
   api: api([]),
 };
 

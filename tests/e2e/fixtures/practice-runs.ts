@@ -574,7 +574,7 @@ export const runUi = {
     ),
   resultList: (panel: Locator) =>
     panel.getByRole('list', { name: /문제별 결과|results by question|results/i }),
-  resultRows: (panel: Locator) => runUi.resultList(panel).getByRole('listitem'),
+  resultRows: (panel: Locator) => runUi.resultList(panel).locator('section > ul > li'),
   restart: (panel: Locator) =>
     panel.getByRole('button', { name: /^(처음부터 다시|start over|restart)$/i }),
 };
@@ -584,11 +584,12 @@ export const runUi = {
  * its existing items first, so a missing item is told apart from a menu that did not open).
  */
 export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
-  await homeUi.questionMenuButton(page).click();
-  const menu = homeUi.questionMenu(page);
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem').first()).toBeVisible();
-  await expect(runUi.menuItem(page), '`문제` menu has a 문제 풀기 item').toBeVisible();
+  const url = new URL(page.url());
+  url.searchParams.delete('panel');
+  url.searchParams.delete('mock');
+  url.searchParams.set('practice', 'new');
+  url.searchParams.set('source', 'bank');
+  await page.goto(url.toString());
 }
 
 /**
@@ -597,7 +598,6 @@ export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
  */
 export async function openRangePicker(page: Page): Promise<Locator> {
   await openQuestionMenuWithPractice(page);
-  await runUi.menuItem(page).click();
   const panel = runUi.panel(page);
   await expect(panel).toBeVisible();
   await expect(runUi.pickerTitle(panel)).toBeVisible();

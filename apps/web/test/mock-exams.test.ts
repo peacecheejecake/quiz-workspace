@@ -165,7 +165,7 @@ describe('만들기 options', () => {
   it('checks the name, the types, the environment and the 문항 수 limits', () => {
     expect(checkOptions(options({}), true)).toBeNull();
     expect(checkOptions(options({ title: '  ' }), true)?.field).toBe('title');
-    expect(checkOptions(options({ types: [] }), true)?.field).toBe('types');
+    expect(checkOptions(options({ types: [] }), true)).toBeNull();
     expect(checkOptions(options({}), false)?.message).toBe(
       '이 환경에서는 AI 변형을 쓸 수 없습니다.',
     );

@@ -95,7 +95,7 @@ import {
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { useAskState } from '@/components/ask/use-ask-state';
 import { normalizeScope } from '@/lib/ask/client';
-import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model';
+import { EMPTY_SCOPE } from '@/lib/ask/model';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
@@ -151,7 +151,6 @@ import {
   withShownMockView,
   RUN_DIALOG,
   withPracticeQuestion,
-  withRunPanel,
   searchPagePath,
   type HomePanel,
   ASK_PANEL,
@@ -343,13 +342,6 @@ function WorkspaceHomeContent({
     practiceReturnFocusRef.current = returnFocus;
     openPanelAt(`${pathname}${withPracticeQuestion(window.location.search, questionId)}`);
   }
-  // The range run panel (QVIEW-01): opened from the 문제 menu on a new entry; its range → run →
-  // results steps rewrite that entry, its positions push entries, closing drops them (QOV-01-AC14).
-  function openRun() {
-    if (homeOpensBlocked(new URLSearchParams(window.location.search))) return;
-    const picker: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
-    openPanelAt(`${pathname}${withRunPanel(window.location.search, picker)}`);
-  }
   function navigateRun(state: RunUrlState, how: 'push' | 'replace') {
     const target = `${pathname}${keepMockView(withRunState(window.location.search, state))}`;
     if (how === 'push') panelHistory.push(target);
@@ -433,8 +425,6 @@ function WorkspaceHomeContent({
   const ask = useAskState(workspace.id);
   const askConversation = askConversationOf(searchParams) ?? null;
   const askOpen = isOpen(ASK_PANEL);
-  const askReason = unavailableReason(ask.state, workspace.archived);
-  const askUnavailable = askReason ? unavailableText(askReason) : null;
   const [askSession, setAskSession] = useState(0);
   const [askWasOpen, setAskWasOpen] = useState(askOpen);
   if (askOpen !== askWasOpen) {
@@ -852,16 +842,24 @@ function WorkspaceHomeContent({
             <Button onClick={() => setPanel('documents', true)}>
               문서 <span className={styles.count}>{bookCount}</span>
             </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
+                  panelHistory.push(
+                    `${pathname}${withMockView(window.location.search, { view: 'create' })}`,
+                  );
+                }
+              }}
+            >
+              풀기
+            </Button>
             <QuestionMenu
               readOnly={readOnly}
               onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
               onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
               onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
               onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
-              onMockExams={() => setPanel(MOCK_EXAMS_PANEL, true)}
-              onPractice={openRun}
-              onAsk={openAsk}
-              askUnavailable={askUnavailable}
             />
           </div>
           <div className={styles.actionGroup} data-align="end">
@@ -1043,6 +1041,11 @@ function WorkspaceHomeContent({
             view={mockView}
             onViewChange={changeMockView}
             onPractise={(exam) => openMockRun(exam.id)}
+            onBankStarted={(runId) =>
+              panelHistory.replace(
+                `${pathname}${withRunState(withoutMockExams(window.location.search), { step: 'solve', runId, position: 1 })}`,
+              )
+            }
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel

@@ -7,16 +7,7 @@
 // workspace's confirmed questions with its filters, "선택 n문제 중 m문항을 만듭니다", the AI notice
 // and `만들기` (설정 바꾸기: `다시 만들기`), disabled with "출제 범위를 고르세요" while nothing is
 // selected. A saved range comes back as the selection it meant (selectionFromRange).
-import {
-  Button,
-  Checkbox,
-  IconButton,
-  Input,
-  Select,
-  StepProgress,
-  Tooltip,
-  useUnsavedChanges,
-} from '@quiz/ui';
+import { Button, Checkbox, IconButton, Input, Select, Tooltip, useUnsavedChanges } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import { RUN_FAILURE_MESSAGES } from '@/lib/questions/practice-run-problems';
@@ -78,6 +69,8 @@ export interface MockExamFormProps {
   /** The last request's failure, shown above the step's buttons. */
   readonly error: string | null;
   readonly onSubmit: (value: MockExamSubmit) => void;
+  readonly onBankSubmit?: (range: MockRange, count: number | null, randomOrder: boolean) => void;
+  readonly canCreateMock?: boolean;
   /** 설정 바꾸기: back to the detail without a new round. */
   readonly onCancel?: () => void;
 }
@@ -91,17 +84,23 @@ export function MockExamForm({
   busy,
   error,
   onSubmit,
+  onBankSubmit,
+  canCreateMock = true,
   onCancel,
 }: MockExamFormProps) {
   const [step, setStep] = useState<0 | 1>(0);
   const [values, setValues] = useState<OptionValues>(() => {
     if (llmAvailable) return initial;
     const types = initial.types.filter((type) => !isAiType(type));
-    return { ...initial, types: types.length ? types : ['OPTION_SHUFFLE'] };
+    return {
+      ...initial,
+      types: types.length || initial.types.length === 0 ? types : ['OPTION_SHUFFLE'],
+    };
   });
   const [opening] = useState(() => JSON.stringify(values));
   // HOMEDLG-01: typed options or the range step are unsaved input (the backdrop keeps them).
   useUnsavedChanges(step === 1 || JSON.stringify(values) !== opening);
+  const [randomOrder, setRandomOrder] = useState(false);
   const [optionError, setOptionError] = useState<OptionError | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
   const [moved, setMoved] = useState(0);
@@ -125,13 +124,23 @@ export function MockExamForm({
 
   const formId = useId();
   const ai = usesAi(values.types);
-  const shuffleOnly = !ai && values.types.length > 0;
+  const shuffleOnly = !ai;
   const made = madeCount(values, range.count);
   const reasonId = useId();
-  const reason = range.count === 0 ? NO_RANGE_TEXT : null;
+  const reason =
+    range.count === 0
+      ? NO_RANGE_TEXT
+      : !values.wholeRange && Number(values.count) > range.count
+        ? '선택한 범위보다 문항 수가 많습니다.'
+        : null;
 
   function submit() {
     if (!range.request || busy || range.count === 0) return;
+    if (values.types.length === 0 && onBankSubmit) {
+      onBankSubmit(range.request, values.wholeRange ? null : Number(values.count), randomOrder);
+      return;
+    }
+    if (values.types.length === 0) return;
     onSubmit({
       title: values.title.trim(),
       config: configFrom(values, range.count),
@@ -141,7 +150,13 @@ export function MockExamForm({
 
   return (
     <div className={styles.form}>
-      <StepProgress label="만들기 단계" steps={STEPS} current={step} />
+      <ol className={styles.steps} aria-label="풀기 단계">
+        {STEPS.map((item, index) => (
+          <li key={item.id} aria-current={step === index ? 'step' : undefined}>
+            {index + 1}. {item.label}
+          </li>
+        ))}
+      </ol>
       {step === 0 ? (
         <form className={styles.form} onSubmit={next} noValidate>
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
@@ -169,7 +184,7 @@ export function MockExamForm({
                 key={type}
                 type={type}
                 checked={values.types.includes(type)}
-                disabled={busy || (isAiType(type) && !llmAvailable)}
+                disabled={busy || !canCreateMock || (isAiType(type) && !llmAvailable)}
                 reason={isAiType(type) && !llmAvailable ? AI_DISABLED_TEXT : null}
                 onChange={(on) => {
                   setValues({
@@ -188,6 +203,16 @@ export function MockExamForm({
               </p>
             ) : null}
           </fieldset>
+          {!canCreateMock ? (
+            <p className={styles.muted}>변형 출제에는 편집 권한이 필요합니다.</p>
+          ) : null}
+          {values.types.length === 0 ? (
+            <Checkbox
+              label="문제 순서 무작위"
+              checked={randomOrder}
+              onCheckedChange={(checked) => setRandomOrder(checked === true)}
+            />
+          ) : null}
           <div className={styles.formRow}>
             <Input
               id={`${formId}-count`}
@@ -201,7 +226,7 @@ export function MockExamForm({
               description={
                 ai
                   ? `1~${MAX_AI_QUESTIONS}문항`
-                  : '보기 섞기만 고르면 범위의 문제 수까지 만들 수 있습니다.'
+                  : '원본과 보기 섞기는 선택 범위까지 풀 수 있습니다.'
               }
               error={optionError?.field === 'count' ? optionError.message : undefined}
               fieldClassName={styles.countField}
@@ -210,26 +235,33 @@ export function MockExamForm({
                 if (optionError?.field === 'count') setOptionError(null);
               }}
             />
-            <Select
-              label="난이도"
-              value={values.difficulty ?? SAME}
-              disabled={busy || !ai}
-              options={[
-                { value: SAME, label: SAME_DIFFICULTY_LABEL },
-                ...(Object.keys(DIFFICULTY_LABELS) as Difficulty[]).map((value) => ({
-                  value,
-                  label: DIFFICULTY_LABELS[value],
-                })),
-              ]}
-              onValueChange={(value) =>
-                setValues({ ...values, difficulty: value === SAME ? null : (value as Difficulty) })
-              }
-            />
+            {ai ? (
+              <Select
+                label="난이도"
+                value={values.difficulty ?? SAME}
+                disabled={busy || !ai}
+                options={[
+                  { value: SAME, label: SAME_DIFFICULTY_LABEL },
+                  ...(Object.keys(DIFFICULTY_LABELS) as Difficulty[]).map((value) => ({
+                    value,
+                    label: DIFFICULTY_LABELS[value],
+                  })),
+                ]}
+                onValueChange={(value) =>
+                  setValues({
+                    ...values,
+                    difficulty: value === SAME ? null : (value as Difficulty),
+                  })
+                }
+              />
+            ) : (
+              <p className={styles.muted}>난이도는 원본과 같습니다.</p>
+            )}
           </div>
           {shuffleOnly ? (
             <Checkbox
-              label="범위 전체"
-              description="고른 범위의 문제를 모두 옮깁니다."
+              label="선택 범위의 모든 문항"
+              description="선택한 범위의 문제를 모두 사용합니다."
               checked={values.wholeRange}
               disabled={busy}
               onCheckedChange={(checked) => setValues({ ...values, wholeRange: checked === true })}
@@ -264,6 +296,11 @@ export function MockExamForm({
             onFiltersChange={range.setFilters}
             countText={(n) => `선택 ${n}문제 중 ${madeCount(values, n)}문항을 만듭니다`}
           />
+          {mode === 'settings' && values.types.length === 0 ? (
+            <p className={styles.notice}>
+              기존 모의고사를 변경하지 않고 새 원본 풀이를 시작합니다.
+            </p>
+          ) : null}
           {ai ? <p className={styles.notice}>{AI_NOTICE_TEXT}</p> : null}
           {error ? (
             <p role="alert" className={styles.error}>
@@ -283,11 +320,17 @@ export function MockExamForm({
             <Button
               variant="primary"
               loading={busy}
-              disabled={range.count === 0 || !range.request || range.busy || made === 0}
+              disabled={
+                range.count === 0 ||
+                !range.request ||
+                range.busy ||
+                made === 0 ||
+                (!values.wholeRange && Number(values.count) > range.count)
+              }
               aria-describedby={reason ? reasonId : undefined}
               onClick={submit}
             >
-              {mode === 'create' ? '만들기' : '다시 만들기'}
+              {values.types.length === 0 ? '시작' : mode === 'create' ? '만들기' : '다시 만들기'}
             </Button>
             {reason ? (
               <p id={reasonId} className={styles.muted}>

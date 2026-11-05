@@ -48,14 +48,7 @@ interface QuestionMenuAction {
  * moves questions between chapters, after it in the same group.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
- * 문제 풀기 (QVIEW-01: the range run panel, `?practice=new&source=bank`) is a personal practice
- * every member may start, archived workspaces included, so it is enabled too and follows
- * 보관·초안 문제 in the same group (MOCK-SYNC).
- * 모의고사 (MOCK-01: the 모의고사 dialog, `?panel=mock-exams`) lists and practises mock exams, which
- * every member may do, so it is enabled too and sits between 보관·초안 문제 and 문제 풀기 (MOCK-SYNC).
- * AI 질문 (ASK-01 "`문제` 메뉴 항목": the AI 질문 panel, `?panel=ask`) is for every member and comes
- * last; unlike the items before it, it has its own disabled state — the feature is off in this
- * environment or the workspace is archived — with its own reason text under it (`askUnavailable`).
+
  */
 export function QuestionMenu({
   readOnly,
@@ -63,21 +56,12 @@ export function QuestionMenu({
   onDuplicates,
   onRedistribute,
   onInactive,
-  onMockExams,
-  onPractice,
-  onAsk,
-  askUnavailable = null,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
   readonly onCreate: () => void;
   readonly onDuplicates: () => void;
   readonly onRedistribute: () => void;
   readonly onInactive: () => void;
-  readonly onMockExams: () => void;
-  readonly onPractice: () => void;
-  readonly onAsk: () => void;
-  /** Why AI 질문 cannot take new questions here (null: it can). */
-  readonly askUnavailable?: string | null;
 }) {
   const reasonId = useId();
   const ownReasonId = useId();
@@ -97,23 +81,13 @@ export function QuestionMenu({
       separated: true,
       onSelect: onInactive,
     },
-    { key: 'mock-exams', label: '모의고사', requiresEdit: false, onSelect: onMockExams },
-    { key: 'practice', label: '문제 풀기', requiresEdit: false, onSelect: onPractice },
-    {
-      key: 'ask',
-      label: 'AI 질문',
-      requiresEdit: false,
-      ownReason: askUnavailable,
-      onSelect: onAsk,
-    },
   ];
   const reason = readOnly ? READ_ONLY_REASONS[readOnly] : null;
   const anyDisabled = reason !== null && actions.some((a) => a.requiresEdit);
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button ref={triggerRef}>
-          문제
+        <Button ref={triggerRef} aria-label="문제 메뉴">
           <ChevronDownIcon width={16} height={16} aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
