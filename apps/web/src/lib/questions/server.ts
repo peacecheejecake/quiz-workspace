@@ -109,8 +109,16 @@ export async function loadChapterContext(
       params: { path: { workspace_id: workspaceId } },
     });
     const documents = (data?.items ?? [])
-      .filter((d) => d.document_type === 'book' && d.status === 'ready')
-      .map((d) => ({ id: d.id, title: d.title || d.filename }));
+      .filter(
+        (d) =>
+          (d.document_type === 'book' || d.document_type === 'question_paper') &&
+          d.status === 'ready',
+      )
+      .map((d) => ({
+        id: d.id,
+        title: d.title || d.filename,
+        paper: d.document_type === 'question_paper',
+      }));
     const get = api.GET as unknown as UntypedGet;
     const outlines = await Promise.all(
       documents.map(async (doc) => {
@@ -118,7 +126,14 @@ export async function loadChapterContext(
           const { data: body, response } = await get('/api/v1/documents/{document_id}/outline', {
             params: { path: { document_id: doc.id } },
           });
-          return response.ok ? outlineNodes(body).map((n) => ({ ...n, doc })) : [];
+          if (!response.ok) return [];
+          // CHAP-MATCH: a question paper offers only its top-level chapters (its deeper
+          // "headings" are question lines such as `01 …?` and `정답: ②`).
+          const nodes = outlineNodes(body);
+          return (doc.paper ? nodes.filter((n) => n.level === 1) : nodes).map((n) => ({
+            ...n,
+            doc,
+          }));
         } catch {
           return [];
         }
@@ -131,7 +146,11 @@ export async function loadChapterContext(
       documentId: doc.id,
       documentTitle: doc.title,
     }));
-    return { chapters, documents };
+    // Source documents stay the books: a question's source is read from a book.
+    return {
+      chapters,
+      documents: documents.filter((d) => !d.paper).map(({ id, title }) => ({ id, title })),
+    };
   } catch {
     return { chapters: [], documents: [] };
   }

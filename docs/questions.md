@@ -188,7 +188,7 @@ Confirmed question
 
 서버 측 등록(QIMP-JOB 2026-10-23, QIMPORT-01-AC07): 검토 화면은 위 batch를 브라우저에서 보내지 않고 선택 전체를 `POST /question-imports/{id}/registrations`로 한 번 보낸다(최대 5000개, `Idempotency-Key`). API는 같은 트랜잭션에서 초안마다 `question_import_registration_items` 행(보낸 version, 등록할 챕터)을 기록한다 — 이미 등록됨은 `skipped`, 보낸 version과 다름은 `refused`/`stale-draft`, 확정 불가는 `refused`/`not-publishable`, 나머지 `pending` — 그리고 run의 `registration_job_id`가 가리키는 `question.import_register` job(호출자 이름, 미발행 → commit 후 발행, 놓치면 reconciler)을 만든다. job은 SECURITY DEFINER `public.worker_register_import_drafts(job, batch)`를 남은 항목이 없을 때까지 부른다(batch = 한 트랜잭션, 100개): Workspace 행 FOR SHARE 재확인(보관·삭제·권한 상실이면 `workspace_unavailable`로 job 실패, 남은 항목은 그대로), 초안 FOR UPDATE(위치 순, publish와 같은 잠금 순서) → 챕터 문서 FOR SHARE, 초안마다 이미 등록됨 → `skipped`, version 다름 → `stale-draft`, 아니면 API publish와 같은 내용으로 승인(job 사용자, 이미 승인이면 유지)·CONFIRMED 문제·revision 1·import 출처 행·`question.created`·`published_question_id`, batch마다 `question_import.published`. 같은 version이면 API가 제출 시 확인한 확정 가능 상태 그대로이므로 내용 규칙을 SQL에서 반복하지 않는다(DB 제약이 거부하면 그 초안만 `not-publishable`). 항목이 job의 영속 진행 상태라 재시도·중복 전달은 남은 `pending`만 이어서 처리하고, 이미 문제에 연결된 초안은 다시 등록하지 않는다. 진행(처리/전체)과 거절 목록은 `GET /question-imports/{id}/registrations/{registration_id}`. quiz_worker는 초안·문제 테이블 쓰기 권한 없이 이 함수만 실행한다. 이전 등록이 대기·진행 중이면 새 제출은 409 `import-registration-running`.
 
-챕터(CHAPTER-MAP 2026-10-23, QIMPORT-01-AC08): import 초안은 교재(`book`) 챕터 아래에 등록된다. `question_drafts.chapter_manual = false`이면 API(`quiz_api.chapter_matching`)가 읽을 때마다 추천한다 — 초안 첫 출처 블록(`evidence[0].block_ids[0]`, 없으면 첫 쪽의 첫 블록)의 `content_blocks.chapter_id`에서 시작해 상위 장까지(깊은 것부터) 제목 key(NFKC·casefold, 앞 번호 `제N장`/`N장`/`Chapter N`/`N.`/`N.M` 분리, 문자·숫자만)를 Workspace의 살아 있는 책들의 활성 revision 챕터 key와 비교: 첫 일치 단계에서 후보 1개 → 추천(`matched`), 여럿 → 장 번호 일치 1개면 추천, 아니면 `ambiguous`(추천 없음); 일치 단계 없음 `no_match`, 시작 블록에 장 없음 `no_source_chapter`. 추측 금지: 숫자만으로 맞추지 않는다. 검토자가 `PATCH` `chapter_id`(책의 현재 revision 챕터 또는 null)를 보내면 `chapter_manual = true`로 그 선택이 이긴다(내용 변경이 아니므로 승인 유지). 저장된 챕터가 옛 revision이면 등록 시 같은 `section_key`의 현재 revision 챕터로(없으면 null) 해석한다 — 문제의 `documents_remap_question_chapters`와 같은 규칙. 등록(publish·서버 등록 job)은 책 문서를 FOR SHARE로 잠근 뒤 해석해 revision 게시와 경쟁하지 않는다. 추천은 초안 version을 바꾸지 않고 달라질 수 있으므로(교재 추가·교정) 클라이언트는 선택마다 보이던 `chapter_id`를 보내고, 서버의 현재 챕터와 다르면 publish·registrations 요청 전체를 409 `chapter-changed`로 거절한다(Codex P2; 보내지 않으면 검사 안 함 — API 호환).
+챕터(CHAPTER-MAP 2026-10-23, QIMPORT-01-AC08): import 초안은 교재(`book`) 챕터 아래에 등록된다. `question_drafts.chapter_manual = false`이면 API(`book_core.chapter_matching`)가 읽을 때마다 추천한다 — 초안 첫 출처 블록(`evidence[0].block_ids[0]`, 없으면 첫 쪽의 첫 블록)의 `content_blocks.chapter_id`에서 시작해 상위 장까지(깊은 것부터) 제목 key(NFKC·casefold, 앞 번호 `제N장`/`N장`/`Chapter N`/`N.`/`N.M` 분리, 문자·숫자만)를 Workspace의 살아 있는 책들의 활성 revision 챕터 key와 비교: 첫 일치 단계에서 후보 1개 → 추천(`matched`), 여럿 → 장 번호 일치 1개면 추천, 아니면 `ambiguous`(추천 없음); 일치 단계 없음 `no_match`, 시작 블록에 장 없음 `no_source_chapter`. 추측 금지: 숫자만으로 맞추지 않는다. 장 번호로도 못 좁히면 후보 중 `level`이 가장 작은(outline에서 가장 높은) 것이 하나뿐일 때 그것을 추천하고(CHAP-MATCH 2026-11-04), 아니면 `ambiguous`다. 검토자가 `PATCH` `chapter_id`(책의 현재 revision 챕터 또는 null)를 보내면 `chapter_manual = true`로 그 선택이 이긴다(내용 변경이 아니므로 승인 유지). 저장된 챕터가 옛 revision이면 등록 시 같은 `section_key`의 현재 revision 챕터로(없으면 null) 해석한다 — 문제의 `documents_remap_question_chapters`와 같은 규칙. 등록(publish·서버 등록 job)은 책 문서를 FOR SHARE로 잠근 뒤 해석해 revision 게시와 경쟁하지 않는다. 추천은 초안 version을 바꾸지 않고 달라질 수 있으므로(교재 추가·교정) 클라이언트는 선택마다 보이던 `chapter_id`를 보내고, 서버의 현재 챕터와 다르면 publish·registrations 요청 전체를 409 `chapter-changed`로 거절한다(Codex P2; 보내지 않으면 검사 안 함 — API 호환).
 
 ## 7. 홈 집계와 필터
 
@@ -298,7 +298,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 | 모의고사 풀이(`sequence(mock)`)·관리(`manage(mock)`) | `mock_exam_practice_sessions`의 `mock_exam_attempts` 유무 / 편집 권한 | 같은 규칙. 내용은 `mock_exam_question_revisions` 행, 출처 구절은 그 revision의 `evidence` 중 현재 발행 `book` 블록(원본 문제의 `question_sources`가 아님) — ASK-01-C10 |
 | 공유 게스트 | 없음 | AI 질문 없음 |
 
-- `질문하기` 위치(사용자 결정 2026-11-01; ASK-SYNC에서 QuestionViewer 방식으로): 문제 상세(`manage`, `detail` → `full`)와 모의고사 문제(`sequence(mock)` 제출 전 `hint`·제출 후 `full`, `manage(mock)` `full`)만. 풀이 panel(`practice`)과 등록 문제 범위 풀이(`sequence(bank)`) header에는 없고, 그 둘의 유일한 경로는 제출 뒤 AI 해설 아래의 `이 문제로 질문하기`(`full`)다.
+- `질문하기` 위치(사용자 결정 2026-11-01; ASK-SYNC에서 QuestionViewer 방식으로): 문제 상세(`manage`, `detail` → `full`)와 모의고사 문제(`sequence(mock)` 제출 전 `hint`·제출 후 `full`, `manage(mock)` `full`)만. 풀이 panel(`practice`)과 등록 문제 범위 풀이(`sequence(bank)`) header에는 없고, 그 둘의 유일한 경로는 제출 뒤 AI 해설 아래의 `AI 질문하기`(`full`)다.
 - `hint`의 모델 지시(사용자 결정 2026-11-01): 정답·정답 보기를 말하지 말고 개념과 근거 구절로 돕는다. 교재 근거로 모델이 답을 추론할 수 있다는 한계는 저장된 정답이 새는 것이 아니다(교재는 열람 범위).
 - 질문·AI 해설은 풀이(attempt)·열람(viewed)이 아니다: 풀이 기록·`question_user_states`·Heatmap 상태를 바꾸지 않는다(§2.1). 문제 상세의 정답 보기와 같은 규칙.
 - **AI 해설:** 제출 후(그 session의 제출을 서버가 확인 — `practice`·`sequence(bank|mock)` 모두) 또는 문제 상세에서 만든다. 문제 revision마다 Workspace 공유 캐시 하나(사용자의 답은 입력이 아님; 모의고사 문제는 `mock_exam_question_revisions`마다 따로 — 원본 문제와 공유하지 않음), 정답은 서버의 정답이 기준(모델이 다른 정답을 말하면 버림). 사람이 쓴 `explanation`을 바꾸지 않고, 문제은행·정리 노트(§9) 입력·ASK 근거에 들어가지 않는다. 문제를 고치면(새 revision) 새로 만들어야 한다.
@@ -322,12 +322,12 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 
 ### 14.2 추천 다시 받기 (등록된 문제의 첫 출처 블록)
 
-초안 추천(§6 "챕터", `quiz_api.chapter_matching`)과 **같은 함수**를 등록된 문제에 쓴다. 문제의 시작 블록:
+초안 추천(§6 "챕터", `book_core.chapter_matching`)과 **같은 함수**를 등록된 문제에 쓴다. 문제의 시작 블록:
 
 1. 그 문제의 `question_sources` 중 가져온 출처(import provenance — 문제지 PDF의 발문·보기 영역)가 있으면 그것, 없으면 가장 먼저 만든 출처 행.
 2. 그 행의 `block_ids[0]`; 없으면 `page_range` 첫 쪽의 첫 블록(그 행의 `document_revision_id`의 블록 — 지난 revision의 블록도 남아 있으므로 그대로 읽는다).
 3. 시작 블록의 문서가 `book`이면 그 블록의 장을 그 문서 **현재 발행 revision**의 같은 `section_key` 장으로 옮긴 것이 추천이다(`source_in_book`; 없으면 `no_source_chapter`).
-4. 아니면(문제지·`mixed`의 문제 구간) 그 블록의 `content_blocks.chapter_id`에서 상위 장까지 깊은 것부터 제목 key(NFKC·casefold, 앞 번호 분리, 문자·숫자만)를 Workspace의 살아 있는 책들의 현재 revision 장 key와 비교한다: 후보 1개 `matched`, 여럿이면 장 번호가 같은 하나만 `matched` 아니면 `ambiguous`, 없으면 `no_match`, 시작 블록에 장 없음 `no_source_chapter`. 숫자만으로 맞추지 않는다(추측 금지).
+4. 아니면(문제지·`mixed`의 문제 구간) 그 블록의 `content_blocks.chapter_id`에서 상위 장까지 깊은 것부터 제목 key(NFKC·casefold, 앞 번호 분리, 문자·숫자만)를 Workspace의 살아 있는 책들의 현재 revision 장 key와 비교한다: 후보 1개 `matched`, 여럿이면 장 번호가 같은 하나만 `matched`, 아니면 `level`이 가장 작은 후보가 하나뿐일 때 `matched`, 아니면 `ambiguous`, 없으면 `no_match`, 시작 블록에 장 없음 `no_source_chapter`. 숫자만으로 맞추지 않는다(추측 금지). `no_match`·`ambiguous`이면 **문제지 자신의 장**이 추천이다(`paper_chapter`, §14.4).
 5. 출처 행이 없으면 `no_source`(직접 등록한 문제 대부분).
 
 추천은 저장하지 않고 미리보기 요청마다 계산한다(교재 추가·교정으로 달라질 수 있음). 미리보기는 읽기 전용이고, 적용은 보이던 지금 챕터(`expected_chapter_id`)를 함께 보내 그 사이 바뀐 문제가 있으면 요청 전체를 409 `chapter-changed`로 거절한다(CHAPTER-MAP의 등록 409와 같은 방식). 기본으로 `chapter_source = manual` 문제는 계산하지 않고 "직접 정한 챕터라 건너뜀"으로 센다.
@@ -339,6 +339,12 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **정리 노트:** 옮긴 문제가 있던 장과 새 장의 노트는 stale(§9 "장 이동", CHNOTE-01-C03 fingerprint). 노트 본문·각주는 그대로이고, 옮긴 문제의 옛 장 노트 각주는 구성원에게 "삭제되었거나 옮긴 문제"로 보인다. 공유 게스트·Fork의 출처 일치 판정은 바뀌지 않는다(인용 문제의 상태·revision이 그대로이므로 계속 보임 — 내용은 이미 공개 범위).
 - **이미 만든 것:** 범위 풀이 묶음(`practice_runs.item_ids`)·모의고사 문제·그 풀이는 바뀌지 않는다. 모의고사 범위 고르기의 출처 장 묶음은 원본의 지금 장(MOCK-01-C10)이라 새 장으로 보인다. 문제의 해설 하이라이트(§15)는 문제를 따라 새 장의 `내 하이라이트`로 간다.
 - **문제 번호:** 번호는 바꾸지 않는다. 다른 장에서 옮겨 와 같은 장에 같은 번호가 둘이면 Heatmap 순서(`sort_order`, 번호, 등록 순)대로 둘 다 보인다(사용자 결정 2026-11-02).
+
+### 14.4 문제지 장 폴백과 자동 재매칭 (CHAP-MATCH 2026-11-04 사용자 결정)
+
+- **폴백:** 등록된 문제의 추천(§14.2 4)이 `no_match`이거나 장 번호·level로도 `ambiguous`이면 문제지(또는 `mixed`의 문제 구간) 자신의 장 — 시작 블록 장의 **최상위(level 1) 조상**을, 그 문서의 현재 revision의 같은 `section_key` 장으로 옮겨 추천한다(`reason = paper_chapter`). 가장 깊은 노드는 쓰지 않는다(워크북 outline의 `01 …?`·`정답: ②` 같은 가짜 level-2 heading). `no_source_chapter`(시작 블록에 장 없음)·`no_source`에는 폴백이 없다. 폴백 장은 Heatmap 장 목록에 교재 장처럼 나온다. 가져오기 초안의 추천은 교재 장만 쓴다(등록이 비교재 장을 거절하므로); 초안이 `챕터 없음`으로 등록되면 아래 재매칭이 폴백을 붙인다.
+- **자동 재매칭(사용자 결정 2026-11-04: worker, 교재가 준비된 직후 한 번):** `document.parse`가 교재(`question_paper`가 아닌 문서)의 새 revision을 활성화한 뒤(publish 트랜잭션 밖, 실패해도 job은 성공) `quiz_worker.chapter_rematch`가 그 Workspace의 대상 문제를 같은 matcher(`book_core.chapter_matching`)로 다시 매칭한다. 대상은 CONFIRMED 살아 있는 문제 중 `chapter_source = auto`이고 챕터가 없거나 문제지 폴백 장인 것뿐이다 — **`manual`(사람이 정하거나 바꾼 챕터)은 절대 건드리지 않는다**. 쓰기는 SECURITY DEFINER `public.worker_rematch_chapters(workspace, moves jsonb)` 하나뿐이다(quiz_worker만 실행; 테이블 권한 추가 없음): 활성 Workspace 확인 → 문서 FOR SHARE(id 순) → 문제 FOR UPDATE(id 순) 뒤 항목마다 다시 확인(CONFIRMED·`auto`·`expected_chapter_id`와 같은 지금 장·옛 장은 없음 또는 비교재 장·새 장은 이 Workspace의 살아 있는 문서의 활성 revision 장이며 교재 장이거나 챕터 없는 문제에만 문제지 level-1 장). 하나라도 어긋난 항목은 건너뛰므로 멱등이고 재전달이 두 번 옮기지 않는다. 옮긴 문제는 `chapter_source = auto`·`chapter_set_by = null`·이력 `recommendation`(`changed_by` null)으로 쓴다. API 쪽 endpoint는 없다.
+- **문제 편집 챕터 선택:** 교재 장 전부와 문제지의 level-1 장.
 
 ## 15. 하이라이트와 `내 하이라이트` (UX9-SPEC 2026-11-02)
 

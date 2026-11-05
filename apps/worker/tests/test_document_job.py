@@ -740,6 +740,21 @@ def test_qimport_01_ac06_a_processed_question_paper_starts_one_import_for_its_up
     assert world.definition.follow_ups is started_import_jobs
 
 
+def test_chap_match_a_newly_active_book_rematches_its_workspace_once(world: World) -> None:
+    document, revision = world.upload()
+    envelope = world.submit(document, revision.id)
+
+    assert world.run(envelope).outcome is RunOutcome.SUCCEEDED
+    assert world.store.rematched == [envelope.workspace_id]
+
+
+def test_chap_match_a_question_paper_does_not_rematch(world: World) -> None:
+    document, revision = world.upload(document_type="question_paper")
+
+    assert world.run(world.submit(document, revision.id)).outcome is RunOutcome.SUCCEEDED
+    assert world.store.rematched == []
+
+
 def test_qimport_01_ac06_books_start_no_import(world: World) -> None:
     document, revision = world.upload()
 

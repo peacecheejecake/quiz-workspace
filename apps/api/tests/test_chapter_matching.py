@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from quiz_api.chapter_matching import BookChapter, ChapterMatcher, title_key
+from book_core.chapter_matching import BookChapter, ChapterMatcher, title_key
 from quiz_api.draft_chapters import DraftChapter, draft_chapters, source_ref
 from quiz_api.repositories.draft_chapters import SourceRef
 from quiz_api.repositories.question_imports import DraftRecord
@@ -165,3 +165,27 @@ def test_qimport_01_ac08_the_reviewer_choice_wins_over_the_suggestion() -> None:
     assert out[gone.id].chapter is None
     assert out[by_page.id].match == "no_source_chapter"
     assert repo.refs[by_page.id] == SourceRef(None, 3)
+
+
+# --- CHAP-MATCH: outline level breaks a tie, the question paper's own chapter is the fallback ----
+
+
+def test_chap_match_several_candidates_pick_the_one_highest_in_the_outline() -> None:
+    top = chapter("1장 총론", level=1)
+    matcher = ChapterMatcher([chapter("1.1 총론", OTHER_BOOK, level=2), top])
+    found = matcher.suggest(["총론"])
+    assert (found.chapter, found.match) == (top, "matched")
+
+
+def test_chap_match_equal_highest_level_stays_ambiguous() -> None:
+    matcher = ChapterMatcher(
+        [chapter("총론", level=1), chapter("총론", OTHER_BOOK, level=1), chapter("총론", level=2)]
+    )
+    found = matcher.suggest(["총론"])
+    assert (found.chapter, found.match) == (None, "ambiguous")
+
+
+def test_chap_match_the_chapter_number_still_decides_before_the_level() -> None:
+    first = chapter("1장 총론", level=2)
+    matcher = ChapterMatcher([first, chapter("3장 총론", OTHER_BOOK, level=1)])
+    assert matcher.suggest(["제1장 총론"]).chapter == first

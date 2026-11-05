@@ -706,6 +706,14 @@ provider = "operator"
 note = "false; true sends question text to the LLM provider (needs LLM_API_KEY)"
 
 [[var]]
+name = "QUESTION_IMPORT_LLM_CONCURRENCY"
+services = ["worker"]
+kind = "config"
+check = "number"
+provider = "default"
+note = "4 (1-16); questions of one import refined by the LLM at once"
+
+[[var]]
 name = "WORKER_DOCUMENT_SUMMARY"
 services = ["api", "worker"]
 kind = "config"

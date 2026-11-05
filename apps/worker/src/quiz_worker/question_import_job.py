@@ -55,6 +55,7 @@ from book_core.contracts import (
 )
 from book_core.extractor import EXTRACT_PROMPT_VERSION, ExtractedQuestion, QuestionExtractor
 from book_core.llm import LLMClient
+from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from quiz_worker.adapters import WorkerNotConfiguredError
@@ -119,6 +120,7 @@ class ImportJobDeps:
     # APP_ENV=test: honour IMPORT_FAILURE_MARKER.
     inject_failures: bool = False
     lock_wait_seconds: float = 60
+    llm_concurrency: int = 1
 
 
 # --------------------------------------------------------------------------------------------
@@ -222,7 +224,13 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
         document_id=str(run.document_id),
         revision_id=str(run.revision_id),
         progress=_ExtractionProgress(progress),
+        concurrency=deps.llm_concurrency,
+        # Soft time limit while refining: save the drafts with what is refined so far
+        # (the hard limit still kills a stuck job).
+        stop_on=(SoftTimeLimitExceeded,),
     )
+    if extraction.refinement_incomplete:
+        logger.warning("question refinement incomplete: saving the rule-based remainder")
     drafts = [
         draft_row(position, question, canonical)
         for position, question in enumerate(extraction.questions)
@@ -253,6 +261,7 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
         "import_id": str(run.id),
         "drafts": len(drafts),
         "created": created,
+        **({"refinement": "incomplete"} if extraction.refinement_incomplete else {}),
         # Codes only (never text): e.g. answer_key_missing, question_number_gap.
         "warnings": [str(code) for code in sorted({w.code for w in extraction.warnings})],
     }
@@ -430,6 +439,7 @@ def deps_from_settings(settings: WorkerSettings) -> ImportJobDeps:
         llm_model=model,
         inject_failures=settings.is_test,
         lock_wait_seconds=settings.document_lock_wait_seconds,
+        llm_concurrency=settings.question_import_llm_concurrency,
     )
 
 

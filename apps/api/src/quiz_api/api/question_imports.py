@@ -66,6 +66,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
+from book_core.chapter_matching import BookChapter, ChapterMatch
 from book_core.contracts import QuestionDraft
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.exceptions import RequestValidationError
@@ -87,7 +88,6 @@ from quiz_api.authz import (
     authorize_workspace,
     get_access_repository,
 )
-from quiz_api.chapter_matching import BookChapter, ChapterMatch
 from quiz_api.db import get_db_session
 from quiz_api.draft_chapters import ChapterChoice, DraftChapter, draft_chapters
 from quiz_api.errors import ProblemException, ProblemType, problem_responses

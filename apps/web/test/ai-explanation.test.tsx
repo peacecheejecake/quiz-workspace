@@ -104,7 +104,11 @@ function fakeClient(state: ExplanationState, created: ExplanationState = state) 
 }
 
 function area(scope: HTMLElement = document.body) {
-  return within(scope).getByRole('region', { name: 'AI 해설' });
+  // The member view is a group (toolbar + the region once there is content); the shared one a region.
+  return (
+    within(scope).queryByRole('group', { name: 'AI 해설' }) ??
+    within(scope).getByRole('region', { name: 'AI 해설' })
+  );
 }
 
 const gate = { practice_session_id: SESSION } as const;
@@ -197,8 +201,11 @@ describe('AIEXPL-01 area states', () => {
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
     const region = area();
-    const button = await within(region).findByRole('button', { name: 'AI 해설 만들기' });
+    const button = await within(region).findByRole('button', { name: 'AI 해설' });
     expect(within(region).getByText(model.EXPL_TEXT.sendNotice)).toBeInTheDocument();
+    // No explanation yet: no area (region / heading) at all, only the button.
+    expect(within(region).queryByRole('region')).toBeNull();
+    expect(within(region).queryByRole('heading')).toBeNull();
     expect(within(region).queryByRole('status')).toBeNull();
     // The keyboard path (AIEXPL-01-AC06): Enter moves focus to the heading; a second press while
     // the request is out makes no second request.
@@ -215,7 +222,8 @@ describe('AIEXPL-01 area states', () => {
     pending.answer?.(stateOf({ explanation: explanation(), can_create: false }));
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.create).toHaveBeenCalledWith(target, gate);
-    expect(within(region).getByRole('heading', { name: 'AI 해설', level: 3 })).toHaveFocus();
+    // The area mounts with the result; focus moves to its heading.
+    expect(await within(region).findByRole('heading', { name: 'AI 해설', level: 3 })).toHaveFocus();
     // A cache hit: shown open at once, every option by its text and a footnote button.
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
     expect(within(region).getByText('1. 증발')).toBeInTheDocument();
@@ -236,7 +244,7 @@ describe('AIEXPL-01 area states', () => {
     const show = await within(area()).findByRole('button', { name: 'AI 해설 보기' });
     expect(show).toHaveAttribute('aria-expanded', 'false');
     expect(within(area()).queryByText('AI 생성')).toBeNull();
-    expect(within(area()).queryByRole('button', { name: 'AI 해설 만들기' })).toBeNull();
+    expect(within(area()).queryByRole('button', { name: 'AI 해설' })).toBeNull();
     await user.click(show);
     expect(show).toHaveAttribute('aria-expanded', 'true');
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
@@ -468,7 +476,7 @@ describe('AIEXPL-01 shared (guest)', () => {
     await screen.findByRole('region', { name: 'AI 해설' });
     await user.click(within(area()).getByRole('button', { name: 'AI 해설 보기' }));
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
-    for (const name of ['AI 해설 만들기', '다시 만들기', '출처 1']) {
+    for (const name of ['AI 해설', '다시 만들기', '출처 1']) {
       expect(within(area()).queryByRole('button', { name })).toBeNull();
     }
     expect(within(area()).queryByText(/버전/)).toBeNull();
@@ -584,9 +592,7 @@ describe('AIEXPL-01 in QuestionViewer sequence', () => {
       fetchSpy.mock.calls.filter(([url]) => String(url).includes('ai-explanation'));
     expect(explanationCalls()).toEqual([]);
     await user.click(within(panel).getByRole('button', { name: /^제출$/ }));
-    expect(
-      await within(panel).findByRole('button', { name: 'AI 해설 만들기' }),
-    ).toBeInTheDocument();
+    expect(await within(panel).findByRole('button', { name: 'AI 해설' })).toBeInTheDocument();
     expect(explanationCalls().map(([url]) => url)).toEqual([
       `/api/questions/${QID}/ai-explanation?practice_session_id=${SESSION}`,
     ]);

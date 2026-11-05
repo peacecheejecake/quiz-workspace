@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -35,7 +37,7 @@ from book_core.extractor import (
     QuestionExtractor,
     llm_requests,
 )
-from book_core.llm import FakeLLMClient, LLMProviderError
+from book_core.llm import FakeLLMClient, LLMProviderError, LLMRequest, LLMResult
 from book_core.parser import FakeParser, document_from_pages
 from book_core.question import (
     answer_option_keys,
@@ -46,6 +48,7 @@ from book_core.question import (
 )
 from fixture_truth import QuestionsTruth, TruthQuestion
 from make_fixture_pdfs import OUT_DIR
+from pydantic import BaseModel
 
 TRUTH_PATH = OUT_DIR / "questions-ko.truth.json"
 PDF_PATH = OUT_DIR / "questions-ko.pdf"
@@ -1644,3 +1647,238 @@ def test_progress_callback_reports_done_and_total_after_each_question() -> None:
     total = len(result.questions)
     assert total > 1
     assert calls == [(n, total) for n in range(1, total + 1)]
+
+
+# ------------------------------------------------------------------------------------------
+# QPARSE-FIX: spaced answer labels and lettered stem lists
+
+
+def test_spaced_answer_label_below_options_is_the_inline_answer_not_an_option() -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "① 갑 ② 을 ③ 병",
+            "(정  답) ③",
+            "(출제원) 1권 5page",
+            "(해  설) 갑은 틀림",
+            "2. 다음 중 틀린 것은?",
+            "① 가",
+            "② 나",
+            "정 답 ①",
+        ]
+    )
+    q1, q2 = result.drafts
+    assert [o.text for o in q1.options] == ["갑", "을", "병"]
+    assert q1.correct_option_ids == ("opt-3",)
+    assert [o.text for o in q2.options] == ["가", "나"]
+    assert q2.correct_option_ids == ("opt-1",)
+
+
+# QPARSE-FIX: lettered stem lists
+
+
+@pytest.mark.parametrize(
+    "option_lines",
+    [
+        ["① (가)", "② (나)", "③ (가), (나)"],
+        ["① (가) ② (나) ③ (가), (나)"],
+        ["1. (가)", "2. (나)", "3. (가), (나)"],
+        ["1) (가)", "2) (나)", "3) (가), (나)"],
+    ],
+    ids=["circled-lines", "circled-inline", "dot-numbered", "paren-numbered"],
+)
+def test_lettered_stem_list_belongs_to_the_stem_and_numbered_markers_are_the_options(
+    option_lines: list[str],
+) -> None:
+    result = _extract(
+        [
+            "1. 다음 중 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            *option_lines,
+            "(정  답) ③",
+        ]
+    )
+    (draft,) = result.drafts
+    assert "(가) 갑은 을이다." in draft.stem
+    assert "(나) 병은 정이다." in draft.stem
+    assert [o.text for o in draft.options] == ["(가)", "(나)", "(가), (나)"]
+    assert draft.correct_option_ids == ("opt-3",)
+
+
+def test_latin_stem_list_before_circled_options_stays_in_the_stem() -> None:
+    result = _extract(
+        ["1. 옳은 것은?", "(A) 갑은 을이다.", "(B) 병은 정이다.", "① (A)", "② (B)", "(정  답) ②"]
+    )
+    (draft,) = result.drafts
+    assert "(B) 병은 정이다." in draft.stem
+    assert [o.text for o in draft.options] == ["(A)", "(B)"]
+
+
+def test_llm_cannot_resplit_a_stem_list_into_extra_options() -> None:
+    client = FakeLLMClient()
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="MCQ",
+            multi_select=False,
+            stem="옳은 것은?",
+            options=[
+                LLMOption(label="(가)", text="갑은 을이다."),
+                LLMOption(label="(나)", text="병은 정이다."),
+                LLMOption(label="①", text="(가)"),
+                LLMOption(label="②", text="(나)"),
+            ],
+            answer=None,
+        ),
+    )
+    doc = _doc(["1. 옳은 것은?", "(가) 갑은 을이다.", "(나) 병은 정이다.", "① (가)", "② (나)"])
+    (draft,) = QuestionExtractor(client).extract(doc, document_id="d").drafts
+    assert [o.text for o in draft.options] == ["(가)", "(나)"]
+    assert "(나) 병은 정이다." in draft.stem
+    assert "llm_text_rejected" in _codes(draft.validations)
+
+
+def test_dot_numbered_letter_options_keep_their_blocks_as_source_evidence() -> None:
+    result = _extract(
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            "1. (가)",
+            "2. (나)",
+            "3. (가), (나)",
+        ]
+    )
+    (draft,) = result.drafts
+    block_ids = {b for e in draft.evidence for b in e.block_ids}
+    assert len(block_ids) == 6
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["① 갑", "② 을", "③ 병"],
+        ["1. (가)", "2. (나)", "3. (다)"],
+    ],
+    ids=["circled-so-far", "dot-numbered-so-far"],
+)
+def test_following_question_with_letter_reference_is_not_swallowed_as_option(
+    options: list[str],
+) -> None:
+    result = _extract(
+        [
+            "1. 옳은 것은?",
+            "(가) 갑은 을이다.",
+            "(나) 병은 정이다.",
+            *options,
+            "4. (가)에 대한 설명으로 옳은 것은?",
+            "① 갑 ② 을",
+        ]
+    )
+    assert len(result.drafts) == 2
+    assert len(result.drafts[0].options) == 3
+
+
+# -- bounded-concurrency refinement and soft-stop partial result ------------------------
+
+
+class _SlowClient:
+    """Delegates to a scripted fake, sleeping per call and recording the in-flight peak."""
+
+    def __init__(self, inner: FakeLLMClient, delay: float = 0.03) -> None:
+        self._inner = inner
+        self._delay = delay
+        self._lock = threading.Lock()
+        self._running = 0
+        self.peak = 0
+
+    @property
+    def model_name(self) -> str:
+        return self._inner.model_name
+
+    def complete[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]:
+        with self._lock:
+            self._running += 1
+            self.peak = max(self.peak, self._running)
+        try:
+            time.sleep(self._delay)
+            return self._inner.complete(request, schema)
+        finally:
+            with self._lock:
+                self._running -= 1
+
+
+class _SoftStop(BaseException):
+    """Stands in for celery's SoftTimeLimitExceeded."""
+
+
+def test_concurrent_refinement_equals_sequential_output() -> None:
+    sequential = QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID)
+    concurrent = QuestionExtractor(_SlowClient(_scripted())).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=4
+    )
+    assert [q.draft.id for q in concurrent.questions] == [q.draft.id for q in sequential.questions]
+    assert concurrent.questions == sequential.questions
+    assert concurrent.warnings == sequential.warnings
+    assert [c.request_fingerprint for c in concurrent.llm_calls] == [
+        c.request_fingerprint for c in sequential.llm_calls
+    ]
+    assert not concurrent.refinement_incomplete
+
+
+@pytest.mark.parametrize("limit", [1, 3])
+def test_concurrency_bound_is_respected(limit: int) -> None:
+    client = _SlowClient(_scripted())
+    QuestionExtractor(client).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=limit
+    )
+    assert client.peak <= limit
+    if limit > 1:
+        assert client.peak > 1
+
+
+def test_progress_is_monotonic_and_ends_at_total() -> None:
+    seen: list[tuple[int, int]] = []
+    QuestionExtractor(_SlowClient(_scripted())).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=4, progress=lambda d, t: seen.append((d, t))
+    )
+    dones = [d for d, _ in seen]
+    assert dones == sorted(dones)
+    assert {t for _, t in seen} == {8}
+    assert dones[-1] == 8
+
+
+def test_soft_stop_keeps_refined_questions_and_saves_the_rest_rule_based() -> None:
+    full = QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID)
+    plain = QuestionExtractor(None).extract(_document(), document_id=DOC_ID)
+
+    def stop_after_three(done: int, total: int) -> None:
+        if done >= 3:
+            raise _SoftStop
+
+    result = QuestionExtractor(_SlowClient(_scripted(), delay=0.05)).extract(  # type: ignore[arg-type]
+        _document(),
+        document_id=DOC_ID,
+        concurrency=1,
+        progress=stop_after_three,
+        stop_on=(_SoftStop,),
+    )
+    assert result.refinement_incomplete
+    assert [q.draft.id for q in result.questions] == [q.draft.id for q in full.questions]
+    refined = [q for q in result.questions if q.refined_by_llm]
+    assert 3 <= len(refined) < 8
+    for got, ref, pre in zip(result.questions, full.questions, plain.questions, strict=True):
+        if got.refined_by_llm:
+            assert got == ref
+        else:
+            assert got.draft.stem == pre.draft.stem
+            assert "llm_unavailable" in {v.code for v in got.draft.validations}
+
+
+def test_soft_stop_not_in_stop_on_propagates() -> None:
+    def boom(done: int, total: int) -> None:
+        raise _SoftStop
+
+    with pytest.raises(_SoftStop):
+        QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID, progress=boom)

@@ -139,7 +139,7 @@ class Space:
         self.token = t
 
 
-def import_space(seed: Any, label: str) -> dict[str, Any]:
+def import_space(seed: Any, label: str, db: Any) -> dict[str, Any]:
     """R5: A, B auto under 챕터 없음; C manual (reviewer picked 1장); D auto under the titled book's
     chapter; E direct with no source (manual)."""
     owner = seed.client(f"{label}-owner")
@@ -184,6 +184,13 @@ def import_space(seed: Any, label: str) -> dict[str, Any]:
     c = publish(by_number(4))
     titled = notes.upload(owner, ws, PAPER, filename="chapter-book.pdf", document_type="book")
     titled_chapter = notes.chapters(owner, titled)[PAPER_CHAPTER]
+    # CHAP-MATCH: the new book's parse job already re-matched A and B (auto, no chapter) to the
+    # titled chapter. Put them back under "챕터 없음" so these tests start from the state a
+    # preview recommends from (the automatic re-match has its own test below).
+    db(
+        "update public.questions set chapter_id = null where id = any(%s::uuid[])",
+        ([a, b],),
+    )
     d_draft = by_number(5)
     d = publish(d_draft)
     e = notes.question(owner, ws, f"{notes.token()}-direct", 9, ch[CH2], OK)
@@ -291,8 +298,6 @@ def test_chredist_01_c02_one_bad_item_refuses_the_whole_request(seed: Any, db: A
         {**notes_question_body(f"{s.token}-draft", 7, s.ch[CH1]), "publication_status": "DRAFT"},
         (201,),
     )
-    paper = notes.upload(s.owner, s.ws, PAPER, document_type="question_paper")
-    paper_chapter = notes.chapters(s.owner, paper)[PAPER_CHAPTER]
     before = {q["id"]: chapter_of(s.owner, q) for q in s.q}
     good = item(s.q[0], s.ch[CH2], s.ch[CH1])
 
@@ -303,7 +308,6 @@ def test_chredist_01_c02_one_bad_item_refuses_the_whole_request(seed: Any, db: A
         ("unknown question", [good, {**good, "question_id": RANDOM_ID}], 404, None),
         ("draft", [good, item(draft, s.ch[CH2], s.ch[CH1])], 409, NOT_CONFIRMED),
         ("stale expected", [good, item(s.q[1], s.ch[CH2], s.ch[CH2])], 409, CHAPTER_CHANGED),
-        ("question paper chapter", [item(s.q[0], paper_chapter, s.ch[CH1])], 422, CHAPTER_INVALID),
         ("foreign chapter", [item(s.q[0], other.ch[CH1], s.ch[CH1])], 404, None),
     ]
     for name, items, status, ptype in cases:
@@ -445,8 +449,10 @@ def test_chredist_01_c04_writes_source_history_activity_and_nothing_else(
 # ---------------------------------------------------------------------------------------------
 
 
-def test_chredist_01_c05_recommendation_rule_matches_the_draft_suggestion(seed: Any) -> None:
-    x = import_space(seed, "chredist-c05")
+def test_chredist_01_c05_recommendation_rule_matches_the_draft_suggestion(
+    seed: Any, db: Any
+) -> None:
+    x = import_space(seed, "chredist-c05", db)
     owner, ws, ids = x["owner"], x["ws"], x["ids"]
     # Direct questions filed under 1장 by hand: one whose first source is the paper (page 1),
     # one whose first source is page 4 of the book (2장).
@@ -497,7 +503,7 @@ def test_chredist_01_c05_recommendation_rule_matches_the_draft_suggestion(seed: 
 
 
 def test_chredist_01_c06_preview_writes_nothing_and_is_repeatable(seed: Any, db: Any) -> None:
-    x = import_space(seed, "chredist-c06")
+    x = import_space(seed, "chredist-c06", db)
     owner, ws, ids = x["owner"], x["ws"], x["ids"]
     seed.assert_status(preview(owner, ws, all=True), 200, "preview")
     before = counts(db, ws)
@@ -536,7 +542,7 @@ def test_chredist_01_c06_preview_writes_nothing_and_is_repeatable(seed: Any, db:
 
 
 def test_chredist_01_c07_chapter_source_by_path_and_fork_copy(seed: Any, db: Any) -> None:
-    x = import_space(seed, "chredist-c07")
+    x = import_space(seed, "chredist-c07", db)
     owner, ws, ids = x["owner"], x["ws"], x["ids"]
 
     def source(question_id: str) -> str:
@@ -632,3 +638,14 @@ def test_chredist_01_c08_overview_notes_and_logs_after_a_move(
     seed.assert_status(shared_after, 200, "shared note after: still source-matched")
     for text in (s.token, CH1, CH2):
         assert text not in caplog.text, "no stems or chapter titles in logs"
+
+
+def test_chap_match_a_question_paper_level_one_chapter_is_a_valid_target(
+    seed: Any, db: Any
+) -> None:
+    s = Space(seed, "chredist-paper-target")
+    paper = notes.upload(s.owner, s.ws, PAPER, document_type="question_paper")
+    top = notes.chapters(s.owner, paper)[PAPER_CHAPTER]
+    res = assign(s.owner, s.ws, [item(s.q[0], top, s.ch[CH1])])
+    seed.assert_status(res, 200, "paper level-1 target")
+    assert chapter_of(s.owner, s.q[0]) == top

@@ -45,6 +45,13 @@ import uuid
 from collections import Counter
 from typing import Annotated, Any, Literal, cast
 
+from book_core.chapter_matching import (
+    BookChapter,
+    ChapterMatcher,
+    NoRecommendation,
+    RecommendationReason,
+    recommend,
+)
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -65,13 +72,6 @@ from quiz_api.authz import (
     WorkspaceAccess,
     authorize_workspace,
     get_access_repository,
-)
-from quiz_api.chapter_matching import (
-    BookChapter,
-    ChapterMatcher,
-    NoRecommendation,
-    RecommendationReason,
-    recommend,
 )
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
@@ -168,7 +168,8 @@ class RedistributionPreviewItem(BaseModel):
     current_chapter: RedistributionChapter | None = Field(description='null = "챕터 없음".')
     recommended_chapter: RedistributionChapter
     reason: RecommendationReason = Field(
-        description="source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치)."
+        description="source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치) | "
+        "paper_chapter (일치하는 교재 장이 없어 문제지 자신의 최상위 장)."
     )
 
 
@@ -311,7 +312,10 @@ def list_redistribution_questions(
             )
         )
     targets: dict[uuid.UUID, RedistributionTargetDocument] = {}
-    for chapter in repo.book_chapters(access.workspace_id):
+    for chapter in [
+        *repo.book_chapters(access.workspace_id),
+        *repo.paper_chapters(access.workspace_id),
+    ]:
         doc = targets.get(chapter.document_id)
         if doc is None:
             doc = targets[chapter.document_id] = RedistributionTargetDocument(

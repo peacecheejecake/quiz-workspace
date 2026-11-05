@@ -1,7 +1,7 @@
 """``QuestionExtractor``: question PDF (``ParsedDocument``) -> ``QuestionDraft``s (Task M4.3).
 
 Pipeline (questions.md §6): rule-based pre-extraction (numbering, options, figures, answer key,
-page/bbox provenance) -> optional LLM refinement per question (``questions.extract/v1``,
+page/bbox provenance) -> optional LLM refinement per question (``questions.extract/v2``,
 structured output, own source text only) -> structural validation -> drafts with
 ``review_status=pending``, ``origin=pdf_import`` and validation issues.
 
@@ -21,6 +21,7 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Literal
 
@@ -96,6 +97,8 @@ class QuestionExtraction(CoreModel):
     questions: tuple[ExtractedQuestion, ...] = ()
     warnings: tuple[ValidationIssue, ...] = ()
     llm_calls: tuple[LLMCallInfo, ...] = ()
+    # True when a stop signal (soft time limit) ended the LLM refinement early.
+    refinement_incomplete: bool = False
 
     @property
     def drafts(self) -> tuple[QuestionDraft, ...]:
@@ -139,8 +142,16 @@ class QuestionExtractor:
         document_id: str,
         revision_id: str | None = None,
         progress: Callable[[int, int], object] | None = None,
+        concurrency: int = 1,
+        stop_on: tuple[type[BaseException], ...] = (),
     ) -> QuestionExtraction:
-        """Extract drafts; ``progress(done, total)`` is called after each question."""
+        """Extract drafts; ``progress(done, total)`` is monotonic and called from this thread.
+
+        LLM refinement runs on at most ``concurrency`` threads (the client must be safe for
+        concurrent use); output order and draft ids do not depend on it. If an exception in
+        ``stop_on`` (e.g. a Celery soft time limit) arrives while refining, finished questions
+        keep their refinement, the rest stay rule-based and ``refinement_incomplete`` is set.
+        """
         blocks = document.blocks
         seg = segment_chapters(blocks)
         warnings = _document_warnings(
@@ -153,22 +164,85 @@ class QuestionExtractor:
         questions: list[ExtractedQuestion] = []
         calls: list[LLMCallInfo] = []
         contexts = list(_contexts(seg, blocks))
-        for done, ctx in enumerate(contexts, start=1):
-            raw = ctx.raw
-            candidate = _pre_extract(raw, ctx.entries, ctx.next_block, ctx.figures)
+        total = len(contexts)
+
+        # Phase 1: deterministic pre-extraction (cheap, sequential).
+        candidates: list[_Candidate] = []
+        for ctx in contexts:
+            candidate = _pre_extract(ctx.raw, ctx.entries, ctx.next_block, ctx.figures)
             if ctx.occurrence and not ctx.entries:
                 candidate.issues.append(
                     issue(
                         "duplicate_question_number",
-                        f"Question number {raw.number} appears more than once; "
+                        f"Question number {ctx.raw.number} appears more than once; "
                         "the answer key was not applied.",
                     )
                 )
+            candidates.append(candidate)
+
+        # Phase 2: LLM refinement on a bounded pool; results are stored by index so the output
+        # order never depends on completion order.
+        refinable = [i for i, c in enumerate(candidates) if c.stem] if self._llm is not None else []
+        results: dict[int, tuple[_Candidate, bool, LLMCallInfo | None]] = {}
+        done = 0
+        for _ in range(total - len(refinable)):  # no LLM call needed: done at once
+            done += 1
+            if progress is not None:
+                progress(done, total)
+        interrupted = False
+        if refinable and self._llm is not None:
+            llm = self._llm
+            pool = ThreadPoolExecutor(
+                max_workers=max(1, min(concurrency, len(refinable))),
+                thread_name_prefix="question-refine",
+            )
+            futures: dict[Future[tuple[_Candidate, bool, LLMCallInfo | None]], int] = {}
+            try:
+                futures = {
+                    pool.submit(_refine, llm, candidates[i], contexts[i]): i for i in refinable
+                }
+                for future in as_completed(futures):
+                    results[futures[future]] = future.result()
+                    done += 1
+                    if progress is not None:
+                        progress(done, total)
+            except stop_on:
+                # Soft time limit: keep what finished, leave the rest rule-based.
+                interrupted = True
+                for future, i in futures.items():
+                    if (
+                        i not in results
+                        and future.done()
+                        and not future.cancelled()
+                        and future.exception() is None
+                    ):
+                        results[i] = future.result()
+                logger.warning(
+                    "question refinement stopped early document=%s refined=%d of %d",
+                    document_id,
+                    len(results),
+                    len(refinable),
+                )
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+
+        # Phase 3: drafts in document order.
+        for index, ctx in enumerate(contexts):
+            raw = ctx.raw
+            candidate = candidates[index]
             refined = False
-            if self._llm is not None and candidate.stem:
-                candidate, refined, info = _refine(self._llm, candidate, ctx)
+            if index in results:
+                candidate, refined, info = results[index]
                 if info is not None:
                     calls.append(info)
+            elif interrupted and index in refinable:
+                candidate.issues.append(
+                    issue(
+                        "llm_unavailable",
+                        "LLM refinement stopped at the time limit; "
+                        "the rule-based extraction was kept.",
+                    )
+                )
 
             draft_id = f"{document_id}-q{raw.number:03d}"
             if ctx.occurrence:
@@ -185,8 +259,6 @@ class QuestionExtractor:
                         f"Question {raw.number} has no stem text and was skipped.",
                     )
                 )
-                if progress is not None:
-                    progress(done, len(contexts))
                 continue
             questions.append(
                 ExtractedQuestion(
@@ -196,8 +268,7 @@ class QuestionExtractor:
                     draft=draft,
                 )
             )
-            if progress is not None:
-                progress(done, len(contexts))
+        refinement_incomplete = interrupted
 
         logger.info(
             "question extraction document=%s questions=%d answer_key_entries=%d llm_calls=%d",
@@ -212,6 +283,7 @@ class QuestionExtractor:
             questions=tuple(questions),
             warnings=tuple(warnings),
             llm_calls=tuple(calls),
+            refinement_incomplete=refinement_incomplete,
         )
 
 

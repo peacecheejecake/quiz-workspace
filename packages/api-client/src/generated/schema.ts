@@ -6473,10 +6473,10 @@ export type components = {
       question_id: string;
       /**
        * Reason
-       * @description source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치).
+       * @description source_in_book (출처 교재의 장) | matched (문제지 장 제목과 일치) | paper_chapter (일치하는 교재 장이 없어 문제지 자신의 최상위 장).
        * @enum {string}
        */
-      reason: 'source_in_book' | 'matched';
+      reason: 'source_in_book' | 'matched' | 'paper_chapter';
       recommended_chapter: components['schemas']['RedistributionChapter'];
       /** Stem Preview */
       stem_preview: string;

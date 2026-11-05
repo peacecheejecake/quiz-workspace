@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from book_core.contracts import ParsedDocument
 from book_core.parser import FakeParser, document_from_pages
+from celery.exceptions import SoftTimeLimitExceeded
 from quiz_worker.celery_app import default_definitions
 from quiz_worker.document_job import (
     DocumentJobDeps,
@@ -551,3 +552,27 @@ def test_import_job_reports_extraction_progress_within_the_extracting_stage(worl
     assert extracting == sorted(extracting)
     assert all(40 <= pct <= 79 for pct in extracting)
     assert [s for s, _ in world.imports.percents][-1] == "saving"
+
+
+class _SoftLimitLLM:
+    """An LLM whose every call hits the Celery soft time limit."""
+
+    model_name = "soft-limit-llm"
+
+    def complete(self, request: Any, schema: Any) -> Any:
+        raise SoftTimeLimitExceeded
+
+
+def test_soft_time_limit_while_refining_still_saves_the_rule_based_drafts(world: World) -> None:
+    world.deps = replace(world.deps, llm=_SoftLimitLLM(), llm_model="soft-limit-llm")  # type: ignore[arg-type]
+    run = world.start(world.paper())
+
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert result.record.result["drafts"] == 8
+    assert result.record.result["refinement"] == "incomplete"
+    assert world.imports.runs[run.id].status == "succeeded"
+    assert world.imports.llm == [(None, None)]  # nothing was refined: no LLM provenance
+    for draft in world.imports.run_drafts(run.id):
+        assert "llm_unavailable" in {v["code"] for v in draft.validations}

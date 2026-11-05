@@ -460,11 +460,11 @@ html body[data-scroll-locked] {
   }
 
   &[data-tone='success'] > .tone-icon {
-    color: var(--color-success);
+    color: var(--color-success-fill);
   }
 
   &[data-tone='error'] > .tone-icon {
-    color: var(--color-danger);
+    color: var(--color-danger-fill);
   }
 
   > .body {

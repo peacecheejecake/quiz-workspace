@@ -1,7 +1,7 @@
 """The chapter each import draft is registered under (CHAPTER-MAP, QIMPORT-01-AC08).
 
 A draft the reviewer has not touched (`chapter_manual = false`) gets the suggestion of
-`quiz_api.chapter_matching`, recomputed on every read from the current books of the workspace (a
+`book_core.chapter_matching`, recomputed on every read from the current books of the workspace (a
 book uploaded after the import is matched too). A reviewer's choice (`chapter_manual = true`,
 `chapter_id` or none) wins and is resolved to the same section of its book's current revision.
 Registration (publish and the registration job) uses exactly what the review screen shows.
@@ -14,7 +14,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from quiz_api.chapter_matching import BookChapter, ChapterMatch, ChapterMatcher
+from book_core.chapter_matching import BookChapter, ChapterMatch, ChapterMatcher
+
 from quiz_api.repositories.draft_chapters import DraftChapterRepository, SourceRef
 from quiz_api.repositories.question_imports import DraftRecord
 
