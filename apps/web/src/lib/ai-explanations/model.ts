@@ -11,7 +11,6 @@ export const EXPL_TEXT = {
   title: 'AI 해설',
   create: 'AI 해설',
   show: 'AI 해설 보기',
-  sendNotice: '문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다.',
   working: 'AI 해설을 만드는 중',
   started: 'AI 해설을 만드는 중입니다',
   ready: 'AI 해설이 준비되었습니다',

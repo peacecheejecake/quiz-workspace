@@ -153,7 +153,7 @@ async function fillOptions(
   for (const type of ['OPTION_SHUFFLE', 'PARAPHRASE', 'INVERT_POLARITY'] as const) {
     const box = mockUi.variation(dialog, type);
     if (types.includes(type)) await box.check();
-    else if (await box.isChecked()) await box.uncheck();
+    else if ((await box.count()) > 0 && (await box.isChecked())) await box.uncheck();
   }
   await mockUi.questionCount(dialog).fill(String(count));
   await mockUi.next(dialog).click();
@@ -803,8 +803,7 @@ test(
       await mockUi.add(offDialog).click();
       for (const type of ['PARAPHRASE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
         const box = mockUi.variation(offDialog, type);
-        await expect(box).toBeDisabled();
-        await expect(box).toHaveAccessibleDescription(MOCK_TEXT.aiDisabled);
+        await expect(box).toHaveCount(0);
       }
       await expect(mockUi.variation(offDialog, 'OPTION_SHUFFLE')).toBeEnabled();
       await fillOptions(offDialog, '섞기만', ['OPTION_SHUFFLE'], 2);

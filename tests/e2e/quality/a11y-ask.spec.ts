@@ -427,7 +427,7 @@ test(
     await expect(detail).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(detail)).first()).toBeVisible();
     // The shared explanation is cached: 문제 상세 offers `AI 해설 보기`.
-    await explUi.show(explUi.area(detail)).click();
+    await expect(explUi.show(explUi.area(detail))).toHaveAttribute('aria-expanded', 'true');
     await expectDone(explUi.area(detail));
     await settle(page);
     await expectAccessible(page, 'AI 해설 and 관련 본문 in 문제 상세 (manage)');
@@ -492,13 +492,14 @@ test(
     await expect(explUi.create(area)).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'AI 해설 make button and 관련 본문 list (mock exam run)');
-    await explUi.create(area).click();
+    await keyTo(page, explUi.create(area));
+    await page.keyboard.press('Enter');
     await expectDone(area);
     await settle(page);
     await expectAccessible(page, 'AI 해설 done and 관련 본문 list (mock exam run)');
     await page.keyboard.press('Escape');
 
-    // manage(mock): the mock question's view, AI 해설 made by keyboard alone.
+    // manage(mock): the cached explanation opens without another generation.
     await page.goto(mockExamsPath(s.workspaceId, exam.id));
     const detail = mockUi.dialog(page);
     await expect(mockUi.heading(detail, examName)).toBeVisible();
@@ -507,9 +508,7 @@ test(
     await expect(manage).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(manage)).first()).toBeVisible();
     const manageArea = explUi.area(manage);
-    const action = explUi.show(manageArea).or(explUi.create(manageArea));
-    await keyTo(page, action);
-    await page.keyboard.press('Enter');
+    await expect(explUi.show(manageArea)).toHaveAttribute('aria-expanded', 'true');
     await expectDone(manageArea);
     await settle(page);
     await expectAccessible(page, 'AI 해설 and 관련 본문 in the mock question manage view');

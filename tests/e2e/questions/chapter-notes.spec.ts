@@ -687,8 +687,7 @@ test(
         panel = noteUi.panel(page);
         await expect(panel).toBeVisible();
         const create = noteUi.create(panel);
-        await expect(create).toHaveAttribute('aria-disabled', 'true');
-        await expect(create).toHaveAccessibleDescription(noteUi.unavailableReason);
+        await expect(create).toHaveCount(0);
         const state = await off.request<ChapterNoteState>(
           s.owner,
           'GET',

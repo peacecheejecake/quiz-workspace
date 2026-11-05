@@ -94,8 +94,12 @@ export function MockExamForm({
   onCancel,
 }: MockExamFormProps) {
   const [step, setStep] = useState<0 | 1>(0);
-  const [values, setValues] = useState(initial);
-  const [opening] = useState(() => JSON.stringify(initial));
+  const [values, setValues] = useState<OptionValues>(() => {
+    if (llmAvailable) return initial;
+    const types = initial.types.filter((type) => !isAiType(type));
+    return { ...initial, types: types.length ? types : ['OPTION_SHUFFLE'] };
+  });
+  const [opening] = useState(() => JSON.stringify(values));
   // HOMEDLG-01: typed options or the range step are unsaved input (the backdrop keeps them).
   useUnsavedChanges(step === 1 || JSON.stringify(values) !== opening);
   const [optionError, setOptionError] = useState<OptionError | null>(null);
@@ -160,7 +164,7 @@ export function MockExamForm({
             aria-describedby={optionError?.field === 'types' ? `${formId}-types` : undefined}
           >
             <legend className={styles.legend}>변형 유형</legend>
-            {VARIATION_ORDER.map((type) => (
+            {VARIATION_ORDER.filter((type) => llmAvailable || !isAiType(type)).map((type) => (
               <VariationChoice
                 key={type}
                 type={type}

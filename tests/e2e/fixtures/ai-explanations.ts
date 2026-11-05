@@ -96,7 +96,7 @@
 //   panel "n번 문제", range/mock run modal, "문제 상세" dialog, `manage(mock)` "문제 k", share
 //   panel), after the result/explanation and before the footer. Never before a submission in
 //   practice/sequence. States: button "AI 해설" + text "문제와 정답, 관련 교재 구절이 AI
-//   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, collapsed);
+//   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, open);
 //   running: text "AI 해설을 만드는 중" with [aria-busy="true"]; one status announcement "AI 해설을
 //   만드는 중입니다" at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
 //   생성", notice "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.", the body

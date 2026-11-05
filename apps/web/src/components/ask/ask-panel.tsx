@@ -564,7 +564,14 @@ function useAskPanel({
       : null;
   const tooLong = draft.trim().length > limits.max_question_chars;
   const canSend =
-    !blockedReason && !tooLong && draft.trim() !== '' && !running && !sending && !waiting;
+    askState?.available === true &&
+    !archived &&
+    !blockedReason &&
+    !tooLong &&
+    draft.trim() !== '' &&
+    !running &&
+    !sending &&
+    !waiting;
 
   // A request whose answer was lost (network, 5xx) may still have been accepted. Sending the
   // same operation again reuses its Idempotency-Key (the API replays the first result); any
@@ -942,7 +949,8 @@ function useAskPanel({
                       onSource: openSource,
                       onCopy: copy,
                       onFeedback: feedback,
-                      onAgain: isLast && !reason ? (m) => void again(m) : null,
+                      onAgain:
+                        isLast && askState?.available && !archived ? (m) => void again(m) : null,
                       againBlocked,
                     }}
                   />
@@ -1032,7 +1040,7 @@ function useAskPanel({
           <Button size="sm" onClick={() => void stop()}>
             답변 중지
           </Button>
-        ) : (
+        ) : askState?.available && !archived ? (
           <IconButton
             label="보내기"
             icon={<SendIcon />}
@@ -1041,7 +1049,7 @@ function useAskPanel({
             aria-describedby={blockedReason ? reasonId : undefined}
             onClick={() => void send()}
           />
-        )}
+        ) : null}
       </div>
       {counter || blockedReason || refusalText ? (
         <div className={styles.composerMeta}>

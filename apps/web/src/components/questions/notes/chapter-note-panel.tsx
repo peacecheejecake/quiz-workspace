@@ -421,21 +421,21 @@ function NoteContent({
   const progress = batchProgress(state.generation);
   const newest = state.versions[0]?.version;
 
-  // `정리 노트 만들기` / `다시 만들기` / `다시 시도`: aria-disabled with the reason when this
-  // environment cannot create notes (stored notes stay readable).
-  const actionButton = (label: string, variant: 'primary' | 'secondary') => (
-    <Button
-      size="sm"
-      variant={variant}
-      className={styles.disabled}
-      loading={requesting}
-      aria-disabled={view.createDisabled || undefined}
-      aria-describedby={view.createDisabled ? reasonId : undefined}
-      onClick={view.createDisabled ? undefined : () => void create()}
-    >
-      {label}
-    </Button>
-  );
+  // Generation actions are hidden when unavailable; stored notes stay readable.
+  const actionButton = (label: string, variant: 'primary' | 'secondary') =>
+    view.createDisabled ? null : (
+      <Button
+        size="sm"
+        variant={variant}
+        className={styles.disabled}
+        loading={requesting}
+        aria-disabled={view.createDisabled || undefined}
+        aria-describedby={view.createDisabled ? reasonId : undefined}
+        onClick={view.createDisabled ? undefined : () => void create()}
+      >
+        {label}
+      </Button>
+    );
   const offReason =
     view.createDisabled && (view.canCreate || view.canRegenerate || view.canRetry) ? (
       <p id={reasonId} className={styles.hint}>

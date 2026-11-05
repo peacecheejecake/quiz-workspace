@@ -125,6 +125,22 @@ function props(client: AskClient, patch: Partial<AskPanelProps> = {}): AskPanelP
   };
 }
 
+describe('UX10-AI availability', () => {
+  it('hides the send action while retaining stored conversation access', async () => {
+    const client = fakeClient();
+    render(
+      <AskPanel
+        {...props(client, {
+          askState: { ...STATE, available: false, reason: 'disabled' },
+          conversationId: 'c1',
+        })}
+      />,
+    );
+    await waitFor(() => expect(client.get).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: '보내기' })).toBeNull();
+  });
+});
+
 beforeEach(() => {
   // The answer stream relay: never answers unless a test says otherwise.
   vi.stubGlobal(
