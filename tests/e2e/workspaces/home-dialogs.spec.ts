@@ -147,9 +147,10 @@ const DIALOGS: readonly HomeDialog[] = [
     opener: homeUi.questionMenuButton,
   },
   {
-    name: '모의고사',
+    name: '문제 풀기',
     panel: 'mock-exams',
-    dialog: homeDialogUi.mockExams,
+    dialog: (page) =>
+      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
     open: (page) => page.getByRole('button', { name: /^풀기$/ }).click(),
     opener: (page) => page.getByRole('button', { name: /^풀기$/ }),
   },
@@ -472,8 +473,9 @@ const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
     open: (page) => domClick(noteUi.opener(page, CH1)),
   },
   {
-    name: '모의고사',
-    dialog: homeDialogUi.mockExams,
+    name: '문제 풀기',
+    dialog: (page) =>
+      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
     open: (page) => domClick(page.getByRole('button', { name: /^풀기$/ })),
   },
   {
