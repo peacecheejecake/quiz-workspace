@@ -890,6 +890,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 180758 Codex 리뷰의 후보 5,000개 초과 시 count만 줄여 허용하라는 P2는 거절한다. main이 Task brief에서 승인한 범위는 기존 후보 범위 상한 보존이며, 작은 count로 대규모 후보 해석 용량을 확장하는 변경은 포함하지 않는다. [PLAY 기준](implementation/ux10/play.md)에 명시하고 5,001 후보·count10 거절 회귀를 유지한다. 초기에는 홈 진입 연결을 HOME dependency로 인계했으나, 182307 리뷰에서 실제 production 진입 부재 P1과 Task 간 검증 순환이 확인되어 다음과 같이 소유권을 변경한다. PLAY가 HOME의 완성된 header/menu hunk를 받아 primary 진입·onBankStarted 및 실제 클릭 AC01을 구현한다. HOME은 PLAY 이후 필터·AI header guard와 최종 keyboard/visual 흐름을 검증한다. 의존 방향을 PLAY→HOME으로 고정하고 같은 파일을 동시에 편집하지 않는다. 생성 dialog/step 접근성 이름 변경에 따른 기존 MOCK fixture 수정은 PLAY가 수행한다.
 
+### UX11 과거 mock 연습 provenance — 2026-11-05
+
+구현 조사 결과 NULL-run session의 후속 제출은 shown generation만 허용하고, idempotency 저장소는 만료되어 지속적인 권한 근거로 쓸 수 없다. 앞서 migration 불필요로 가정한 부분을 수정한다. RETURN에 scoring linkage와 별개의 immutable retry origin(run ID·position)을 저장하는 최소 additive migration `20261106110000`을 허용한다. 일반 standalone 정책은 유지하고 origin 일치·소유권·position·generation을 검증한다. main만 candidate를 별도 테스트 DB에 적용하고, 공유 DB에는 리뷰·통합 후 적용한다.
+
 ### UX11 과거 mock 문항의 연습 권한 — 2026-11-05
 
 현재 본인 run에서 available인 과거 generation 문항은 현재 목록에서 빠졌다는 이유만으로 다시 풀기를 404로 끝내지 않는다. RETURN이 run 소유권·위치를 근거로 별도 session을 만드는 좁은 API를 추가한다. 일반 mock standalone의 현재 목록 정책, 삭제/제거 no-access, 원 회차 불변과 bank/mock 격리는 유지한다. [계약·검증 기준](implementation/ux11/return.md#회차-문항의-별도-연습-api).

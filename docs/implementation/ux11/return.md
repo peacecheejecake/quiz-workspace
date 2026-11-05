@@ -10,7 +10,7 @@
 현재 본인 회차에서 읽을 수 있는 문항은 현재 목록에서 빠진 과거 mock generation 문항도 별도 연습할 수 있어야 한다. 기존 일반 mock standalone endpoint의 현재 목록 검증은 완화하지 않는다. `POST /practice-runs/{run_id}/items/{position}/retry-session`처럼 본인 회차를 근거로 하는 좁은 생성 경로를 추가한다(기존 DTO·생성 helper 재사용 우선).
 
 - JWT 사용자 소유 run → workspace membership/보관 여부 → 고정 위치와 원본 문항·generation을 서버가 재검증한다. 클라이언트의 question/user/workspace 식별자로 권한을 대체하지 않는다. 다른 사용자·workspace·삭제/제거되어 기존 회차에서도 unavailable인 문항은 거절한다.
-- 생성 session의 practice_run_id/run_position은 비워 원 회차를 재제출하지 않는다. bank/mock 기존 시도 저장소·채점 경로를 유지하며 fresh idempotency key, bank reset epoch·stale/replay 검증을 재사용한다. reset 뒤 옛 idempotency 결과를 다시 노출하지 않는다. 새 migration은 필요하지 않다.
+- 생성 session의 practice_run_id/run_position은 비워 원 회차를 재제출하지 않는다. bank/mock 기존 시도 저장소·채점 경로를 유지하며 fresh idempotency key, bank reset epoch·stale/replay 검증을 재사용한다. reset 뒤 옛 idempotency 결과를 다시 노출하지 않는다. 기존 scoring linkage와 구별되는 durable retry origin(run ID·position)을 mock session에 보존하는 additive migration을 허용한다. 이력이 만료되는 idempotency 저장소로 권한 근거를 대체하지 않는다. 생성·읽기/제출/자기채점에서 origin의 소유자·Workspace·source·generation·문항/위치를 재검증하고 기존 일반 standalone의 shown 정책은 유지한다.
 - 기존 source의 old-generation read eligibility만 사용하고 현재 목록 정책을 전역 완화하지 않는다. 과거 generation이지만 원 run에서 available인 문항의 성공·정답 선노출 없음·원 결과 불변, 다른 run 소유자/namespace 거절, 실제 삭제·제거의 거절을 계약 테스트한다. OpenAPI/client는 make contracts로 생성한다.
 
 ## 복귀 상태·보안
