@@ -111,8 +111,21 @@ describe('stemItems', () => {
     [')', '다음을 보시오(단, 2024년 기준)'],
     ['」', '「은행법」'],
     ['>', '<보기>'],
+    ['？', '옳은 것은？'],
+    ['：', '다음과 같다：'],
+    ['）', '다음을 보시오（단, 2024년 기준）'],
   ])('accepts a question sentence ending with %s', (_end, lead) => {
     expect(stemItems(`${lead} (가) 하나 (나) 둘`)?.lead).toEqual([lead]);
+  });
+
+  it('accepts a fullwidth empty answer mark after a sentence without an end mark', () => {
+    expect(stemItems('옳은 것은 （ ） (가) 하나 (나) 둘')?.lead).toEqual(['옳은 것은']);
+    expect(stemItems('옳은 것은（　）\nㄱ. 하나\nㄴ. 둘')?.lead).toEqual(['옳은 것은']);
+  });
+
+  it('still refuses a lead without any sentence end, fullwidth or not', () => {
+    expect(stemItems('다음 중 （가） 사과 （나） 배 가운데 과일인 것은？')).toBeNull();
+    expect(stemItems('다음 중 가운데 ㄱ. 사과 ㄴ. 배')).toBeNull();
   });
 
   it('removes the empty answer mark that ends the question sentence', () => {
