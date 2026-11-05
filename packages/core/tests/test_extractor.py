@@ -451,7 +451,8 @@ def test_llm_split_that_does_not_reproduce_the_print_is_rejected(
     draft = _single_question_llm(stem, options)
     assert draft.options == ()
     assert draft.question_type is QuestionType.SHORT_ANSWER
-    assert draft.stem == "물이 기체가 되는 과정은? 가. 응결 나. 증발"
+    # The unrecognised labels read as stem items, one per line (questions.md §4 11).
+    assert draft.stem == "물이 기체가 되는 과정은?\n\n가. 응결\n나. 증발"
     assert "llm_text_rejected" in _codes(draft.validations)
 
 
@@ -1778,6 +1779,162 @@ def test_following_question_with_letter_reference_is_not_swallowed_as_option(
     )
     assert len(result.drafts) == 2
     assert len(result.drafts[0].options) == 3
+
+
+# -- STEM-ITEMS: stem item lines keep their line breaks (questions.md §4 11) --------------
+
+
+def test_stem_item_lines_each_start_a_line_after_a_blank_line_and_options_stay_options() -> None:
+    (draft,) = _extract(
+        [
+            "1. 다음 중 예금에 관한 설명으로 옳은 것만 묶인 것은? ( )",
+            "(가) 첫째 설명이다.",
+            "(나) 둘째 설명이다.",
+            "(다) 셋째 설명이다.",
+            "(라) 넷째 설명이다.",
+            "① (가), (나)",
+            "② (가), (다)",
+            "③ (나), (라)",
+            "④ (다), (라)",
+            "(정  답) ④",
+        ]
+    ).drafts
+    assert draft.stem == (
+        "다음 중 예금에 관한 설명으로 옳은 것만 묶인 것은? ( )\n\n"
+        "(가) 첫째 설명이다.\n(나) 둘째 설명이다.\n(다) 셋째 설명이다.\n(라) 넷째 설명이다."
+    )
+    assert draft.question_type is QuestionType.MCQ
+    assert [(o.id, o.text) for o in draft.options] == [
+        ("opt-1", "(가), (나)"),
+        ("opt-2", "(가), (다)"),
+        ("opt-3", "(나), (라)"),
+        ("opt-4", "(다), (라)"),
+    ]
+    assert draft.correct_option_ids == ("opt-4",)
+
+
+def test_jamo_items_and_a_wrapped_item_line() -> None:
+    (draft,) = _extract(
+        [
+            "1. <보기>에서 옳은 것을 고른 것은?",
+            "ㄱ. 첫째 설명은 길어서",
+            "다음 줄로 이어진다.",
+            "ㄴ. 둘째 설명이다.",
+            "ㄷ. 셋째 설명이다.",
+            "① ㄱ",
+            "② ㄱ, ㄴ",
+            "③ ㄴ, ㄷ",
+        ]
+    ).drafts
+    assert draft.stem == (
+        "<보기>에서 옳은 것을 고른 것은?\n\n"
+        "ㄱ. 첫째 설명은 길어서 다음 줄로 이어진다.\nㄴ. 둘째 설명이다.\nㄷ. 셋째 설명이다."
+    )
+    assert [o.text for o in draft.options] == ["ㄱ", "ㄱ, ㄴ", "ㄴ, ㄷ"]
+
+
+def test_dot_numbered_options_citing_jamo_items_stay_options() -> None:
+    result = _extract(
+        ["1. 옳은 것은?", "ㄱ. 갑은 을이다.", "ㄴ. 병은 정이다.", "1. ㄱ", "2. ㄴ", "3. ㄱ, ㄴ"]
+    )
+    (draft,) = result.drafts
+    assert draft.stem == "옳은 것은?\n\nㄱ. 갑은 을이다.\nㄴ. 병은 정이다."
+    assert [o.text for o in draft.options] == ["ㄱ", "ㄴ", "ㄱ, ㄴ"]
+
+
+def test_latin_items_moved_back_from_the_options_keep_their_lines() -> None:
+    (draft,) = _extract(
+        ["1. 옳은 것은?", "(A) 갑은 을이다.", "(B) 병은 정이다.", "① (A)", "② (B)"]
+    ).drafts
+    assert draft.stem == "옳은 것은?\n\n(A) 갑은 을이다.\n(B) 병은 정이다."
+    assert [o.text for o in draft.options] == ["(A)", "(B)"]
+
+
+@pytest.mark.parametrize(
+    ("question", "items", "stem"),
+    [
+        (
+            "1. 옳은 것은",
+            ["( 가 ) 갑은 을이다.", "( 나 ) 병은 정이다."],
+            "옳은 것은 ( 가 ) 갑은 을이다. ( 나 ) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은?",
+            ["( 가 ) 갑은 을이다.", "( 나 ) 병은 정이다."],
+            "옳은 것은?\n\n( 가 ) 갑은 을이다.\n( 나 ) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은",
+            ["(가) 갑은 을이다.", "(나) 병은 정이다."],
+            "옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은?",
+            ["(가) 갑은 을이다.", "(다) 병은 정이다.", "(나) 무는 기이다."],
+            "옳은 것은? (가) 갑은 을이다. (다) 병은 정이다. (나) 무는 기이다.",
+        ),
+        (
+            "1. 옳은 것은? (가) 갑은 을이다. (나) 병은 정이다.",
+            [],
+            "옳은 것은?\n\n(가) 갑은 을이다.\n(나) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+            [],
+            "옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+        ),
+    ],
+    ids=[
+        "spaced-no-sentence-end",
+        "spaced",
+        "no-sentence-end",
+        "interrupted",
+        "one-line",
+        "one-line-no-sentence-end",
+    ],
+)
+def test_numbered_options_under_loosely_printed_items_stay_options(
+    question: str, items: list[str], stem: str
+) -> None:
+    """The option boundary does not depend on the item layout rules (questions.md §4 11)."""
+    (draft,) = _extract([question, *items, "1. (가)", "2. (나)", "3. (가), (나)"]).drafts
+    assert draft.stem == stem
+    assert [o.text for o in draft.options] == ["(가)", "(나)", "(가), (나)"]
+
+
+def test_labels_mentioned_in_the_question_sentence_do_not_break_the_stem() -> None:
+    (draft,) = _extract(
+        [
+            "1. 다음 글의 (가)와 (나)에 들어갈 말로",
+            "옳은 것은?",
+            "① 갑 ② 을",
+        ]
+    ).drafts
+    assert draft.stem == "다음 글의 (가)와 (나)에 들어갈 말로 옳은 것은?"
+    assert [o.text for o in draft.options] == ["갑", "을"]
+
+
+def test_extract_prompt_v3_asks_for_item_lines_and_accepts_them() -> None:
+    assert EXTRACT_PROMPT_VERSION == "questions.extract/v3"
+    lines = ["1. 옳은 것은? ( )", "(가) 갑은", "을이다.", "(나) 병은 정이다.", "① (가)", "② (나)"]
+    ((_, request),) = llm_requests(_doc(lines))
+    assert request.prompt_version == "questions.extract/v3"
+    assert "each item on its own line" in (request.system or "")
+    client = FakeLLMClient()
+    stem = "옳은 것은? ( )\n\n(가) 갑은 을이다.\n(나) 병은 정이다."
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="MCQ",
+            multi_select=False,
+            stem=stem,
+            options=[LLMOption(label="①", text="(가)"), LLMOption(label="②", text="(나)")],
+            answer=None,
+        ),
+    )
+    (draft,) = QuestionExtractor(client).extract(_doc(lines), document_id="d").drafts
+    assert draft.stem == stem
+    assert "llm_text_rejected" not in _codes(draft.validations)
 
 
 # -- bounded-concurrency refinement and soft-stop partial result ------------------------
