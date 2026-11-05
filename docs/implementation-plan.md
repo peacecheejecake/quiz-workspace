@@ -1079,9 +1079,9 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 | UX10-UI | ✅ 독립 리뷰·main 재검증 | 28b870f6 · merge 3d386787 | UI unit434·RSC·Chromium/WebKit E2E10 main 재실행 GREEN. Review: task worktree .reviews/20261105-151302-31355-UX10-UI-controls-and-overlay-swipe.log, 지적 없음. 확대 gesture matrix는 UX10-QA에서 검증 |
 | UX10-QVIEW | ✅ 리뷰·main 재검증·통합 | 6d8381b1 · merge dafd3071 | 최종 리뷰 지적 없음(173622 log), main Node24 reset/sequence/scope21·실제 API32·Chromium/WebKit12·trace16/strict·pgTAP11 GREEN. 공유 DB migration 추가 적용, 기존 ERRATA 이력·데이터 보존 |
 | UX10-DOC | ✅ 기능 리뷰·main 재검증·통합 | aee599d9 · 3f61c7b9 · merge827c26cd | main UI440/RSC·web1254·Chromium/WebKit14·trace16 GREEN. 독립 리뷰 지적 없음(164050 log), fullscreen/resize QA 수정 포함. Linux 이미지 갱신은 UX10-QA 후속 |
-| UX10-HOME | ◐ 분리 구현·인계 대기 | task/UX10-HOME | 검색·메뉴·필터 모델 구현 및 부분 검증, QVIEW 통합 후 상태 debounce/overview 연결 |
+| UX10-HOME | ◐ 독립 리뷰 중 | task/UX10-HOME | all/none·350ms debounce·메뉴/AI header guard 구현, web1275·API range21·양 브라우저12 및 경합회귀6 GREEN. root typecheck의 AI test 오류는 별도 수정 대기 |
 | UX10-PLAY | ◐ 분리 구현·인계 대기 | task/UX10-PLAY | 이름 수정·행별 비활성화·결과 그룹 단위 검증, AI/QVIEW 인계 후 통합 flow·bank 문항 수 구현 |
-| UX10-AI | ✅ 리뷰·main 재검증·통합 (HOME 연결 후 최종 QA) | 09b04855 · merge d2a7e85c | 독립 재리뷰 지적 없음(173225 log), main frontend91·web typecheck·trace16/strict GREEN. HOME header 가용성 guard는 HOME 인계; ask-panel은 UX11-AI-DIRECT로 인계 |
+| UX10-AI | ◐ 리뷰·통합 후 QA 수정 대기 | 09b04855 · merge d2a7e85c | 리뷰 지적 없음(173225 log), main frontend91·web typecheck·trace16/strict GREEN. 통합 root typecheck에서 off.request 인수 타입 오류 확인, 원 AI agent 수정 대기. HOME header guard 연결 및 최종 QA 필요 |
 | UX10-QA | ◐ 기능별 재검증·공통 후속 | feature/ux10-spec | UI/DOC main 재검증 완료, UI agent 버튼 전수 점검·gesture 확대 검증. 전체 통합 후 Linux baseline·종합 QA |
 
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
