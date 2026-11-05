@@ -361,7 +361,7 @@ Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase
 
 ### UX11 — 추가 피드백 Task
 
-[세부 구현 기준](implementation/ux11/index.md). UX10을 취소하지 않으며 같은 최종 feature PR/CI/배포 범위에 포함한다. 신규 구현 agent를 Task별 terra 기본 effort로 배정한다. UX11-STEM은 기존 active scope와 독립이므로 즉시 시작하고, AI prompt는 독립·composer는 UX10-AI 이후, 복귀 provider는 독립·풀이 viewer 연결은 UX10-QVIEW/PLAY 이후다. 사용자 확정: 실패 전송 입력은 새 draft가 없으면 복구·새 draft는 보존, 다시 풀기는 현재 문제만 새 시도·이력 유지. 범위/모의고사 회차 결과 반영 방식만 추가 확인 중이다.
+[세부 구현 기준](implementation/ux11/index.md). UX10을 취소하지 않으며 같은 최종 feature PR/CI/배포 범위에 포함한다. 신규 구현 agent를 Task별 terra 기본 effort로 배정한다. UX11-STEM은 기존 active scope와 독립이므로 즉시 시작하고, AI prompt는 독립·composer는 UX10-AI 이후, 복귀 provider는 독립·풀이 viewer 연결은 UX10-QVIEW/PLAY 이후다. 사용자 확정: 실패 전송 입력은 새 draft가 없으면 복구·새 draft는 보존, 다시 풀기는 현재 문제만 새 시도·이력 유지. 범위/모의고사의 기존 회차 결과는 유지하고 다시 풀기는 현재 문제의 별도 연습으로 기록한다(사용자 최종 확정).
 
 | ID | 내용 | 의존 | DoD |
 |---|---|---|---|
@@ -886,6 +886,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 - 기존 QPLAY 보기 shuffle·QOV 빈 status=전체/접힘·MOCK 변형 1개 이상·DOCVIEW both 기본/모바일 단일 pane·AI off 비활성 UI·EXPL 접힘 기본을 [UX10 기준](implementation/ux10/index.md)으로 개정한다. 변형 0개는 bank 경로이므로 mock API nonempty 계약은 유지 가능하다.
 - 사용자 승인 실행: terra 기본 effort Task 1:1 → 독립 Codex 리뷰 → 커밋·main thread 통합 → QA(수정도 terra) → feature PR 하나·CI GREEN까지 수정 → develop 병합 → develop/main PR·병합 → production 배포. 로컬 검증은 생략하지 않는다.
 
+### UX11 다시 풀기 기록 경계 — 2026-11-05
+
+사용자 확정: 현재 문제만 다시 풀며 과거 시도를 보존한다. 범위 풀이·모의고사의 원 회차 점수·결과는 그대로 두고 별도 연습 시도로 기록한다. UX10의 기록·Heatmap 초기화와 별개이며, 원 run 위치를 재제출하거나 결과를 덮어쓰지 않는다. mock 연습은 mock 기록 경계를 유지한다. [세부 기준](implementation/ux11/return.md).
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |
@@ -1087,5 +1091,5 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
 
 | UX11-AI-DIRECT | ◐ 신규 terra agent 구현 | task/UX11-AI-DIRECT | prompt RED→GREEN 18개, composer는 UX10-AI 인계 후; 실패 복구 사용자 확정 |
-| UX11-RETURN | ◐ 신규 terra agent 구현 | task/UX11-RETURN | provider/model/RSC 검증 진행, 회차 결과 반영만 확인 중, viewer 연결 인계 대기 |
+| UX11-RETURN | ◐ 신규 terra agent 구현 | task/UX11-RETURN | provider/model/standalone viewer 검증. 사용자 확정: 원 회차 결과 유지·현재 문제 별도 연습; PLAY sequence 인계 후 연결 |
 | UX11-STEM | ◐ 경계 parser 독립 리뷰 수정 중 | task/UX11-STEM | 세 사례·범위 참조 span·기존 문단·TS/Python 공유 matrix 보강. main TS67/Python52 GREEN, 양 브라우저14 통과 보고. inline 연산자와 bullet 경계 분류 마지막 P2 수정 대기 |
