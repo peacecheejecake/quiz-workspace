@@ -146,6 +146,8 @@ export interface FloatingSidePanelProps {
   container?: HTMLElement | null;
   /** Defaults to focusing the panel itself so its title is announced first. */
   onOpenAutoFocus?: ContentProps['onOpenAutoFocus'];
+  /** Receives the resolved opening control, including Safari mouse-click fallback. */
+  onOpenerResolved?: (opener: HTMLElement | null) => void;
   onCloseAutoFocus?: ContentProps['onCloseAutoFocus'];
   /**
    * Changing this while the panel is open brings it to the top of the open floating layers again
@@ -198,6 +200,7 @@ export function FloatingSidePanel({
   mobileLayout = 'sheet',
   container,
   onOpenAutoFocus,
+  onOpenerResolved,
   onCloseAutoFocus,
   raiseKey,
   staysExposedUnderModal = false,
@@ -307,6 +310,7 @@ export function FloatingSidePanel({
                 return;
               }
               returnFocusRef.current = currentOpener();
+              onOpenerResolved?.(returnFocusRef.current);
               onOpenAutoFocus?.(event);
               if (event.defaultPrevented) return;
               event.preventDefault();

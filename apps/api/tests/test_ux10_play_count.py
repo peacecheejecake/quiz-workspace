@@ -20,14 +20,21 @@ def test_bank_count_contract() -> None:
 
 
 def test_oversized_candidate_pool_is_rejected_before_count_limit() -> None:
-    from types import SimpleNamespace
     from unittest.mock import Mock
     from uuid import uuid4
 
     from quiz_api.api.practice_runs import MAX_RUN, create_practice_run
+    from quiz_api.authz.dependencies import WorkspaceAccess
+    from quiz_api.authz.permissions import Action, Role
     from quiz_api.errors import ProblemException, ProblemType
 
-    access = SimpleNamespace(user_id=uuid4(), workspace_id=uuid4())
+    access = WorkspaceAccess(
+        workspace_id=uuid4(),
+        user_id=uuid4(),
+        role=Role.OWNER,
+        status="active",
+        action=Action.PRACTICE,
+    )
     resolver = Mock()
     resolver.resolve.return_value = [uuid4() for _ in range(MAX_RUN + 1)]
     body = PracticeRunCreate.model_validate(

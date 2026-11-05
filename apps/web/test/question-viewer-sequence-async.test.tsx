@@ -542,3 +542,16 @@ describe('sequence viewer async edges (QVIEW-W review)', () => {
     expect(create.mock.calls[1]?.[2]).not.toBe(create.mock.calls[0]?.[2]);
   });
 });
+
+it('focuses a bank run heading on handoff and returns to its original opener on close', async () => {
+  const opener = document.createElement('button');
+  document.body.append(opener);
+  const c = client();
+  const view = render(viewer({ step: 'solve', runId: RUN, position: 1 }, c));
+  const heading = await screen.findByRole('heading', { name: /1번/ });
+  act(() => window.dispatchEvent(new CustomEvent('quiz:bank-run-transition', { detail: opener })));
+  expect(heading).toHaveFocus();
+  view.rerender(viewer(null, c));
+  await waitFor(() => expect(opener).toHaveFocus());
+  opener.remove();
+});
