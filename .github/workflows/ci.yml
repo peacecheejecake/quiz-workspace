@@ -241,7 +241,10 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browsers (Chromium + WebKit)
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: |
+          # Azure's Ubuntu mirror has occasionally throttled downloads past the job timeout.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          pnpm exec playwright install --with-deps chromium webkit
 
       - name: Start local stack
         run: make infra-up
@@ -426,7 +429,10 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browsers (Chromium)
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          # Keep the same official Ubuntu archive as the E2E shards.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          pnpm exec playwright install --with-deps chromium
 
       - name: Start local stack
         run: make infra-up
