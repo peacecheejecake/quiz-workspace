@@ -3,15 +3,16 @@
 // WS-SHARE-01 `WorkspaceSharingPanel` (docs/design-system.md: owner share link create / revoke /
 // rotate, expiry, Fork switch on the shared FloatingSidePanel). Since UX3c it is the "링크 공유"
 // dialog of the workspace home's `공유하기` button: mounted when it opens, it shows a skeleton
-// while the link metadata loads (listShareLinksAction), so closing it also drops a shown URL. The screen manages one link: the
+// while the link metadata loads (listShareLinksAction). The screen manages one link: the
 // newest active one, else the newest expired one, whose policy stays editable (a later expiry
 // reopens a URL already handed out, also while archived). Policy controls save on change; revoke
 // and rotate are confirmed. UX7-SHARE-EXPIRY: `만료일 삭제` saves "no expiry" (AC06; a policy
 // edit, so also while archived), and `링크 복사` confirms with its own check (AC08), not a toast.
 //
-// Secret handling (docs/workspace-sharing.md §2): the share URL with `#k=` comes back once from
-// create/rotate and lives only in this component's state while the link stays current — never in
-// storage, a URL, a log or a later server render. Reloading leaves only the link metadata.
+// Secret handling (docs/workspace-sharing.md §2, SHARE-PERSIST): the share URL with `#k=` comes
+// from the owner server actions (reconstructed server-side for non-revoked links while keeping
+// PostgreSQL digest-only) and lives only in this component's memory — never in localStorage,
+// sessionStorage, a page URL or a log.
 import {
   Badge,
   Button,
@@ -43,6 +44,7 @@ import {
 } from '@/lib/sharing/actions';
 import {
   expiryDateValue,
+  isShareUrl,
   localDateString,
   parseExpiryDate,
   SHARE_FAILURE_MESSAGES,
@@ -129,7 +131,9 @@ export function WorkspaceSharingPanel({
   const statusId = useId();
 
   const { current, active, others, lastEnded } = sharingState(links);
-  const shownUrl = issued && current?.id === issued.linkId ? issued.shareUrl : null;
+  const shownUrl =
+    (issued && current?.id === issued.linkId ? issued.shareUrl : null) ??
+    (current && isShareUrl(current.share_url, current.id) ? current.share_url : null);
   const savedExpiry = current ? expiryDateValue(current.expires_at) : '';
   const expiryValue = expiryDraft ?? (isClient ? savedExpiry : '');
   const policyDisabled = pending || (archived && !current);
@@ -165,7 +169,7 @@ export function WorkspaceSharingPanel({
       setReplayed(Boolean(result.secretAlreadyIssued));
       setExpiryDraft(null);
       if (result.issued) {
-        toast({ tone: 'success', title: '보기 전용 링크를 만들었습니다. 지금 복사해 두세요.' });
+        toast({ tone: 'success', title: '보기 전용 링크를 만들었습니다.' });
         requestAnimationFrame(() => linkFieldRef.current?.focus());
       }
     });
@@ -387,7 +391,7 @@ export function WorkspaceSharingPanel({
               ) : null}
 
               {shownUrl ? (
-                <section className={styles.issued} aria-label="새 공유 링크">
+                <section className={styles.issued} aria-label="공유 링크 주소">
                   <Input
                     ref={linkFieldRef}
                     label="공유 링크"
@@ -396,7 +400,7 @@ export function WorkspaceSharingPanel({
                     onFocus={(event) => event.currentTarget.select()}
                     spellCheck={false}
                     autoComplete="off"
-                    description="이 링크는 지금 한 번만 표시됩니다. 닫거나 새로 고치면 다시 볼 수 없으니 지금 복사해 두세요."
+                    description="이 링크를 가진 사람은 로그인 없이 발행된 내용을 볼 수 있습니다. 주소를 바꾸려면 링크를 재발급하세요."
                   />
                   <div>
                     <CopyButton
@@ -408,9 +412,9 @@ export function WorkspaceSharingPanel({
                 </section>
               ) : current ? (
                 <p className={styles.note}>
-                  보안을 위해 링크 주소는 만들 때 한 번만 보여 드립니다.
-                  {replayed ? ' 이 링크의 주소는 이미 표시되었습니다.' : ''} 주소를 잃어버렸다면
-                  링크를 재발급하세요.
+                  {replayed
+                    ? '이 링크의 주소는 이미 표시되었습니다. 주소가 필요하면 링크를 재발급하세요.'
+                    : '이전에 만든 링크라 주소를 다시 불러올 수 없습니다. 주소가 필요하면 링크를 재발급하세요.'}
                 </p>
               ) : null}
 

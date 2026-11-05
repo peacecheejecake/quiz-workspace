@@ -99,7 +99,7 @@ test(
 );
 
 test(
-  'WS-SHARE-01-AC02 creating a link shows the view-only secret URL once, copyable, and adds no member',
+  'WS-SHARE-01-AC02 creating a link keeps the view-only URL visible across close and reload until revoked, and adds no member',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('share01-ac02');
@@ -111,32 +111,63 @@ test(
     await sharingUi.createButton(page).click();
     const field = sharingUi.linkField(page);
     const [linkId, secret] = await readShareUrl(field);
-    expect(secretBytes(secret), 'secret carries >= 32 random bytes').toBeGreaterThanOrEqual(32);
+    const firstUrl = await field.inputValue();
+    expect(secretBytes(secret), 'secret carries >= 32 bytes').toBeGreaterThanOrEqual(32);
     await expect(sharingUi.copyButton(page)).toBeEnabled();
-    await expect(sharingUi.onceNotice(page)).toBeVisible();
+    await expect(sharingUi.onceNotice(page)).toHaveCount(0);
     await expect(sharingUi.expiry(page)).toBeEditable();
     await expect(sharingUi.forkSwitch(page)).not.toBeChecked();
 
-    // Server: one view-only link, Fork OFF, listed without its secret; DB keeps a digest only.
+    // Server: one view-only link, Fork OFF, owner listing has share_url (never raw secret/digest);
+    // DB keeps only the 32-byte SHA-256 digest.
     const links = await listShareLinks(owner, ws.id);
-    expect(links.map((l: ShareLink) => [l.id, l.allow_fork, l.revoked_at])).toEqual([
-      [linkId, false, null],
-    ]);
-    expectNoSecret(JSON.stringify(links), secret, 'the share-link listing');
+    expect(
+      links.map((l: ShareLink) => [l.id, l.allow_fork, l.revoked_at, l.share_url === firstUrl]),
+    ).toEqual([[linkId, false, null, true]]);
+    expect('secret' in (links[0] ?? {}), 'no raw secret field in listing').toBe(false);
+    expect('token_digest' in (links[0] ?? {}), 'no token_digest field in listing').toBe(false);
     const row = shareLinkRow(linkId);
     expectNoSecret(row.json, secret, 'workspace_share_links');
-    expect(row.digestBytes, 'SHA-256/HMAC digest').toBe(32);
+    expect(row.digestBytes, 'SHA-256 digest').toBe(32);
 
     // The URL works for a guest, and a guest is never a member.
     const session = await ShareSession.open(linkId, secret);
     expect((await session.workspace()).workspace.name).toBe(ws.name);
     expect(membershipsOf(ws.id)).toEqual([[owner.user.id, 'owner']]);
 
-    // Shown once: after a reload only the metadata is left.
-    await page.reload();
+    // Closing the dialog and reopening it via 공유하기 still shows the exact same working URL.
+    await page.keyboard.press('Escape');
+    await expect(sharingUi.dialog(page)).toHaveCount(0);
+    await homeUi.shareButton(page).click();
+    await expect(sharingUi.dialog(page)).toBeVisible();
+    await readShareUrl(sharingUi.linkField(page));
+    expect(
+      (await sharingUi.linkField(page).inputValue()) === firstUrl,
+      'share URL persists after closing and reopening the dialog',
+    ).toBe(true);
+    await expect(sharingUi.copyButton(page)).toBeEnabled();
+    await expect(sharingUi.onceNotice(page)).toHaveCount(0);
+
+    // Reloading the page also keeps the exact same share URL in memory (never in web storage).
+    await page.goto(sharingSettingsPath(ws.id));
+    await readShareUrl(sharingUi.linkField(page));
+    expect(
+      (await sharingUi.linkField(page).inputValue()) === firstUrl,
+      'share URL persists after reloading the page',
+    ).toBe(true);
+    await expect(sharingUi.copyButton(page)).toBeEnabled();
+    await expect(sharingUi.onceNotice(page)).toHaveCount(0);
+    const storageText = await page.evaluate(() =>
+      JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+    );
+    expectNoSecret(storageText, secret, 'browser web storage');
+
+    // Once revoked, the link field disappears immediately.
+    await sharingUi.revokeButton(page).click();
+    await sharingUi.confirmButton(sharingUi.confirmDialog(page)).click();
+    await expect(sharingUi.revokedStatus(page)).toBeVisible();
     await expect(sharingUi.linkField(page)).toHaveCount(0);
-    expectNoSecret(await page.content(), secret, 'the sharing page after reload');
-    await expect(sharingUi.revokeButton(page)).toBeVisible();
+    expect((await listShareLinks(owner, ws.id))[0]?.share_url).toBeNull();
   },
 );
 
