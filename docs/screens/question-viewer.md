@@ -1,5 +1,7 @@
 # QVIEW-01 — 통합 문제 보기 `QuestionViewer` (범위 풀이 popup)
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "정해진 범위의 문제에서 하나씩 팝업 위에서 문제를 보여주는 기능 추가(랜덤 여부는 시작 전 체크) — 등록된 문제 전체, 그리고 모의고사로 생성된 문제에서 각각 해당 기능 사용 — 공통 컴포넌트로 개발", 추가 결정 "하나씩 팝업 위에서 문제를 보여주는 기능을 통합 QuestionViewer로 하고, 기존 문제를 보여줄 때도 이 컴포넌트를 사용해도 되겠다") · MOCK-SYNC 개정 2026-11-02 (UX7이 만든 호출 위치·메뉴·보관·중복 정리에 맞춤) · UX9-SPEC 개정 2026-11-02 (해설 영역 하이라이트 — [HILITE-01](highlights.md), `다시 풀기` toggle 물음표 아이콘 — C08, 정리 노트 각주 호출의 노트 가림 — [CHNOTE-02](chapter-note-tools.md))
 **Route:** 범위 고르기 `/workspaces/:workspaceId?practice=new&source=bank` · 모의고사 범위 고르기 `/workspaces/:workspaceId?practice=new&source=mock&mock=:mockExamId` · 진행 중 `/workspaces/:workspaceId?practice=:practiceRunId&i=:position` (Workspace 홈 위 modal panel). 한 문제 보기는 기존 route 그대로(`?question=:questionId` — QPLAY-01)
 **테스트:** `tests/e2e/questions/question-viewer.spec.ts` (계약: `tests/integration/questions/practice_runs/test_practice_runs_contract.py`, `packages/ui` · `apps/web` Vitest)

@@ -1,5 +1,7 @@
 # DOCVIEW-01 — PDF 열람 보기 설정 (목차 panel·보기 방식·분할)
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.1 · DOCVIEW-SPEC 신규 2026-10-29 (사용자 요청 "pdf 보기 UI 개선") · DOCVIEW-PORT 2026-11-02(사용자 결정 "제 배치로 교체": DOC-02 v1.4의 목차 panel·폭 조정 구분선(DOC-02-AC06·AC10, 폐기)을 이 배치로 바꾸고 DOC-02-AC07·AC08·AC09·AC11은 유지)
 **Route:** 별도 route 없음 — DOC-02 `/workspaces/:workspaceId/documents/:documentId` 화면의 배치(공유 게스트의 WS-VIEW-01 문서 보기 `/share/:shareId`도 같은 배치)
 **테스트:** `tests/e2e/documents/documents-viewer-layout.spec.ts`

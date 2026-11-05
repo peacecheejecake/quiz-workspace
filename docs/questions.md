@@ -1,5 +1,7 @@
 # Questions — Product & Domain Specification v1.2
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 기준 설계 · 2026-10-16  
 **디자인 참조:** `design-system.md`  
 **구현 참조:** `architecture.md`

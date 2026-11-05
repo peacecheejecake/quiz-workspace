@@ -1,5 +1,7 @@
 # ASK-01 — AI 질문 (문서 기반 답변) Floating Side Panel
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM에 질문하기 — 문서 기반 답변 — 문제별로 '질문하기' 버튼 추가 -> LLM input에 context로 추가") · 사용자 결정 반영 2026-11-01(진입점 세 곳, 대화 저장·비공개, 힌트 모드, 문서 근거만, `질문하기`는 문제 상세·모의고사 문제에만). 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행). RED(ASK.0)는 구현 착수 직전에 쓴다. · **ASK-SYNC 개정 2026-11-02** (develop의 UX7·모의고사·QuestionViewer·QGEN-RM에 맞춤): 문제 쪽 진입점을 QuestionViewer 방식으로 다시 적고("문제 쪽 진입점"), panel 쌓기·뒤로가기 규칙("panel 쌓기·뒤로가기"), 모의고사 문제 첨부(이전 ASK-QM)를 이 화면의 AC12·C10으로 당겼다.
 **Route:** `/workspaces/:workspaceId?panel=ask` (대화 목록·새 대화) · `?panel=ask&conversation=:conversationId` (대화 하나). Workspace header의 `AI 질문` 버튼, header `문제` 메뉴의 `AI 질문` 항목, 본문 검색의 `AI에게 묻기`, 그리고 문제의 `질문하기`(QuestionViewer `manage` — "문제 상세" dialog — 와 모의고사 문제의 `sequence(mock)`·`manage(mock)`)와 제출 결과 아래 AI 해설의 `AI 질문하기`가 연다. 공유 링크 게스트(`/share/:shareId`)에는 없다.
 **테스트:** `tests/e2e/ask/ask-llm.spec.ts` (계약: `tests/integration/ask/test_ask_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)

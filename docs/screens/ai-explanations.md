@@ -1,5 +1,7 @@
 # AIEXPL-01 — AI 문제 해설 (제출 후)
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 · 사용자 결정 반영 2026-11-01(공유 해설·모든 보기, 구성원 생성·편집 권한 다시 만들기, 공유 게스트 읽기·Fork 복제) (사용자 요청 "LLM 문제 해설 — 문제 제출 후 버튼 노출 -> 해당 버튼 누르면 하단에 llm이 생성한 해설 생성 — 같은 문제에 대한 답변은 캐싱"). [ASK-01](ask-llm.md)과 따로 켜고 끌 수 있는 별도 기능이며 LLM 호출 경로·fake·인용 검증·usage 기록을 ASK와 함께 쓴다. 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행).
 **Route:** 별도 route 없음 — QuestionViewer(QVIEW-01)의 결과 영역 안의 영역: `practice`(풀이 panel, `?question=:questionId`)·`sequence(bank|mock)`(범위 풀이, `?practice=:runId&i=`)의 제출 결과 아래, `manage`("문제 상세" dialog)의 해설 아래, `read-only`(공유 게스트 미리보기)의 해설 아래(있는 해설만).
 **테스트:** `tests/e2e/questions/ai-explanations.spec.ts` (계약: `tests/integration/questions/ai_explanations/test_ai_explanations_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)

@@ -1,5 +1,7 @@
 # MOCK-01 — 모의고사 목록·만들기·편집 Floating Dialog
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.0 · MOCK-SPEC 신규 2026-11-01 (사용자 요청 "변형 출제 -> '문제 생성' 삭제 / 대신 '모의고사' 기능 추가 — 모의고사 리스트 화면 필요, 리스트 위 '추가' 버튼 눌러 생성, 다른 화면과 레이아웃 비슷하게 — 생성 버튼을 누르면 현재 '변형 유형'에 해당하는 옵션과 출제 문제 범위 선택 화면 — 한 번 생성한 모의고사는 저장됨(수정, 삭제 가능) — 문제 선택에는 전체 선택 기능이 필요", 사용자 결정 1·2·4) · MOCK-SYNC 개정 2026-11-02 (UX7의 `문제` 메뉴·보관·초안 문제·중복 정리에 맞춤)
 **Route:** 목록 `/workspaces/:workspaceId?panel=mock-exams` · 만들기 `?panel=mock-exams&mock=new` · 상세·편집 `?panel=mock-exams&mock=:mockExamId` (Workspace header `문제` 메뉴 › `모의고사`가 여는 non-modal floating dialog "모의고사") · 풀기는 QuestionViewer(`?practice=new&source=mock&mock=:mockExamId`, [QVIEW-01](question-viewer.md))
 **테스트:** `tests/e2e/questions/mock-exams.spec.ts` (계약: `tests/integration/questions/mock_exams/test_mock_exams_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)

@@ -342,6 +342,23 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | STEM-ITEMS-A 표시 | RED(QPLAY-01-AC14 E2E) → `stemItems` 순수 함수(항목 계열·형식·연속성·문장 속 언급 제외·빈 답 괄호) + `StemItems` 박스 부품(`ul` 이름 `제시 항목`, hanging indent, semantic token) → 문제 내용 전체를 보이는 모든 곳에 적용 | `apps/web/src/lib/questions/stem-items.ts`, `apps/web/src/components/questions/**`, `apps/web/src/components/documents/editor/text-block-editor.tsx`·`editor.module.css`, `apps/web/src/components/shared/**`, `apps/web/test/stem-items.test.ts`, `tests/e2e/questions/questions-practice.spec.ts`·fixture, `scripts/e2e-trace.ts`·CI `E2E_PHASES` | — | AC14 GREEN, AC13·QPLAY 기존 GREEN, Vitest(계열별·형식 혼합·`①`/`1.` 제외·언급 제외·빈 줄 범위·빈 답 괄호), lint/typecheck, `e2e:trace --strict --phase STEM.0` |
 | STEM-ITEMS-B 추출 | `segment.py` 제시 항목 줄 앞 `\n`(첫 항목 앞 `\n\n`, 넘친 줄은 공백), `llm_refine` 프롬프트 `questions.extract/v3`(같은 모양), 기호 계열은 A와 같은 목록(보기 기호 제외) | `packages/core/src/book_core/extractor/**`, `packages/core/tests/**` | — | 추출기 pytest GREEN(새 케이스: 한 줄 PDF 줄의 (가)~(라), ㄱ.~ㄷ., 넘친 줄, 보기 `①`은 그대로 보기), mypy strict, ruff |
 
+### UX10 — 홈·문제 보기·풀이 통합·문서 뷰어 개선
+
+상세 구현의 기준은 [UX10 문서 묶음](implementation/ux10/index.md)이다. 구현 brief에 해당 Task 문서를 반드시 포함한다. 사용자 지시로 각 Task는 gpt-6.1-terra(기본 effort) agent 1개에 배정하며 독립 리뷰 통과 후 커밋한다. 로컬 검증은 유지하고 CI는 최종 feature PR에서 한 번에 수행한다.
+
+| ID | 내용 | 의존 | DoD |
+|---|---|---|---|
+| UX10-SPEC | 세부 설계·원본 명세 연결 | — | 문서·링크·충돌 결정 기록, 포맷 검증 |
+| UX10-UI | 공통 버튼·아이콘·swipe | SPEC | ui.md AC01~04 GREEN·독립 리뷰 |
+| UX10-QVIEW | 보기 순서·기존 결과·리셋 | SPEC·UI | qview.md AC01~05 GREEN·DB/격리 계약·독립 리뷰 |
+| UX10-HOME | header·검색·상태 필터 | UI·QVIEW | home.md AC01~05 GREEN·독립 리뷰 |
+| UX10-PLAY | 풀이 화면 통합·폼·결과 | HOME·QVIEW | play.md AC01~05 GREEN·독립 리뷰 |
+| UX10-AI | 가용성·해설 펼침·문구 | PLAY | ai.md AC01~04 GREEN·독립 리뷰 |
+| UX10-DOC | checkbox·모바일 함께 보기·전체 높이 | UI | doc.md AC01~05 GREEN·독립 리뷰 |
+| UX10-QA | 교차 QA·PR·CI·병합·배포 | 전체 구현 | qa.md AC01~05·CI GREEN·production smoke |
+
+Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase는 main thread가 통합한다. 독립 scope의 DOC만 병렬 가능하며 반드시 별도 worktree를 쓴다.
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -846,6 +863,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 | 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
 
+### UX10 사용자 결정 — 2026-11-05
+
+- 문제 풀기/모의고사는 화면·진입점 통합, 은행·mock 기록 격리 유지. 리셋은 본인의 해당 문제 풀이 기록·Heatmap 상태 초기화(immutable 원본은 reset epoch로 사용자 기록에서 제외). 모바일 원본·변환본 모두 선택 시 **함께 상하 표시**가 최종 결정이다.
+- 기존 QPLAY 보기 shuffle·QOV 빈 status=전체/접힘·MOCK 변형 1개 이상·DOCVIEW both 기본/모바일 단일 pane·AI off 비활성 UI·EXPL 접힘 기본을 [UX10 기준](implementation/ux10/index.md)으로 개정한다. 변형 0개는 bank 경로이므로 mock API nonempty 계약은 유지 가능하다.
+- 사용자 승인 실행: terra 기본 effort Task 1:1 → 독립 Codex 리뷰 → 커밋·main thread 통합 → QA(수정도 terra) → feature PR 하나·CI GREEN까지 수정 → develop 병합 → develop/main PR·병합 → production 배포. 로컬 검증은 생략하지 않는다.
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |
@@ -1034,3 +1057,6 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | STEM-ITEMS-B 추출 줄바꿈 | ✅ (Codex P2×2 → 9a63cc75, 재리뷰 P2 → 0e178121, 재리뷰 지적 없음) | 6763f86c · 9a63cc75 · 0e178121, 병합 245f2902 | 2026-11-05. `feature/stem-items`. `book_core.question.labels`(`stem_item_starts`·`break_stem_items`·`leading_item_families`·`has_item_label`), `RawQuestion.stem` 줄바꿈, prompt `questions.extract/v3`. 보기 판단은 줄 모양 규칙과 분리(괄호 안 공백·문장부호 없음·한 줄 발문에서도 `1. (가)` 보기 유지). 기존 기대값 1건 변경(`가. 응결 나. 증발` 발문이 줄바꿈). 한계: 추출기는 빈 줄을 모르므로 마지막 항목 뒤 문장은 그 항목 줄에 붙는다. fingerprint/3은 공백 제거라 영향 없음. 병합 후 make lint·typecheck·test(pytest 2630, web 1233) GREEN. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
+
+| UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 기능 구현 미완료 |
+| UX10-UI·QVIEW·HOME·PLAY·AI·DOC·QA | ☐ 대기 | — | 각 Task 문서 기준으로 순차 착수 |

@@ -1,5 +1,7 @@
 # QPLAY-01 — 문제 풀이 Floating Side Panel
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.5 · UX7-BANK 개정 2026-11-01 (문제 관리: 편집·삭제) · UX7-BANK-2 개정 2026-11-01 (정답·해설 보기·수정 이력·출처·보관 복원) · UX7-QDISPLAY 개정 2026-11-01 (채점 결과 테두리·`보기` 글자·끝 빈 괄호) · UX9-SPEC 개정 2026-11-02 (`다시 풀기` toggle 물음표 아이콘, 해설 하이라이트, 정리 노트 접기 폐지에 따른 분리 규칙)
 **Route:** `/workspaces/:workspaceId?question=:questionId` (Workspace 홈 위 panel; 이전 `/questions?question=`은 redirect — UX3c 2026-10-20)
 **테스트:** `tests/e2e/questions/questions-practice.spec.ts`
