@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, FloatingSidePanel } from '@quiz/ui';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { createMockPracticeApi } from '@/components/questions/mock-exams/mock-exam-client';
 import {
   selfGradePracticeAction,
@@ -53,7 +53,9 @@ export function SeparateRetry({
   const key = useRef(crypto.randomUUID());
   const current = useRef(true);
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     if (source !== 'bank') return;
     return subscribePracticeResets(workspaceId, (resetQuestionId) => {
