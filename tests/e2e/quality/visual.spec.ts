@@ -496,6 +496,9 @@ test(
     await page.goto(mockExamsPath(ws.id, midterm.id));
     await expect(mockUi.heading(dialog, '중간 점검')).toBeVisible();
     await expect(mockUi.questions(dialog)).toHaveCount(5);
+    // Set the intended keyboard focus after the detail finishes loading.
+    await mockUi.heading(dialog, '중간 점검').focus();
+    await expect(mockUi.heading(dialog, '중간 점검')).toBeFocused();
     await snapEvery(page, 'mock-exams-detail');
 
     // QuestionViewer: the range picker (전체 선택 mixed, 1장 open) ...
@@ -765,6 +768,9 @@ test(
     // The 본문 검색 page: before a search, then with results.
     await page.goto(searchPagePath(ws.id));
     await expect(searchPageUi.intro(page)).toBeVisible();
+    // Capture the empty search field with a deterministic focus ring.
+    await searchPageUi.box(page).focus();
+    await expect(searchPageUi.box(page)).toBeFocused();
     await snapEvery(page, 'search-page');
     const target = block(BOOK, 'ch1-s2-p1');
     await page.goto(searchPagePath(ws.id, `text=${encodeURIComponent(snippet(target.text, 6))}`));
