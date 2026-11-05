@@ -7,8 +7,9 @@
 // Rules: labels of one family and one format, consecutive from the family's first label, at least
 // two. A label starts the text or follows whitespace and is followed by whitespace and content
 // (so "(가)와 (나)에 …" is a mention, not a list). Option labels (①~⑳, ❶~❿, ➀~➓) and "1." are never
-// item labels. A question sentence before the first item must end with ? . : ) 」 > or an empty
-// answer mark, whose mark is not shown. The list runs from the first item to a blank line or the end.
+// item labels. A question sentence before the first item must end with ? . : ) 」 > (or fullwidth
+// ？ ： ）) or an empty answer mark ( ) / （ ）, whose mark is not shown. The list runs from the
+// first item to a blank line or the end.
 import { displayStem, stemParagraphs } from './display-stem';
 
 export interface StemItem {
@@ -154,7 +155,8 @@ function labelsIn(s: string, start: number, end: number): Label[] {
   return out;
 }
 
-const SENTENCE_ENDS = new Set(['?', '.', ':', ')', '」', '>']);
+/** Sentence ends before a list, with the fullwidth ？ ： ） (the empty mark is checked apart). */
+const SENTENCE_ENDS = new Set(['?', '.', ':', ')', '」', '>', '？', '：', '）']);
 
 /** The question sentence may precede a list: empty, or ending like a sentence or answer mark. */
 function leadEnds(lead: string): boolean {
