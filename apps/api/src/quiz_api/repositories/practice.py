@@ -37,8 +37,8 @@ from sqlalchemy import and_, func, insert, literal, select, true, tuple_, union_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from quiz_api.authz.permissions import LockMode
-from quiz_api.authz.repository import MembershipRecord, membership_record, membership_select
+from quiz_api.authz.permissions import LockMode, Role
+from quiz_api.authz.repository import MembershipRecord, membership_select
 from quiz_api.practice_grading import AttemptResult, GradedResult
 from quiz_api.question_rules import QuestionType
 from quiz_api.question_status import LastGradedResult
@@ -237,52 +237,54 @@ class PracticeRepository:
 
     # --- sessions --------------------------------------------------------------------------------
 
-    def lock_epoch(self, user_id: uuid.UUID, question_id: uuid.UUID) -> int:
-        """Serialize all mutations for one user's physical question before session locks."""
+    def lock_reset(self, user_id: uuid.UUID, question_id: uuid.UUID) -> None:
         key = f"practice-reset:{user_id}:{question_id}"
         self._session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
-        self._session.execute(
-            pg_insert(practice_reset_epochs)
-            .values(user_id=user_id, question_id=question_id, epoch=0)
-            .on_conflict_do_nothing()
-        )
-        return int(
-            self._session.execute(
-                select(practice_reset_epochs.c.epoch).where(
-                    practice_reset_epochs.c.user_id == user_id,
-                    practice_reset_epochs.c.question_id == question_id,
-                )
-            ).scalar_one()
-        )
 
-    def reset_since_transaction(self, user_id: uuid.UUID, question_id: uuid.UUID) -> bool:
-        return bool(
-            self._session.execute(
-                select(practice_reset_epochs.c.reset_at > func.transaction_timestamp()).where(
-                    practice_reset_epochs.c.user_id == user_id,
-                    practice_reset_epochs.c.question_id == question_id,
-                )
-            ).scalar_one_or_none()
-        )
-
-    def session_question(self, session_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
-        return self._session.execute(
-            select(practice_sessions.c.question_id).where(
-                practice_sessions.c.id == session_id, practice_sessions.c.user_id == user_id
+    def lock_epoch_with_reset(self, user_id: uuid.UUID, question_id: uuid.UUID) -> tuple[int, bool]:
+        """Take the transaction lock before reading an epoch in a fresh statement snapshot."""
+        self.lock_reset(user_id, question_id)
+        row = self._session.execute(
+            select(
+                practice_reset_epochs.c.epoch,
+                practice_reset_epochs.c.reset_at > func.transaction_timestamp(),
+            ).where(
+                practice_reset_epochs.c.user_id == user_id,
+                practice_reset_epochs.c.question_id == question_id,
             )
-        ).scalar_one_or_none()
+        ).one_or_none()
+        return (int(row[0]), bool(row[1])) if row is not None else (0, False)
+
+    def lock_epoch(self, user_id: uuid.UUID, question_id: uuid.UUID) -> int:
+        return self.lock_epoch_with_reset(user_id, question_id)[0]
 
     def reset(self, user_id: uuid.UUID, question_id: uuid.UUID) -> dict[str, int]:
         members = sorted(set(self._session.execute(self._members(question_id)).scalars()), key=str)
         for member in members:
             self.lock_epoch(user_id, member)
         epochs = self._session.execute(
-            update(practice_reset_epochs)
-            .where(
-                practice_reset_epochs.c.user_id == user_id,
-                practice_reset_epochs.c.question_id.in_(members),
+            pg_insert(practice_reset_epochs)
+            .values(
+                [
+                    {
+                        "user_id": user_id,
+                        "question_id": member,
+                        "epoch": 1,
+                        "reset_at": func.clock_timestamp(),
+                    }
+                    for member in members
+                ]
             )
-            .values(epoch=practice_reset_epochs.c.epoch + 1, reset_at=func.clock_timestamp())
+            .on_conflict_do_update(
+                index_elements=[
+                    practice_reset_epochs.c.user_id,
+                    practice_reset_epochs.c.question_id,
+                ],
+                set_={
+                    "epoch": practice_reset_epochs.c.epoch + 1,
+                    "reset_at": func.clock_timestamp(),
+                },
+            )
             .returning(practice_reset_epochs.c.question_id, practice_reset_epochs.c.epoch)
         ).all()
         self._session.execute(
@@ -305,16 +307,54 @@ class PracticeRepository:
 
     def session_membership(
         self, session_id: uuid.UUID, user_id: uuid.UUID, lock: LockMode
-    ) -> MembershipRecord | None:
+    ) -> tuple[MembershipRecord, uuid.UUID] | None:
         """The caller's membership in the workspace of the caller's own session, in one query
         (ownership and membership, with the membership lock of the action); `None` for unknown
         and foreign sessions and for non-members alike (the route answers all with one 404)."""
         stmt = (
             membership_select(user_id, lock)
+            .add_columns(practice_sessions.c.question_id.label("session_question_id"))
             .join(practice_sessions, practice_sessions.c.workspace_id == workspaces.c.id)
             .where(practice_sessions.c.id == session_id, practice_sessions.c.user_id == user_id)
         )
-        return membership_record(self._session, stmt, user_id)
+        row = self._session.execute(stmt).mappings().one_or_none()
+        if row is None:
+            return None
+        return (
+            MembershipRecord(
+                workspace_id=row["id"],
+                user_id=user_id,
+                role=Role(row["role"]),
+                status=row["status"],
+                archived_at=row["archived_at"],
+            ),
+            row["session_question_id"],
+        )
+
+    def get_session_epoch(
+        self, session_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False
+    ) -> tuple[SessionRecord, int] | None:
+        epoch = (
+            select(practice_reset_epochs.c.epoch)
+            .where(
+                practice_reset_epochs.c.user_id == user_id,
+                practice_reset_epochs.c.question_id == practice_sessions.c.question_id,
+            )
+            .scalar_subquery()
+        )
+        stmt = (
+            self._session_select()
+            .add_columns(func.coalesce(epoch, 0).label("current_epoch"))
+            .where(
+                practice_sessions.c.id == session_id,
+                practice_sessions.c.user_id == user_id,
+                questions.c.deleted_at.is_(None),
+            )
+        )
+        if lock:
+            stmt = stmt.with_for_update(of=practice_sessions)
+        row = self._session.execute(stmt).one_or_none()
+        return (_session(row), int(row.current_epoch)) if row is not None else None
 
     def get_session(
         self, session_id: uuid.UUID, user_id: uuid.UUID, *, lock: bool = False

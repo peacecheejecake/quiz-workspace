@@ -343,15 +343,15 @@ def _own_session(
     together with membership (one query), so a foreign session is indistinguishable from an
     unknown id (404, same body) whatever the caller's role or the workspace's state. Writes lock
     the session row."""
-    record = practice.session_membership(session_id, user_id, policy_for(action).lock)
-    access = decide(record, action, not_found_detail=NOT_FOUND)
-    question_id = practice.session_question(session_id, user_id)
-    if question_id is None:
+    membership = practice.session_membership(session_id, user_id, policy_for(action).lock)
+    if membership is None:
         raise _not_found()
-    epoch = practice.lock_epoch(user_id, question_id)
-    found = practice.get_session(session_id, user_id, lock=action is Action.PRACTICE)
-    if found is None:  # the question was soft-deleted
+    access = decide(membership[0], action, not_found_detail=NOT_FOUND)
+    practice.lock_reset(user_id, membership[1])
+    session_epoch = practice.get_session_epoch(session_id, user_id, lock=action is Action.PRACTICE)
+    if session_epoch is None:  # the question was soft-deleted
         raise _not_found()
+    found, epoch = session_epoch
     if found.reset_epoch != epoch:
         raise ProblemException(
             409, ProblemType.PRACTICE_SESSION_RESET, detail="This practice session was reset."
@@ -544,10 +544,10 @@ def start_practice_session(
     body_hash = request_hash(body.model_dump(mode="json", exclude_none=True, exclude_defaults=True))
     if idempotency_key is not None:
         idempotency.lock(user.id, scope, idempotency_key)
-    epoch = practice.lock_epoch(user.id, access.resource_id)
+    epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
     if (
         body.expected_reset_epoch is not None and body.expected_reset_epoch != epoch
-    ) or practice.reset_since_transaction(user.id, access.resource_id):
+    ) or reset_since_start:
         raise ProblemException(
             409, ProblemType.PRACTICE_SESSION_RESET, detail="This practice session was reset."
         )
@@ -874,10 +874,10 @@ def update_my_state(
             [{"loc": ("body",), "msg": "Give is_favorite and/or needs_retry.", "type": "missing"}]
         )
     ws = access.workspace
-    epoch = practice.lock_epoch(ws.user_id, access.resource_id)
+    epoch, reset_since_start = practice.lock_epoch_with_reset(ws.user_id, access.resource_id)
     if (
         body.expected_reset_epoch is not None and body.expected_reset_epoch != epoch
-    ) or practice.reset_since_transaction(ws.user_id, access.resource_id):
+    ) or reset_since_start:
         raise ProblemException(
             409,
             ProblemType.PRACTICE_SESSION_RESET,
