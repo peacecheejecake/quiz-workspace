@@ -44,3 +44,7 @@ tests/e2e/questions/{questions-practice,question-viewer}.spec.ts에 기존 경�
 - 작업 브랜치·worktree를 사용하고 다른 Task scope를 수정하지 않는다. 공통 파일·migration 번호·API client 생성 충돌은 main thread에 보고한다. 공유 DB migration 적용은 main thread만 한다.
 - 리뷰는 scripts/codex-review.sh --uncommitted --title "<Task ID>: <summary>"로 커밋 전에 실행한다. 수정 후 재리뷰한다. 기본 모델을 사용한다. RED 및 구현·QA 증거를 보고한다.
 - semantic token·Radix·공통 FloatingSidePanel 사용, 한국어 UI, 키보드·터치 동등, reduced-motion 준수. 테스트 skip/fixme 및 API client 수동 편집 금지.
+
+## 최종 QA: 잠금과 성능 예산
+
+리셋 관련 읽기는 autocommit으로 실행하지 않는다. 트랜잭션 advisory lock 획득과 대기 후 epoch snapshot 조회는 별도 statement로 유지한다. 불필요한 epoch 행 생성·중복 조회 제거 및 안전한 조회 병합 후 상한은 세션 열기 10·제출 6·session GET 6·my-state PATCH 9 DB 왕복이다. 이전 row-lock 없는 GET 전제의 PERF-1 기준은 이 네 경로에 한해 대체한다(구현 계획 §7). 다른 상한·권한 검사·revision/alias/epoch fencing·실제 동시성 검증은 유지한다.

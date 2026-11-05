@@ -906,6 +906,12 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 독립 리뷰에서 새 계정이 이전 Workspace에 가입되어 있지 않으면 not-found가 AuthenticatedShell보다 먼저 렌더되어 신원 확인 대기가 끝나지 않는 문제가 확인되었다. 보호 경로의 확정된 계정 변경은 이전 화면을 가린 채 `/workspaces`, 확정된 로그아웃은 `/login`으로 이동한다. 이전 Workspace의 shell 재등장만을 복구 조건으로 삼지 않는다. 공개 공유·복구 경로는 이 대기 때문에 가리지 않고, 일시적인 신원 API 오류는 계정 변경으로 오인하지 않아 같은 사용자의 draft·풀이를 유지한다. Root layout의 query 구독은 별도 작은 Suspense 경계에 두며 Workspace 권한 검사 전체를 fallback 안에 넣어 404를 200으로 바꾸지 않는다.
 
+### UX10-QVIEW 리셋 잠금의 DB 왕복 예산 — 2026-11-05
+
+최종 infra QA에서 PERF-1의 기존 상한(open 8·submit 5·GET session 3·PATCH state 7)을 초과했다. 기존 PERF-1 결정은 GET을 row-lock 없는 autocommit으로 보았지만, 새 리셋 계약은 답변 노출과 재전송을 막기 위해 트랜잭션 전체의 잠금과 잠금 대기 **뒤**의 새 epoch snapshot이 필요하다. advisory lock과 epoch 조회를 한 SQL statement에 합치면 대기 전 snapshot으로 오래된 결과를 승인할 수 있으므로 이 분리는 유지한다.
+
+불필요한 epoch row 생성·중복 reset 시각 조회를 제거하고, 소유자/멤버십·문항·epoch 조회를 안전하게 묶은 뒤의 측정 상한은 세션 열기 10, 제출 6, session GET 6, my-state PATCH 9다. Main은 이 네 경로의 실제 트랜잭션/잠금 비용을 새 기준으로 승인했다. 다른 Workspace·overview·documents 상한은 바꾸지 않는다. 테스트는 새 수치에 고정해 이후 추가 왕복을 계속 차단하며, 권한 matrix·리셋/alias/동시성 계약을 함께 통과해야 한다. 수치 변경만으로 기존 실패를 숨기지 않으며 독립 리뷰에서 잠금·snapshot 보존을 확인한다.
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |
