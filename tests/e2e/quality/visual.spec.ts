@@ -75,7 +75,7 @@ import {
   searchPageUi,
 } from '../fixtures/ux9-pages.ts';
 import { MOCK_TEXT, mockExamsPath, mockUi, STATUS_TEXT } from '../fixtures/mock-exams.ts';
-import { goToResults, runUi } from '../fixtures/practice-runs.ts';
+import { goToResults, openRangePicker, runUi } from '../fixtures/practice-runs.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
 import {
   createShareLink,
@@ -501,9 +501,7 @@ test(
     // QuestionViewer: the range picker (전체 선택 mixed, 1장 open) ...
     await page.goto(overviewPath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(5);
-    await homeUi.questionMenuButton(page).click();
-    await runUi.menuItem(page).click();
-    let panel = runUi.panel(page);
+    let panel = await openRangePicker(page);
     await expect(runUi.pickerTitle(panel)).toBeVisible();
     await expect(runUi.busy(panel)).toHaveCount(0);
     await runUi.selectAll(panel).check();

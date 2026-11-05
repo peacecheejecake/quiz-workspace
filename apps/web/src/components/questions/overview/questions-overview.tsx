@@ -22,8 +22,6 @@
 // 문제 관리 / 문제 정보 menu, its dialogs and the Heatmap refresh after studying.
 import {
   Button,
-  ChevronDownIcon,
-  ChevronUpIcon,
   ConfirmDialog,
   EmptyState,
   QuestionHeatmap,
@@ -246,7 +244,6 @@ export function QuestionsOverview({
   const [reloading, startReload] = useTransition();
   const canAuthor = readOnly === null;
   // QOV-01-AC08: the status filter is collapsed until asked for.
-  const [statusOpen, setStatusOpen] = useState(false);
   const statusRegionId = useId();
 
   // Optimistic study-state changes until the revalidated overview arrives.
@@ -779,7 +776,6 @@ export function QuestionsOverview({
   }
 
   const filtered = isOverviewFiltered(filters);
-  const stateFiltered = view.status.length > 0 || view.favorite !== null || view.retry !== null;
   const busy = navigating || reloading;
 
   return (
@@ -787,41 +783,11 @@ export function QuestionsOverview({
       <h2 id={`${statusRegionId}-title`} className="qz-visually-hidden">
         문제
       </h2>
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarStart}>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={statusOpen}
-            aria-controls={statusRegionId}
-            data-filtered={stateFiltered || undefined}
-            onClick={() => setStatusOpen((open) => !open)}
-          >
-            상태 필터
-            {statusOpen ? (
-              <ChevronUpIcon width={16} height={16} aria-hidden="true" />
-            ) : (
-              <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-            )}
-          </Button>
-          {/* No question count since UX4; a collapsed filter still says it applies. */}
-          <p className={styles.inFilter} role="status">
-            {busy
-              ? '문제를 불러오는 중입니다.'
-              : stateFiltered && !statusOpen
-                ? '상태 필터 적용 중'
-                : ''}
-          </p>
-        </div>
-      </div>
+      <p className={styles.inFilter} role="status">
+        {busy ? '문제를 불러오는 중입니다.' : ''}
+      </p>
 
-      <div
-        id={statusRegionId}
-        className={styles.stateFilters}
-        role="group"
-        aria-label="상태 필터"
-        hidden={!statusOpen}
-      >
+      <div id={statusRegionId} className={styles.stateFilters} role="group" aria-label="상태 필터">
         {QUESTION_DOT_STATUSES.map((status) => (
           <Button
             key={status}
@@ -968,8 +934,8 @@ export function QuestionsOverview({
           }
           const root = screenRef.current;
           if (!root) return;
-          // An empty heatmap falls back to the status filter toggle (a stable control).
-          const toggle = root.querySelector<HTMLElement>('button[aria-controls]');
+          // An empty heatmap falls back to the first status chip.
+          const toggle = root.querySelector<HTMLElement>('button[data-status]');
           if (focusAfterPanel(root, lastOpened.current, openOrder.current, toggle)) {
             event.preventDefault();
           }

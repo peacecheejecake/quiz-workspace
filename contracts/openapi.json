@@ -9101,7 +9101,7 @@
                 "type": "null"
               }
             ],
-            "description": "Keep these dot statuses.",
+            "description": "Keep these dot statuses; empty selects none, omitted selects all.",
             "title": "Status"
           },
           "type": {
@@ -26721,7 +26721,7 @@
             }
           },
           {
-            "description": "Repeatable; keeps these statuses.",
+            "description": "Repeatable statuses; none selects no questions, omitted selects all.",
             "in": "query",
             "name": "status",
             "required": false,
@@ -26729,14 +26729,22 @@
               "anyOf": [
                 {
                   "items": {
-                    "enum": [
-                      "unseen",
-                      "viewed",
-                      "incorrect",
-                      "correct",
-                      "retry"
-                    ],
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "unseen",
+                          "viewed",
+                          "incorrect",
+                          "correct",
+                          "retry"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "const": "none",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "type": "array"
                 },
@@ -26744,7 +26752,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Repeatable; keeps these statuses.",
+              "description": "Repeatable statuses; none selects no questions, omitted selects all.",
               "title": "Status"
             }
           },

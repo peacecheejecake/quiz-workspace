@@ -289,3 +289,9 @@ def test_run_models_are_an_allowlist() -> None:
     assert set(RunResults.model_fields) == {"total", "offset", "limit", "items"}
     assert "attempt" in RunItem.model_fields
     assert not set(RunItem.model_fields) & ANSWER_KEYS
+
+
+def test_ux10_home_empty_status_range_is_empty_even_with_favorite() -> None:
+    assert pick(all=True, filters={}) == IDS
+    assert pick(all=True, filters={"status": []}) == []
+    assert pick(all=True, filters={"status": [], "favorite": True}) == []

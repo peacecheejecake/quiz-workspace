@@ -287,7 +287,7 @@ export function filtersFromRange(range: MockRange | null | undefined): RangeFilt
   const f = range?.filters;
   if (!f) return EMPTY_RANGE_FILTERS;
   return {
-    status: (f.status ?? []) as QuestionDotStatus[],
+    status: (f.status ?? EMPTY_RANGE_FILTERS.status) as QuestionDotStatus[],
     favorite: f.favorite === true,
     retry: f.retry === true,
     type: f.type ?? null,

@@ -5,10 +5,9 @@
 // 설정" popover with the heatmap's chapter/type filters. Without any question to search the box is
 // disabled and a visible status message, linked by aria-describedby, says why. The page owns the
 // state; this renders it.
-import { Input } from '@quiz/ui';
-import { useId, type FormEvent, type ReactNode } from 'react';
+import { Input, IconButton, ChevronDownIcon, ChevronUpIcon } from '@quiz/ui';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import type { LiveQuery } from './use-live-query';
-import { SearchSettings } from './search-settings';
 import styles from './search-forms.module.css';
 
 export const QUESTION_SEARCH_BLOCKED = '검색할 문제가 없습니다. 문제를 먼저 등록하세요.';
@@ -31,6 +30,8 @@ export function QuestionSearch({
   screenId,
 }: QuestionSearchProps) {
   const messageId = useId();
+  const settingsId = useId();
+  const [settingsOpen, setSettingsOpen] = useState(true);
   const message = searchable ? null : QUESTION_SEARCH_BLOCKED;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -60,7 +61,16 @@ export function QuestionSearch({
           fieldClassName={styles.field}
           {...query.inputProps}
         />
-        <SearchSettings label="문제">{settings}</SearchSettings>
+        <IconButton
+          label="검색 설정"
+          icon={settingsOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
+          aria-expanded={settingsOpen}
+          aria-controls={settingsId}
+          onClick={() => setSettingsOpen(!settingsOpen)}
+        />
+      </div>
+      <div id={settingsId} hidden={!settingsOpen}>
+        {settings}
       </div>
       {/* Always mounted so a change is announced; empty while there is nothing to say. */}
       <p
