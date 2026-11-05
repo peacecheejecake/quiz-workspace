@@ -108,6 +108,7 @@ import {
   overviewUi,
   pageLabel,
   panelUi,
+  RESULT_TEXT,
   runSearch,
   searchUi,
   seedMembership,
@@ -659,6 +660,9 @@ test(
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId, q.id)}`);
       const offPractice = panelUi.panel(page);
       await expect(offPractice).toBeVisible();
+      await expect(
+        offPractice.getByRole('status').filter({ hasText: RESULT_TEXT.incorrect }),
+      ).toBeVisible();
       await choosePanelMenu(page, offPractice, 'answers');
       await expect(detailUi.dialog(page)).toBeVisible();
       await expect(askUi.questionButton(detailUi.dialog(page))).toHaveCount(0);
@@ -669,6 +673,7 @@ test(
     await page.goto(overviewPath(s.workspaceId, q.id));
     const archivedPractice = panelUi.panel(page);
     await expect(archivedPractice).toBeVisible();
+    await expect(archivedPractice.getByText(/보관된 Workspace는 읽기 전용입니다/i)).toBeVisible();
     await choosePanelMenu(page, archivedPractice, 'answers');
     await expect(detailUi.dialog(page)).toBeVisible();
     await expect(askUi.questionButton(detailUi.dialog(page))).toHaveCount(0);
