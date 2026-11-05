@@ -149,7 +149,8 @@
 
 .hitTitle {
   padding: 0;
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text-primary);

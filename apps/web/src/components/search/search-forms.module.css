@@ -37,7 +37,8 @@
 .settingsToggle {
   flex: none;
   padding: var(--space-1);
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);

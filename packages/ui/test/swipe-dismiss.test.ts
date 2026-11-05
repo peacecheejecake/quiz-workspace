@@ -26,3 +26,29 @@ it('UX10-UI-AC01 keeps an explicit boundary on transparent button variants', asy
   expect(css).toMatch(/box-sizing:\s*border-box/);
   expect(css).not.toMatch(/border-color:\s*transparent;\s*background:\s*transparent/);
 });
+
+it('UX10-UI-AC01 tabs have a visible default boundary', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('src/styles/controls.css', 'utf8');
+  const tabRule = css.split('> .list > .trigger {')[1]?.split('}')[0];
+  expect(tabRule).toMatch(/border:\s*1px solid var\(--color-border\)/);
+});
+
+it('UX10-UI-AC03 fixes the closest edge and honors every directional threshold', () => {
+  expect(nearestEdge({ left: 8, right: 800, top: 40, bottom: 760 }, 1000, 800, 'right')).toBe(
+    'left',
+  );
+  expect(nearestEdge({ left: 100, right: 900, top: 5, bottom: 700 }, 1000, 800, 'bottom')).toBe(
+    'top',
+  );
+  expect(qualifiesSwipe('left', -64, 0, 1000)).toBe(true);
+  expect(qualifiesSwipe('top', 0, -64, 1000)).toBe(true);
+  expect(qualifiesSwipe('bottom', 0, -100, 10)).toBe(false);
+  expect(qualifiesSwipe('left', -24, 0, 49)).toBe(false);
+});
+
+it('UX10-UI-AC01 BackLink buttons have a boundary while links retain link styling', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('src/styles/layout.css', 'utf8');
+  expect(css).toMatch(/button\.qz-back-link\s*\{\s*border:\s*1px solid var\(--color-border\)/);
+});
