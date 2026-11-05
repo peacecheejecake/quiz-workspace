@@ -311,7 +311,9 @@ def test_ci_deploys_staging_only_on_develop_pushes() -> None:
 
 
 PR_ONLY_SKIP = "github.event_name != 'pull_request' || "
-PATH_FILTERED = {"checks", "images", "integration", "visual-ui"}
+PATH_FILTERED = {"checks", "images", "e2e", "infra", "visual-ui"}
+# CI-SHARD: the merged E2E report only re-reads what the e2e shards ran; it gates nothing.
+REPORT_ONLY = {"e2e-report"}
 
 
 def _ci_jobs() -> dict[str, dict[str, Any]]:
@@ -327,17 +329,27 @@ def test_ci_deploy_needs_every_required_ci_job() -> None:
     }
     assert required == PATH_FILTERED
     assert set(_ci_deploy_job()["needs"]) == required
-    assert _ci_deploy_job()["needs"] == ["checks", "images", "integration", "visual-ui"]
+    assert _ci_deploy_job()["needs"] == ["checks", "images", "e2e", "infra", "visual-ui"]
 
 
 def test_ci_jobs_are_exactly_the_known_set() -> None:
     # A new job must be classified here (path-filtered, nightly, aggregate or deploy).
-    assert set(_ci_jobs()) == PATH_FILTERED | {"changes", "models", "ci-ok", "deploy-staging"}
+    assert set(_ci_jobs()) == PATH_FILTERED | REPORT_ONLY | {
+        "changes",
+        "models",
+        "ci-ok",
+        "deploy-staging",
+    }
 
 
 def test_ci_path_filter_skips_only_pull_requests() -> None:
     jobs = _ci_jobs()
-    outputs = {"checks": "checks", "integration": "integration", "visual-ui": "visual_ui"}
+    outputs = {
+        "checks": "checks",
+        "e2e": "integration",
+        "infra": "integration",
+        "visual-ui": "visual_ui",
+    }
     for name, output in outputs.items():
         assert jobs[name]["if"] == f"{PR_ONLY_SKIP}needs.changes.outputs.{output} == 'true'"
     assert jobs["images"]["if"] == f"{PR_ONLY_SKIP}needs.changes.outputs.images != '[]'"
@@ -369,6 +381,51 @@ def test_ci_image_steps_skip_only_on_pull_requests() -> None:
         assert step["if"] == "steps.want.outputs.build == 'true'", step
 
 
+def test_ci_e2e_runs_in_four_shards_beside_the_infra_job() -> None:
+    # CI-SHARD (implementation-plan §7, 2026-11-05).
+    jobs = _ci_jobs()
+    e2e = jobs["e2e"]
+    assert e2e["name"] == "e2e · ${{ matrix.shard }}/4"
+    assert e2e["strategy"] == {"fail-fast": False, "matrix": {"shard": [1, 2, 3, 4]}}
+    run = next(str(s["run"]) for s in e2e["steps"] if "e2e:log-audit" in str(s.get("run", "")))
+    assert run.rstrip().endswith('-- "${specs[@]}" --shard="$SHARD"')
+    shard_env = next(s["env"] for s in e2e["steps"] if "e2e:log-audit" in str(s.get("run", "")))
+    assert shard_env["SHARD"] == "${{ matrix.shard }}/4"
+    # Neither waits for the static checks; both stop their stack whatever happened.
+    for name in ("e2e", "infra"):
+        assert jobs[name]["needs"] == "changes", name
+        assert jobs[name]["steps"][-1] == {
+            "name": "Stop local stack",
+            "if": "${{ always() }}",
+            "run": "make infra-down",
+        }
+    infra_runs = [str(s.get("run", "")) for s in jobs["infra"]["steps"]]
+    for command in ("make db-test", "make test-infra", "visual-run.sh", "scripts/restore"):
+        assert any(command in run for run in infra_runs), command
+    # The visual step builds the web app on this runner; perf reuses that build.
+    visual = next(r for r in infra_runs if "visual-run.sh" in r)
+    perf = next(r for r in infra_runs if "perf.spec.ts" in r)
+    assert "--no-build" not in visual
+    assert "--no-build" in perf
+    assert infra_runs.index(visual) < infra_runs.index(perf)
+    # Per-shard artifact names never collide.
+    names = [s["with"]["name"] for s in e2e["steps"] if "upload-artifact" in str(s.get("uses"))]
+    assert names
+    assert all("${{ matrix.shard }}" in n for n in names)
+
+
+def test_ci_e2e_report_merges_the_shards_without_gating() -> None:
+    job = _ci_jobs()["e2e-report"]
+    assert job["needs"] == "e2e"
+    assert job["if"].startswith("${{ !cancelled() && ")
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    runs = "\n".join(str(s.get("run", "")) for s in job["steps"])
+    assert "playwright merge-reports --reporter html" in runs
+    assert "e2e:artifact-audit" in runs
+    assert "e2e-report" not in _ci_jobs()["ci-ok"]["needs"]
+    assert "e2e-report" not in _ci_deploy_job()["needs"]
+
+
 def test_ci_changes_outputs_everything_outside_pull_requests() -> None:
     job = _ci_jobs()["changes"]
     steps = job["steps"]
@@ -398,14 +455,15 @@ def test_ci_changes_outputs_everything_outside_pull_requests() -> None:
 
 def test_ci_ok_aggregates_every_job_but_the_deploy() -> None:
     job = _ci_jobs()["ci-ok"]
-    assert set(job["needs"]) == set(_ci_jobs()) - {"ci-ok", "deploy-staging"}
+    assert set(job["needs"]) == set(_ci_jobs()) - {"ci-ok", "deploy-staging"} - REPORT_ONLY
 
 
 @pytest.mark.parametrize(
     ("results", "ok"),
     [
         ({"checks": "success", "images": "skipped", "models": "skipped"}, True),
-        ({"checks": "success", "integration": "failure"}, False),
+        ({"checks": "success", "e2e": "failure"}, False),
+        ({"checks": "success", "infra": "failure"}, False),
         ({"checks": "success", "visual-ui": "cancelled"}, False),
         ({"changes": "failure", "checks": "skipped"}, False),
     ],

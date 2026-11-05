@@ -1,23 +1,27 @@
 # CI (M7.3, docs/deployment.md §5): static checks → unit → contracts ‖ container images ‖ UI
-# visual baselines, then the local stack (Supabase CLI + Qdrant/Redis) → DB tests → infra
-# integration tests → E2E (screens, a11y, WebKit/mobile smoke) with the worker and log/artifact
-# audits → app visual baselines → backup/restore rehearsal (DEP-06). Nightly (schedule) runs all of
-# it plus Web Vitals/API latency (`e2e:perf`) and the real-model tests.
+# visual baselines ‖ E2E in 4 shards (screens, a11y, WebKit/mobile smoke, each on its own local
+# stack: Supabase CLI + Qdrant/Redis, with the worker and log/artifact audits) ‖ DB tests → infra
+# integration tests → app visual baselines → backup/restore rehearsal (DEP-06) on another local
+# stack. Nightly (schedule) runs all of it plus Web Vitals/API latency (`e2e:perf`) and the
+# real-model tests. CI-SHARD (2026-11-05): the E2E/infra jobs no longer wait for `checks`.
 #
-#   checks ──► integration (+ perf on schedule / manual)
+#   checks (lint · typecheck · unit · contracts)
 #   images (api · worker · web, no push)
+#   e2e (e2e · 1/4 … 4/4) ──► e2e-report (merged HTML report; not gating)
+#   infra (db · infra · visual · restore; + perf on schedule / manual)
 #   visual-ui (@quiz/ui Storybook baselines)
 #   models (schedule / manual only)
-#   checks + images + integration + visual-ui ──► deploy-staging (push to develop only;
+#   checks + images + e2e + infra + visual-ui ──► deploy-staging (push to develop only;
 #     calls deploy.yml with environment=staging, M7.4p)
-#   all of the above (but deploy-staging) ──► ci-ok (aggregate status for pull requests)
+#   all of the above (but deploy-staging, e2e-report) ──► ci-ok (aggregate status for pull requests)
 #
 # Pull requests only (CI-SKIP, docs/deployment.md §5): `changes` maps the PR diff to path groups
-# (scripts/ci_changes.py) and each job runs only when a group it depends on changed; CI files,
-# the Makefile, scripts/, lockfiles, root configs and unknown paths run everything. A skipped job
-# counts as passed in `ci-ok`. push, schedule and workflow_dispatch always run every job: every
-# job condition starts with `github.event_name != 'pull_request' ||`, and deploy-staging /
-# deploy.yml's REQUIRED_CI_JOBS still see the same job names succeed on the push run.
+# (scripts/ci_changes.py) and each job runs only when a group it depends on changed (`integration`
+# gates both `e2e` and `infra`); CI files, the Makefile, scripts/, lockfiles, root configs and
+# unknown paths run everything. A skipped job counts as passed in `ci-ok`. push, schedule and
+# workflow_dispatch always run every job: every path-filtered job condition starts with
+# `github.event_name != 'pull_request' ||`, and deploy-staging / deploy.yml's REQUIRED_CI_JOBS
+# still see the same job names succeed on the push run.
 #
 # Visual baselines are Linux renders of the pinned Playwright image (tests/e2e/README.md "Visual
 # baselines"): scripts/visual-run.sh starts `playwright run-server` in
@@ -199,12 +203,19 @@ jobs:
           docker image ls "$IMAGE"
           docker rm -f smoke
 
-  integration:
-    name: db · infra · e2e · restore
-    needs: [changes, checks]
+  # CI-SHARD (implementation-plan §7, 2026-11-05): the E2E suite runs as 4 Playwright shards on
+  # their own runners, each with its own local stack (Supabase CLI + Qdrant/Redis), servers, worker
+  # and log/artifact audits. No `needs: checks`: it starts with the static checks.
+  e2e:
+    name: e2e · ${{ matrix.shard }}/4
+    needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -257,17 +268,14 @@ jobs:
               -c "alter role $role with login password 'change-me-local'"
           done
 
-      - name: DB tests (pgTAP)
-        run: make db-test
-      - name: Infra integration tests
-        run: make test-infra
-
       # Web (:3000, the Supabase site_url that auth mail links and HARNESS-09 expect), API (:8000)
       # and the Celery worker are started by e2e:log-audit, which fails on secrets in their logs.
-      # APP_ENV=test selects the fixture parser, the fake embedder and the scripted LLM.
-      - name: E2E (all GREEN phases + cross-cutting specs, with worker and log audit)
+      # APP_ENV=test selects the fixture parser, the fake embedder and the scripted LLM. Every
+      # shard selects the same specs; Playwright's --shard picks this runner's part of them.
+      - name: E2E shard (all GREEN phases + cross-cutting specs, with worker and log audit)
         env:
           APP_ENV: test
+          SHARD: ${{ matrix.shard }}/4
           WORKER_LLM_SCENARIO_FILE: ${{ github.workspace }}/tests/fixtures/llm/generation-scenarios.json
           WORKER_CHAPTER_NOTES: 'true'
           WORKER_MOCK_EXAMS: 'true'
@@ -289,14 +297,167 @@ jobs:
             done
             if [[ $skip -eq 0 ]]; then specs+=("$spec"); fi
           done < <(find tests/e2e -name '*.spec.ts' -not -path '*/_pending/*' | LC_ALL=C sort)
-          echo "E2E specs (${#specs[@]}): ${specs[*]}"
+          echo "E2E specs (${#specs[@]}), shard $SHARD: ${specs[*]}"
           # tests/e2e/quality/ (a11y-chromium, smoke-{ipad,iphone}-webkit, smoke-mobile-chrome) is
           # in this list; its visual/perf projects only exist when their renderer/flag is set.
           printf '%s\n' "${specs[@]}" | grep -q '^tests/e2e/quality/a11y.spec.ts$'
-          pnpm e2e:log-audit --worker --web-port 3000 --api-port 8000 -- "${specs[@]}"
+          pnpm e2e:log-audit --worker --web-port 3000 --api-port 8000 -- "${specs[@]}" --shard="$SHARD"
 
-      # App screenshots against the pinned renderer (visual-desktop, visual-ipad), same servers and
-      # worker (reusing the web build); own output/report dirs so the E2E artifacts stay.
+      - name: E2E artifact audit (no share secrets in traces/reports)
+        if: ${{ !cancelled() }}
+        run: pnpm e2e:artifact-audit test-results playwright-report blob-report
+      # Input of `e2e · report`: this shard's blob report plus the share-secret digests its tests
+      # wrote (never the values), so the merged report is audited against the same secrets.
+      - name: Stage blob report
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-blob
+          if [[ -d blob-report ]]; then cp -R blob-report e2e-blob/; fi
+          if [[ -d test-results ]]; then
+            find test-results -name share-secret.sha256 -exec cp --parents {} e2e-blob/ \;
+          fi
+      # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
+      # only (tests/e2e/README.md), kept briefly.
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-e2e-${{ matrix.shard }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-blob-${{ matrix.shard }}
+          path: e2e-blob/
+          if-no-files-found: ignore
+          retention-days: 1
+      - name: Stop local stack
+        if: ${{ always() }}
+        run: make infra-down
+
+  # One HTML report for the 4 shards (Playwright blob → merge-reports). A convenience view of what
+  # the shards already ran and audited: not in `ci-ok` or the deploy gate (a shard failure already
+  # fails those; a missing blob from a crashed shard must not add a second, derived failure).
+  # The blobs are fetched with the runner's `gh` (no download-artifact action is pinned here).
+  e2e-report:
+    name: e2e · report
+    needs: e2e
+    if: ${{ !cancelled() && (needs.e2e.result == 'success' || needs.e2e.result == 'failure') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read # list/download this run's artifacts
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Download shard blob reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'e2e-blob-*' \
+            --dir "$RUNNER_TEMP/e2e-blob"
+          mkdir -p blob-report
+          find "$RUNNER_TEMP/e2e-blob" -path '*/blob-report/*.zip' -exec cp {} blob-report/ \;
+          ls -l blob-report
+      - name: Merge reports (HTML)
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-merged
+        run: pnpm exec playwright merge-reports --reporter html ./blob-report
+      - name: E2E artifact audit (merged report)
+        run: pnpm e2e:artifact-audit playwright-report-merged blob-report "$RUNNER_TEMP/e2e-blob"
+      - name: Upload merged Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-merged
+          path: playwright-report-merged/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # DB tests, infra integration tests, app visual baselines, nightly perf and the DEP-06
+  # backup/restore rehearsal on their own runner and local stack (CI-SHARD), next to the E2E shards.
+  infra:
+    name: db · infra · visual · restore
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.integration == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          uv sync --locked
+      # The visual projects render in the pinned image (scripts/visual-run.sh); the nightly perf
+      # project uses the runner's Chromium.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright browsers (Chromium)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start local stack
+        run: make infra-up
+      - name: Local .env (throwaway stack keys, masked)
+        run: |
+          status="$(pnpm exec supabase status -o json | sed -n '/^{/,$p')"
+          publishable="$(jq -r .PUBLISHABLE_KEY <<<"$status")"
+          secret="$(jq -r .SECRET_KEY <<<"$status")"
+          echo "::add-mask::$publishable"
+          echo "::add-mask::$secret"
+          umask 077
+          sed -e "s|^NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=.*|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable|" \
+              -e "s|^SUPABASE_SECRET_KEY=.*|SUPABASE_SECRET_KEY=$secret|" .env.example > .env
+          {
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$publishable"
+            echo "SUPABASE_SECRET_KEY=$secret"
+          } >> "$GITHUB_ENV"
+      - name: Enable local quiz_api / quiz_worker login (CI-only password)
+        run: |
+          for role in quiz_api quiz_worker; do
+            psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 \
+              -c "alter role $role with login password 'change-me-local'"
+          done
+
+      - name: DB tests (pgTAP)
+        run: make db-test
+      - name: Infra integration tests
+        run: make test-infra
+
+      # App screenshots against the pinned renderer (visual-desktop, visual-ipad) with the servers
+      # and worker of e2e:log-audit, which builds the web app here (no E2E build on this runner).
       - name: Visual baselines (app, pinned Linux renderer)
         if: ${{ !cancelled() }}
         env:
@@ -309,10 +470,11 @@ jobs:
           WORKER_AI_EXPLANATIONS: 'true'
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report-visual
         run: >-
-          scripts/visual-run.sh pnpm e2e:log-audit --worker --no-build --web-port 3000 --api-port 8000
+          scripts/visual-run.sh pnpm e2e:log-audit --worker --web-port 3000 --api-port 8000
           -- tests/e2e/quality/visual.spec.ts --project=visual-desktop --project=visual-ipad
           --output=test-results-visual
 
+      # Reuses the visual step's web build.
       - name: Web Vitals / API latency (nightly)
         if: ${{ !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.perf)) }}
         env:
@@ -327,8 +489,8 @@ jobs:
       - name: E2E artifact audit (no share secrets in traces/reports)
         if: ${{ !cancelled() }}
         run: >-
-          pnpm e2e:artifact-audit test-results playwright-report test-results-visual
-          playwright-report-visual test-results-perf playwright-report-perf
+          pnpm e2e:artifact-audit test-results-visual playwright-report-visual test-results-perf
+          playwright-report-perf
 
       # DEP-06 rehearsal on the throwaway stack: back up, wipe the DB and the index, restore,
       # rebuild Qdrant from Postgres. The backup holds synthetic users only and is never uploaded.
@@ -340,7 +502,7 @@ jobs:
           set -euo pipefail
           backup="$RUNNER_TEMP/backup"
           probe="$RUNNER_TEMP/restore-probe.json"
-          # The E2E fixtures delete their data, so seed one published synthetic document (real
+          # The visual fixtures delete their data, so seed one published synthetic document (real
           # upload + document.parse path) that the restore must bring back.
           uv run --no-sync python scripts/restore_probe.py seed --state "$probe"
           scripts/backup "$backup"
@@ -372,16 +534,12 @@ jobs:
           uv run --no-sync python scripts/restore_probe.py verify --state "$probe"
           rm -rf "$backup"
 
-      # Reports hold traces/screenshots of failed tests: synthetic users on this throwaway stack
-      # only (tests/e2e/README.md), kept briefly.
-      - name: Upload Playwright report
+      - name: Upload Playwright report (visual · perf)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-report
+          name: playwright-report-visual
           path: |
-            playwright-report/
-            test-results/
             playwright-report-visual/
             test-results-visual/
             playwright-report-perf/
@@ -448,11 +606,12 @@ jobs:
         run: make test-models
 
   # One status for branch protection / merge decisions: skipped (PR path filter, or `models`
-  # outside the nightly) is fine; any failed or cancelled job fails it.
+  # outside the nightly) is fine; any failed or cancelled job fails it. `e2e · report` is left out:
+  # it only merges and re-audits what the e2e shards (which are in here) already ran and audited.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, checks, images, integration, visual-ui, models]
+    needs: [changes, checks, images, e2e, infra, visual-ui, models]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -474,7 +633,7 @@ jobs:
   deploy-staging:
     name: deploy · staging
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: [checks, images, integration, visual-ui]
+    needs: [checks, images, e2e, infra, visual-ui]
     permissions:
       contents: read
       packages: write # push the api/worker images to GHCR

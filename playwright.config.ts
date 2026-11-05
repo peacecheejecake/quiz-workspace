@@ -139,8 +139,16 @@ export default defineConfig({
   retries: CI ? 1 : 0,
   workers: CI ? 2 : undefined,
   outputDir: 'test-results',
+  // CI-SHARD: each E2E shard also writes a blob report (blob-report/report-<shard>.zip) that the
+  // `e2e · report` job merges into one HTML report; every shard runs on its own runner, so the
+  // per-shard html/junit outputs never collide.
   reporter: CI
-    ? [['list'], ['html', { open: 'never' }], ['junit', { outputFile: 'test-results/junit.xml' }]]
+    ? [
+        ['list'],
+        ['html', { open: 'never' }],
+        ['junit', { outputFile: 'test-results/junit.xml' }],
+        ['blob'],
+      ]
     : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: BASE_URL,

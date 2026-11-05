@@ -7,7 +7,7 @@ which CI jobs a pull request runs:
 
     checks=true|false              lint · typecheck · unit · contracts (any change)
     images=["api","worker","web"]  image matrix entries to build (JSON array, may be empty)
-    integration=true|false         db · infra · e2e · restore
+    integration=true|false         e2e · 1/4 … 4/4 and db · infra · visual · restore
     visual_ui=true|false           @quiz/ui Storybook baselines
 
 Conservative by construction: CI/workflow files, the Makefile, scripts/, lockfiles, root configs
@@ -53,6 +53,7 @@ IMAGE_GROUPS: dict[str, frozenset[str]] = {
     "worker": frozenset({"api", "worker", "core"}),
     "web": frozenset({"web", "ui"}),
 }
+# One output for both local-stack jobs (CI-SHARD): the e2e shards and the infra job.
 INTEGRATION_GROUPS = frozenset(
     {"api", "worker", "core", "web", "ui", "db", "contracts", "e2e", "integration", "infra"}
 )
