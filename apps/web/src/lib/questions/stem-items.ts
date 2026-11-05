@@ -149,12 +149,18 @@ function blocks(s: string): [number, number][] {
 /** Labels in `s[start, end)` that sit at a line/word start and are followed by blank + content. */
 function labelsIn(s: string, start: number, end: number): Label[] {
   const out: Label[] = [];
+  const references = [
+    ...s
+      .slice(start, end)
+      .matchAll(/[（(][^()（）\r\n]+[)）]\s*[~～]\s*[（(][^()（）\r\n]+[)）]/gu),
+  ].map((match) => [start + match.index, start + match.index + match[0].length] as const);
   for (let p = start; p < end; p += 1) {
     if (p > start && !isBlank(s[p - 1])) continue;
     if (isBlank(s[p])) continue;
     const label = labelAt(s, p);
     if (!label || label.end >= end || !isBlank(s[label.end])) continue;
     if (s.slice(label.end, end).trim() === '') continue;
+    if (references.some(([a, b]) => p >= a && p < b)) continue;
     out.push(label);
   }
   return out;
@@ -218,5 +224,49 @@ export function stemItems(stem: string): StemLayout | null {
       }
     }
   }
+  const allBullets: RegExpMatchArray[] = [];
+  const sentenceEnd = /[.!?。！？][)）"'’”」』]*\s*$/u;
+  for (const candidate of s.matchAll(/(?<!\S)-\s+(?=\S)/gu)) {
+    const prefix = s.slice(0, candidate.index);
+    const lineStart = prefix.trim() === '' || /\n[^\S\r\n]*$/u.test(prefix);
+    const boundary = allBullets.length === 0 ? leadEnds(prefix) : sentenceEnd.test(prefix);
+    if (lineStart || boundary) allBullets.push(candidate);
+  }
+  const firstBullet = allBullets[0]?.index ?? s.length;
+  const blockEnd =
+    blocks(s).find(([start, end]) => firstBullet >= start && firstBullet < end)?.[1] ?? s.length;
+  const bullets = allBullets.filter((bullet) => (bullet.index ?? s.length) < blockEnd);
+  const bulletBodies = bullets.map((bullet, i) =>
+    s.slice((bullet.index ?? 0) + bullet[0].length, bullets[i + 1]?.index ?? blockEnd).trim(),
+  );
+  if (
+    bullets.length >= 2 &&
+    leadEnds(s.slice(0, bullets[0]?.index)) &&
+    bulletBodies.every((body) => sentenceEnd.test(body))
+  ) {
+    const first = bullets[0]?.index ?? 0;
+    return {
+      lead: paragraphs(displayStem(s.slice(0, first).trimEnd())),
+      items: bullets.map((bullet, i) => ({
+        label: '-',
+        text: bulletBodies[i] ?? '',
+      })),
+      trailing: paragraphs(s.slice(blockEnd)),
+    };
+  }
   return null;
+}
+
+/** Split only an explicit question answer mark followed by a substantial passage. */
+export function stemPassageParagraphs(stem: string): string[] {
+  const text = displayStem(stem);
+  const match = /[?？]\s*\(\s*\)\s+(?=\S)/u.exec(text);
+  if (!match || text.slice(match.index + match[0].length).trim().length < 40) {
+    return stemParagraphs(text);
+  }
+  const boundary = match.index + match[0].length;
+  return [
+    ...paragraphs(displayStem(text.slice(0, boundary).trimEnd())),
+    ...stemParagraphs(text.slice(boundary).trimStart()),
+  ];
 }

@@ -183,6 +183,15 @@ def stem_item_starts(text: str) -> list[int]:
     ``:``, ``)``, ``」``, ``>``, an answer blank ``( )``).
     """
     tokens = _item_tokens(text)
+    # Both endpoints of a printed range are references, not item starts.
+    references = [
+        match.span()
+        for match in re.finditer(
+            r"[\uff08(][^()\uff08\uff09\r\n]+[)\uff09]\s*[~\uff5e]\s*[\uff08(][^()\uff08\uff09\r\n]+[)\uff09]",
+            text,
+        )
+    ]
+    tokens = [t for t in tokens if not any(a <= t[0] < b for a, b in references)]
     for family in dict.fromkeys(family for _, family, _, ordinal in tokens if ordinal == 1):
         run = [t for t in tokens if t[1] == family]
         if len(run) < 2 or len({fmt for _, _, fmt, _ in run}) != 1:
@@ -200,12 +209,50 @@ def break_stem_items(text: str) -> str:
     """``text`` with each stem item on its own line and a blank line between the question
     sentence and the first item (``stem_item_starts``); unchanged without an item list."""
     starts = stem_item_starts(text)
+    item_end = len(text)
     if not starts:
-        return text
-    items = [text[a:b].strip() for a, b in zip(starts, [*starts[1:], len(text)], strict=True)]
+        candidates = re.finditer(r"(?<!\S)-\s+(?=\S)", text)
+        bullets: list[re.Match[str]] = []
+        sentence_end = re.compile(r"[.!?。\uff01\uff1f][)\uff09\"'\u2019”」』]*\s*$")
+        for candidate in candidates:
+            prefix = text[: candidate.start()]
+            line_start = not prefix.strip() or re.search(r"\n[^\S\r\n]*$", prefix)
+            # A closing answer mark can introduce the first item, but is not a sentence
+            # boundary between items (it can close an operand within an item).
+            boundary = sentence_end.search(prefix) if bullets else _BEFORE_FIRST_ITEM.search(prefix)
+            if line_start or boundary:
+                bullets.append(candidate)
+        if bullets:
+            paragraph_end = re.search(r"\r?\n(?:[^\S\r\n]*\r?\n)+", text[bullets[0].start() :])
+            if paragraph_end:
+                item_end = bullets[0].start() + paragraph_end.start()
+                bullets = [bullet for bullet in bullets if bullet.start() < item_end]
+        bullet_bodies = [
+            text[m.end() : end].strip()
+            for m, end in zip(bullets, [*(n.start() for n in bullets[1:]), item_end], strict=False)
+        ]
+        if (
+            len(bullets) >= 2
+            and (
+                not text[: bullets[0].start()].strip()
+                or _BEFORE_FIRST_ITEM.search(text[: bullets[0].start()].strip())
+            )
+            and all(sentence_end.search(body) for body in bullet_bodies)
+        ):
+            starts = [m.start() for m in bullets]
+        else:
+            passage = re.search(r"[?\uff1f]\s*\(\s*\)\s+(?=\S)", text)
+            if (
+                passage
+                and len(text[passage.end() :].strip()) >= 40
+                and "\n\n" not in passage.group()
+            ):
+                return text[: passage.end()].rstrip() + "\n\n" + text[passage.end() :].lstrip()
+            return text
+    items = [text[a:b].strip() for a, b in zip(starts, [*starts[1:], item_end], strict=True)]
     head = text[: starts[0]].strip()
     body = "\n".join(items)
-    return f"{head}\n\n{body}" if head else body
+    return (f"{head}\n\n{body}" if head else body) + text[item_end:]
 
 
 # A label at the very start, in any item format and with nothing required after it: ``(가)``,
