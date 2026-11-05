@@ -8,6 +8,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindRecoveryIdentity } from '../src/components/ask/ask-recovery-identity';
+import { createAskRecoveryStore } from '../src/components/ask/ask-recovery-store';
 import { AskPanel, type AskPanelProps } from '../src/components/ask/ask-panel';
 import {
   AskApiError,
@@ -125,6 +127,22 @@ function props(client: AskClient, patch: Partial<AskPanelProps> = {}): AskPanelP
   };
 }
 
+describe('UX10-AI availability', () => {
+  it('hides the send action while retaining stored conversation access', async () => {
+    const client = fakeClient();
+    render(
+      <AskPanel
+        {...props(client, {
+          askState: { ...STATE, available: false, reason: 'disabled' },
+          conversationId: 'c1',
+        })}
+      />,
+    );
+    await waitFor(() => expect(client.get).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: '보내기' })).toBeNull();
+  });
+});
+
 beforeEach(() => {
   // The answer stream relay: never answers unless a test says otherwise.
   vi.stubGlobal(
@@ -135,6 +153,323 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('UX11-AI-DIRECT composer', () => {
+  it('clears immediately, retains a pending question, and preserves edits on acceptance', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '첫 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    expect(input).toHaveValue('');
+    expect(screen.getByText('첫 질문')).toBeTruthy();
+    await user.type(input, '새 질문');
+    pending.resolve(accepted('첫 질문'));
+    await waitFor(() => expect(input).toHaveValue('새 질문'));
+  });
+
+  it('does not overwrite an edited draft on failure, including an erased draft', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '실패 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    await user.type(input, '새 글');
+    await user.clear(input);
+    pending.reject(new AskApiError('network'));
+    await screen.findByText(/네트워크 연결을 확인/);
+    expect(input).toHaveValue('');
+    const recovery = screen.getByRole('group', { name: '보내지 못한 질문' });
+    expect(recovery).toHaveTextContent('실패 질문');
+    expect(recovery).toHaveTextContent('질문 복사');
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('unavailable'));
+    await user.click(screen.getByRole('button', { name: '질문 복사' }));
+    await screen.findByText('복사하지 못했습니다');
+    expect(recovery).toHaveTextContent('실패 질문');
+    expect(input).toHaveValue('');
+  });
+
+  it('retains a failed pending send across close and reopen without exposing it in another conversation', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    const p = props(client, { conversationId: CONV, recovery });
+    const view = render(<AskPanel {...p} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '원래 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    view.unmount();
+    pending.reject(new AskApiError('network'));
+    await waitFor(() => expect(recovery.getSnapshot()).toHaveLength(1));
+    const other = render(<AskPanel {...p} conversationId="other" />);
+    expect(screen.queryByText('원래 질문')).toBeNull();
+    other.unmount();
+    render(<AskPanel {...p} />);
+    expect(await screen.findByText('원래 질문')).toBeTruthy();
+  });
+
+  it('does not retain a late failure after the account owner unmounts', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    const view = render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '비공개 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    view.unmount();
+    recovery.deactivate();
+    pending.reject(new AskApiError('network'));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(recovery.getSnapshot()).toHaveLength(0);
+  });
+
+  it('keeps an edited draft and a hidden rejected question through an identity outage', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    let offline = false;
+    const identity = bindRecoveryIdentity(
+      recovery,
+      async () => {
+        if (offline) throw new Error('offline');
+        return 'A';
+      },
+      vi.fn(),
+    );
+    await waitFor(() => expect(recovery.valid(recovery.token())).toBe(true));
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '첫 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    await user.type(input, '새 글');
+    await user.clear(input);
+    offline = true;
+    pending.reject(new AskApiError('network'));
+    await screen.findByText(/네트워크 연결을 확인/);
+    expect(input).toHaveValue('');
+    expect(screen.queryByText('첫 질문')).toBeNull();
+    offline = false;
+    expect(await recovery.verify()).toBe(true);
+    expect(await screen.findByText('첫 질문')).toBeTruthy();
+    expect(input).toHaveValue('');
+    identity.close();
+  });
+
+  it('reconciles an accepted response after identity returns without posting again', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    let offline = false;
+    let offlineChecks = 0;
+    const identity = bindRecoveryIdentity(
+      recovery,
+      async () => {
+        if (offline) {
+          offlineChecks += 1;
+          throw new Error('offline');
+        }
+        return 'A';
+      },
+      vi.fn(),
+    );
+    await waitFor(() => expect(recovery.valid(recovery.token())).toBe(true));
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '수락된 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    offline = true;
+    pending.resolve(accepted('수락된 질문'));
+    await waitFor(() => expect(offlineChecks).toBeGreaterThan(0));
+    expect(recovery.getReceipts()).toHaveLength(0);
+    offline = false;
+    expect(await recovery.verify()).toBe(true);
+    expect(await screen.findByText('수락된 질문')).toBeTruthy();
+    expect(client.ask).toHaveBeenCalledTimes(1);
+    identity.close();
+  });
+
+  it('defers first-conversation navigation until an accepted receipt is verified', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    let offline = false;
+    let offlineChecks = 0;
+    const identity = bindRecoveryIdentity(
+      recovery,
+      async () => {
+        if (offline) {
+          offlineChecks += 1;
+          throw new Error('offline');
+        }
+        return 'A';
+      },
+      vi.fn(),
+    );
+    await waitFor(() => expect(recovery.valid(recovery.token())).toBe(true));
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    const p = props(client, { recovery });
+    render(<AskPanel {...p} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '첫 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    offline = true;
+    pending.resolve(accepted('첫 질문'));
+    await waitFor(() => expect(offlineChecks).toBeGreaterThan(0));
+    expect(p.onNavigate).not.toHaveBeenCalled();
+    offline = false;
+    await recovery.verify();
+    await waitFor(() => expect(p.onNavigate).toHaveBeenCalledWith(CONV, 'replace'));
+    expect(client.ask).toHaveBeenCalledTimes(1);
+    identity.close();
+  });
+
+  it.each(['대화 목록', '새 대화'])(
+    'does not navigate a newer %s view when an older send is accepted',
+    async (label) => {
+      const user = userEvent.setup();
+      const pending = deferred<MessageAccepted>();
+      const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+      const p = props(client);
+      render(<AskPanel {...p} />);
+      await user.type(await screen.findByRole('textbox', { name: '질문' }), '이전 질문{Enter}');
+      await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+      await user.click(screen.getByRole('button', { name: label }));
+      pending.resolve(accepted('이전 질문'));
+      expect(await screen.findByRole('group', { name: '확인할 답변' })).toHaveTextContent(
+        '이전 질문',
+      );
+      expect(p.onNavigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reloads a same-conversation receipt after reopening, retaining it on read failure and preserving the draft', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const recovery = createAskRecoveryStore();
+    const get = vi
+      .fn<AskClient['get']>()
+      .mockResolvedValueOnce(conversation())
+      .mockResolvedValueOnce(conversation())
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockResolvedValueOnce(
+        conversation({
+          messages: [accepted('기존 질문').user_message, accepted('기존 질문').answer],
+        }),
+      );
+    const client = fakeClient({ ask: vi.fn(() => pending.promise), get });
+    const p = props(client, { recovery, conversationId: CONV });
+    const first = render(<AskPanel {...p} />);
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '기존 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    first.unmount();
+    pending.resolve(accepted('기존 질문'));
+    await waitFor(() => expect(recovery.getReceipts()).toHaveLength(1));
+    render(<AskPanel {...p} />);
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    const draft = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(draft, '새 draft');
+    await user.click(await screen.findByRole('button', { name: '답변 확인' }));
+    await screen.findByText(/네트워크 연결을 확인/);
+    expect(screen.getByRole('button', { name: '답변 확인' })).toBeTruthy();
+    expect(draft).toHaveValue('새 draft');
+    await user.click(screen.getByRole('button', { name: '답변 확인' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '답변 확인' })).toBeNull());
+    expect(await screen.findByText('기존 질문')).toBeTruthy();
+    expect(draft).toHaveValue('새 draft');
+    expect(p.onNavigate).not.toHaveBeenCalled();
+  });
+
+  it('reuses an ambiguous operation after panel remount with the exact original body and key', async () => {
+    const user = userEvent.setup();
+    const recovery = createAskRecoveryStore();
+    const ask = vi
+      .fn<AskClient['ask']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockImplementation(async (_id, body) => accepted(body.question));
+    const client = fakeClient({ ask });
+    const p = props(client, { recovery });
+    const first = render(<AskPanel {...p} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '같은 질문{Enter}');
+    await screen.findByText(/네트워크 연결을 확인/);
+    first.unmount();
+    render(<AskPanel {...p} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '같은 질문{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(ask.mock.calls[1]).toEqual(ask.mock.calls[0]);
+    expect(client.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconciles a possibly accepted question before sending changed text after remount', async () => {
+    const user = userEvent.setup();
+    const recovery = createAskRecoveryStore();
+    const ask = vi
+      .fn<AskClient['ask']>()
+      .mockRejectedValueOnce(new AskApiError('network'))
+      .mockImplementation(async (_id, body) => accepted(body.question));
+    const client = fakeClient({ ask });
+    const p = props(client, { recovery });
+    const first = render(<AskPanel {...p} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '원래 질문{Enter}');
+    await screen.findByText(/네트워크 연결을 확인/);
+    first.unmount();
+    render(<AskPanel {...p} />);
+    await user.type(await screen.findByRole('textbox', { name: '질문' }), '다른 질문{Enter}');
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+    expect(client.get).toHaveBeenCalledWith(CONV);
+    expect(client.create).toHaveBeenCalledTimes(1);
+    expect(ask.mock.calls[1]?.[2]).not.toBe(ask.mock.calls[0]?.[2]);
+    expect(ask.mock.calls[1]?.[1].question).toBe('다른 질문');
+  });
+
+  it.each(['첫 질문', '다른 질문'])(
+    'starts a distinct compose session after an ambiguous first-send failure for %s',
+    async (nextQuestion) => {
+      const user = userEvent.setup();
+      const recovery = createAskRecoveryStore();
+      const secondId = '55555555-5555-4555-8555-555555555555';
+      const create = vi
+        .fn<AskClient['create']>()
+        .mockResolvedValueOnce(conversation())
+        .mockResolvedValueOnce(conversation({ id: secondId }));
+      const ask = vi
+        .fn<AskClient['ask']>()
+        .mockRejectedValueOnce(new AskApiError('network'))
+        .mockImplementation(async (_id, body) => accepted(body.question));
+      const client = fakeClient({ ask, create });
+      render(<AskPanel {...props(client, { recovery })} />);
+      const input = await screen.findByRole('textbox', { name: '질문' });
+      await user.type(input, '첫 질문{Enter}');
+      await screen.findByText(/네트워크 연결을 확인/);
+      await user.click(screen.getByRole('button', { name: '새 대화' }));
+      await user.type(input, `${nextQuestion}{Enter}`);
+      await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(ask.mock.calls[1]?.[0]).toBe(secondId);
+      expect(ask.mock.calls[1]?.[2]).not.toBe(ask.mock.calls[0]?.[2]);
+    },
+  );
+
+  it('restores a failed send only when no subsequent edit occurred', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client, { conversationId: CONV })} />);
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    await user.type(input, '실패 질문{Enter}');
+    await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
+    expect(input).toHaveValue('');
+    pending.reject(new AskApiError('network'));
+    await waitFor(() => expect(input).toHaveValue('실패 질문'));
+    expect(screen.queryByRole('group', { name: '보내지 못한 질문' })).toBeNull();
+  });
 });
 
 describe('AI 질문 panel request races', () => {

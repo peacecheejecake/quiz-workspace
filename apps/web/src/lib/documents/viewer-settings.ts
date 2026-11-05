@@ -23,7 +23,7 @@ export interface ViewerSettings {
 }
 
 export const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
-  mode: 'both',
+  mode: 'pdf',
   orientation: 'horizontal',
   order: 'pdf-first',
   pdfRatio: 50,
@@ -169,11 +169,6 @@ export function isOverOtherPane(
   return otherStart > selfStart
     ? along >= (selfEnd + otherStart) / 2 && along <= otherEnd
     : along <= (otherEnd + selfStart) / 2 && along >= otherStart;
-}
-
-/** Narrow screens show one pane: 변환본 when that is the saved mode, otherwise 원본. */
-export function narrowInitialPane(mode: ViewMode): PaneId {
-  return mode === 'text' ? 'text' : 'pdf';
 }
 
 // --- width classes -----------------------------------------------------------------------------

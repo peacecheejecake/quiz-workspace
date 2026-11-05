@@ -11,7 +11,7 @@ export interface OverviewFilters {
   readonly chapter: string | null;
   readonly type: QuestionType | null;
   readonly q: string;
-  /** Statuses to keep, in legend order; empty = every status. */
+  /** Statuses to keep, in legend order; empty = no statuses. */
   readonly status: readonly QuestionDotStatus[];
   readonly favorite: boolean | null;
   readonly retry: boolean | null;
@@ -21,7 +21,7 @@ export const EMPTY_OVERVIEW_FILTERS: OverviewFilters = {
   chapter: null,
   type: null,
   q: '',
-  status: [],
+  status: QUESTION_DOT_STATUSES,
   favorite: null,
   retry: null,
 };
@@ -59,7 +59,9 @@ export function isUuid(value: string): boolean {
 export function parseOverviewFilters(params: Params): OverviewFilters {
   const chapter = first(params, 'chapter');
   const type = first(params, 'type');
-  const wanted = new Set(all(params, 'status'));
+  const values = all(params, 'status');
+  const wanted = new Set(values);
+  const known = QUESTION_DOT_STATUSES.filter((s) => wanted.has(s));
   return {
     chapter:
       chapter === NO_CHAPTER
@@ -70,7 +72,10 @@ export function parseOverviewFilters(params: Params): OverviewFilters {
     type: type && TYPES.has(type) ? (type as QuestionType) : null,
     q: (first(params, 'q') ?? '').trim().slice(0, OVERVIEW_SEARCH_MAX),
     // Legend order, duplicates dropped: one canonical URL per filter set.
-    status: QUESTION_DOT_STATUSES.filter((s) => wanted.has(s)),
+    status:
+      values.length === 0 || (known.length === 0 && !wanted.has('none'))
+        ? QUESTION_DOT_STATUSES
+        : known,
     favorite: bool(first(params, 'favorite')),
     retry: bool(first(params, 'retry')),
   };
@@ -82,7 +87,10 @@ export function overviewFilterParams(filters: OverviewFilters): URLSearchParams 
   if (filters.chapter) params.set('chapter', filters.chapter);
   if (filters.type) params.set('type', filters.type);
   if (filters.q) params.set('q', filters.q);
-  for (const s of filters.status) params.append('status', s);
+  if (filters.status.length === 0) params.set('status', 'none');
+  else if (filters.status.length !== QUESTION_DOT_STATUSES.length) {
+    for (const s of filters.status) params.append('status', s);
+  }
   if (filters.favorite !== null) params.set('favorite', String(filters.favorite));
   if (filters.retry !== null) params.set('retry', String(filters.retry));
   return params;
@@ -130,7 +138,7 @@ export function overviewApiQuery(filters: OverviewFilters): {
   chapter?: string;
   type?: QuestionType;
   q?: string;
-  status?: QuestionDotStatus[];
+  status?: (QuestionDotStatus | 'none')[];
   favorite?: boolean;
   retry?: boolean;
 } {
@@ -138,7 +146,11 @@ export function overviewApiQuery(filters: OverviewFilters): {
     ...(filters.chapter ? { chapter: filters.chapter } : {}),
     ...(filters.type ? { type: filters.type } : {}),
     ...(filters.q ? { q: filters.q } : {}),
-    ...(filters.status.length > 0 ? { status: [...filters.status] } : {}),
+    ...(filters.status.length === 0
+      ? { status: ['none' as const] }
+      : filters.status.length < QUESTION_DOT_STATUSES.length
+        ? { status: [...filters.status] }
+        : {}),
     ...(filters.favorite !== null ? { favorite: filters.favorite } : {}),
     ...(filters.retry !== null ? { retry: filters.retry } : {}),
   };

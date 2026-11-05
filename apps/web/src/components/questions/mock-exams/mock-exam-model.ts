@@ -217,10 +217,10 @@ export function optionsFromConfig(title: string, config: MockExamConfig): Option
   };
 }
 
-export function newOptions(existing: number, llmAvailable: boolean): OptionValues {
+export function newOptions(existing: number, _llmAvailable: boolean): OptionValues {
   return {
     title: defaultTitle(existing),
-    types: llmAvailable ? ['PARAPHRASE'] : ['OPTION_SHUFFLE'],
+    types: [],
     count: String(DEFAULT_QUESTION_COUNT),
     wholeRange: false,
     difficulty: null,
@@ -238,9 +238,6 @@ export function checkOptions(values: OptionValues, llmAvailable: boolean): Optio
   if (title === '') return { field: 'title', message: '이름을 입력하세요.' };
   if (title.length > TITLE_MAX) {
     return { field: 'title', message: `이름은 ${TITLE_MAX}자까지 쓸 수 있습니다.` };
-  }
-  if (values.types.length === 0) {
-    return { field: 'types', message: '변형 유형을 하나 이상 고르세요.' };
   }
   const ai = usesAi(values.types);
   if (ai && !llmAvailable) return { field: 'types', message: AI_DISABLED_TEXT };
@@ -290,7 +287,7 @@ export function filtersFromRange(range: MockRange | null | undefined): RangeFilt
   const f = range?.filters;
   if (!f) return EMPTY_RANGE_FILTERS;
   return {
-    status: (f.status ?? []) as QuestionDotStatus[],
+    status: (f.status ?? EMPTY_RANGE_FILTERS.status) as QuestionDotStatus[],
     favorite: f.favorite === true,
     retry: f.retry === true,
     type: f.type ?? null,

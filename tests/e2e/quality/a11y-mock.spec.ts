@@ -29,7 +29,12 @@ import {
   waitForMockExam,
   type MockSourceName,
 } from '../fixtures/mock-exams.ts';
-import { createShuffleMockExam, goToResults, runUi } from '../fixtures/practice-runs.ts';
+import {
+  createShuffleMockExam,
+  goToResults,
+  openRangePicker,
+  runUi,
+} from '../fixtures/practice-runs.ts';
 import { openRangeFilters, rangePickerUi as picker } from '../fixtures/range-picker.ts';
 import { expect, NO_VISUAL_ARTIFACTS, test } from '../fixtures/sharing.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
@@ -72,13 +77,14 @@ async function keyTo(page: Page, target: Locator, key = 'Tab', max = 60): Promis
   await expect(target, `reached by ${key} alone`).toBeFocused();
 }
 
-/** Opens the header `문제` menu by keyboard and activates the item matching `name`. */
-async function menuByKeyboard(page: Page, item: Locator): Promise<void> {
-  await keyTo(page, homeUi.questionMenuButton(page));
+/** Opens the primary practice flow using the keyboard. */
+async function openPlayByKeyboard(page: Page): Promise<Locator> {
+  const play = page.getByRole('button', { name: /^풀기$/ });
+  await keyTo(page, play);
   await page.keyboard.press('Enter');
-  await expect(homeUi.questionMenu(page)).toBeVisible();
-  await keyTo(page, item, 'ArrowDown', 12);
-  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 /** Sets a checkbox reached by Tab to `checked` with Space only. */
@@ -317,7 +323,7 @@ test(
 );
 
 test(
-  'A11Y-14 keyboard only: 문제 › 모의고사, 추가, both steps, 만들기, then 풀기 to the results',
+  'A11Y-14 keyboard only: 풀기, both steps, 만들기, then practise to the results',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await bookWorkspace(workspaceFactory, 'a11y14-keys');
@@ -325,13 +331,8 @@ test(
     await openHome(page, s.owner, s.workspaceId);
     await page.locator('body').focus();
 
-    await menuByKeyboard(page, mockUi.menuItem(page));
-    const dialog = mockUi.dialog(page);
-    await expect(dialog).toBeVisible();
-    await keyTo(page, mockUi.add(dialog));
-    await page.keyboard.press('Enter');
-    await expect(mockUi.heading(dialog, /모의고사 만들기|new mock exam/i)).toBeFocused();
-
+    let dialog = await openPlayByKeyboard(page);
+    await spaceTo(page, mockUi.variation(dialog, 'PARAPHRASE'), true);
     // Step 1: name, 문구 변형 only, 2 questions → 다음.
     await keyTo(page, mockUi.title(dialog));
     await page.keyboard.press('ControlOrMeta+A');
@@ -349,6 +350,7 @@ test(
     await spaceTo(page, picker.chapter(dialog, CH1), true);
     await keyTo(page, mockUi.make(dialog));
     await page.keyboard.press('Enter');
+    dialog = mockUi.dialog(page);
     await expect(mockUi.heading(dialog, '키보드 점검')).toBeFocused();
     await expect(dialog.getByText(STATUS_TEXT.ready).first()).toBeVisible({
       timeout: MOCK_TIMEOUT_MS,
@@ -419,9 +421,7 @@ test(
     if (!first || !second) throw new Error('2장 questions');
     await openHome(page, s.owner, s.workspaceId);
 
-    await homeUi.questionMenuButton(page).click();
-    await runUi.menuItem(page).click();
-    let panel = runUi.panel(page);
+    let panel = await openRangePicker(page);
     await expect(runUi.pickerTitle(panel)).toBeVisible();
     await expect(runUi.busy(panel)).toHaveCount(0);
     await expect(runUi.start(panel)).toBeDisabled();
@@ -508,7 +508,7 @@ test(
 );
 
 test(
-  'A11Y-15 keyboard only: 문제 › 문제 풀기, a chapter by Space, 시작, answer, 결과 보기 and back to the menu button',
+  'A11Y-15 keyboard only: 풀기, a chapter by Space, 시작, answer, 결과 보기 and back to 풀기',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await rangeWorkspace(workspaceFactory, 'a11y15-keys');
@@ -517,22 +517,24 @@ test(
     await openHome(page, s.owner, s.workspaceId);
     await page.locator('body').focus();
 
-    await menuByKeyboard(page, runUi.menuItem(page));
+    const dialog = await openPlayByKeyboard(page);
+    await keyTo(page, mockUi.questionCount(dialog));
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type('2');
+    await keyTo(page, mockUi.next(dialog));
+    await page.keyboard.press('Enter');
+    await spaceTo(page, picker.chapter(dialog, CH2), true);
+    await expect(picker.selected(dialog, 2)).toBeVisible();
+    await keyTo(page, picker.expand(dialog, CH2));
+    await page.keyboard.press('Enter');
+    await expect(picker.expand(dialog, CH2)).toHaveAttribute('aria-expanded', 'true');
+    await spaceTo(page, picker.question(dialog, 2, 2), false);
+    await expect(picker.selected(dialog, 1)).toBeVisible();
+    await expect(picker.chapter(dialog, CH2)).toHaveAttribute('aria-checked', 'mixed');
+    await spaceTo(page, picker.question(dialog, 2, 2), true);
+    await keyTo(page, dialog.getByRole('button', { name: /^(시작|start)$/i }));
+    await page.keyboard.press('Enter');
     const panel = runUi.panel(page);
-    await expect(runUi.pickerTitle(panel)).toBeVisible();
-    await expect(runUi.busy(panel)).toHaveCount(0);
-    await spaceTo(page, runUi.chapter(panel, CH2), true);
-    await expect(runUi.selected(panel, 2)).toBeVisible();
-    // The expand button is its own Tab stop; Enter opens the group, Space unchecks a question.
-    await keyTo(page, runUi.expand(panel, CH2));
-    await page.keyboard.press('Enter');
-    await expect(runUi.expand(panel, CH2)).toHaveAttribute('aria-expanded', 'true');
-    await spaceTo(page, runUi.question(panel, 2, 2), false);
-    await expect(runUi.selected(panel, 1)).toBeVisible();
-    await expect(runUi.chapter(panel, CH2)).toHaveAttribute('aria-checked', 'mixed');
-    await spaceTo(page, runUi.question(panel, 2, 2), true);
-    await keyTo(page, runUi.start(panel));
-    await page.keyboard.press('Enter');
 
     for (const [i, q] of [first, second].entries()) {
       await expect(runUi.title(panel, 2, i + 1)).toBeFocused();
@@ -556,6 +558,6 @@ test(
     ).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(homeUi.questionMenuButton(page)).toBeFocused();
+    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
   },
 );

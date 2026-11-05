@@ -557,15 +557,12 @@ describe('ChapterNotePanel', () => {
     expect(within(dialog).queryByRole('button', { name: '정리 노트 만들기' })).toBeNull();
   });
 
-  it('disables creating with the reason when the feature is off', async () => {
+  it('UX10-AI-AC01 hides creation when the feature is off', async () => {
     responses = [state({ available: false })];
     renderPanel();
     const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
-    const create = await within(dialog).findByRole('button', { name: '정리 노트 만들기' });
-    expect(create.getAttribute('aria-disabled')).toBe('true');
-    const reason = document.getElementById(create.getAttribute('aria-describedby') ?? '');
-    expect(reason?.textContent).toBe('이 환경에서는 AI 정리 노트를 사용할 수 없습니다.');
-    await userEvent.setup().click(create);
+    await within(dialog).findByText('이 환경에서는 AI 정리 노트를 사용할 수 없습니다.');
+    expect(within(dialog).queryByRole('button', { name: '정리 노트 만들기' })).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 

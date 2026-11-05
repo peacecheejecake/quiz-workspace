@@ -679,7 +679,10 @@ class AskRepository:
                 "select s.id, s.question_revision_id, s.displayed_option_ids, exists (select 1 "
                 "from public.question_attempts a where a.practice_session_id = s.id "
                 "and a.user_id = s.user_id) as submitted from public.practice_sessions s "
-                "where s.id = :s and s.user_id = :u and s.question_id = :q"
+                "where s.id = :s and s.user_id = :u and s.question_id = :q "
+                "and not exists (select 1 from public.practice_reset_epochs e "
+                "where e.user_id = s.user_id and e.question_id = s.question_id "
+                "and e.epoch > s.reset_epoch)"
             ),
             {"s": session_id, "u": user_id, "q": question_id},
         ).one_or_none()
@@ -696,10 +699,20 @@ class AskRepository:
             text(
                 "select (select a.submitted_answer from public.question_attempts a "
                 "where a.practice_session_id = :s and a.user_id = :u "
+                "and exists (select 1 from public.practice_sessions s "
+                "where s.id = a.practice_session_id "
+                "and not exists (select 1 from public.practice_reset_epochs e "
+                "where e.user_id = s.user_id "
+                "and e.question_id = s.question_id and e.epoch > s.reset_epoch)) "
                 "and a.grades_attempt_id is null "
                 "order by a.submitted_at, a.id limit 1) as submitted_answer, "
                 "(select a.result from public.question_attempts a "
                 "where a.practice_session_id = :s and a.user_id = :u "
+                "and exists (select 1 from public.practice_sessions s "
+                "where s.id = a.practice_session_id "
+                "and not exists (select 1 from public.practice_reset_epochs e "
+                "where e.user_id = s.user_id "
+                "and e.question_id = s.question_id and e.epoch > s.reset_epoch)) "
                 "order by a.submitted_at desc, a.id desc limit 1) as result"
             ),
             {"s": session_id, "u": user_id},

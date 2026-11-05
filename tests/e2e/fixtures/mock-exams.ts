@@ -564,13 +564,14 @@ export function partialText(requested: number, created: number): RegExp {
 export const mockUi = {
   menuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제|questions)$/i })
+      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
       .getByRole('menuitem', { name: /^(모의고사|mock exams?)$/i }),
   generateMenuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제|questions)$/i })
+      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
       .getByRole('menuitem', { name: /^(변형 출제|generate variants?)$/i }),
-  dialog: (page: Page) => main(page).getByRole('dialog', { name: /^(모의고사|mock exams?)$/i }),
+  dialog: (page: Page) =>
+    main(page).getByRole('dialog', { name: /^(모의고사|문제 풀기|mock exams?|practice)$/i }),
   close: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(모의고사 닫기|close mock exams?|닫기|close)$/i }),
   busy: (dialog: Locator) => dialog.locator('[aria-busy="true"]'),
@@ -599,7 +600,8 @@ export const mockUi = {
       .or(dialog.getByRole('button', { name: /모의고사 목록|mock exam list/i })),
   heading: (dialog: Locator, name: RegExp | string) => dialog.getByRole('heading', { name }),
   // Create / 설정 바꾸기 (two steps)
-  steps: (dialog: Locator) => dialog.getByRole('list', { name: /^(진행 단계|progress steps)$/i }),
+  steps: (dialog: Locator) =>
+    dialog.getByRole('list', { name: /^(진행 단계|풀기 단계|progress steps)$/i }),
   title: (dialog: Locator) => dialog.getByRole('textbox', { name: /^(이름|name)$/i }),
   variationGroup: (dialog: Locator) =>
     dialog.getByRole('group', { name: /^(변형 유형|variation types?)$/i }),
@@ -655,10 +657,9 @@ function escape(text: string): string {
 
 /** Opens the header `문제` menu and chooses `모의고사`; returns the dialog. */
 export async function openMockExams(page: Page): Promise<Locator> {
-  await main(page)
-    .getByRole('button', { name: /^(문제|questions)$/i })
-    .click();
-  await mockUi.menuItem(page).click();
+  const url = new URL(page.url());
+  url.searchParams.append('panel', 'mock-exams');
+  await page.goto(url.toString());
   const dialog = mockUi.dialog(page);
   await expect(dialog).toBeVisible();
   return dialog;

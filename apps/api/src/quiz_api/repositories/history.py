@@ -34,11 +34,13 @@ from quiz_api.repositories.jobs import (
     error_code,
     progress_of,
 )
+from quiz_api.repositories.practice_epoch import current_session
 from quiz_api.repositories.tables import (
     activity_events,
     async_jobs,
     document_revisions,
     documents,
+    practice_sessions,
     profiles,
     question_attempts,
     question_generation_runs,
@@ -265,6 +267,9 @@ def attempts_query(
         .where(
             qa.c.workspace_id == workspace_id,
             qa.c.user_id == user_id,
+            select(practice_sessions.c.id)
+            .where(practice_sessions.c.id == qa.c.practice_session_id, current_session())
+            .exists(),
             questions.c.deleted_at.is_(None),
         )
     )

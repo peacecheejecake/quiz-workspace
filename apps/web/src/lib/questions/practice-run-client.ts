@@ -36,6 +36,8 @@ export const RUN_BFF_PATHS = {
   run: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}`,
   item: (runId: string, position: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}`,
+  retrySession: (runId: string, position: number) =>
+    `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/retry-session`,
   results: (runId: string, offset: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/results?offset=${offset}&limit=${RUN_RESULTS_PAGE}`,
   finish: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}/finish`,
@@ -53,7 +55,12 @@ export interface PracticeRunApi {
   rangeQuestions(
     query: RangeQuery,
   ): Promise<RunActionResult<Pick<QuestionOverview, 'chapters' | 'items'>>>;
-  create(range: RunRange, randomOrder: boolean, key: string): Promise<RunActionResult<PracticeRun>>;
+  create(
+    range: RunRange,
+    randomOrder: boolean,
+    key: string,
+    count?: number | null,
+  ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
   openSession(
@@ -61,6 +68,13 @@ export interface PracticeRunApi {
     runId: string,
     position: number,
     key: string,
+    expectedResetEpoch?: number | null,
+  ): Promise<RunActionResult<PracticeSession>>;
+  openRetrySession(
+    runId: string,
+    position: number,
+    key: string,
+    expectedResetEpoch?: number | null,
   ): Promise<RunActionResult<PracticeSession>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
@@ -115,7 +129,8 @@ export function createPracticeRunApi(
   return {
     async rangeQuestions(query) {
       const params = new URLSearchParams();
-      for (const status of query.status) params.append('status', status);
+      if (query.status.length === 0) params.set('status', 'none');
+      else for (const status of query.status) params.append('status', status);
       if (query.favorite) params.set('favorite', 'true');
       if (query.retry) params.set('retry', 'true');
       if (query.type) params.set('type', query.type);
@@ -127,21 +142,33 @@ export function createPracticeRunApi(
         ? { ok: true, data: { chapters: result.data.chapters, items: result.data.items } }
         : result;
     },
-    create: async (range, randomOrder, key) =>
+    create: async (range, randomOrder, key, count) =>
       own(
         await call<PracticeRun>(RUN_BFF_PATHS.create(workspaceId), {
           method: 'POST',
-          body: { source: 'bank', range, random_order: randomOrder },
+          body: { source: 'bank', range, random_order: randomOrder, question_count: count ?? null },
           key,
         }),
       ),
     getRun: async (runId) => own(await call<PracticeRun>(RUN_BFF_PATHS.run(runId))),
     getItem: (runId, position) => call<RunItem>(RUN_BFF_PATHS.item(runId, position)),
-    openSession: async (questionId, runId, position, key) =>
+    openSession: async (questionId, runId, position, key, expectedResetEpoch) =>
       own(
         await call<PracticeSession>(RUN_BFF_PATHS.session(questionId), {
           method: 'POST',
-          body: { practice_run_id: runId, run_position: position },
+          body: {
+            practice_run_id: runId,
+            run_position: position,
+            ...(expectedResetEpoch == null ? {} : { expected_reset_epoch: expectedResetEpoch }),
+          },
+          key,
+        }),
+      ),
+    openRetrySession: async (runId, position, key, epoch) =>
+      own(
+        await call<PracticeSession>(RUN_BFF_PATHS.retrySession(runId, position), {
+          method: 'POST',
+          body: epoch == null ? {} : { expected_reset_epoch: epoch },
           key,
         }),
       ),

@@ -103,6 +103,7 @@ class MockSessionRecord:
     # The mock exam lists the session's question now (exam not deleted, shown generation, not
     # taken out): what a session outside a run needs to be submitted or self-graded.
     shown: bool = True
+    retry_origin_valid: bool = False
 
 
 @dataclass(frozen=True)
@@ -193,6 +194,13 @@ _SESSION = """
     select s.id, s.workspace_id, q.mock_exam_id, s.mock_exam_question_id, s.user_id,
            q.question_type, q.variation_type, s.displayed_option_ids, s.state, s.opened_at,
            s.submitted_at, s.graded_at, s.practice_run_id, s.run_position,
+           exists (select 1 from public.practice_runs origin
+             where origin.id = s.retry_origin_run_id and origin.user_id = s.user_id
+               and origin.workspace_id = s.workspace_id and origin.source = 'mock'
+               and origin.mock_exam_id = q.mock_exam_id
+               and origin.mock_exam_generation_id = q.generation_id
+               and origin.item_ids[s.retry_origin_position] = q.id
+               and q.removed_at is null and e.deleted_at is null) as retry_origin_valid,
            (q.removed_at is null and e.deleted_at is null
             and e.current_generation_id is not distinct from q.generation_id) as shown,
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
@@ -243,6 +251,7 @@ def _session(row: Any) -> MockSessionRecord:
         practice_run_id=row.practice_run_id,
         run_position=row.run_position,
         shown=bool(row.shown),
+        retry_origin_valid=bool(row.retry_origin_valid),
     )
 
 
@@ -302,6 +311,26 @@ class MockPracticeRepository:
 
     # --- sessions --------------------------------------------------------------------------------
 
+    def valid_retry_origin(
+        self, run_id: uuid.UUID, position: int, user_id: uuid.UUID, question_id: uuid.UUID
+    ) -> bool:
+        return bool(
+            self._session.execute(
+                text(
+                    "select exists (select 1 from public.practice_runs r "
+                    "join public.mock_exam_questions q on q.id = :q "
+                    "and q.workspace_id = r.workspace_id "
+                    "join public.mock_exams e on e.id = q.mock_exam_id "
+                    "and e.workspace_id = q.workspace_id "
+                    "where r.id = :r and r.user_id = :u and r.source = 'mock' "
+                    "and r.item_ids[:p] = q.id and r.mock_exam_id = q.mock_exam_id "
+                    "and r.mock_exam_generation_id = q.generation_id "
+                    "and q.removed_at is null and e.deleted_at is null)"
+                ),
+                {"q": question_id, "r": run_id, "u": user_id, "p": position},
+            ).scalar_one()
+        )
+
     def target(self, question_id: uuid.UUID) -> MockQuestionTarget | None:
         row = self._session.execute(text(_TARGET), {"q": question_id}).one_or_none()
         if row is None:
@@ -356,13 +385,17 @@ class MockPracticeRepository:
         shuffle_seed: int | None,
         practice_run_id: uuid.UUID | None = None,
         run_position: int | None = None,
+        retry_origin_run_id: uuid.UUID | None = None,
+        retry_origin_position: int | None = None,
     ) -> OpenedMockSession:
         row = self._session.execute(
             text(
                 "insert into public.mock_exam_practice_sessions (workspace_id, "
                 "mock_exam_question_id, mock_exam_question_revision_id, user_id, "
-                "displayed_option_ids, shuffle_seed, state, practice_run_id, run_position) "
-                "values (:w, :q, :r, :u, cast(:d as text[]), :seed, 'open', :run, :pos) "
+                "displayed_option_ids, shuffle_seed, state, practice_run_id, run_position, "
+                "retry_origin_run_id, retry_origin_position) "
+                "values (:w, :q, :r, :u, cast(:d as text[]), :seed, 'open', "
+                ":run, :pos, :origin, :origin_pos) "
                 "returning id, state, opened_at"
             ),
             {
@@ -374,6 +407,8 @@ class MockPracticeRepository:
                 "seed": shuffle_seed,
                 "run": practice_run_id,
                 "pos": run_position,
+                "origin": retry_origin_run_id,
+                "origin_pos": retry_origin_position,
             },
         ).one()
         return OpenedMockSession(row.id, row.state, row.opened_at)
@@ -597,12 +632,18 @@ class MockPracticeRepository:
                    where pr.id = :r
                 )
                 select page.position, page.question_id, q.id as live_id, q.question_type,
-                       left(rev.stem, {STEM_HEAD}) as stem_head, res.state, res.result
+                       left(rev.stem, {STEM_HEAD}) as stem_head, res.state, res.result,
+                       source.chapter_id, chapter.title as chapter_title, source.question_number
                   from page
                   left join public.mock_exam_questions q
                     on q.id = page.question_id and q.workspace_id = :w and q.removed_at is null
                   left join public.mock_exam_question_revisions rev
                     on rev.id = q.active_revision_id and rev.mock_exam_question_id = q.id
+                  left join public.questions source
+                    on source.id = q.source_question_id and source.workspace_id = q.workspace_id
+                   and source.deleted_at is null
+                  left join public.chapters chapter
+                    on chapter.id = source.chapter_id and chapter.workspace_id = source.workspace_id
                   left join lateral (
                     select s.state, {_LATEST_RESULT} as result
                       from public.mock_exam_practice_sessions s
@@ -628,9 +669,9 @@ class MockPracticeRepository:
                     question_id=r.question_id if available else None,
                     available=available,
                     question_type=cast("QuestionType | None", r.question_type),
-                    chapter_id=None,
-                    chapter_title=None,
-                    question_number=None,
+                    chapter_id=r.chapter_id,
+                    chapter_title=r.chapter_title,
+                    question_number=r.question_number,
                     stem_head=r.stem_head,
                     state=r.state,
                     result=r.result,

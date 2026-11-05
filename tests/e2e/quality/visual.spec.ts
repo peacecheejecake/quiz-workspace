@@ -75,7 +75,7 @@ import {
   searchPageUi,
 } from '../fixtures/ux9-pages.ts';
 import { MOCK_TEXT, mockExamsPath, mockUi, STATUS_TEXT } from '../fixtures/mock-exams.ts';
-import { goToResults, runUi } from '../fixtures/practice-runs.ts';
+import { goToResults, openRangePicker, runUi } from '../fixtures/practice-runs.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
 import {
   createShareLink,
@@ -257,9 +257,10 @@ test(
     await page.mouse.move(0, 0);
     await snap(page, 'search-excerpt');
 
-    // DOCVIEW-01 default layout (함께 보기 · 좌우; docked outline on desktop, collapsed on iPad).
+    // DOCVIEW-01 with both panes (docked outline on desktop, collapsed on iPad).
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
     await expect(viewerUi.settingsBar(page)).toBeVisible();
+    await viewerUi.mode(page, 'text').check();
     await expect(editorUi.textPanel(page)).toBeVisible();
     await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
     await expectFitsViewport(page);
@@ -360,6 +361,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
     await expect(viewerUi.settingsBar(page)).toBeVisible();
+    await viewerUi.mode(page, 'text').check();
     const pdfReady = async () => {
       await expect(editorUi.textPanel(page)).toBeVisible();
       await expect(editorUi.viewer(page).locator('canvas').first()).toBeVisible();
@@ -367,7 +369,7 @@ test(
       await page.mouse.move(0, 0);
     };
 
-    // Default layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
+    // Selected layout (함께 보기 · 좌우 · 원본 먼저) with the outline open: docked beside the panes
     // on desktop; on the iPad (tablet width) it starts collapsed and opens as an opaque overlay.
     const toggle = viewerUi.outlineToggle(page);
     if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
@@ -494,14 +496,15 @@ test(
     await page.goto(mockExamsPath(ws.id, midterm.id));
     await expect(mockUi.heading(dialog, '중간 점검')).toBeVisible();
     await expect(mockUi.questions(dialog)).toHaveCount(5);
+    // Set the intended keyboard focus after the detail finishes loading.
+    await mockUi.heading(dialog, '중간 점검').focus();
+    await expect(mockUi.heading(dialog, '중간 점검')).toBeFocused();
     await snapEvery(page, 'mock-exams-detail');
 
     // QuestionViewer: the range picker (전체 선택 mixed, 1장 open) ...
     await page.goto(overviewPath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(5);
-    await homeUi.questionMenuButton(page).click();
-    await runUi.menuItem(page).click();
-    let panel = runUi.panel(page);
+    let panel = await openRangePicker(page);
     await expect(runUi.pickerTitle(panel)).toBeVisible();
     await expect(runUi.busy(panel)).toHaveCount(0);
     await runUi.selectAll(panel).check();
@@ -765,6 +768,9 @@ test(
     // The 본문 검색 page: before a search, then with results.
     await page.goto(searchPagePath(ws.id));
     await expect(searchPageUi.intro(page)).toBeVisible();
+    // Capture the empty search field with a deterministic focus ring.
+    await searchPageUi.box(page).focus();
+    await expect(searchPageUi.box(page)).toBeFocused();
     await snapEvery(page, 'search-page');
     const target = block(BOOK, 'ch1-s2-p1');
     await page.goto(searchPagePath(ws.id, `text=${encodeURIComponent(snippet(target.text, 6))}`));

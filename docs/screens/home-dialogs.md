@@ -1,5 +1,7 @@
 # HOMEDLG-01 — Workspace 홈 dialog는 modal, 열고 닫아도 배치가 변하지 않음
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.0 · UX9-SPEC 신규 2026-11-02 (사용자 요청 "문서 관리, 중복 문제 정리 등도 modal로 변경하고 해당 dialog의 열고 닫힘에 따라 본문 layout이 변하지 않게", "정리 노트도 모달로 변경. 모달을 닫고 문제를 누르도록 유도" — 사용자 결정 2026-11-02 D3)
 **Route:** 별도 route 없음 — Workspace 홈(`/workspaces/:workspaceId`)의 모든 floating dialog(`?panel=…`)와 정리 노트 panel. QOV-01(phase M5.0, CI에서 GREEN)의 dialog 규칙을 바꾸는 새 동작을 따로 추적한다.
 **테스트:** `tests/e2e/workspaces/home-dialogs.spec.ts`

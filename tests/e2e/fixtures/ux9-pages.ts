@@ -342,7 +342,9 @@ export const homeBackgroundUi = {
   historyButton: (page: Page) =>
     page.locator('main').getByRole('button', { name: /^(이력|history)$/i, includeHidden: true }),
   questionMenuButton: (page: Page) =>
-    page.locator('main').getByRole('button', { name: /^(문제|questions)$/i, includeHidden: true }),
+    page
+      .locator('main')
+      .getByRole('button', { name: /^(문제 메뉴|question menu)$/i, includeHidden: true }),
   questionSearch: (page: Page) =>
     page.locator('main').getByRole('search', {
       name: /^(문제 검색|question search|search questions)$/i,

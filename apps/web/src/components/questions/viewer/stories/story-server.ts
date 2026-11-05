@@ -38,6 +38,15 @@ export const STORY_RESULT: SubmitResult = {
 
 const ok = <T>(data: T) => Promise.resolve({ ok: true as const, data });
 
+export const latestPracticeAction = () =>
+  ok({
+    session: null,
+    previous_revision: false,
+    reset_epoch: 0,
+    active_revision_id: STORY_SESSION.question_revision_id,
+    latest_attempt_id: null,
+  });
+export const resetPracticeAction = () => ok({ reset: true, epochs: {} });
 export const openPracticeSessionAction = () => ok(STORY_SESSION);
 export const submitPracticeAction = () => ok(STORY_RESULT);
 export const selfGradePracticeAction = () =>

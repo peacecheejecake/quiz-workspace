@@ -506,7 +506,8 @@ test(
     await expect(docUi.kindOption(page, '문제지')).toHaveAttribute('aria-checked', 'true');
     await expect(docUi.kindOption(page, '교재')).toHaveAttribute('aria-checked', 'false');
     await expect(docUi.kindOption(page, '교재+문제')).toHaveAttribute('aria-checked', 'false');
-    await docUi.kindOption(page, '교재+문제').focus();
+    await page.keyboard.press('End');
+    await expect(docUi.kindOption(page, '교재+문제')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(docUi.kindMenu(page)).toBeHidden();
     await expect(docUi.kindBadge(paperRow, '교재+문제')).toBeVisible();
@@ -574,11 +575,6 @@ test(
       /^(챕터 재분배|redistribute chapters)$/i,
       // UX7-BANK-2 (QOV-01-AC15).
       /^(보관·초안 문제|archived and draft questions)$/i,
-      // MOCK-01 (MOCK-W) and QVIEW-01 (QVIEW-W).
-      /^(모의고사|mock exams?)$/i,
-      /^(문제 풀기|practice questions?|start practice)$/i,
-      // ASK-01 (ASK-W): the end of the group below the divider.
-      /^(AI 질문|ask ai)$/i,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

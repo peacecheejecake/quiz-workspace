@@ -224,6 +224,7 @@ test(
     );
     await expect(editorUi.currentPage(page)).toHaveValue(String(CHLORINE_PAGE));
     await expect(editorUi.highlight(page)).toBeVisible();
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expect(editorUi.currentBlock(page)).toContainText(CHLORINE_EN.text.slice(0, 40));
   },
 );
@@ -393,8 +394,7 @@ test(
 
     // 문제 설정 (next to the 문제 search) by click: chapter and type only.
     const questionSettings = homeUi.searchSettingsButton(page, 'questions');
-    await expect(questionSettings).toHaveAttribute('aria-expanded', 'false');
-    await questionSettings.click();
+    await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
     const questionPopover = homeUi.searchSettings(page, 'questions');
     await expect(questionPopover).toBeVisible();
     await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
@@ -1116,7 +1116,6 @@ test.describe('SEARCH-01-AC08 touch', () => {
 
       await signInAs(page, owner.user);
       await page.goto(homePath(ws.id));
-      await homeUi.searchSettingsButton(page, 'questions').tap();
       const popover = homeUi.searchSettings(page, 'questions');
       await expect(popover).toBeVisible();
       const chapter = popover.getByRole('combobox', { name: /^(챕터|chapter)$/i });

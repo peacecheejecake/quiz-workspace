@@ -246,7 +246,7 @@ test(
     // Hold the API reads: the panel must already be open, busy, before any data arrives.
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    const isApi = (url: URL) => url.pathname.includes('/api/');
+    const isApi = (url: URL) => /\/api\/workspaces\/[^/]+\/questions\/overview$/.test(url.pathname);
     // The held reads continue before the route goes: unrouting while a handler still waits lets
     // Playwright drop the interception under it ("Route is already handled").
     const held: Promise<void>[] = [];
@@ -259,7 +259,6 @@ test(
       },
     );
     await openQuestionMenuWithPractice(page);
-    await runUi.menuItem(page).click();
     const panel = runUi.panel(page);
     await expect(panel).toBeVisible();
     await expect(runUi.pickerTitle(panel)).toBeVisible();
@@ -298,7 +297,7 @@ test(
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(homeUi.questionMenuButton(page)).toBeFocused();
+    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeVisible();
     expect(new URL(page.url()).searchParams.has('practice')).toBe(false);
   },
 );
@@ -332,7 +331,11 @@ test(
         await runUi.filterToggle(panel).click();
       }
     }
-    await runUi.incorrectFilter(panel).click();
+    // All status chips start selected; leave only incorrect selected.
+    const filters = panel.getByRole('group', { name: '상태 필터' });
+    for (const label of ['안 푼 문제', '본 문제', '맞힌 문제', '다시 풀기']) {
+      await filters.getByRole('button', { name: label, exact: true }).click();
+    }
     await expandAll(panel);
     await expect(runUi.questions(panel)).toHaveCount(2);
     await expect(runUi.question(panel, 1, 2)).toBeVisible();
@@ -344,7 +347,9 @@ test(
     await expect(runUi.selectAll(panel)).toBeChecked();
 
     // Filter off: the questions that were hidden came back unselected.
-    await runUi.incorrectFilter(panel).click();
+    for (const label of ['안 푼 문제', '본 문제', '맞힌 문제', '다시 풀기']) {
+      await filters.getByRole('button', { name: label, exact: true }).click();
+    }
     await expandAll(panel);
     await expect(runUi.questions(panel)).toHaveCount(5);
     await expect(runUi.selected(panel, 2)).toBeVisible();
@@ -412,12 +417,24 @@ test(
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 5));
     expect(await runOrder(s.viewer, ordered, 5)).toEqual(heatmapOrder);
 
-    // Close, then the same five again with 무작위 순서 (fixed test seed, P6).
+    // Close, then start again through the actual unified play entry.
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    panel = await openRangePicker(page);
-    await expect(runUi.random(panel)).not.toBeChecked(); // never remembered
-    const shuffled = await startAll(page, panel, true);
+    await expect.poll(() => practiceParam(page)).toBeNull();
+    // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /^풀기$/ }).click();
+    const play = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
+    await expect(random).not.toBeChecked();
+    await random.check();
+    await play.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
+    await play.getByRole('button', { name: /다음|next/i }).click();
+    await runUi.selectAll(play).check();
+    await play.getByRole('button', { name: /시작|start/i }).click();
+    await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
+    await expect(page).toHaveURL(/[?&]i=1(&|$)/);
+    const shuffled = practiceParam(page) ?? '';
     expect(shuffled).not.toBe(ordered);
     const order = await runOrder(s.viewer, shuffled, 5);
     expect([...order].sort()).toEqual([...heatmapOrder].sort());
@@ -438,10 +455,10 @@ test(
     // and Forward never reopens it.
     await page.goBack();
     await expect(runUi.panel(page)).toBeHidden();
-    expect(practiceParam(page)).toBeNull();
+    await expect.poll(() => practiceParam(page)).toBeNull();
     await page.goForward();
     await expect(runUi.panel(page)).toBeHidden();
-    expect(practiceParam(page)).toBeNull();
+    await expect.poll(() => practiceParam(page)).toBeNull();
   },
 );
 
@@ -658,8 +675,8 @@ test(
     ).toBeVisible();
     const rows = runUi.resultRows(panel);
     await expect(rows).toHaveCount(5);
-    await expect(nth(await rows.all(), 0)).toContainText(/정답|맞음|correct/i);
-    await expect(nth(await rows.all(), 1)).toContainText(/오답|틀림|incorrect/i);
+    await expect(nth(await rows.all(), 0).getByLabel(/정답|correct/i)).toHaveText('O');
+    await expect(nth(await rows.all(), 1).getByLabel(/오답|incorrect/i)).toHaveText('X');
     await expect(nth(await rows.all(), 2)).toContainText(/건너뜀|skipped/i);
     await expect(nth(await rows.all(), 3)).toContainText(RESULT_TEXT.pending);
     await expect(nth(await rows.all(), 4)).toContainText(RESULT_TEXT.pending);
@@ -714,8 +731,6 @@ test(
     // Archived: the range step, start and the question work; 제출 does not.
     await openHome(page, s.owner, s.workspaceId);
     await openQuestionMenuWithPractice(page);
-    await expect(runUi.menuItem(page)).not.toHaveAttribute('aria-disabled', 'true');
-    await runUi.menuItem(page).click();
     let panel = runUi.panel(page);
     await expect(runUi.pickerTitle(panel)).toBeVisible();
     const runId = await startAll(page, panel);

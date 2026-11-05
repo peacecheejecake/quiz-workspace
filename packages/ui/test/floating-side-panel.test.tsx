@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useRef, useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Button, FloatingSidePanel, Input, ModalDialog } from '../src';
 
 describe('FloatingSidePanel container', () => {
@@ -103,6 +103,31 @@ describe('FloatingSidePanel side and size', () => {
 });
 
 describe('FloatingSidePanel (modal)', () => {
+  it('reports the resolved mouse opener even when a click does not move focus', async () => {
+    const received = vi.fn();
+    function Example() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>열기</button>
+          <FloatingSidePanel
+            open={open}
+            onOpenChange={setOpen}
+            title="패널"
+            onOpenerResolved={received}
+          >
+            내용
+          </FloatingSidePanel>
+        </>
+      );
+    }
+    render(<Example />);
+    const opener = screen.getByRole('button', { name: '열기' });
+    expect(document.activeElement).not.toBe(opener);
+    fireEvent.click(opener);
+    await screen.findByRole('dialog', { name: '패널' });
+    expect(received).toHaveBeenCalledWith(opener);
+  });
   it('traps focus, closes on Escape and returns focus to the trigger', async () => {
     const user = userEvent.setup();
     render(<ModalPanel />);

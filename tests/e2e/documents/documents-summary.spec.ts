@@ -423,10 +423,7 @@ test(
       let panel = summaryUi.panel(page);
       await expect(panel).toBeVisible();
       const create = summaryUi.createButton(panel);
-      await expect(create).toHaveAttribute('aria-disabled', 'true');
-      await expect(create).toHaveAccessibleDescription(summaryUi.unavailableReason);
-      await create.focus();
-      await expect(create).toBeFocused();
+      await expect(create).toHaveCount(0);
 
       const state = await off.request<SummaryState>(
         owner,

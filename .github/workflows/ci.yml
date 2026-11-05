@@ -60,7 +60,7 @@ concurrency:
   cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
 
 env:
-  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M7.0,S0,DOCTXT.0,DOCSUM.0,CHNOTE.0,DOCVIEW.0,QVIEW.0,MOCK.0,UX9.0,ASK.0,EXPL.0,RELSRC.0,QSRC.0,RETRY.0,STEM.0
+  E2E_PHASES: P0.10,A0,M3.0,M4.0,M5.0,M7.0,S0,DOCTXT.0,DOCSUM.0,CHNOTE.0,DOCVIEW.0,QVIEW.0,MOCK.0,UX9.0,ASK.0,EXPL.0,RELSRC.0,QSRC.0,RETRY.0,STEM.0,UX10-UI.0,UX10-DOC.0,UX10-AI.0,UX10-QVIEW.0,UX11-STEM,UX10-PLAY.0,UX10-HOME.0,UX11-AI-DIRECT,UX11-RETURN
   FORCE_COLOR: '1'
 
 jobs:
@@ -241,7 +241,10 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browsers (Chromium + WebKit)
-        run: pnpm exec playwright install --with-deps chromium webkit
+        run: |
+          # Azure's Ubuntu mirror has occasionally throttled downloads past the job timeout.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          pnpm exec playwright install --with-deps chromium webkit
 
       - name: Start local stack
         run: make infra-up
@@ -426,7 +429,10 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - name: Install Playwright browsers (Chromium)
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          # Keep the same official Ubuntu archive as the E2E shards.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          pnpm exec playwright install --with-deps chromium
 
       - name: Start local stack
         run: make infra-up

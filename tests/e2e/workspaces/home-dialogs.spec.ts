@@ -110,7 +110,7 @@ const panels = (page: Page) => new URL(page.url()).searchParams.getAll('panel');
 async function fromQuestionMenu(page: Page, item: RegExp): Promise<void> {
   await homeUi.questionMenuButton(page).click();
   await page
-    .getByRole('menu', { name: /^(문제|questions)$/i })
+    .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
     .getByRole('menuitem', { name: item })
     .click();
 }
@@ -147,11 +147,12 @@ const DIALOGS: readonly HomeDialog[] = [
     opener: homeUi.questionMenuButton,
   },
   {
-    name: '모의고사',
+    name: '문제 풀기',
     panel: 'mock-exams',
-    dialog: homeDialogUi.mockExams,
-    open: (page) => fromQuestionMenu(page, /^(모의고사|mock exams?)$/i),
-    opener: homeUi.questionMenuButton,
+    dialog: (page) =>
+      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
+    open: (page) => page.getByRole('button', { name: /^풀기$/ }).click(),
+    opener: (page) => page.getByRole('button', { name: /^풀기$/ }),
   },
   {
     name: '이력',
@@ -460,22 +461,6 @@ async function domClick(target: Locator): Promise<void> {
   await target.dispatchEvent('click');
 }
 
-/**
- * The `문제` menu through the DOM: Radix opens it on pointerdown and focuses its items without
- * scrolling; the item is chosen with a DOM click.
- */
-async function domMenu(page: Page, item: RegExp): Promise<void> {
-  await focusInPlace(homeUi.questionMenuButton(page));
-  await homeUi
-    .questionMenuButton(page)
-    .dispatchEvent('pointerdown', { button: 0, ctrlKey: false, pointerType: 'mouse' });
-  const menuItem = page
-    .getByRole('menu', { name: /^(문제|questions)$/i })
-    .getByRole('menuitem', { name: item });
-  await expect(menuItem).toBeAttached();
-  await menuItem.dispatchEvent('click');
-}
-
 const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
   {
     name: '문서 관리',
@@ -488,9 +473,10 @@ const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
     open: (page) => domClick(noteUi.opener(page, CH1)),
   },
   {
-    name: '모의고사',
-    dialog: homeDialogUi.mockExams,
-    open: (page) => domMenu(page, /^(모의고사|mock exams?)$/i),
+    name: '문제 풀기',
+    dialog: (page) =>
+      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
+    open: (page) => domClick(page.getByRole('button', { name: /^풀기$/ })),
   },
   {
     name: '이력',

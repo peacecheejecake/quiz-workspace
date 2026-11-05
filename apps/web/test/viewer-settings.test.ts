@@ -9,7 +9,6 @@ import {
   firstPaneRatio,
   isOverOtherPane,
   layoutAnnouncement,
-  narrowInitialPane,
   paneOrder,
   parseViewerSettings,
   pdfRatioFromFirst,
@@ -43,10 +42,10 @@ const throwing = {
 };
 
 describe('parseViewerSettings', () => {
-  it('uses the defaults when nothing is stored', () => {
+  it('UX10-DOC-AC01 uses the original by default when nothing is stored', () => {
     expect(parseViewerSettings(null)).toEqual(DEFAULT_VIEWER_SETTINGS);
     expect(DEFAULT_VIEWER_SETTINGS).toEqual({
-      mode: 'both',
+      mode: 'pdf',
       orientation: 'horizontal',
       order: 'pdf-first',
       pdfRatio: 50,
@@ -82,7 +81,7 @@ describe('parseViewerSettings', () => {
       theme: 'unknown',
     });
     expect(parseViewerSettings(raw)).toEqual({
-      mode: 'both',
+      mode: 'pdf',
       orientation: 'vertical',
       order: 'pdf-first',
       pdfRatio: 20,
@@ -153,7 +152,7 @@ describe('createViewerSettingsStore', () => {
     const store = createViewerSettingsStore(() => storage);
     const listener = vi.fn();
     store.subscribe(listener);
-    store.update({ mode: 'both', pdfRatio: 50 });
+    store.update({ mode: 'pdf', pdfRatio: 50 });
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
@@ -168,9 +167,9 @@ describe('createViewerSettingsStore', () => {
   it('reload() reads the stored value again', () => {
     const storage = memoryStorage();
     const store = createViewerSettingsStore(() => storage);
-    expect(store.getSnapshot().mode).toBe('both');
+    expect(store.getSnapshot().mode).toBe('pdf');
     storage.data.set(VIEWER_SETTINGS_KEY, '{"mode":"text"}');
-    expect(store.getSnapshot().mode).toBe('both'); // other tabs apply from the next load
+    expect(store.getSnapshot().mode).toBe('pdf'); // other tabs apply from the next load
     store.reload();
     expect(store.getSnapshot().mode).toBe('text');
   });
@@ -210,10 +209,10 @@ describe('pane order and ratio', () => {
 });
 
 describe('narrow screens and width classes', () => {
-  it('starts narrow screens on 변환본 only when that is the saved mode', () => {
-    expect(narrowInitialPane('text')).toBe('text');
-    expect(narrowInitialPane('both')).toBe('pdf');
-    expect(narrowInitialPane('pdf')).toBe('pdf');
+  it('UX10-DOC-AC02 preserves each explicitly stored view mode', () => {
+    for (const mode of ['pdf', 'text', 'both'] as const) {
+      expect(parseViewerSettings(JSON.stringify({ mode })).mode).toBe(mode);
+    }
   });
 
   it('splits widths at 768 and 1024', () => {

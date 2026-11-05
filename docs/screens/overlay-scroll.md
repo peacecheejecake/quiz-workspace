@@ -1,5 +1,7 @@
 # UX9-SCROLL — Overlay scroll 격리 (dialog·side panel 위 스와이프)
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 화면 요구사항 v1.0 · UX9-SPEC 신규 2026-11-02 (사용자 피드백 "dialog가 올라와 있을 때, dialog 위를 스와이프했는데 하단에 깔린 페이지에 스크롤이 발생하는 현상 수정(ios safari에서 확인했음)"). 구현 Task UX9-SCROLL(test-first: 이 AC의 test를 먼저 RED로 확인한 뒤 고침)이 만든 test에 맞춘 ID다.
 **Route:** 별도 route 없음 — Workspace 홈의 모든 floating 표면(modal dialog, non-modal floating dialog, side panel, 모바일 bottom sheet·full-screen 레이아웃)
 **테스트:** `tests/e2e/workspaces/overlay-scroll.spec.ts`

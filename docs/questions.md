@@ -1,5 +1,7 @@
 # Questions — Product & Domain Specification v1.2
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 확정 기준 설계 · 2026-10-16  
 **디자인 참조:** `design-system.md`  
 **구현 참조:** `architecture.md`
@@ -116,7 +118,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 ## 4. 문제 풀이 및 채점 정책
 
 1. Heatmap dot click → `POST /questions/{id}/practice-sessions` → 서버는 정답/해설이 없는 문제 데이터를 반환.
-2. 객관식이면 선택지 순서를 `shuffle_seed` 또는 표시 순서 목록으로 고정하고 `practice_session`/`attempt`에 저장.
+2. 객관식 보기는 기본적으로 원본 revision 순서다. 명시적으로 섞기만 선택하면 `shuffle_seed`로 섞고, 표시 순서 목록을 `practice_session`/`attempt`에 저장한다(UX10-QVIEW-AC01).
 3. 답 제출 시 server-side correct option IDs 기준 채점. 선택지 위치(A/B/C)가 아니라 변하지 않는 option ID로 비교한다.
 4. 객관식 단일·복수 선택 지원. 단답식은 등록된 허용 답안과 정규화 규칙으로 자동 채점 가능한 경우에만 채점.
 5. 서술형과 자동 채점 불가능한 단답식은 `PENDING`을 반환한 뒤 사용자의 자기평가(`correct`/`incorrect`) 또는 검토자의 채점을 받는다. 향후 AI 자동 채점은 별도 opt-in 기능으로 확장.

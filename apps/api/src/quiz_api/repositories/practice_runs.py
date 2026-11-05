@@ -22,12 +22,24 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Integer, and_, func, insert, literal, select, true, update
+from sqlalchemy import (
+    ColumnElement,
+    Integer,
+    and_,
+    case,
+    func,
+    insert,
+    literal,
+    select,
+    true,
+    update,
+)
 from sqlalchemy.orm import Session
 
 from quiz_api.authz.permissions import LockMode
 from quiz_api.authz.repository import MembershipRecord, membership_record, membership_select
 from quiz_api.question_rules import QuestionType
+from quiz_api.repositories.practice_epoch import current_session
 from quiz_api.repositories.tables import (
     chapters,
     practice_runs,
@@ -247,7 +259,7 @@ class PracticeRunRepository:
                 practice_sessions.c.run_position.label("position"),
                 practice_sessions.c.state,
                 latest.c.result,
-                questions.c.id.is_not(None).label("eligible"),
+                and_(questions.c.id.is_not(None), current_session()).label("eligible"),
             )
             .select_from(
                 practice_sessions.outerjoin(latest, true()).outerjoin(
@@ -346,8 +358,8 @@ class PracticeRunRepository:
         run_sessions = (
             select(
                 practice_sessions.c.run_position,
-                practice_sessions.c.state,
-                latest.c.result,
+                case((current_session(), practice_sessions.c.state), else_="reset").label("state"),
+                case((current_session(), latest.c.result), else_=None).label("result"),
             )
             .select_from(practice_sessions.outerjoin(latest, true()))
             .where(practice_sessions.c.practice_run_id == run.id)

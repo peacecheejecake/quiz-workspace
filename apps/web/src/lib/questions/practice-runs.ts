@@ -131,6 +131,7 @@ export const RESULT_WORDS: Readonly<Record<PositionResult, string>> = {
   incorrect: '틀림',
   pending: '채점 대기',
   skipped: '건너뜀',
+  reset: '초기화됨',
 };
 
 /** "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w". */

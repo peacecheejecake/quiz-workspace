@@ -107,9 +107,8 @@
 //      worker; export it before `pnpm e2e:log-audit` — ASK-W adds it to playwright.config.ts / CI).
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   Entry points: header button "AI 질문" (before "이력"); `문제` menu item "AI 질문" (last; when
-//   unavailable aria-disabled with its own reason text as its description); 본문 search button
-//   "본문 검색어로 AI에게 묻기" (text "AI에게 묻기"; aria-disabled + description when unavailable);
+//   Entry points: header button "AI 질문" and 본문 search button "본문 검색어로 AI에게 묻기";
+//   both are hidden when new questions are unavailable. The `문제` menu has no AI item.
 //   question-side button "이 문제로 AI에게 질문하기" (text "질문하기") in the 문제 상세 footer and the
 //   mock exam viewer headers.
 //   Panel: FloatingSidePanel role=dialog named "AI 질문" (`?panel=ask[&conversation=<id>]`),

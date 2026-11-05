@@ -15,6 +15,8 @@ export const PRACTICE_CACHE_MAX_ENTRIES = 200;
 interface Entry {
   readonly session: PracticeSession;
   readonly storedAt: number;
+  readonly epoch: number;
+  readonly baselineAttemptId: string | null;
 }
 
 export interface PracticeCacheOptions {
@@ -71,8 +73,20 @@ export class PracticeSessionCache {
     return entry.session;
   }
 
+  /** Epoch pinned when the open session was created. */
+  epoch(questionId: string): number | undefined {
+    return this.get(questionId) ? this.entries.get(questionId.toLowerCase())?.epoch : undefined;
+  }
+
+  /** Latest attempt known when this unanswered session was opened. */
+  baselineAttemptId(questionId: string): string | null | undefined {
+    return this.get(questionId)
+      ? this.entries.get(questionId.toLowerCase())?.baselineAttemptId
+      : undefined;
+  }
+
   /** Keeps an open session of this workspace; anything else (submitted, foreign) is ignored. */
-  put(session: PracticeSession): void {
+  put(session: PracticeSession, epoch = 0, baselineAttemptId: string | null = null): void {
     if (session.workspace_id.toLowerCase() !== this.workspaceId) return;
     if (this.wasDropped(session.id)) return;
     const key = session.question_id.toLowerCase();
@@ -81,7 +95,12 @@ export class PracticeSessionCache {
       return;
     }
     this.entries.delete(key);
-    this.entries.set(key, { session: answerFreeSession(session), storedAt: this.now() });
+    this.entries.set(key, {
+      session: answerFreeSession(session),
+      storedAt: this.now(),
+      epoch,
+      baselineAttemptId,
+    });
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;

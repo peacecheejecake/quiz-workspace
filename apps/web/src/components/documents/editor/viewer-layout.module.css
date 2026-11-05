@@ -88,7 +88,8 @@
 .segment {
   min-height: var(--control-height-sm);
   padding: 0 var(--space-3);
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
@@ -187,6 +188,7 @@ button.segment:focus-visible {
 }
 
 .paneHeader {
+  margin-top: 3rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -210,7 +212,8 @@ button.segment:focus-visible {
   width: var(--control-height-sm);
   height: var(--control-height-sm);
   padding: 0;
-  border: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
@@ -294,4 +297,73 @@ button.segment:focus-visible {
   .segment {
     transition: none;
   }
+}
+
+.viewer {
+  position: fixed;
+  z-index: var(--z-popover);
+  inset: 0;
+  display: block;
+  box-sizing: border-box;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--color-surface);
+}
+
+.chrome {
+  position: absolute;
+  z-index: calc(var(--z-side-panel) + 1);
+  inset: 0 0 auto;
+  max-height: 70dvh;
+  overflow: auto;
+  padding-top: max(var(--space-2), env(safe-area-inset-top));
+  padding-right: max(var(--space-3), env(safe-area-inset-right));
+  padding-bottom: var(--space-2);
+  padding-left: max(var(--space-3), env(safe-area-inset-left));
+  background: var(--color-surface);
+  transition:
+    transform var(--duration-state) var(--easing-standard),
+    opacity var(--duration-state) var(--easing-standard);
+}
+
+.chrome[data-hidden] {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.area,
+.skeleton {
+  height: 100%;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome {
+    transition: none;
+  }
+}
+
+:global(html):has(.viewer) {
+  overflow: hidden;
+}
+
+/* Keep the docked outline's controls below the overlay while both are visible. */
+.outlinePanel:global(.qz-panel)[data-placement='docked'] {
+  top: var(--viewer-chrome-height, 0px);
+}
+
+/* Persistent warnings and active edits keep the chrome visible; expose all reading content. */
+.viewer[data-chrome-pinned] .area {
+  padding-top: var(--viewer-chrome-height, 0px);
+}
+
+/* Bound pinned chrome by viewport height at every width, leaving room for both panes. */
+.viewer[data-chrome-pinned] .chrome {
+  max-height: min(70dvh, max(4rem, calc(100dvh - 14rem)));
+}
+
+.viewer[data-chrome-pinned] .paneHeader {
+  min-height: var(--control-height-sm);
+  margin-top: 0;
 }

@@ -1,7 +1,9 @@
 # ASK-01 — AI 질문 (문서 기반 답변) Floating Side Panel
 
+> **UX10 개정 예정(2026-11-05):** [확정 구현 기준](../implementation/ux10/index.md)의 해당 변경 요구가 이 문서의 이전 동작에 우선한다. 구현 Task의 RED 단계에서 해당 AC·trace를 함께 갱신한다. 변경되지 않은 요구·보안 경계는 유지한다.
+
 **상태:** 화면 요구사항 v1.0 (모든 제안 사용자 결정 2026-11-01) · ASK-SPEC 신규 2026-11-01 (사용자 요청 "LLM에 질문하기 — 문서 기반 답변 — 문제별로 '질문하기' 버튼 추가 -> LLM input에 context로 추가") · 사용자 결정 반영 2026-11-01(진입점 세 곳, 대화 저장·비공개, 힌트 모드, 문서 근거만, `질문하기`는 문제 상세·모의고사 문제에만). 모든 설계 선택은 사용자가 확인했다(implementation-plan §7 ASK-SPEC 사용자 결정 행). RED(ASK.0)는 구현 착수 직전에 쓴다. · **ASK-SYNC 개정 2026-11-02** (develop의 UX7·모의고사·QuestionViewer·QGEN-RM에 맞춤): 문제 쪽 진입점을 QuestionViewer 방식으로 다시 적고("문제 쪽 진입점"), panel 쌓기·뒤로가기 규칙("panel 쌓기·뒤로가기"), 모의고사 문제 첨부(이전 ASK-QM)를 이 화면의 AC12·C10으로 당겼다.
-**Route:** `/workspaces/:workspaceId?panel=ask` (대화 목록·새 대화) · `?panel=ask&conversation=:conversationId` (대화 하나). Workspace header의 `AI 질문` 버튼, header `문제` 메뉴의 `AI 질문` 항목, 본문 검색의 `AI에게 묻기`, 그리고 문제의 `질문하기`(QuestionViewer `manage` — "문제 상세" dialog — 와 모의고사 문제의 `sequence(mock)`·`manage(mock)`)와 제출 결과 아래 AI 해설의 `AI 질문하기`가 연다. 공유 링크 게스트(`/share/:shareId`)에는 없다.
+**Route:** `/workspaces/:workspaceId?panel=ask` (대화 목록·새 대화) · `?panel=ask&conversation=:conversationId` (대화 하나). Workspace header의 `AI 질문` 버튼, 본문 검색의 `AI에게 묻기`, 그리고 문제의 `질문하기`(QuestionViewer `manage` — "문제 상세" dialog — 와 모의고사 문제의 `sequence(mock)`·`manage(mock)`)와 제출 결과 아래 AI 해설의 `AI 질문하기`가 연다. 공유 링크 게스트(`/share/:shareId`)에는 없다.
 **테스트:** `tests/e2e/ask/ask-llm.spec.ts` (계약: `tests/integration/ask/test_ask_contract.py`, `apps/worker` · `packages/core` unit test, `supabase/tests` pgTAP)
 **Phase:** ASK.0 (RED) → ASK-B (계약 C01~C11, 모의고사 첨부 C10 포함) → ASK-W (AC01~AC03·AC06~AC11) → ASK-Q (AC04·AC05·AC12, CI phase 켬) · ASK-X (품질·eval·runbook). 이전 계획의 ASK-QM은 ASK-SYNC에서 ASK-B·ASK-Q에 합쳤다(MOCK·QVIEW가 이미 develop에 있음).
 **연계:** [전체 아키텍처](../architecture.md) §4·§5·§6, [SEARCH-01](search.md), [QPLAY-01](questions-practice.md), [QVIEW-01](question-viewer.md), [MOCK-01](mock-exams.md), [QOV-01](questions-overview.md), [DOCSUM-01](documents-summary.md), [CHNOTE-01](chapter-notes.md), [Questions 명세](../questions.md) §13, [공유 명세](../workspace-sharing.md) §10, [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
@@ -97,8 +99,8 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 
 - **진입 — 세 곳 모두 (사용자 결정 2026-11-01 "위 세 군데 모두"):** 셋 다 같은 `?panel=ask` panel을 연다. panel은 바로 열리고 데이터를 불러오는 동안 skeleton(QOV-01-AC09).
   - **header 버튼:** Workspace header 오른쪽 아이콘 묶음(`이력`·`공유하기`) 앞에 `AI 질문` 버튼(아이콘 + 글자 "AI 질문", 접근성 이름 "AI 질문", 모든 구성원; 보관된 Workspace·기능 꺼짐에서도 보임 — 지난 대화 읽기, 이유는 panel이 보임).
-  - **`문제` 메뉴 항목 (ASK-SYNC 2026-11-02에 지금 메뉴에 맞춤):** 메뉴는 `직접 추가`·`중복 문제 정리` | `보관·초안 문제`·`모의고사`·`문제 풀기`이고(QOV-01-AC11, MOCK-SYNC), `AI 질문`은 구분선 아래 보기 권한 항목 묶음의 **맨 끝**(`문제 풀기` 다음)에 온다. 메뉴 항목 정의는 `requiresEdit: false`(보기 권한도 사용 — `보관·초안 문제`·`모의고사`·`문제 풀기`와 같음)이고, 그 항목들과 달리 자기 비활성 조건이 있다: 기능이 꺼진 환경과 보관된 Workspace에서는 늘 보이되 비활성이다. 비활성 표시는 메뉴의 다른 비활성 항목과 같은 방식(QOV-01-AC11: Radix 비활성 — `aria-disabled="true"`, 화살표 키 이동에서 건너뜀, 눌러도 panel을 열지 않음; 이유는 tooltip이 아니라 메뉴 안 글자)이고, 이유("이 환경에서는 AI 질문을 사용할 수 없습니다." / "보관된 Workspace에서는 새 질문을 할 수 없습니다.")는 그 항목 아래 글자로 보이며 항목의 `aria-describedby`다(편집 항목의 메뉴 공통 이유 글자와 따로). 보관된 Workspace에서는 메뉴 공통 이유 "보관된 Workspace는 읽기 전용입니다"와 이 항목의 이유가 함께 보인다. 지난 대화는 header 버튼으로 연다.
-  - **본문 검색의 `AI에게 묻기`** (메뉴가 아닌 버튼이라 비활성이면 `aria-disabled` + focus 가능): 본문 검색 영역(SEARCH-01, 펼친 상태; UX9부터 본문 검색 페이지 SEARCH-02 — ASK-INTEG)의 검색 버튼 옆 글자 버튼 `AI에게 묻기`(접근성 이름 "본문 검색어로 AI에게 묻기"). 누르면 새 대화로 panel을 열고 지금 본문 검색어를 입력란에 **채워 둔다**(자동으로 보내지 않음 — 사용자가 고쳐서 Enter; 사용자 결정 2026-11-01). 본문 설정의 문서·장 필터가 있으면 `질문 범위`로 옮긴다. 검색어가 비어 있으면 빈 입력란으로 연다. 보관·기능 꺼짐에서는 비활성 + 같은 이유. 공유 화면 검색에는 없다.
+  - **`문제` 메뉴:** `AI 질문` 항목은 제거했다. 새 질문은 기능이 사용 가능할 때 header에서 연다.
+  - **본문 검색의 `AI에게 묻기`:** 검색어와 선택한 문서·장 범위를 새 대화에 채우며 자동 전송하지 않는다. 보관 또는 기능 꺼짐에서는 숨긴다.
 - **SEARCH-01과의 관계 (사용자 결정 2026-11-01):** 세 진입점(header 버튼·`문제` 메뉴·`AI에게 묻기`) 외에는 본문 검색과 별개다. 같은 검색 파이프라인을 쓰지만 검색창·결과 목록·URL은 바뀌지 않는다. 각주가 여는 "본문 발췌" panel은 SEARCH-01의 `DocumentExcerptPanel`을 그대로 쓴다.
 - **panel:** 공통 `FloatingSidePanel`, non-modal(design-system §5.1; 다른 홈 dialog와 함께 열리고 나중에 연 것이 위 — QOV-01-AC10, 뒤로가기 규칙 QOV-01-AC14; modal 층 위에서 열 때는 아래 "panel 쌓기·뒤로가기"). **UX9와 합친 뒤(ASK-INTEG 2026-11-03):** 모든 홈 dialog가 modal이 되었으므로(HOMEDLG-01, 사용자 결정 2026-11-02 D3 "홈 밖의 floating panel도 모두 modal") AI 질문 panel도 어디서 열든 modal이다 — 열린 동안 홈은 inert이고, 홈 `?panel=` dialog 중 늘 맨 위에 쌓인다(딥링크·새로 고침에서도 마지막). 아래의 "non-modal로 열면"·"다시 열 때 위로" 규칙은 홈에서 더는 생기지 않는다. 본문 검색 페이지(SEARCH-02)의 `AI에게 묻기`는 그 페이지 위에 같은 panel을 modal로 열고 URL에 남기지 않는다(그 페이지의 "본문 발췌" panel과 같음; 대화는 저장되어 홈 `?panel=ask` 목록에서 다시 연다). 모바일(<640px)은 full-height sheet(safe-area, 입력란은 아래 고정, 화면 키보드가 올라오면 입력란이 그 위에 남음). 데스크톱 폭은 §5.1 기본(500px).
   - header: 제목 "AI 질문", 부제(대화를 열었으면 대화 제목), `대화 목록` 버튼(목록 ↔ 대화 전환, 목록이면 숨김), `새 대화` 버튼, `질문 범위` 버튼(popover), 닫기.
@@ -155,7 +157,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 | 실패 | alert 이유 + `다시 시도` | 읽기(버튼 없음) | — |
 | 다시 생성한 답 | "답 n/n" + `이전 답`·`다음 답`, 마지막 답에 `다시 생성` | 읽기(버전 오가기만) | — |
 | 한도(턴·하루·분당·월) | 이유 + 보내기 비활성(분당은 남은 초) | — | — |
-| 기능 꺼짐(환경) | 비활성 입력란(`aria-disabled`, focus 가능) + "이 환경에서는 AI 질문을 사용할 수 없습니다." 지난 대화 읽기, 문제 상세의 `질문하기` 없음, `문제` 메뉴 항목·`AI에게 묻기` 비활성 + 이유 | 같음 | — |
+| 기능 꺼짐(환경) | 비활성 입력란(`aria-disabled`, focus 가능) + "이 환경에서는 AI 질문을 사용할 수 없습니다." 지난 대화 읽기, 문제 상세의 `질문하기` 없음, 새 질문 header·`AI에게 묻기` 숨김 | 같음 | — |
 | 다른 사용자·다른 Workspace·지운 대화 딥링크 | panel에 "대화를 찾을 수 없습니다."(API 404) + `새 대화` | 같음 | — |
 | 첨부 문제가 삭제·보관됨 | 칩에 "더 이상 볼 수 없는 문제" — 다음 메시지부터 문제 context 없음 | 같음 | — |
 
@@ -205,14 +207,14 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 ### ASK-01-AC07
 
 - **Given:** 대화가 하나 있는 Workspace를 보관(archive)한 상태의 Owner, 다른 Workspace의 사용자, 같은 Workspace의 유효한 공유 링크(비로그인 게스트)
-- **When:** Owner가 보관된 Workspace 홈에서 `AI 질문`을 열어 지난 대화를 보고 질문을 보내려 하며 `POST …/messages`를 직접 부른다. 다른 사용자가 그 Workspace의 `GET /workspaces/{id}/ask`·`POST /workspaces/{id}/ask/conversations`(다른 Workspace의 문서·장 id를 범위로)를 부른다. 게스트가 `/share/:shareId?panel=ask`를 연다
+- **When:** Owner가 저장된 대화의 딥링크를 열어 지난 대화를 보고 `POST …/messages`를 직접 부른다. 다른 사용자가 그 Workspace의 `GET /workspaces/{id}/ask`·`POST /workspaces/{id}/ask/conversations`(다른 Workspace의 문서·장 id를 범위로)를 부른다. 게스트가 `/share/:shareId?panel=ask`를 연다
 - **Then:** 보관된 Workspace에서 지난 대화는 읽히고, 입력란은 비활성이며 "보관된 Workspace에서는 새 질문을 할 수 없습니다."를 보이고, POST는 403 `workspace-archived`다. 다른 사용자는 404(Workspace를 모르는 것과 같은 응답)이고, 자기 Workspace에서 다른 Workspace의 문서·장 id로 범위를 보내도 그 문서의 내용은 근거·응답에 나오지 않는다. 공유 화면에는 `AI 질문` 버튼이 없고 `?panel=ask`는 아무 panel도 열지 않으며, 공유 세션으로 부른 ask API는 401/404다.
 
 ### ASK-01-AC08
 
 - **Given:** 기능이 꺼진 환경(`WORKER_ASK_LLM` off 또는 `LLM_MODEL` 없음), 기능이 켜져 있을 때 만든 대화 하나
-- **When:** 편집 권한자가 `AI 질문`을 열고 지난 대화를 열며, 입력란과 보내기 버튼에 focus를 주고, `GET /workspaces/{id}/ask`와 `POST …/messages`를 직접 부른다
-- **Then:** panel은 열리고 입력란·보내기는 비활성(`aria-disabled`, focus 가능)이며 "이 환경에서는 AI 질문을 사용할 수 없습니다."가 연결된 설명(`aria-describedby`)이다. 지난 대화와 출처 발췌는 그대로 읽힌다. API는 `available: false`, POST는 409 `ask-disabled`이고 job·LLM 호출이 없다.
+- **When:** 편집 권한자가 저장된 대화의 딥링크를 열고 `GET /workspaces/{id}/ask`와 `POST …/messages`를 직접 부른다
+- **Then:** panel은 열리고 입력란은 비활성(`aria-disabled`, focus 가능), 보내기는 숨겨지며 "이 환경에서는 AI 질문을 사용할 수 없습니다."가 연결된 설명(`aria-describedby`)이다. 지난 대화와 출처 발췌는 그대로 읽힌다. API는 `available: false`, POST는 409 `ask-disabled`이고 job·LLM 호출이 없다.
 
 ### ASK-01-AC09
 
@@ -229,8 +231,8 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 ### ASK-01-AC11
 
 - **Given:** 발행된 교재가 있는 Workspace 홈(보기 권한 멤버), 같은 Workspace를 보관한 상태, 기능이 꺼진 환경
-- **When:** header `문제` 메뉴를 열어 `AI 질문`을 고른다. 본문 검색을 펼쳐(UX9부터 header `본문 검색`으로 본문 검색 페이지를 열어 — ASK-INTEG) "가나다 원리"를 검색하고 본문 설정에서 문서를 고른 뒤 `AI에게 묻기`를 누른다. 보관된 Workspace와 기능이 꺼진 환경에서 `문제` 메뉴와 본문 검색을 연다
-- **Then:** `문제` 메뉴의 항목은 `직접 추가`·`중복 문제 정리`·`챕터 재분배`(UX9, CHREDIST-01; 보기 권한에는 비활성) | `보관·초안 문제`·`모의고사`·`문제 풀기`·`AI 질문` 순서이고, `AI 질문`은 보기 권한에게도 쓸 수 있으며 header `AI 질문`과 같은 `?panel=ask` panel을 연다(뒤로가기 한 번이 panel을 닫고 앞으로가기는 다시 열지 않는다 — QOV-01-AC14). `AI에게 묻기`는 새 대화로 panel을 열고 입력란에 "가나다 원리"를 채워 두며(보내지 않음 — 메시지 0개), `질문 범위`에 고른 문서가 들어 있다. 본문 검색어·결과·URL `text`는 그대로다. 보관된 Workspace와 기능이 꺼진 환경에서 `문제` 메뉴의 `AI 질문`은 다른 비활성 메뉴 항목처럼 비활성(`aria-disabled="true"`, 화살표 키 이동에서 건너뜀, 눌러도 panel이 열리지 않음)이고 `AI에게 묻기`는 비활성(`aria-disabled`, focus 가능)이며, 둘 다 각각 "보관된 Workspace에서는 새 질문을 할 수 없습니다." / "이 환경에서는 AI 질문을 사용할 수 없습니다."를 글자 설명(`aria-describedby`)으로 보인다. header `AI 질문`은 두 경우 모두 panel을 연다(AC07·AC08).
+- **When:** header의 `AI 질문`을 열고, 본문 검색에서 검색어와 문서를 고른 뒤 `AI에게 묻기`를 누른다. 보관 Workspace와 기능 꺼짐 환경에서도 확인한다.
+- **Then:** header는 같은 panel을 열고 뒤로가기는 닫는다. 검색의 버튼은 검색어와 범위를 채우되 자동 전송하지 않는다. 보관·기능 꺼짐에서는 새 질문 진입점을 숨기고, 허용된 저장 대화는 딥링크로 읽을 수 있다. 직접 전송 API는 각각 403 또는 409로 거절한다.
 
 ### ASK-01-AC12
 

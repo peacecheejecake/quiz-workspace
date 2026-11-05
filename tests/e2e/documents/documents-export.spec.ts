@@ -252,6 +252,7 @@ test(
     await captureClipboard(page);
     await signInAs(page, owner.user);
     await page.goto(documentPath(ws.id, documentId));
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expectShown(editorUi.textPanel(page), token, 'the draft correction is shown');
     const button = exportUi.headerButton(page);
 
@@ -292,6 +293,7 @@ test(
     try {
       await signInAs(viewerPage, viewer.user);
       await viewerPage.goto(documentPath(ws.id, documentId));
+      await viewerPage.getByRole('checkbox', { name: '변환본', exact: true }).check();
       await expectShown(
         editorUi.textPanel(viewerPage),
         original,
@@ -374,6 +376,7 @@ test(
     await expect(exportUi.anyEntry(page)).toHaveCount(0);
     await sharedUi.documentLink(page, sharedDoc?.title ?? readyTitle).click();
     await expect(sharedUi.pdfViewer(page)).toBeVisible();
+    await page.getByRole('checkbox', { name: '변환본', exact: true }).check();
     await expectShown(page.locator('body'), snippet(RAIN.text), 'the shared document text');
     await expect(exportUi.anyEntry(page)).toHaveCount(0);
   },

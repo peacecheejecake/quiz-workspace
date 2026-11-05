@@ -17,7 +17,10 @@
 // UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
 // session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
+  ArrowLeftIcon,
   Button,
+  ConfirmDialog,
+  IconButton,
   FavoriteToggle,
   FloatingSidePanel,
   RetryToggle,
@@ -34,16 +37,25 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  latestPracticeAction,
   openPracticeSessionAction,
+  resetPracticeAction,
   selfGradePracticeAction,
   submitPracticeAction,
   type PracticeSession,
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
+import {
+  practiceResetVersion,
+  rememberPracticeEpoch,
+  publishPracticeReset,
+  subscribePracticeResets,
+} from '@/lib/questions/practice-reset-events';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import {
   canSubmit,
@@ -93,6 +105,7 @@ export interface PracticeViewerProps {
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) => void;
   /** A session was opened: the server recorded the view. */
+  readonly onReset?: (questionId: string) => void;
   readonly onViewed: (questionId: string) => void;
   /** An answer was submitted (`pending`) or graded (auto or self). */
   readonly onGraded?: (questionId: string, result: AttemptResult) => void;
@@ -117,15 +130,21 @@ export interface Invalidation {
 
 type SessionState =
   | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly session: PracticeSession }
+  | {
+      readonly status: 'ready';
+      readonly session: PracticeSession;
+      readonly prior?: { outcome: SubmitResult; answer: PracticeAnswer };
+      readonly previousRevision?: boolean;
+    }
   | { readonly status: 'error'; readonly message: string };
 
 interface Opening {
   readonly questionId: string | null;
   /** Idempotency key of this opening: a re-run effect (Strict Mode, retry) reuses it. */
   readonly key: string;
-  /** The still open session this screen already started for the question: no request. */
+  /** The open session to reuse if recent metadata confirms it is current. */
   readonly cached: PracticeSession | null;
+  readonly forceNew?: boolean;
 }
 
 /** The answering state of one session in one opening. */
@@ -166,12 +185,15 @@ export function PracticeViewer({
   onClose,
   onFlagsChange,
   onViewed,
+  onReset,
   onGraded,
   onCloseAutoFocus,
   headerExtra,
   invalidated = null,
 }: PracticeViewerProps) {
   const questionId = question?.id ?? null;
+  const returnControl = useOptionalPracticeReturn();
+  const recordActivity = returnControl?.recordActivity;
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
@@ -180,6 +202,21 @@ export function PracticeViewer({
   const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
   const scoped = cache.workspaceId === workspaceId.toLowerCase();
   if (!scoped) setCache(new PracticeSessionCache(workspaceId));
+
+  const liveWork = useRef<string | null>(null);
+  useEffect(
+    () =>
+      subscribePracticeResets(workspaceId, (id) => {
+        const stale = cache.get(id);
+        if (stale) cache.dropSession(stale.id);
+        onReset?.(id);
+        if (id === questionId) {
+          liveWork.current = null;
+          onClose();
+        }
+      }),
+    [cache, workspaceId, questionId, onReset, onClose],
+  );
 
   // Forget an invalidated question's cached session before anything reads the cache; when it is
   // the question on screen, it is opened again (a session of its new revision).
@@ -211,28 +248,75 @@ export function PracticeViewer({
 
   useEffect(() => {
     const id = opening.questionId;
-    if (!id || readOnly || opening.cached) return;
+    if (!id || readOnly) return;
     let current = true;
     const key = opening.key;
-    void openPracticeSessionAction(workspaceId, id, key).then(
-      (result: StudyActionResult<PracticeSession>) => {
-        if (result.ok) {
-          cache.put(result.data);
-          onViewed(id);
-        }
-        if (!current) return;
+    const resetVersion = practiceResetVersion(workspaceId, id);
+    void (async () => {
+      const latest = await latestPracticeAction(workspaceId, id);
+      if (latest && !latest.ok) {
+        if (current && practiceResetVersion(workspaceId, id) === resetVersion)
+          setSession({ status: 'error', message: latest.message, key });
+        return;
+      }
+      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
+      rememberPracticeEpoch(workspaceId, id, latest.data.reset_epoch);
+      if (
+        opening.cached &&
+        !opening.forceNew &&
+        cache.get(id)?.id === opening.cached.id &&
+        cache.epoch(id) === latest.data.reset_epoch &&
+        opening.cached.question_revision_id === latest.data.active_revision_id &&
+        cache.baselineAttemptId(id) === latest.data.latest_attempt_id
+      ) {
+        setSession({
+          status: 'ready',
+          session: opening.cached,
+          previousRevision: latest.data.previous_revision,
+          key,
+        });
+        return;
+      }
+      if (!opening.forceNew && latest.data.session?.outcome) {
+        const saved = latest.data.submitted_answer;
+        const answer: PracticeAnswer = {
+          selected: Array.isArray(saved?.selected_option_ids)
+            ? (saved.selected_option_ids as string[])
+            : [],
+          text: typeof saved?.answer_text === 'string' ? saved.answer_text : '',
+        };
+        onGraded?.(id, latest.data.session.outcome.result);
+        if (current)
+          setSession({
+            status: 'ready',
+            session: latest.data.session,
+            prior: { outcome: latest.data.session.outcome, answer },
+            key,
+          });
+        return;
+      }
+      if (opening.cached) cache.dropSession(opening.cached.id);
+      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
+      const result = await openPracticeSessionAction(workspaceId, id, key, latest.data.reset_epoch);
+      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
+      if (result.ok) {
+        cache.put(result.data, latest.data.reset_epoch, latest.data.latest_attempt_id);
+        if (current) onViewed(id);
+      }
+      if (current)
         setSession(
           result.ok
-            ? { status: 'ready', session: result.data, key }
+            ? {
+                status: 'ready',
+                session: result.data,
+                previousRevision: latest?.ok && latest.data.previous_revision,
+                key,
+              }
             : { status: 'error', message: result.message, key },
         );
-      },
-      () => {
-        if (current) {
-          setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
-        }
-      },
-    );
+    })().catch(() => {
+      if (current) setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
+    });
     return () => {
       current = false;
     };
@@ -241,21 +325,26 @@ export function PracticeViewer({
   }, [opening, readOnly, workspaceId, cache]);
 
   const view = shown;
-  const state: SessionState = opening.cached
-    ? { status: 'ready', session: opening.cached }
-    : session.key === opening.key
-      ? session
-      : { status: 'loading' as const };
+  const state: SessionState =
+    session.key === opening.key ? session : { status: 'loading' as const };
   const ready = state.status === 'ready' ? state.session : null;
+  useEffect(() => {
+    if (questionId && !readOnly) {
+      recordActivity?.({ kind: 'question', workspaceId, questionId });
+    }
+  }, [questionId, readOnly, recordActivity, workspaceId]);
 
   // Answering state belongs to one opening of one session: a new session (next question, reopen)
   // and a re-opened cached one start empty.
   const workId = ready ? `${opening.key}:${ready.id}` : null;
   const [workState, setWorkState] = useState<Work>(() => freshWork(null));
-  const work = workId && workState.workId === workId ? workState : freshWork(workId);
+  const initial: Work =
+    state.status === 'ready' && state.prior
+      ? { ...freshWork(workId), answer: state.prior.answer, outcome: state.prior.outcome }
+      : freshWork(workId);
+  const work = workId && workState.workId === workId ? workState : initial;
   // The session being answered now: a late result of an earlier session (the user moved on to
   // another question meanwhile) must not land in the new one.
-  const liveWork = useRef<string | null>(null);
   useLayoutEffect(() => {
     liveWork.current = workId;
   }, [workId]);
@@ -263,7 +352,7 @@ export function PracticeViewer({
   function updateWork(id: string, patch: (w: Work) => Partial<Work>) {
     if (liveWork.current !== id) return;
     setWorkState((prev) => {
-      const base = prev.workId === id ? prev : freshWork(id);
+      const base = prev.workId === id ? prev : initial;
       return { ...base, ...patch(base) };
     });
   }
@@ -282,6 +371,7 @@ export function PracticeViewer({
       return;
     }
     const qid = view.id;
+    const resetVersion = practiceResetVersion(workspaceId, qid);
     // Submitted (or failed: already submitted elsewhere) sessions are never shown again.
     cache.dropSession(ready.id);
     updateWork(workId, () => ({ busy: 'submit', error: null }));
@@ -291,7 +381,9 @@ export function PracticeViewer({
     } catch {
       result = { ok: false, kind: 'unavailable', message: QUESTION_FAILURE_MESSAGES.unavailable };
     }
-    if (result.ok) onGraded?.(qid, result.data.result);
+    if (result.ok && practiceResetVersion(workspaceId, qid) === resetVersion) {
+      onGraded?.(qid, result.data.result);
+    }
     updateWork(workId, () =>
       result.ok ? { busy: null, outcome: result.data } : { busy: null, error: result.message },
     );
@@ -309,6 +401,7 @@ export function PracticeViewer({
       return;
     }
     const qid = view.id;
+    const resetVersion = practiceResetVersion(workspaceId, qid);
     updateWork(workId, () => ({ busy: 'grade', error: null }));
     let ok = false;
     let message: string = QUESTION_FAILURE_MESSAGES.unavailable;
@@ -319,7 +412,7 @@ export function PracticeViewer({
     } catch {
       // network failure: keep the pending result and let the user try again
     }
-    if (ok) onGraded?.(qid, grade);
+    if (ok && practiceResetVersion(workspaceId, qid) === resetVersion) onGraded?.(qid, grade);
     updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
     );
@@ -327,6 +420,10 @@ export function PracticeViewer({
 
   const locked = work.busy !== null || work.outcome !== null;
   const outcome = work.outcome;
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const resetKey = useRef(newKey());
   const pendingGrade = outcome?.result === 'pending' && work.selfGrade === null;
   const finished = outcome !== null && !pendingGrade;
 
@@ -349,9 +446,20 @@ export function PracticeViewer({
       {ready && finished ? (
         <Button
           variant="ghost"
-          onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null }))}
+          onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
         >
-          한 번 더 풀기
+          다시 풀기
+        </Button>
+      ) : null}
+      {ready ? (
+        <Button
+          onClick={() => {
+            resetKey.current = newKey();
+            setResetError(null);
+            setResetOpen(true);
+          }}
+        >
+          초기화
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
@@ -385,6 +493,7 @@ export function PracticeViewer({
               favorite={view.isFavorite}
               retry={view.needsRetry}
               retryAvailable={view.lastGradedResult === 'correct' && !view.isPendingGrading}
+              disabled={!ready}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
             {headerExtra}
@@ -395,6 +504,41 @@ export function PracticeViewer({
         ) : undefined
       }
     >
+      <ConfirmDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="풀이 기록 초기화"
+        description={
+          <>
+            이 문제의 내 풀이 기록과 Heatmap 상태가 초기화됩니다. 되돌릴 수 없습니다.
+            {resetError ? <span role="alert"> {resetError}</span> : null}
+          </>
+        }
+        confirmLabel="초기화"
+        loading={resetBusy}
+        onConfirm={() => {
+          if (!view || resetBusy) return;
+          setResetBusy(true);
+          const version = practiceResetVersion(workspaceId, view.id);
+          void resetPracticeAction(workspaceId, view.id, resetKey.current)
+            .then((result) => {
+              if (practiceResetVersion(workspaceId, view.id) !== version) return;
+              setResetBusy(false);
+              if (!result.ok) {
+                setResetError(result.message);
+                return;
+              }
+              if (ready) cache.dropSession(ready.id);
+              liveWork.current = null;
+              setResetOpen(false);
+              publishPracticeReset(workspaceId, result.data.epochs);
+            })
+            .catch(() => {
+              setResetBusy(false);
+              setResetError(QUESTION_FAILURE_MESSAGES.unavailable);
+            });
+        }}
+      />
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
           {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
@@ -408,6 +552,12 @@ export function PracticeViewer({
             </>
           ) : ready ? (
             <>
+              {state.status === 'ready' && state.previousRevision ? (
+                <p>
+                  문제가 변경되었습니다.{' '}
+                  <a href={`/workspaces/${workspaceId}?panel=history`}>이전 풀이 이력 보기</a>
+                </p>
+              ) : null}
               <form
                 id={formId}
                 className={styles.form}
@@ -488,8 +638,10 @@ export function StudyToggles({
   favorite,
   retry,
   retryAvailable,
+  disabled = false,
   onChange,
 }: {
+  readonly disabled?: boolean;
   readonly favorite: boolean;
   readonly retry: boolean;
   readonly retryAvailable: boolean;
@@ -498,11 +650,13 @@ export function StudyToggles({
   return (
     <>
       <FavoriteToggle
+        disabled={disabled}
         pressed={favorite}
         onPressedChange={(pressed) => onChange({ is_favorite: pressed })}
       />
       {retryAvailable ? (
         <RetryToggle
+          disabled={disabled}
           pressed={retry}
           onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
         />
@@ -546,14 +700,19 @@ function NavButton({
 }) {
   const unavailable = !target || !onNavigate;
   return (
-    <Button
-      size="sm"
+    <IconButton
+      label={children}
+      icon={
+        <ArrowLeftIcon
+          width={20}
+          height={20}
+          style={children === '다음 문제' ? { transform: 'rotate(180deg)' } : undefined}
+        />
+      }
       aria-disabled={unavailable || undefined}
       onClick={() => {
         if (target && onNavigate) onNavigate(target);
       }}
-    >
-      {children}
-    </Button>
+    />
   );
 }

@@ -754,3 +754,8 @@ html body[data-scroll-locked] {
   overflow: hidden;
   pointer-events: auto;
 }
+
+/* Header gestures do not interfere with scrolling the overlay body. */
+:is(.qz-panel, .qz-modal) > .header {
+  touch-action: none;
+}

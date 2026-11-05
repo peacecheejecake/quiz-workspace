@@ -2039,3 +2039,18 @@ def test_soft_stop_not_in_stop_on_propagates() -> None:
 
     with pytest.raises(_SoftStop):
         QuestionExtractor(_scripted()).extract(_document(), document_id=DOC_ID, progress=boom)
+
+
+def test_ux11_extraction_keeps_options_separate_and_stem_text() -> None:
+    import json
+    from pathlib import Path
+
+    cases = json.loads((Path(__file__).parents[3] / "tests/fixtures/ux11-stem.json").read_text())
+    for case in cases:
+        lines = ["1. " + case["stem"]]
+        lines.extend(
+            f"{marker} {option}" for marker, option in zip("①②③④", case["options"], strict=True)
+        )
+        (draft,) = _extract(lines).drafts
+        assert "".join(draft.stem.split()) == "".join(case["stem"].split())
+        assert [option.text for option in draft.options] == case["options"]

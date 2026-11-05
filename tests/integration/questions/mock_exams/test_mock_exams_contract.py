@@ -1199,3 +1199,32 @@ def test_mock_01_c09_a_restarted_job_does_not_call_finished_batches_again(
         assert calls_with(prompts, MARKER.findall(q["revision"]["stem"])[0]) == 1
     assert calls_with(prompts, crash) == 2
     assert max_in_flight(serial_worker) <= 1
+
+
+def test_ux10_qview_ac01_mock_options_default_to_revision_order(seed: Any, db: Any) -> None:
+    from quiz_api.practice_grading import shuffled_option_ids
+
+    owner = seed.client("ux10-mock-order")
+    book = Book(owner)
+    book.sources(NORMAL)
+    made = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1))
+    [question] = questions(owner, made["id"], answers=True)
+    authored = [o["id"] for o in question["options"]]
+    path = f"/mock-exam-questions/{question['id']}/practice-sessions"
+    session = owner.ok("POST", path, {}, (201,))
+    assert session["displayed_option_ids"] == authored
+    assert not ANSWER_KEYS & set(session)
+    shuffled = owner.ok("POST", path, {"shuffle_options": True}, (201,))
+    assert sorted(shuffled["displayed_option_ids"]) == sorted(authored)
+    [(stored_seed,)] = db(
+        "select shuffle_seed from public.mock_exam_practice_sessions where id = %s",
+        (shuffled["id"],),
+    )
+    assert stored_seed is not None
+    assert shuffled["displayed_option_ids"] == shuffled_option_ids(authored, stored_seed)
+    graded = owner.ok(
+        "POST",
+        f"/mock-practice-sessions/{shuffled['id']}/submit",
+        {"selected_option_ids": question["correct_option_ids"]},
+    )
+    assert graded["result"] == "correct"

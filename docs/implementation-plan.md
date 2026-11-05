@@ -342,6 +342,33 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | STEM-ITEMS-A 표시 | RED(QPLAY-01-AC14 E2E) → `stemItems` 순수 함수(항목 계열·형식·연속성·문장 속 언급 제외·빈 답 괄호) + `StemItems` 박스 부품(`ul` 이름 `제시 항목`, hanging indent, semantic token) → 문제 내용 전체를 보이는 모든 곳에 적용 | `apps/web/src/lib/questions/stem-items.ts`, `apps/web/src/components/questions/**`, `apps/web/src/components/documents/editor/text-block-editor.tsx`·`editor.module.css`, `apps/web/src/components/shared/**`, `apps/web/test/stem-items.test.ts`, `tests/e2e/questions/questions-practice.spec.ts`·fixture, `scripts/e2e-trace.ts`·CI `E2E_PHASES` | — | AC14 GREEN, AC13·QPLAY 기존 GREEN, Vitest(계열별·형식 혼합·`①`/`1.` 제외·언급 제외·빈 줄 범위·빈 답 괄호), lint/typecheck, `e2e:trace --strict --phase STEM.0` |
 | STEM-ITEMS-B 추출 | `segment.py` 제시 항목 줄 앞 `\n`(첫 항목 앞 `\n\n`, 넘친 줄은 공백), `llm_refine` 프롬프트 `questions.extract/v3`(같은 모양), 기호 계열은 A와 같은 목록(보기 기호 제외) | `packages/core/src/book_core/extractor/**`, `packages/core/tests/**` | — | 추출기 pytest GREEN(새 케이스: 한 줄 PDF 줄의 (가)~(라), ㄱ.~ㄷ., 넘친 줄, 보기 `①`은 그대로 보기), mypy strict, ruff |
 
+### UX10 — 홈·문제 보기·풀이 통합·문서 뷰어 개선
+
+상세 구현의 기준은 [UX10 문서 묶음](implementation/ux10/index.md)이다. 구현 brief에 해당 Task 문서를 반드시 포함한다. 사용자 지시로 각 Task는 gpt-6.1-terra(기본 effort) agent 1개에 배정하며 독립 리뷰 통과 후 커밋한다. 로컬 검증은 유지하고 CI는 최종 feature PR에서 한 번에 수행한다.
+
+| ID | 내용 | 의존 | DoD |
+|---|---|---|---|
+| UX10-SPEC | 세부 설계·원본 명세 연결 | — | 문서·링크·충돌 결정 기록, 포맷 검증 |
+| UX10-UI | 공통 버튼·아이콘·swipe | SPEC | ui.md AC01~04 GREEN·독립 리뷰 |
+| UX10-QVIEW | 보기 순서·기존 결과·리셋 | SPEC·UI | qview.md AC01~05 GREEN·DB/격리 계약·독립 리뷰 |
+| UX10-HOME | 검색·상태 필터·AI header guard·통합 header 검증 | UI·QVIEW·PLAY | home.md AC01~05 GREEN·독립 리뷰 |
+| UX10-PLAY | 홈 primary 진입·풀이 통합·폼·결과·이름 수정 | UI·QVIEW·AI | play.md AC01~06 GREEN·독립 리뷰 |
+| UX10-AI | 가용성·해설 펼침·문구 | UI (HOME header 검증은 HOME 이후) | ai.md AC01~04 GREEN·독립 리뷰 |
+| UX10-DOC | checkbox·모바일 함께 보기·전체 높이 | UI | doc.md AC01~05 GREEN·독립 리뷰 |
+| UX10-QA | 교차 QA·PR·CI·병합·배포 | 전체 구현 | qa.md AC01~05·CI GREEN·production smoke |
+
+Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase는 main thread가 통합한다. 독립 scope의 UI/QVIEW/DOC는 SPEC 기준 별도 worktree에서 구현 가능하며, 통합 순서와 의존 Task 통합 후 재검증은 유지한다.
+
+### UX11 — 추가 피드백 Task
+
+[세부 구현 기준](implementation/ux11/index.md). UX10을 취소하지 않으며 같은 최종 feature PR/CI/배포 범위에 포함한다. 신규 구현 agent를 Task별 terra 기본 effort로 배정한다. UX11-STEM은 기존 active scope와 독립이므로 즉시 시작하고, AI prompt는 독립·composer는 UX10-AI 이후, 복귀 provider는 독립·풀이 viewer 연결은 UX10-QVIEW/PLAY 이후다. 사용자 확정: 실패 전송 입력은 새 draft가 없으면 복구·새 draft는 보존, 다시 풀기는 현재 문제만 새 시도·이력 유지. 범위/모의고사의 기존 회차 결과는 유지하고 다시 풀기는 현재 문제의 별도 연습으로 기록한다(사용자 최종 확정).
+
+| ID | 내용 | 의존 | DoD |
+|---|---|---|---|
+| UX11-AI-DIRECT | 첨부는 context·직접 질문 우선·전송 즉시 clear·실패 복구 | UX10-AI 인계 | ai-direct.md AC01~04·개인/제출 경계·리뷰 |
+| UX11-RETURN | 다시 풀기·하단 global 복귀/X | UX10-QVIEW/PLAY 인계 | return.md AC01~05·권한·상태·브라우저·리뷰 |
+| UX11-STEM | 괄호 항목·bullet·보조 본문 줄바꿈 | 독립 | stem.md AC01~05·TS/Python parity·반례·리뷰 |
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -846,6 +873,45 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 | 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
 
+### UX10 사용자 결정 — 2026-11-05
+
+**구현 정합성 결정:** UX10의 이미 푼 문제 결과 즉시 표시는 UX7의 캐시 열기 HTTP 0회보다 우선한다. Heatmap 열기마다 recent/epoch metadata를 재검증하고 유효한 미제출 session 내용은 그대로 재사용(새 POST 없음)한다. 다른 기기의 제출은 client broadcast로 감지할 수 없어 metadata 재검증이 필요하다. 기존 TTL/200개/브라우저 비저장/미제출 DTO 정답 비노출은 유지한다.
+
+**최종 재변경:** 통합을 다시 추진한다. 홈 primary `풀기` 버튼에서 통합 화면으로 직접 진입, 변형 0개는 기존 bank 풀이·변형 선택 시 mock 경로를 사용한다. 기록·권한 격리 유지. 이름 수정의 저장/취소 배치 및 편집 중 해당 풀기 disabled 결정은 유지한다. 아래 통합 취소·빈 변형 mock 복사 결정은 더 이상 유효하지 않다.
+
+**최종 수정:** 문제 풀기·모의고사 통합 취소. 홈 `풀기` primary dropdown에 `문제 풀기`·`모의고사`, 기존 독립 화면 유지. 모의고사 변형 0개도 mock으로 원본 그대로 생성(LLM 0회), 전체 범위 가능. 이름 수정은 입력 아래 저장/취소 같은 줄, 편집 중 해당 모의고사 풀기 disabled(사용자 확인). 아래 최초 통합 결정과 bank 우회는 이 수정으로 대체한다.
+
+
+- 문제 풀기/모의고사는 화면·진입점 통합, 은행·mock 기록 격리 유지. 리셋은 본인의 해당 문제 풀이 기록·Heatmap 상태 초기화(immutable 원본은 reset epoch로 사용자 기록에서 제외). 모바일 원본·변환본 모두 선택 시 **함께 상하 표시**가 최종 결정이다.
+- 기존 QPLAY 보기 shuffle·QOV 빈 status=전체/접힘·MOCK 변형 1개 이상·DOCVIEW both 기본/모바일 단일 pane·AI off 비활성 UI·EXPL 접힘 기본을 [UX10 기준](implementation/ux10/index.md)으로 개정한다. 변형 0개는 bank 경로이므로 mock API nonempty 계약은 유지 가능하다.
+- 사용자 승인 실행: terra 기본 effort Task 1:1 → 독립 Codex 리뷰 → 커밋·main thread 통합 → QA(수정도 terra) → feature PR 하나·CI GREEN까지 수정 → develop 병합 → develop/main PR·병합 → production 배포. 로컬 검증은 생략하지 않는다.
+
+### UX10-PLAY 리뷰의 범위·상한 처리 — 2026-11-05
+
+180758 Codex 리뷰의 후보 5,000개 초과 시 count만 줄여 허용하라는 P2는 거절한다. main이 Task brief에서 승인한 범위는 기존 후보 범위 상한 보존이며, 작은 count로 대규모 후보 해석 용량을 확장하는 변경은 포함하지 않는다. [PLAY 기준](implementation/ux10/play.md)에 명시하고 5,001 후보·count10 거절 회귀를 유지한다. 초기에는 홈 진입 연결을 HOME dependency로 인계했으나, 182307 리뷰에서 실제 production 진입 부재 P1과 Task 간 검증 순환이 확인되어 다음과 같이 소유권을 변경한다. PLAY가 HOME의 완성된 header/menu hunk를 받아 primary 진입·onBankStarted 및 실제 클릭 AC01을 구현한다. HOME은 PLAY 이후 필터·AI header guard와 최종 keyboard/visual 흐름을 검증한다. 의존 방향을 PLAY→HOME으로 고정하고 같은 파일을 동시에 편집하지 않는다. 생성 dialog/step 접근성 이름 변경에 따른 기존 MOCK fixture 수정은 PLAY가 수행한다.
+
+### UX11 과거 mock 연습 provenance — 2026-11-05
+
+구현 조사 결과 NULL-run session의 후속 제출은 shown generation만 허용하고, idempotency 저장소는 만료되어 지속적인 권한 근거로 쓸 수 없다. 앞서 migration 불필요로 가정한 부분을 수정한다. RETURN에 scoring linkage와 별개의 immutable retry origin(run ID·position)을 저장하는 최소 additive migration `20261106110000`을 허용한다. 일반 standalone 정책은 유지하고 origin 일치·소유권·position·generation을 검증한다. main만 candidate를 별도 테스트 DB에 적용하고, 공유 DB에는 리뷰·통합 후 적용한다.
+
+### UX11 과거 mock 문항의 연습 권한 — 2026-11-05
+
+현재 본인 run에서 available인 과거 generation 문항은 현재 목록에서 빠졌다는 이유만으로 다시 풀기를 404로 끝내지 않는다. RETURN이 run 소유권·위치를 근거로 별도 session을 만드는 좁은 API를 추가한다. 일반 mock standalone의 현재 목록 정책, 삭제/제거 no-access, 원 회차 불변과 bank/mock 격리는 유지한다. [계약·검증 기준](implementation/ux11/return.md#회차-문항의-별도-연습-api).
+
+### UX11 다시 풀기 기록 경계 — 2026-11-05
+
+사용자 확정: 현재 문제만 다시 풀며 과거 시도를 보존한다. 범위 풀이·모의고사의 원 회차 점수·결과는 그대로 두고 별도 연습 시도로 기록한다. UX10의 기록·Heatmap 초기화와 별개이며, 원 run 위치를 재제출하거나 결과를 덮어쓰지 않는다. mock 연습은 mock 기록 경계를 유지한다. [세부 기준](implementation/ux11/return.md).
+
+### UX11-RETURN 계정 전환의 보호 경로 복구 — 2026-11-05
+
+독립 리뷰에서 새 계정이 이전 Workspace에 가입되어 있지 않으면 not-found가 AuthenticatedShell보다 먼저 렌더되어 신원 확인 대기가 끝나지 않는 문제가 확인되었다. 보호 경로의 확정된 계정 변경은 이전 화면을 가린 채 `/workspaces`, 확정된 로그아웃은 `/login`으로 이동한다. 이전 Workspace의 shell 재등장만을 복구 조건으로 삼지 않는다. 공개 공유·복구 경로는 이 대기 때문에 가리지 않고, 일시적인 신원 API 오류는 계정 변경으로 오인하지 않아 같은 사용자의 draft·풀이를 유지한다. Root layout의 query 구독은 별도 작은 Suspense 경계에 두며 Workspace 권한 검사 전체를 fallback 안에 넣어 404를 200으로 바꾸지 않는다.
+
+### UX10-QVIEW 리셋 잠금의 DB 왕복 예산 — 2026-11-05
+
+최종 infra QA에서 PERF-1의 기존 상한(open 8·submit 5·GET session 3·PATCH state 7)을 초과했다. 기존 PERF-1 결정은 GET을 row-lock 없는 autocommit으로 보았지만, 새 리셋 계약은 답변 노출과 재전송을 막기 위해 트랜잭션 전체의 잠금과 잠금 대기 **뒤**의 새 epoch snapshot이 필요하다. advisory lock과 epoch 조회를 한 SQL statement에 합치면 대기 전 snapshot으로 오래된 결과를 승인할 수 있으므로 이 분리는 유지한다.
+
+불필요한 epoch row 생성·중복 reset 시각 조회를 제거하고, 소유자/멤버십·문항·epoch 조회를 안전하게 묶은 뒤의 측정 상한은 세션 열기 10, 제출 6, session GET 6, my-state PATCH 9다. Main은 이 네 경로의 실제 트랜잭션/잠금 비용을 새 기준으로 승인했다. 다른 Workspace·overview·documents 상한은 바꾸지 않는다. 테스트는 새 수치에 고정해 이후 추가 왕복을 계속 차단하며, 권한 matrix·리셋/alias/동시성 계약을 함께 통과해야 한다. 수치 변경만으로 기존 실패를 숨기지 않으며 독립 리뷰에서 잠금·snapshot 보존을 확인한다.
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |
@@ -1034,3 +1100,38 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | STEM-ITEMS-B 추출 줄바꿈 | ✅ (Codex P2×2 → 9a63cc75, 재리뷰 P2 → 0e178121, 재리뷰 지적 없음) | 6763f86c · 9a63cc75 · 0e178121, 병합 245f2902 | 2026-11-05. `feature/stem-items`. `book_core.question.labels`(`stem_item_starts`·`break_stem_items`·`leading_item_families`·`has_item_label`), `RawQuestion.stem` 줄바꿈, prompt `questions.extract/v3`. 보기 판단은 줄 모양 규칙과 분리(괄호 안 공백·문장부호 없음·한 줄 발문에서도 `1. (가)` 보기 유지). 기존 기대값 1건 변경(`가. 응결 나. 증발` 발문이 줄바꿈). 한계: 추출기는 빈 줄을 모르므로 마지막 항목 뒤 문장은 그 항목 줄에 붙는다. fingerprint/3은 공백 제거라 영향 없음. 병합 후 make lint·typecheck·test(pytest 2630, web 1233) GREEN. |
 
 Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·갱신한다.
+
+| UX10-SPEC 세부 구현 문서 | ✅ 문서 검증·독립 리뷰 통과 | feature/ux10-spec | docs/implementation/ux10 9개 문서, 상대 링크·diff 검증, Codex 지적 없음(.reviews/20261105-145847-18441-UX10-SPEC-implementation-specifications.log). 후속 기능 구현·통합 QA 완료 |
+| UX10-UI | ✅ 독립 리뷰·main 재검증·최종 visual 통합 | 28b870f6 · 0412ef39 · 360ddf0c · 8346762f | 최종 이미지 리뷰 지적 없음(223812 log). main 전체 147장+footer 수정 12장 직접 검토, Linux app24·Storybook26 GREEN. 공통 버튼·아이콘·swipe와 RETURN 안전 이미지 확인 |
+| UX10-QVIEW | ✅ 리뷰·main 재검증·최종 API QA 통합 | 6d8381b1 · 3fff01a0 | 마지막 리뷰 지적 없음(223106 log). main 실제 HTTP/리셋/왕복/전체 권한 matrix531 GREEN, 전체 infra1036 GREEN. 새 잠금 예산은 §7 결정, 공유 DB reset epoch 적용·이력 보존 |
+| UX10-DOC | ✅ 리뷰·main 재검증·reflow QA 통합 | aee599d9 · 3f61c7b9 · 2221660f | 마지막 리뷰 지적 없음(221923 log). main Chromium/WebKit 전체 viewer40 GREEN. 선택 위치 보이는 경우만 fit reflow 후 보존·읽던 위치 유지, 원래 AC07 불변. Linux DOC4 비교 동일 |
+| UX10-HOME | ✅ 독립 리뷰·main 재검증·통합 | 981a9976 | 최종 리뷰 지적 없음(202933 log). main 웹1298·Chromium/WebKit14 GREEN. all/none의 overview·범위 picker·BFF 일관성, debounce·검색 설정·header guard 포함 |
+| UX10-PLAY | ✅ 리뷰·main 재검증·최종 footer QA 통합 | b462a79a · 97f03465 · c9431efb | 마지막 리뷰 지적 없음(222117 log). main 범위/PLAY 양 브라우저34 GREEN. 실제 dialog 하단 footer·3 viewport bounds·마지막 문항 접근, 기존 순서/이력 검증 유지. 관련 Linux 12장 갱신·직접 확인 |
+| UX10-AI | ✅ 리뷰·main 재검증·접근성 QA 통합 | 09b04855 · 8ead4059 · a6650c80 · 8d4fbb54 | 마지막 리뷰 지적 없음(222718 log). 새 AI 동작 숨김·기존 답변 열람·정확한 409/403 유지. main ASK/모의고사 접근성 후속11 GREEN, 전체 접근성 최초29/30에서 유일한 과거 off 진입 기대값 교정 |
+| UX10-QA | ✅ 전체 통합·독립 리뷰·main QA 완료 | feature/ux10-spec | 최종 lint/format·typecheck374·unit(web1365/UI446/Python2655)·계약·infra1036·pgTAP1204·db lint GREEN. Linux app24/Storybook26·strict trace·log/artifact 감사 0건. 변경 범위 양 브라우저 최초238/246의 8건은 후속 QVIEW/PLAY34·DOC40으로 모두 재검증 GREEN. PR/CI는 요청 순서대로 후속 진행 |
+
+UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
+
+| UX11-AI-DIRECT | ✅ 독립 리뷰·main 재검증·통합 | 1f0a370f · 99ffceda | 최종 test 후속 리뷰 지적 없음(215824 log). 통합 AI 양 브라우저34 GREEN, 직접 질문·즉시 입력 비우기·owner/compose session별 draft/수신/멱등 재시도 복구. 로그아웃 후 보호 경로 이동에도 새 사용자 입력 가능 검증 |
+| UX11-RETURN | ✅ 독립 리뷰·main 재검증·통합 | 7295831f · 28180e26 | 마지막 리뷰 지적 없음(215453 log). main 단위66·실제 API5·pgTAP1204·전용 양 브라우저18 및 로그 감사 추가10 GREEN. 별도 연습·원 회차 유지·리셋 fencing·안전 계정 전환, 공유 origin migration 적용. 과거 WebKit 생성 1건 미재현: production agent5회·main 각 엔진3회 통과 |
+| UX11-STEM | ✅ 독립 리뷰·main 재검증·통합 | bf8d3a8e | 최종 리뷰 지적 없음(182003 log). main TS67·Python52·Chromium/WebKit16·trace16/strict·screen30 GREEN. 초기/후속 항목 경계 분리, 문단·범위 참조·산술 기호 보존 |
+
+### PR #78 CI 후속 — 2026-11-05
+
+첫 CI에서 모바일 SMOKE-02와 ACCOUNT-01-AC01의 실제 헤더 겹침을 발견했다. 공통 `.qz-button`과 같은 specificity였던 UserMenu/WorkspaceSwitcher 축소 규칙이 bundle 순서에 따라 덮이는 문제로, module selector를 button으로 한정해 의도된 flex-shrink를 보장했다(5066268f, 리뷰 233203 log). 원래 검증은 그대로 두었으며 main에서 실패했던 9개 프로젝트·케이스를 다시 통과했다. 기존 mask는 바꾸지 않고 실제 phone header 경계에서 달라진 16개 PNG만 갱신·직접 확인했다.
+
+기존 DOC-01/HOMEDLG-01 검증의 제거된 메뉴 항목·옛 모의고사 제목 기대값은 통합 풀기 기준으로 교정했다(01723cbc, 리뷰 232845 log). 종류 변경은 키보드 End 뒤 실제 focus를 기다리며 원래 변경·권한·modal/inert/focus/layout 검증을 유지한다. main Chromium/WebKit 30개 통과. CI 결과와 이후 병합·배포는 [PR #78](https://github.com/peacecheejecake/quiz-workspace/pull/78)의 실행 기록으로 확인한다.
+
+CI의 iPad VISUAL-07/10 차이는 화면 배치가 아니라 비동기 초기 focus와 촬영 시점 차이였다. 실제 제목·검색 입력에 focus를 명시하고 toBeFocused를 확인한 뒤 촬영하도록 고정했다(3cd01cdf, 독립 리뷰 234820 log). mask·허용 오차는 유지하고 검색 입력 focus ring만 달라진 6개 PNG를 main이 확인했다. 담당자 Linux non-update 3회 반복 12건과 main 재검증 4건 모두 통과했다.
+
+UX10-CI 착수: PR runner의 Ubuntu Azure mirror가 30–40 kB/s로 40분 넘게 의존성을 내려받으며 새 실행에도 반복된다. 별도 Terra agent가 [QA 후속 범위·DoD](implementation/ux10/qa.md#ux10-ci--pr-검증-환경-후속)에 따라 공식 배포 경로의 최소 수정과 기존 workflow 검증을 담당한다. 전체 검증 gate와 고정 버전은 유지한다. 리뷰·main 재검증·커밋은 완료 후 기록한다.
+
+UX10-CI 로컬 완료: 2d51ef57, 독립 리뷰 20261106-000127 log 지적 없음. 기존 Playwright install 직전에 runner의 Ubuntu mirror 파일에서 Azure 주소만 공식 archive.ubuntu.com으로 치환한다. browser/dependency 버전·APT 서명 검증·테스트 gate는 불변이다. main Prettier·diff 검사 및 CI 분류/배포 workflow 테스트 121개 통과. 실제 다운로드 속도 개선 여부는 후속 GitHub runner 실행으로 검증한다.
+
+### PR #78 추가 회귀 검증 — 2026-11-06
+
+전체 CI 42051265843에서 정적 검사·단위·계약·이미지 3종·Storybook·DB/infra/visual/restore와 E2E 1/4·4/4가 통과했다. 2/4·3/4의 실패는 과거 테스트가 완료된 문제를 다시 제출하거나 기본 펼침인 저장 AI 해설을 다시 펼치려던 흐름, 로딩 placeholder 단계에서 메뉴를 열던 흐름이다. AI 담당자가 b4b13943·799264ad로 교정했다(독립 리뷰 002217·003254 log 지적 없음). 원래 권한·캐시·개정·누설 검증을 보존하며 문제 개정 후 새 제출은 그대로 수행한다. 담당자 전체 68건 및 ASK 전체 28건·문제 케이스 양 브라우저 각 3회 통과. main 전체 재검증 67/68의 유일한 ASK 로딩 실패도 재현·교정 후 ASK 전체 28건 통과, touched lint·format·E2E typecheck 통과.
+
+QPLAY-01-AC05의 최초 `viewed` 검사 실패/재시도 통과는 제목만 보이는 loading placeholder를 문제 열람 완료로 간주한 테스트 경합이었다. adf67be5는 각 방문 문제와 마지막 딥링크에서 보기 네 개의 표시를 기다린다(독립 리뷰 002919 log 지적 없음). URL·뒤/앞 이동·재로드·세 문제 모두 viewed 검증은 유지한다. 담당자 양 브라우저 각 3회, main 6건 통과. QPLAY-01-AC14·QOV-01-AC14는 변경 없이 양 브라우저 각 3회 및 이번 CI에서 통과해 추정 수정은 하지 않았다.
+
+UX10-CI 공식 Ubuntu archive 변경 뒤 이번 실행의 모든 E2E runner는 의존성 설치를 수 분 내 마쳤다. 기존 40분 이상 Azure mirror 지연은 재현되지 않았으며, 전체 검증 gate·버전은 그대로다. 이후 커밋의 최종 GREEN 및 병합·배포 결과는 PR 실행 기록으로 확인한다.

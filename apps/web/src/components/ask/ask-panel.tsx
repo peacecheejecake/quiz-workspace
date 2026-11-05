@@ -36,11 +36,19 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
 } from 'react';
+import {
+  createAskRecoveryStore,
+  type AcceptedReceipt,
+  type AskRecoveryStore,
+} from './ask-recovery-store';
+import { recoverFailedDraft } from './ask-draft-recovery';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import {
@@ -105,6 +113,7 @@ export interface AskPanelProps {
   readonly archived: boolean;
   readonly askState: AskState | null;
   readonly client: AskClient;
+  readonly recovery?: AskRecoveryStore;
   /** The URL's conversation (null: the list or a new conversation). */
   readonly conversationId: string | null;
   /** Shows another conversation (null: the list / a new one) — push or replace the entry. */
@@ -222,6 +231,7 @@ function useAskPanel({
   onNavigate,
   documents,
   intent,
+  recovery: suppliedRecovery,
 }: AskPanelProps) {
   const router = useRouter();
   const search = useMemo(() => createSearchClient(), []);
@@ -235,6 +245,7 @@ function useAskPanel({
   // --- view ----------------------------------------------------------------------------------
   const [mode, setMode] = useState<ViewMode>(intent ? 'new' : 'list');
   const [draft, setDraft] = useState(intent?.text ?? '');
+  const draftEditRef = useRef(0);
   const [scope, setScope] = useState<AskScope>(intent?.scope ?? EMPTY_SCOPE);
   const [seenIntent, setSeenIntent] = useState(intent?.key ?? null);
   if (intent && intent.key !== seenIntent) {
@@ -255,6 +266,23 @@ function useAskPanel({
   const [live, setLive] = useState<{ id: string; text: string | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [pending, setPending] = useState<string | null>(null);
+  const localRecovery = useMemo(() => createAskRecoveryStore(), []);
+  const recovery = suppliedRecovery ?? localRecovery;
+  useLayoutEffect(() => {
+    recovery.hide();
+    if (open) void recovery.verify();
+    return () => recovery.hide();
+  }, [open, recovery]);
+  const failedDrafts = useSyncExternalStore(
+    recovery.subscribe,
+    recovery.getSnapshot,
+    recovery.getSnapshot,
+  );
+  const receipts = useSyncExternalStore(
+    recovery.subscribe,
+    recovery.getReceipts,
+    recovery.getReceipts,
+  );
   /** Why the last request was refused; `seconds` counts a 429's Retry-After down. */
   const [refusal, setRefusal] = useState<{ text: string; seconds: number | null } | null>(
     intent?.failure ? { text: intent.failure, seconds: null } : null,
@@ -265,9 +293,13 @@ function useAskPanel({
   // What a request started for: closing the panel or showing another conversation (or the list)
   // moves it on, and a late answer then changes neither the view nor the URL (the server still
   // answers; the question is in the conversation when it is opened again).
+  const viewIdentity = useRef(newIdempotencyKey());
   const viewEpochRef = useRef(0);
   useEffect(() => {
     viewEpochRef.current += 1;
+    return () => {
+      viewEpochRef.current += 1;
+    };
   }, [open, conversationId]);
   const viewToken = () => {
     const epoch = viewEpochRef.current;
@@ -564,7 +596,14 @@ function useAskPanel({
       : null;
   const tooLong = draft.trim().length > limits.max_question_chars;
   const canSend =
-    !blockedReason && !tooLong && draft.trim() !== '' && !running && !sending && !waiting;
+    askState?.available === true &&
+    !archived &&
+    !blockedReason &&
+    !tooLong &&
+    draft.trim() !== '' &&
+    !running &&
+    !sending &&
+    !waiting;
 
   // A request whose answer was lost (network, 5xx) may still have been accepted. Sending the
   // same operation again reuses its Idempotency-Key (the API replays the first result); any
@@ -593,7 +632,7 @@ function useAskPanel({
     ambiguousRef.current = lost ? { op, key, conversationId } : null;
   };
 
-  const accepted = (conv: Conversation, result: MessageAccepted) => {
+  const accepted = useCallback((conv: Conversation, result: MessageAccepted) => {
     // Onto the latest state, not the snapshot the request started from: a re-read meanwhile
     // (operationKey) may have brought in a turn that landed despite a lost response.
     const added = [result.user_message, result.answer];
@@ -603,53 +642,197 @@ function useAskPanel({
     });
     const question = result.answer.question_message_id ?? '';
     setVersions((v) => Object.fromEntries(Object.entries(v).filter(([key]) => key !== question)));
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const receipt = receipts.find(
+      (item) =>
+        item.workspaceId === workspaceId &&
+        item.conversationId === conversationId &&
+        item.originView === `${viewIdentity.current}:${viewEpochRef.current}`,
+    );
+    if (!receipt || !recovery.getReceipts().includes(receipt)) return;
+    recovery.removeReceipt(recovery.token(), receipt);
+    recovery.remove(recovery.token(), receipt);
+    // Synchronize the verified external outbox into the current conversation.
+    accepted(receipt.conversation, receipt.result);
+    setAnnouncement(ASK_TEXT.liveWriting);
+    if (conversationId === null) onNavigate(receipt.conversation.id, 'replace');
+  }, [accepted, conversationId, onNavigate, open, receipts, recovery, workspaceId]);
+
+  const openingReceiptRef = useRef(false);
+  async function openReceipt(receipt: AcceptedReceipt) {
+    if (openingReceiptRef.current) return;
+    const current = viewToken();
+    const token = recovery.token();
+    if (receipt.conversation.id !== conversationId) {
+      recovery.removeReceipt(token, receipt);
+      onNavigate(receipt.conversation.id, 'push');
+      return;
+    }
+    openingReceiptRef.current = true;
+    try {
+      if (!(await recovery.verify()) || !current() || !recovery.valid(token)) return;
+      const fresh = await client.get(receipt.conversation.id);
+      if (!fresh.messages.some((message) => message.id === receipt.result.answer.id)) {
+        throw new AskApiError('network');
+      }
+      if (!(await recovery.verify()) || !current() || !recovery.valid(token)) return;
+      setConversation(fresh);
+      recovery.removeReceipt(token, receipt);
+      recovery.remove(token, receipt);
+      setAnnouncement(ASK_TEXT.liveWriting);
+    } catch (error) {
+      if (current() && recovery.valid(token)) refuse(error);
+    } finally {
+      openingReceiptRef.current = false;
+    }
+  }
 
   async function send() {
     const question = draft.trim();
     if (sendingRef.current || !canSend) return;
     const current = viewToken();
+    const originView = `${viewIdentity.current}:${viewEpochRef.current}`;
+    const snapshot = draft;
+    const recoveryToken = recovery.token();
+    const submitSession = recovery.composeSession(workspaceId);
+    const sentAtEdit = draftEditRef.current;
     sendingRef.current = true;
+    setDraft('');
     setSending(true);
     setPending(question);
     setRefusal(null);
     // Asking from the list starts a new conversation: show it, not the list.
     if (!conversation) setMode('new');
     let created: Conversation | null = null;
+    let receiptDeferred = false;
     try {
+      if (!(await recovery.verify()) || !recovery.valid(recoveryToken))
+        throw new AskApiError('network');
+      if (!current()) {
+        recovery.add(recoveryToken, { workspaceId, conversationId, text: snapshot });
+        return;
+      }
+      const prior = recovery.getOperation(
+        recoveryToken,
+        workspaceId,
+        conversationId,
+        submitSession,
+      );
+      const matches =
+        prior !== null &&
+        prior.workspaceId === workspaceId &&
+        (prior.originConversationId === conversationId ||
+          prior.conversationId === conversationId) &&
+        prior.question === question &&
+        JSON.stringify(prior.scope) === JSON.stringify(scope);
       let conv = conversation;
+      if (matches && prior && (!conv || conv.id !== prior.conversationId)) {
+        conv = await client.get(prior.conversationId);
+        if (current()) setConversation(conv);
+        if (conversationId === null) created = conv;
+      }
+      if (!matches && prior) {
+        recovery.removeOperation(recoveryToken, prior);
+        try {
+          const fresh = await client.get(prior.conversationId);
+          if (!conv && prior.originConversationId === conversationId) {
+            conv = fresh;
+            if (conversationId === null) created = fresh;
+            if (current()) setConversation(fresh);
+          } else {
+            setConversation((value) => (value?.id === fresh.id ? fresh : value));
+          }
+        } catch {
+          /* The next conversation read will reconcile it. */
+        }
+      }
       if (!conv) {
         conv = await client.create(workspaceId, isEmptyScope(scope) ? {} : { scope });
-        if (!current()) return;
+        if (!current()) {
+          recovery.hide();
+          recovery.add(recoveryToken, { workspaceId, conversationId, text: snapshot });
+          await recovery.verify();
+          return;
+        }
         created = conv;
         setConversation(conv);
       }
-      const body = sameScope(scope, normalizeScope(conv.scope))
-        ? { question }
-        : { question, scope };
-      const op = `ask:${conv.id}:${JSON.stringify(body)}`;
-      const key = await operationKey(op);
+      const body =
+        matches && prior
+          ? prior.body
+          : sameScope(scope, normalizeScope(conv.scope))
+            ? { question }
+            : { question, scope };
+      const key = matches && prior ? prior.key : newIdempotencyKey();
+      const operation = {
+        workspaceId,
+        originConversationId: matches && prior ? prior.originConversationId : conversationId,
+        composeSession:
+          matches && prior ? prior.composeSession : recovery.composeSession(workspaceId),
+        conversationId: conv.id,
+        question,
+        scope,
+        body,
+        key,
+      };
+      recovery.putOperation(recoveryToken, operation);
       let result: MessageAccepted;
       try {
         result = await client.ask(conv.id, body, key);
-        settleOperation(op, key, conv.id);
+        recovery.removeOperation(recoveryToken, operation);
       } catch (error) {
-        settleOperation(op, key, conv.id, error);
+        const lost =
+          !(error instanceof AskApiError) ||
+          error.kind === 'network' ||
+          (error.kind === 'failed' && (error.status === 0 || error.status >= 500));
+        if (!lost) recovery.removeOperation(recoveryToken, operation);
         throw error;
       }
-      if (!current()) return;
-      accepted({ ...conv, scope }, result);
+      recovery.hide();
+      const receipt = {
+        workspaceId,
+        conversationId,
+        conversation: { ...conv, scope },
+        result,
+        text: snapshot,
+        originView,
+      };
+      recovery.addReceipt(recoveryToken, receipt);
+      receiptDeferred = true;
+      if (!(await recovery.verify()) || !current() || !recovery.valid(recoveryToken)) return;
+      recovery.removeReceipt(recoveryToken, receipt);
+      receiptDeferred = false;
+      recovery.remove(recoveryToken, { workspaceId, conversationId, text: snapshot });
+      accepted(receipt.conversation, result);
       setAnnouncement(ASK_TEXT.liveWriting);
-      setDraft('');
       setAtEnd(true);
       atEndRef.current = true;
     } catch (error) {
-      if (current()) refuse(error);
+      recovery.hide();
+      recovery.add(recoveryToken, {
+        workspaceId,
+        conversationId,
+        ...(created ? { createdConversationId: created.id } : {}),
+        text: snapshot,
+      });
+      const verified = await recovery.verify();
+      if (current() && recovery.valid(recoveryToken)) {
+        if (verified) {
+          setDraft((value) =>
+            recoverFailedDraft(snapshot, value, sentAtEdit, draftEditRef.current),
+          );
+        }
+        refuse(error);
+      }
     } finally {
       sendingRef.current = false;
       setSending(false);
       setPending(null);
-      if (created && current()) onNavigate(created.id, 'replace');
+      if (created && !receiptDeferred && current() && recovery.valid(recoveryToken))
+        onNavigate(created.id, 'replace');
     }
   }
 
@@ -776,6 +959,8 @@ function useAskPanel({
   };
   const startNew = () => {
     viewEpochRef.current += 1;
+    recovery.startCompose(recovery.token(), workspaceId);
+    setConversation(null);
     setMode('new');
     setDraft('');
     setScope(EMPTY_SCOPE);
@@ -942,7 +1127,8 @@ function useAskPanel({
                       onSource: openSource,
                       onCopy: copy,
                       onFeedback: feedback,
-                      onAgain: isLast && !reason ? (m) => void again(m) : null,
+                      onAgain:
+                        isLast && askState?.available && !archived ? (m) => void again(m) : null,
                       againBlocked,
                     }}
                   />
@@ -967,6 +1153,54 @@ function useAskPanel({
           ) : null}
         </div>
       )}
+      {receipts
+        .filter((item) => item.workspaceId === workspaceId)
+        .map((item) => (
+          <div key={item.result.answer.id} role="group" aria-label="확인할 답변">
+            <p>{item.text}</p>
+            <Button size="sm" variant="ghost" onClick={() => void openReceipt(item)}>
+              답변 확인
+            </Button>
+          </div>
+        ))}
+      {failedDrafts
+        .filter(
+          (item) =>
+            item.workspaceId === workspaceId &&
+            (item.conversationId === conversationId ||
+              item.createdConversationId === conversationId) &&
+            item.text !== draft,
+        )
+        .map((item, index) => (
+          <div key={`${index}-${item.conversationId}`} role="group" aria-label="보내지 못한 질문">
+            <p>보내지 못한 질문</p>
+            <p>{item.text}</p>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const write = navigator.clipboard?.writeText(item.text);
+                if (!write) {
+                  setAnnouncement('복사하지 못했습니다');
+                  return;
+                }
+                void write.then(
+                  () => setAnnouncement(ASK_TEXT.copied),
+                  () => setAnnouncement('복사하지 못했습니다'),
+                );
+              }}
+            >
+              질문 복사
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => recovery.remove(recovery.token(), item)}
+            >
+              복구 질문 지우기
+            </Button>
+          </div>
+        ))}
       <div ref={endRef} aria-hidden="true" />
       {unseen && !atEnd ? (
         <Button
@@ -1015,6 +1249,7 @@ function useAskPanel({
           enterKeyHint="send"
           {...(composing ? { 'data-own-escape': '' } : {})}
           onChange={(event) => {
+            draftEditRef.current += 1;
             setDraft(event.target.value);
             if (refusal && refusal.seconds == null) setRefusal(null);
           }}
@@ -1032,7 +1267,7 @@ function useAskPanel({
           <Button size="sm" onClick={() => void stop()}>
             답변 중지
           </Button>
-        ) : (
+        ) : askState?.available && !archived ? (
           <IconButton
             label="보내기"
             icon={<SendIcon />}
@@ -1041,7 +1276,7 @@ function useAskPanel({
             aria-describedby={blockedReason ? reasonId : undefined}
             onClick={() => void send()}
           />
-        )}
+        ) : null}
       </div>
       {counter || blockedReason || refusalText ? (
         <div className={styles.composerMeta}>

@@ -27,7 +27,7 @@ const liveQuery = (value = ''): LiveQuery => ({
 });
 
 describe('QuestionSearch', () => {
-  it('is a search box without a button; its 설정 popover holds the heatmap filters', async () => {
+  it('UX10-HOME-AC02 shows filters below the search and preserves them when collapsed', async () => {
     const user = userEvent.setup();
     const query = liveQuery('염소');
     render(<QuestionSearch query={query} max={200} searchable settings={<p>챕터 필터</p>} />);
@@ -38,12 +38,14 @@ describe('QuestionSearch', () => {
     expect(screen.queryByRole('button', { name: '검색' })).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
 
-    const settings = screen.getByRole('button', { name: '문제 설정' });
+    const settings = screen.getByRole('button', { name: '검색 설정' });
+    expect(settings).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('챕터 필터')).toBeVisible();
     await user.click(settings);
-    expect(screen.getByRole('dialog', { name: '문제 검색 설정' })).toHaveTextContent('챕터 필터');
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: '문제 검색 설정' })).toBeNull();
-    expect(settings).toHaveFocus();
+    expect(settings).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('챕터 필터')).not.toBeVisible();
+    await user.click(settings);
+    expect(screen.getByText('챕터 필터')).toBeVisible();
 
     // Enter is not needed, but commits at once.
     await user.type(box, '{Enter}');

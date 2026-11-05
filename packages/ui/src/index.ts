@@ -210,3 +210,5 @@ export {
   matchCountLabel,
 } from './reading/find-in-note';
 export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';
+
+export { useModalLayerOpen } from './internal/layer';

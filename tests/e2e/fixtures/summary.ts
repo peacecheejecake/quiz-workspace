@@ -410,7 +410,12 @@ export interface SummaryOffStack {
   /** The Redis DB (Celery broker) claimed for this invocation. */
   readonly redisDb: number;
   /** Calls the off API as `member` (Bearer from the member's session). */
-  request<T = unknown>(member: Member, method: string, path: string): Promise<ApiResponse<T>>;
+  request<T = unknown>(
+    member: Member,
+    method: string,
+    path: string,
+    payload?: unknown,
+  ): Promise<ApiResponse<T>>;
   /** Stops the three processes and fails if their logs hold a secret (log-audit patterns). */
   stop(): Promise<void>;
 }
@@ -526,7 +531,12 @@ export async function startSummaryOffStack(
     webUrl,
     apiUrl,
     redisDb: claim.db,
-    async request<T>(member: Member, method: string, path: string): Promise<ApiResponse<T>> {
+    async request<T>(
+      member: Member,
+      method: string,
+      path: string,
+      payload?: unknown,
+    ): Promise<ApiResponse<T>> {
       const res = await fetch(`${apiUrl}${API_PREFIX}${path}`, {
         method,
         headers: {
@@ -536,7 +546,7 @@ export async function startSummaryOffStack(
             ? {}
             : { 'content-type': 'application/json' }),
         },
-        body: method === 'GET' || method === 'DELETE' ? undefined : '{}',
+        body: method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(payload ?? {}),
       });
       const text = await res.text();
       let body: T | undefined;

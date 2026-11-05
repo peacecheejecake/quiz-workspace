@@ -23,7 +23,7 @@ import { WorkspaceNameForm } from './workspace-name-form';
 
 const CREATE_LABEL = 'Workspace 만들기';
 
-const OpenCreateContext = createContext<(() => void) | null>(null);
+const OpenCreateContext = createContext<((opener: HTMLElement) => void) | null>(null);
 
 export function CreateWorkspaceProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -62,12 +62,15 @@ export function CreateWorkspaceProvider({ children }: { children: ReactNode }) {
   const submission = useNameSubmit(createWorkspaceAction, onResult);
   const { reset } = submission;
 
-  const openCreate = useCallback(() => {
-    // CTAs are not Radix triggers: remember the opener to return focus to it on close.
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    reset();
-    changeOpen(true);
-  }, [reset, changeOpen]);
+  const openCreate = useCallback(
+    (element: HTMLElement) => {
+      // CTAs are not Radix triggers: remember the opener to return focus to it on close.
+      opener.current = element;
+      reset();
+      changeOpen(true);
+    },
+    [reset, changeOpen],
+  );
 
   return (
     <OpenCreateContext.Provider value={openCreate}>
@@ -112,7 +115,11 @@ export function CreateWorkspaceButton({
   const openCreate = useContext(OpenCreateContext);
   if (!openCreate) throw new Error('CreateWorkspaceButton must be inside CreateWorkspaceProvider.');
   return (
-    <Button variant={variant} onClick={openCreate} aria-haspopup="dialog">
+    <Button
+      variant={variant}
+      onClick={(event) => openCreate(event.currentTarget)}
+      aria-haspopup="dialog"
+    >
       {CREATE_LABEL}
     </Button>
   );
