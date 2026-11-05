@@ -78,10 +78,57 @@ describe('stemItems', () => {
     expect(stemItems('옳은 것은? (가) 하나')).toBeNull();
     expect(stemItems('옳은 것은? (나) 하나 (다) 둘')).toBeNull();
     expect(stemItems('옳은 것은? (가) 하나 (다) 둘')).toBeNull();
-    expect(pairs('옳은 것은? (가) 하나 (나) 둘 (라) 넷')).toEqual([
-      ['(가)', '하나'],
-      ['(나)', '둘 (라) 넷'],
+  });
+
+  it('shows no list when any label of the paragraph is out of order', () => {
+    // skipped, missing at the end, swapped, repeated
+    expect(stemItems('옳은 것은? (가) 하나 (나) 둘 (라) 넷')).toBeNull();
+    expect(stemItems('옳은 것은? (가) 하나 (다) 셋 (나) 둘')).toBeNull();
+    expect(stemItems('옳은 것은? ㄱ. 하나 ㄴ. 둘 ㄱ. 다시')).toBeNull();
+    expect(stemItems('옳은 것은?\n(가) 하나\n(나) 둘\n(다) 셋\n(마) 다섯')).toBeNull();
+  });
+
+  it('shows no list when a label of the family in another format interrupts it', () => {
+    expect(stemItems('옳은 것은? (가) 하나 나) 끼어듦 (나) 둘')).toBeNull();
+    expect(stemItems('옳은 것은? ㄱ. 하나 (ㄴ) 끼어듦 ㄴ. 둘')).toBeNull();
+  });
+
+  it('keeps a list when only other families appear inside the items', () => {
+    expect(pairs('옳은 것은? (가) A) 하나 (나) 둘')).toEqual([
+      ['(가)', 'A) 하나'],
+      ['(나)', '둘'],
     ]);
+  });
+
+  it('judges each paragraph on its own', () => {
+    const stem = '참고 (가) 하나 (다) 셋\n\n옳은 것은? (가) 하나 (나) 둘';
+    expect(stemItems(stem)).toEqual({
+      lead: ['참고 (가) 하나 (다) 셋', '옳은 것은?'],
+      items: [
+        { label: '(가)', text: '하나' },
+        { label: '(나)', text: '둘' },
+      ],
+      trailing: [],
+    });
+  });
+
+  it('ignores spaces inside brackets and keeps the label as printed', () => {
+    expect(pairs('옳은 것은? ( 가 ) 갑 ( 나 ) 을')).toEqual([
+      ['( 가 )', '갑'],
+      ['( 나 )', '을'],
+    ]);
+    expect(pairs('옳은 것은? （ 가 ） 갑 （나） 을')).toEqual([
+      ['（ 가 ）', '갑'],
+      ['（나）', '을'],
+    ]);
+    expect(pairs('옳은 것은?\n( 1 ) 하나\n(2 ) 둘')).toEqual([
+      ['( 1 )', '하나'],
+      ['(2 )', '둘'],
+    ]);
+  });
+
+  it('still does not read an empty answer mark as a label', () => {
+    expect(stemItems('옳은 것은? ( ) 끝')).toBeNull();
   });
 
   it('never takes option labels (①, ❶, ➀, 1.) as items', () => {
