@@ -597,12 +597,18 @@ class MockPracticeRepository:
                    where pr.id = :r
                 )
                 select page.position, page.question_id, q.id as live_id, q.question_type,
-                       left(rev.stem, {STEM_HEAD}) as stem_head, res.state, res.result
+                       left(rev.stem, {STEM_HEAD}) as stem_head, res.state, res.result,
+                       source.chapter_id, chapter.title as chapter_title, source.question_number
                   from page
                   left join public.mock_exam_questions q
                     on q.id = page.question_id and q.workspace_id = :w and q.removed_at is null
                   left join public.mock_exam_question_revisions rev
                     on rev.id = q.active_revision_id and rev.mock_exam_question_id = q.id
+                  left join public.questions source
+                    on source.id = q.source_question_id and source.workspace_id = q.workspace_id
+                   and source.deleted_at is null
+                  left join public.chapters chapter
+                    on chapter.id = source.chapter_id and chapter.workspace_id = source.workspace_id
                   left join lateral (
                     select s.state, {_LATEST_RESULT} as result
                       from public.mock_exam_practice_sessions s
@@ -628,9 +634,9 @@ class MockPracticeRepository:
                     question_id=r.question_id if available else None,
                     available=available,
                     question_type=cast("QuestionType | None", r.question_type),
-                    chapter_id=None,
-                    chapter_title=None,
-                    question_number=None,
+                    chapter_id=r.chapter_id,
+                    chapter_title=r.chapter_title,
+                    question_number=r.question_number,
                     stem_head=r.stem_head,
                     state=r.state,
                     result=r.result,

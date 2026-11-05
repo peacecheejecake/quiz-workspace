@@ -88,8 +88,8 @@ export const homeUi = {
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
   /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
   questionMenuButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문제|questions)$/i }),
-  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제|questions)$/i }),
+    main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i }),
+  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제 메뉴|question menu)$/i }),
   questionMenuItem: (page: Page, item: QuestionMenuItem) =>
     homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
@@ -180,9 +180,6 @@ const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.duplicates,
   QUESTION_MENU_ITEMS.redistribution,
   QUESTION_MENU_ITEMS.inactive,
-  QUESTION_MENU_ITEMS.mockExams,
-  QUESTION_MENU_ITEMS.practice,
-  QUESTION_MENU_ITEMS.ask,
 ] as const;
 
 /** Why the `문제` menu's editor-only items are disabled (UX7-DOCS-2, QOV-01-AC11). */
@@ -211,7 +208,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
   // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
   // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
-  for (const item of ['inactive', 'mockExams', 'practice'] as const) {
+  for (const item of ['inactive'] as const) {
     await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
   }
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
@@ -257,6 +254,12 @@ export async function expectReadOnlyQuestionMenu(
 
 /** Opens the header's `문제` menu and chooses `item` (UX4). */
 export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
+  if (item === 'mockExams') {
+    const url = new URL(page.url());
+    url.searchParams.append('panel', 'mock-exams');
+    await page.goto(url.toString());
+    return;
+  }
   await homeUi.questionMenuButton(page).click();
   await homeUi.questionMenuItem(page, item).click();
 }

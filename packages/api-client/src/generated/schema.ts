@@ -5685,6 +5685,8 @@ export type components = {
     PracticeRunCreate: {
       /** Mock Exam Id */
       mock_exam_id?: string | null;
+      /** Question Count */
+      question_count?: number | null;
       /**
        * Random Order
        * @default false

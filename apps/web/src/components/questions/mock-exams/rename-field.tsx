@@ -44,7 +44,7 @@ export function RenameField({
       return;
     }
     setSaving(true);
-    const failed = await onSave(title);
+    const failed = await onSave(title).catch(() => '이름을 저장하지 못했습니다. 다시 시도하세요.');
     setSaving(false);
     if (failed) setError(failed);
   }
@@ -66,19 +66,26 @@ export function RenameField({
           setError(null);
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') {
+          if (e.key === 'Escape' && !saving) {
             e.preventDefault();
             e.stopPropagation();
             onCancel();
           }
         }}
       />
-      <Button size="sm" type="submit" loading={saving}>
-        저장
-      </Button>
-      <Button size="sm" type="button" onClick={onCancel} disabled={saving}>
-        취소
-      </Button>
+      {error ? (
+        <span role="alert" className="qz-visually-hidden">
+          {error}
+        </span>
+      ) : null}
+      <div className={styles.renameActions}>
+        <Button size="sm" type="submit" loading={saving}>
+          저장
+        </Button>
+        <Button size="sm" type="button" onClick={onCancel} disabled={saving}>
+          취소
+        </Button>
+      </div>
     </form>
   );
 }

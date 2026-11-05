@@ -53,7 +53,12 @@ export interface PracticeRunApi {
   rangeQuestions(
     query: RangeQuery,
   ): Promise<RunActionResult<Pick<QuestionOverview, 'chapters' | 'items'>>>;
-  create(range: RunRange, randomOrder: boolean, key: string): Promise<RunActionResult<PracticeRun>>;
+  create(
+    range: RunRange,
+    randomOrder: boolean,
+    key: string,
+    count?: number | null,
+  ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
   openSession(
@@ -128,11 +133,11 @@ export function createPracticeRunApi(
         ? { ok: true, data: { chapters: result.data.chapters, items: result.data.items } }
         : result;
     },
-    create: async (range, randomOrder, key) =>
+    create: async (range, randomOrder, key, count) =>
       own(
         await call<PracticeRun>(RUN_BFF_PATHS.create(workspaceId), {
           method: 'POST',
-          body: { source: 'bank', range, random_order: randomOrder },
+          body: { source: 'bank', range, random_order: randomOrder, question_count: count ?? null },
           key,
         }),
       ),

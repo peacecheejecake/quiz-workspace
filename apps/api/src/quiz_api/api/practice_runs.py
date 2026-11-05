@@ -135,6 +135,7 @@ class PracticeRunCreate(BaseModel):
     mock_exam_id: uuid.UUID | None = None
     range: QuestionRange
     random_order: bool = False
+    question_count: int | None = Field(default=None, ge=1, le=MAX_RUN)
     seed: int | None = Field(
         default=None, ge=0, le=MAX_SEED, description="Shuffle seed; the server picks one if absent."
     )
@@ -143,6 +144,8 @@ class PracticeRunCreate(BaseModel):
     def _mock_exam_matches_source(self) -> PracticeRunCreate:
         if (self.source == "mock") != (self.mock_exam_id is not None):
             raise ValueError("mock_exam_id is required for source=mock and only for it.")
+        if self.source == "mock" and self.question_count is not None:
+            raise ValueError("question_count is only supported for source=bank.")
         return self
 
 
@@ -536,7 +539,14 @@ def create_practice_run(
             ProblemType.PRACTICE_RUN_TOO_LARGE,
             detail=f"A practice run holds at most {MAX_RUN} questions.",
         )
+    if body.question_count is not None and body.question_count > len(ids):
+        raise ProblemException(
+            422, ProblemType.RANGE_INVALID, detail="Question count exceeds the selected range."
+        )
     seed = body.seed if body.seed is not None else server_seed(settings)
+    ordered = run_order(ids, body.random_order, seed)
+    if body.question_count is not None:
+        ordered = ordered[: body.question_count]
     run = runs.create(
         workspace_id=workspace_id,
         user_id=user_id,
@@ -546,7 +556,7 @@ def create_practice_run(
         range_=stored_range(body.range),
         random_order=body.random_order,
         seed=seed,
-        item_ids=run_order(ids, body.random_order, seed),
+        item_ids=ordered,
     )
     empty = RunProgress(0, 0, 0, 0, 0, 0)
     result = _run_out(run, empty)

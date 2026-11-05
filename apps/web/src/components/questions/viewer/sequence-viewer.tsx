@@ -1,5 +1,7 @@
 'use client';
 
+import { GroupedResults } from './grouped-results';
+
 // QuestionViewer `sequence` mode (QVIEW-01 call sites 7–8, docs/screens/question-viewer.md,
 // questions.md §12): a range run in a modal Floating Side Panel, in three steps of one dialog.
 //   range    QuestionRangePicker (`전체 선택`, chapters, filters) + `무작위 순서` (off, never
@@ -34,7 +36,6 @@ import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import type { AskAttachmentInput } from '@/lib/ask/client';
-import { displayStem } from '@/lib/questions/display-stem';
 import {
   lookupOverviewQuestionAction,
   selfGradePracticeAction,
@@ -54,7 +55,6 @@ import {
   positionLabel,
   progressText,
   restartRange,
-  RESULT_WORDS,
   summaryText,
   type PracticeRun,
   type RunItem,
@@ -1401,21 +1401,12 @@ function useResultsStep({
     body = (
       <>
         <p className={styles.summary}>{summaryText(data.run.summary)}</p>
-        <ul className={styles.resultList} aria-label="문제별 결과">
-          {items.map((item) => (
-            <li key={item.position}>
-              <Button
-                variant="ghost"
-                className={styles.resultButton}
-                onClick={() =>
-                  runId && onNavigate({ step: 'solve', runId, position: item.position }, 'push')
-                }
-              >
-                {resultRowText(item, source)}
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <GroupedResults
+          items={items}
+          onSelect={(position) => {
+            if (runId) onNavigate({ step: 'solve', runId, position }, 'push');
+          }}
+        />
         {items.length < data.total ? (
           <Button size="sm" loading={loadingMore} onClick={() => void loadMore()}>
             결과 더 보기
@@ -1443,24 +1434,4 @@ function useResultsStep({
     </div>
   );
   return { body, footer: data || load?.status === 'error' ? footer : undefined };
-}
-
-/** "1장 2번 · <발문 앞부분> · 틀림": a results row (the result in text, never color alone). */
-function resultRowText(item: RunResultItem, source: RunSource): string {
-  const label = item.available
-    ? positionLabel(
-        {
-          chapter_number: item.chapter_number,
-          chapter_title: item.chapter_title,
-          question_number: item.question_number,
-          position: item.position,
-        },
-        source,
-      )
-    : `문제 ${item.position}`;
-  const preview = item.preview ? displayStem(item.preview).replace(/\s+/g, ' ').slice(0, 40) : '';
-  const word = RESULT_WORDS[item.result ?? 'skipped'];
-  return [label, preview || (item.available ? '' : '더 이상 풀 수 없는 문제'), word]
-    .filter(Boolean)
-    .join(' · ');
 }

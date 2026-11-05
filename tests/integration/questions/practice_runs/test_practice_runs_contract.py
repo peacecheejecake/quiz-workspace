@@ -1340,3 +1340,35 @@ def test_c05_standalone_sessions_end_with_their_mock_exam_round_and_workspace(se
         404,
     )
     seed.problem(mock_session(owner, q_mcq["id"], run["id"], 1), 404)
+
+
+def test_ux10_play_bank_count_selects_stable_prefix_and_rejects_oversize(seed: Any) -> None:
+    r = Range(seed, "ux10-count")
+    ordered = created(r.owner, r.ws_id, bank({"all": True}, question_count=2))
+    assert order(r.owner, ordered) == r.heatmap[:2]
+    expected = list(r.heatmap)
+    random.Random(12345).shuffle(expected)  # noqa: S311 - deterministic run seed
+    shuffled = created(
+        r.owner, r.ws_id, bank({"all": True}, random_order=True, seed=12345, question_count=2)
+    )
+    assert order(r.owner, shuffled) == expected[:2]
+    assert order(r.owner, shuffled) == order(r.owner, shuffled)
+    assert start(r.owner, r.ws_id, bank({"all": True}, question_count=6)).status_code == 422
+
+
+def test_ux10_play_mock_result_source_metadata_and_chapterless_fallback(seed: Any) -> None:
+    r = Range(seed, "ux10-metadata")
+    chapterless = r.owner.create_question(r.ws_id, mcq("chapterless", 0, 9, None))
+    exam = create_mock_exam(r.owner, r.ws_id, [r.heatmap[0], chapterless["id"]])
+    run = created(r.owner, r.ws_id, mock(exam["id"], {"all": True}))
+    page = r.owner.ok("GET", f"/practice-runs/{run['id']}/results")
+    assert len(page["items"]) == 2
+    assert any(
+        item["chapter_id"] == r.ch1 and item["question_number"] is not None
+        for item in page["items"]
+    )
+    assert any(item["chapter_id"] is None for item in page["items"])
+    assert not (_keys(page) & ANSWER_KEYS)
+    admin("update public.questions set deleted_at = now() where id = %s", (r.heatmap[0],))
+    after = r.owner.ok("GET", f"/practice-runs/{run['id']}/results")
+    assert all(item["chapter_id"] is None for item in after["items"])

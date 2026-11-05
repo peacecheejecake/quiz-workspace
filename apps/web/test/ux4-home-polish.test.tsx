@@ -16,17 +16,14 @@ import type { QuestionMenuReadOnly } from '../src/components/workspaces/question
 
 const { QuestionMenu } = await import('../src/components/workspaces/question-menu');
 
-function menu(readOnly: QuestionMenuReadOnly, askUnavailable: string | null = null) {
+function menu(readOnly: QuestionMenuReadOnly) {
   const handlers = {
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
     onRedistribute: vi.fn(),
     onInactive: vi.fn(),
-    onMockExams: vi.fn(),
-    onPractice: vi.fn(),
-    onAsk: vi.fn(),
   };
-  render(<QuestionMenu readOnly={readOnly} askUnavailable={askUnavailable} {...handlers} />);
+  render(<QuestionMenu readOnly={readOnly} {...handlers} />);
   return handlers;
 }
 
@@ -34,20 +31,12 @@ describe('home `문제` menu', () => {
   it('QOV-01-AC11 offers 직접 추가, 중복 문제 정리 and 챕터 재분배 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
-    const trigger = screen.getByRole('button', { name: '문제' });
+    const trigger = screen.getByRole('button', { name: '문제 메뉴' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual([
-      '직접 추가',
-      '중복 문제 정리',
-      '챕터 재분배',
-      '보관·초안 문제',
-      '모의고사',
-      '문제 풀기',
-      'AI 질문',
-    ]);
+    expect(items).toEqual(['직접 추가', '중복 문제 정리', '챕터 재분배', '보관·초안 문제']);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
     await waitFor(() => expect(handlers.onCreate).toHaveBeenCalledTimes(1));
@@ -69,45 +58,21 @@ describe('home `문제` menu', () => {
     await user.click(trigger);
     await user.click(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
     await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
-
-    await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: '모의고사' }));
-    await waitFor(() => expect(handlers.onMockExams).toHaveBeenCalledTimes(1));
-
-    await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: '문제 풀기' }));
-    await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
-    expect(trigger).toHaveFocus();
-
-    // ASK-01: AI 질문 (last) opens the AI 질문 panel for every member.
-    await user.click(trigger);
-    await user.click(screen.getByRole('menuitem', { name: 'AI 질문' }));
-    await waitFor(() => expect(handlers.onAsk).toHaveBeenCalledTimes(1));
   });
 
-  it.each([
-    [null, '이 환경에서는 AI 질문을 사용할 수 없습니다.'],
-    ['archived', '보관된 Workspace에서는 새 질문을 할 수 없습니다.'],
-  ] as const)(
-    'ASK-01-AC11 disables AI 질문 with its own reason text (read-only: %s)',
-    async (readOnly, reason) => {
+  it.each([null, 'archived'] as const)(
+    'keeps management actions available without an AI item for %s',
+    async (readOnly) => {
       const user = userEvent.setup();
-      const handlers = menu(readOnly, reason);
-      await user.click(screen.getByRole('button', { name: '문제' }));
-      const menuEl = await screen.findByRole('menu', { name: '문제' });
-      const item = screen.getByRole('menuitem', { name: 'AI 질문' });
-      expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAccessibleDescription(reason);
-      expect(menuEl).toHaveTextContent(reason);
-      // The menu's own description stays the editor items' reason (or none).
-      expect(menuEl).not.toHaveAccessibleDescription(reason);
-      await user.click(item);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(handlers.onAsk).not.toHaveBeenCalled();
-      // The other read items stay enabled.
-      expect(screen.getByRole('menuitem', { name: '문제 풀기' })).not.toHaveAttribute(
-        'aria-disabled',
-      );
+      menu(readOnly);
+      const trigger = screen.getByRole('button', { name: '문제 메뉴' });
+      trigger.focus();
+      await user.keyboard('{Enter}');
+      const opened = await screen.findByRole('menu', { name: '문제 메뉴' });
+      expect(opened).toContainElement(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
+      expect(screen.queryByRole('menuitem', { name: 'AI 질문' })).toBeNull();
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveFocus();
     },
   );
 
@@ -119,9 +84,9 @@ describe('home `문제` menu', () => {
     async (readOnly, reason) => {
       const user = userEvent.setup();
       const handlers = menu(readOnly);
-      const trigger = screen.getByRole('button', { name: '문제' });
+      const trigger = screen.getByRole('button', { name: '문제 메뉴' });
       await user.click(trigger);
-      const menuEl = await screen.findByRole('menu', { name: '문제' });
+      const menuEl = await screen.findByRole('menu', { name: '문제 메뉴' });
       expect(menuEl).toHaveTextContent(reason);
       expect(menuEl).toHaveAccessibleDescription(reason);
       const all = screen.getAllByRole('menuitem');
@@ -130,9 +95,6 @@ describe('home `문제` menu', () => {
         '중복 문제 정리',
         '챕터 재분배',
         '보관·초안 문제',
-        '모의고사',
-        '문제 풀기',
-        'AI 질문',
       ]);
       const items = all.slice(0, 3);
       for (const item of items) {
@@ -150,20 +112,6 @@ describe('home `문제` menu', () => {
       expect(inactive).not.toHaveAttribute('aria-disabled');
       await user.click(inactive);
       await waitFor(() => expect(handlers.onInactive).toHaveBeenCalledTimes(1));
-      // QVIEW-01: 문제 풀기 is a personal practice: enabled, no reason attached.
-      await user.click(trigger);
-      const practice = screen.getByRole('menuitem', { name: '문제 풀기' });
-      expect(practice).not.toHaveAttribute('aria-disabled');
-      expect(practice).not.toHaveAccessibleDescription(reason);
-      await user.click(practice);
-      await waitFor(() => expect(handlers.onPractice).toHaveBeenCalledTimes(1));
-      // MOCK-01: every member lists and practises mock exams.
-      await user.click(trigger);
-      const mock = screen.getByRole('menuitem', { name: '모의고사' });
-      expect(mock).not.toHaveAttribute('aria-disabled');
-      expect(mock).not.toHaveAccessibleDescription(reason);
-      await user.click(mock);
-      await waitFor(() => expect(handlers.onMockExams).toHaveBeenCalledTimes(1));
     },
   );
 });
