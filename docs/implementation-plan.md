@@ -352,7 +352,7 @@ PR #43(이 계획의 "DOCVIEW", DOC-02-AC06–AC11)과 병렬로 만든 DOCVIEW-
 | UX10-UI | 공통 버튼·아이콘·swipe | SPEC | ui.md AC01~04 GREEN·독립 리뷰 |
 | UX10-QVIEW | 보기 순서·기존 결과·리셋 | SPEC·UI | qview.md AC01~05 GREEN·DB/격리 계약·독립 리뷰 |
 | UX10-HOME | header·검색·상태 필터 | UI·QVIEW | home.md AC01~05 GREEN·독립 리뷰 |
-| UX10-PLAY | 풀이 화면 통합·폼·결과 | HOME·QVIEW | play.md AC01~05 GREEN·독립 리뷰 |
+| UX10-PLAY | 독립 풀이 화면·폼·결과·이름 수정 | HOME·QVIEW | play.md AC01~06 GREEN·독립 리뷰 |
 | UX10-AI | 가용성·해설 펼침·문구 | PLAY | ai.md AC01~04 GREEN·독립 리뷰 |
 | UX10-DOC | checkbox·모바일 함께 보기·전체 높이 | UI | doc.md AC01~05 GREEN·독립 리뷰 |
 | UX10-QA | 교차 QA·PR·CI·병합·배포 | 전체 구현 | qa.md AC01~05·CI GREEN·production smoke |
@@ -864,6 +864,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
 
 ### UX10 사용자 결정 — 2026-11-05
+
+**최종 수정:** 문제 풀기·모의고사 통합 취소. 홈 `풀기` primary dropdown에 `문제 풀기`·`모의고사`, 기존 독립 화면 유지. 모의고사 변형 0개도 mock으로 원본 그대로 생성(LLM 0회), 전체 범위 가능. 이름 수정은 입력 아래 저장/취소 같은 줄, 편집 중 해당 모의고사 풀기 disabled(사용자 확인). 아래 최초 통합 결정과 bank 우회는 이 수정으로 대체한다.
+
 
 - 문제 풀기/모의고사는 화면·진입점 통합, 은행·mock 기록 격리 유지. 리셋은 본인의 해당 문제 풀이 기록·Heatmap 상태 초기화(immutable 원본은 reset epoch로 사용자 기록에서 제외). 모바일 원본·변환본 모두 선택 시 **함께 상하 표시**가 최종 결정이다.
 - 기존 QPLAY 보기 shuffle·QOV 빈 status=전체/접힘·MOCK 변형 1개 이상·DOCVIEW both 기본/모바일 단일 pane·AI off 비활성 UI·EXPL 접힘 기본을 [UX10 기준](implementation/ux10/index.md)으로 개정한다. 변형 0개는 bank 경로이므로 mock API nonempty 계약은 유지 가능하다.

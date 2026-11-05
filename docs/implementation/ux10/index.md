@@ -4,7 +4,7 @@
 
 ## 확정 결정
 
-1. 문제 풀기·모의고사는 화면과 진입점을 통합한다. 은행 문제 풀이는 기존 question_attempts/question_user_states, 생성된 모의고사는 mock_exam_attempts를 쓴다.
+1. **최종 변경: 문제 풀기·모의고사 통합 취소.** 홈에는 primary `풀기` dropdown(문제 풀기·모의고사)을 두며 기존 독립 화면·route·기록을 유지한다. 모의고사 이름 수정 중 해당 풀기 버튼은 disabled, 입력 아래 저장·취소는 같은 줄이다.
 2. 리셋은 본인의 해당 은행 문제 풀이 기록과 Heatmap 상태까지 초기화한다. 단순 새 세션 생성이 아니다. 감사·참조 무결성을 위해 immutable 원본 attempt는 유지하되 reset epoch 이전 기록은 사용자 기록·집계에서 제외한다.
 3. 문서 보기 기본은 원본. 두 checkbox로 보기 영역을 선택하며 둘 다 선택하면 모바일도 상하 분할한다(최종 사용자 결정). 모두 해제는 금지한다.
 4. 보기 순서 기본은 원본 순서다. 문제 순서 무작위와 보기 섞기는 별도 개념이다.
@@ -19,7 +19,7 @@
 | UX10-UI | [공통 UI](ui.md) | SPEC | packages/ui, ask-icons.tsx |
 | UX10-QVIEW | [문제 보기](qview.md) | SPEC | practice API/repository, migrations, practice-viewer 및 관련 모델·테스트 |
 | UX10-HOME | [홈](home.md) | UI·QVIEW | workspace-home, questions-overview, overview 필터 API·모델 |
-| UX10-PLAY | [풀이 통합](play.md) | UI·QVIEW·HOME | mock-exams, sequence-viewer, range picker, practice run 결과 API |
+| UX10-PLAY | [풀이 화면 개선](play.md) | UI·QVIEW·HOME | mock-exams, sequence-viewer, range picker, practice run 결과 API |
 | UX10-AI | [AI 가용성](ai.md) | PLAY | AI launcher·explanation·notes, capability 전달, 환경별 테스트 |
 | UX10-DOC | [문서 뷰어](doc.md) | UI | document-viewer-layout, viewer-settings, 문서 페이지 shell·공유 문서 |
 | UX10-QA | [통합 QA](qa.md) | 전체 구현 | 교차 검증·테스트, 수정은 원 소유 Task agent |
@@ -31,8 +31,8 @@
 | 원본 | UX10에서 바꾸는 요구 |
 |---|---|
 | QPLAY-01 / QVIEW-01 / questions.md | 보기 순서, 제출 이력이 있는 문제 열기, 리셋, 결과 O/X |
-| QOV-01 / SEARCH-01 | header 진입점, 필터 기본값·접기·debounce·빈 선택 |
-| MOCK-01 / QVIEW-01 | 통합 화면, 변형 0개 경로, 전체 범위, 단계 표시·폼·결과 묶음 |
+| QOV-01 / SEARCH-01 | header 풀기 dropdown 진입점, 필터 기본값·접기·debounce·빈 선택 |
+| MOCK-01 / QVIEW-01 | 통합 취소·독립 화면 유지, 변형 0개 경로, 전체 범위, 단계 표시·폼·결과 묶음 |
 | ASK-01 / AIEXPL-01 / CHNOTE-01 | AI 가용성, 지정 안내 삭제, 기존 해설 펼침 |
 | design-system / HOMEDLG-01 / overlay-scroll | 버튼 테두리, 아이콘, 스와이프 닫기 |
 | DOCVIEW-01 / DOC-02 / WS-VIEW-01 | 원본 기본, checkbox, 모바일 함께 보기, header overlay |
