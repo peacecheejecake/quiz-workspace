@@ -1873,8 +1873,25 @@ def test_latin_items_moved_back_from_the_options_keep_their_lines() -> None:
             ["(가) 갑은 을이다.", "(다) 병은 정이다.", "(나) 무는 기이다."],
             "옳은 것은? (가) 갑은 을이다. (다) 병은 정이다. (나) 무는 기이다.",
         ),
+        (
+            "1. 옳은 것은? (가) 갑은 을이다. (나) 병은 정이다.",
+            [],
+            "옳은 것은?\n\n(가) 갑은 을이다.\n(나) 병은 정이다.",
+        ),
+        (
+            "1. 옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+            [],
+            "옳은 것은 (가) 갑은 을이다. (나) 병은 정이다.",
+        ),
     ],
-    ids=["spaced-no-sentence-end", "spaced", "no-sentence-end", "interrupted"],
+    ids=[
+        "spaced-no-sentence-end",
+        "spaced",
+        "no-sentence-end",
+        "interrupted",
+        "one-line",
+        "one-line-no-sentence-end",
+    ],
 )
 def test_numbered_options_under_loosely_printed_items_stay_options(
     question: str, items: list[str], stem: str

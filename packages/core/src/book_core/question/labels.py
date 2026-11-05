@@ -166,6 +166,12 @@ def _item_tokens(text: str) -> list[tuple[int, str, str, int]]:
     return tokens
 
 
+def has_item_label(text: str) -> bool:
+    """Whether ``text`` holds an item-label token anywhere (``... 것은? (가) 갑 (나) 을``), any
+    family or format and no list rules: lenient, for telling options from questions."""
+    return bool(_item_tokens(text))
+
+
 def stem_item_starts(text: str) -> list[int]:
     """Offsets of the printed item labels of the stem's item list, ``[]`` without one.
 
