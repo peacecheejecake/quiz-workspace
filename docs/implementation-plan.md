@@ -1123,3 +1123,7 @@ UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·�
 기존 DOC-01/HOMEDLG-01 검증의 제거된 메뉴 항목·옛 모의고사 제목 기대값은 통합 풀기 기준으로 교정했다(01723cbc, 리뷰 232845 log). 종류 변경은 키보드 End 뒤 실제 focus를 기다리며 원래 변경·권한·modal/inert/focus/layout 검증을 유지한다. main Chromium/WebKit 30개 통과. CI 결과와 이후 병합·배포는 [PR #78](https://github.com/peacecheejecake/quiz-workspace/pull/78)의 실행 기록으로 확인한다.
 
 CI의 iPad VISUAL-07/10 차이는 화면 배치가 아니라 비동기 초기 focus와 촬영 시점 차이였다. 실제 제목·검색 입력에 focus를 명시하고 toBeFocused를 확인한 뒤 촬영하도록 고정했다(3cd01cdf, 독립 리뷰 234820 log). mask·허용 오차는 유지하고 검색 입력 focus ring만 달라진 6개 PNG를 main이 확인했다. 담당자 Linux non-update 3회 반복 12건과 main 재검증 4건 모두 통과했다.
+
+UX10-CI 착수: PR runner의 Ubuntu Azure mirror가 30–40 kB/s로 40분 넘게 의존성을 내려받으며 새 실행에도 반복된다. 별도 Terra agent가 [QA 후속 범위·DoD](implementation/ux10/qa.md#ux10-ci--pr-검증-환경-후속)에 따라 공식 배포 경로의 최소 수정과 기존 workflow 검증을 담당한다. 전체 검증 gate와 고정 버전은 유지한다. 리뷰·main 재검증·커밋은 완료 후 기록한다.
+
+UX10-CI 로컬 완료: 2d51ef57, 독립 리뷰 20261106-000127 log 지적 없음. 기존 Playwright install 직전에 runner의 Ubuntu mirror 파일에서 Azure 주소만 공식 archive.ubuntu.com으로 치환한다. browser/dependency 버전·APT 서명 검증·테스트 gate는 불변이다. main Prettier·diff 검사 및 CI 분류/배포 workflow 테스트 121개 통과. 실제 다운로드 속도 개선 여부는 후속 GitHub runner 실행으로 검증한다.

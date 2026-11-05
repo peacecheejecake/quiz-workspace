@@ -52,3 +52,7 @@ main thread가 각 Task의 독립 Codex 로그·커밋·실제 검증 결과를 
 Linux app desktop/iPad 24건과 Storybook 26건을 main이 기준 이미지 갱신 없이 비교했다. 변경 PNG 147장과 footer 후속 12장의 before/after, 합성 RETURN 모바일/전체화면 이미지를 직접 검토했다. 최종 baseline 커밋은 8346762f다. 로그 감사의 실제 복귀 시나리오 10건은 API·web·worker 로그 유출 0건이며, artifact 감사도 공유 비밀 유출 0건이다.
 
 공유 로컬 스택은 기존 데이터/ERRATA 이력을 보존하고 새 20261106100000·20261106110000을 추가 적용했다. 기존 누락 baseline인 20261105090000도 앞서 별도로 적용했으며 migration 이력은 재작성하지 않았다. 중간 DB 연결 포화(99/100)는 완료된 본 작업 worker의 정확한 PID를 확인해 정상 종료하여 해소했고, 실패한 이미지 검사는 전부 다시 통과했다. 기존 WebKit Workspace 생성 1건은 원인 미확정이나 변경 없는 clean production 반복 검증은 통과했다. PR CI가 이 로컬 QA의 다음 단계이며, CI 결과와 develop/main 병합·배포 결과는 해당 PR과 실행 기록으로 확인한다.
+
+## UX10-CI — PR 검증 환경 후속
+
+PR #78의 Ubuntu runner에서 공식 Azure Ubuntu mirror 다운로드가 30–40 kB/s로 지속되어 Playwright 의존성 설치만 40분 이상 소요됐다. 새 실행에서도 한 runner에 반복되어 45분 job 제한 내 E2E 실행을 위협한다. 별도 Terra agent를 UX10-CI와 1:1로 배정하며, 범위는 CI workflow와 기존 workflow 검증 테스트다. 공식 Ubuntu 배포 경로를 사용해 설치 지연을 해소하되 browser 버전·의존성·보안 검증·테스트 및 gate를 그대로 유지한다. 독립 Codex 리뷰, workflow 테스트·lint·main 재검증 후 같은 PR에 통합한다. DoD는 고정된 의존성 설치와 기존 전체 CI의 GREEN이며 다운로드 문제를 테스트 skip이나 시간 제한 확대로 숨기지 않는다.
