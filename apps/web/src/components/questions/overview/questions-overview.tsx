@@ -143,6 +143,10 @@ export interface QuestionsOverviewProps {
   readonly documents?: readonly { readonly id: string; readonly title: string }[];
   /** A question was archived, deleted or edited here (the home re-reads open lists, UX7-BANK-2). */
   readonly onQuestionsChanged?: () => void;
+  /** Study state changed here (viewed, graded, favorite/retry toggled; QSEARCH-CACHE). */
+  readonly onStudyStateChanged?: () => void;
+  /** Retries a failed overview read (client BFF or SSR refresh; QSEARCH-CACHE). */
+  readonly onRetry?: () => void;
   /**
    * The range run panel (`?practice=`, QVIEW-01) moves to another step or position; the home
    * keeps its dialog history consistent. Without it (and onRunClose) there is no run panel.
@@ -229,6 +233,8 @@ export function QuestionsOverview({
   onCreateOpenChange,
   documents = NO_DOCUMENTS,
   onQuestionsChanged,
+  onStudyStateChanged,
+  onRetry,
   onRunNavigate,
   onRunClose,
 }: QuestionsOverviewProps) {
@@ -251,6 +257,10 @@ export function QuestionsOverview({
   }, [serverItems]);
   // Study state changed since the server rendered `overview` (no action revalidates it).
   const staleOverview = useRef(false);
+  const markStale = useCallback(() => {
+    staleOverview.current = true;
+    onStudyStateChanged?.();
+  }, [onStudyStateChanged]);
   // Grading results of this screen's submissions, until the server's overview catches up.
   const gradings = useRef(new Map<string, Grading>());
   useLayoutEffect(() => {
@@ -465,7 +475,7 @@ export function QuestionsOverview({
       if (!item) return;
       const saved =
         event.type === 'saved' ? event.result : event.type === 'failed' ? event.saved : null;
-      if (saved) staleOverview.current = true;
+      if (saved) markStale();
       const pending = event.type === 'change' || (event.type === 'failed' && event.pending);
       if (pending || !saved) {
         const patch: StudyPatch = {
@@ -507,7 +517,7 @@ export function QuestionsOverview({
     const found = await lookupOverviewQuestionAction(workspaceId, questionId);
     if (!found.ok || !found.data) return;
     const { item } = found.data;
-    staleOverview.current = true;
+    markStale();
     const touched = fieldTouched.current.get(questionId);
     const changed = (field: TouchField) => (touched?.[field] ?? 0) > stamp;
     const local = overridesRef.current.get(questionId);
@@ -556,6 +566,7 @@ export function QuestionsOverview({
   ) {
     const item = currentItem(questionId) ?? savingItems.current.get(questionId);
     if (!item) return;
+    onStudyStateChanged?.();
     touch(
       questionId,
       ...(['is_favorite', 'needs_retry'] as const).filter((field) => flags[field] !== undefined),
@@ -570,8 +581,13 @@ export function QuestionsOverview({
   const markViewed = useCallback(
     (questionId: string) => {
       const item = latestItems.current.find((i) => i.question_id === questionId);
-      if (!item || item.status !== 'unseen') return;
-      staleOverview.current = true;
+      if (!item || item.status !== 'unseen') {
+        if (openPlaced?.item.question_id === questionId && openPlaced.item.status === 'unseen') {
+          markStale();
+        }
+        return;
+      }
+      markStale();
       // A flag change in flight already carries the server's status; don't race it.
       if (overridesRef.current.has(questionId)) return;
       const seq = (mutationSeq.current.get(questionId) ?? 0) + 1;
@@ -581,7 +597,7 @@ export function QuestionsOverview({
         settledOn: latestItems.current,
       });
     },
-    [putOverride],
+    [markStale, openPlaced, putOverride],
   );
 
   /**
@@ -601,7 +617,7 @@ export function QuestionsOverview({
         ? { ...openPlaced.item, ...live?.patch }
         : undefined);
     if (!item) return;
-    staleOverview.current = true;
+    markStale();
     touch(questionId, 'grading', ...(result === 'incorrect' ? (['needs_retry'] as const) : []));
     const graded = gradedPatch(item, result);
     gradings.current.set(questionId, {
@@ -829,7 +845,9 @@ export function QuestionsOverview({
       {failure ? (
         <div role="alert" className={styles.loadError}>
           <p>문제 Heatmap을 불러오지 못했습니다. {QUESTION_FAILURE_MESSAGES[failure]}</p>
-          <Button onClick={() => startReload(() => router.refresh())}>다시 시도</Button>
+          <Button onClick={() => (onRetry ? onRetry() : startReload(() => router.refresh()))}>
+            다시 시도
+          </Button>
         </div>
       ) : items.length === 0 ? (
         filtered ? (
@@ -942,16 +960,16 @@ export function QuestionsOverview({
           {...(homeRun.pickerTitle ? { pickerTitle: homeRun.pickerTitle } : {})}
           onViewed={(questionId) => {
             if (!bankRun) return;
-            staleOverview.current = true;
+            markStale();
             markViewed(questionId);
           }}
           onGraded={(questionId, result) => {
             if (!bankRun) return;
-            staleOverview.current = true;
+            markStale();
             markGraded(questionId, result);
           }}
           onFlagsSaved={() => {
-            staleOverview.current = true;
+            markStale();
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
