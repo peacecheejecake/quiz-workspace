@@ -40,6 +40,13 @@ export interface OverviewData {
    * something to search, SEARCH-01 UX6); null when that is unknown (a read failed).
    */
   readonly hasQuestions: boolean | null;
+  /**
+   * The unfiltered heatmap when known on SSR (QSEARCH-CACHE), so clearing a filter or `q` on
+   * direct landing (`/workspaces/:id?q=foo`) restores the full list from memory with no fetch.
+   */
+  readonly unfilteredOverview?: QuestionOverview | null;
+  /** Empty keyword with all other URL filters retained, for immediate search clearing. */
+  readonly querylessOverview?: QuestionOverview | null;
 }
 
 const EMPTY: QuestionOverview = {
@@ -79,9 +86,12 @@ export async function loadOverview(
   // The response's `chapters` only lists the groups left by the filters; the chapter picker
   // offers every group, so a filtered view also reads the unfiltered heatmap.
   const filtered = isOverviewFiltered(filters);
-  const [result, unfiltered] = await Promise.all([
+  const querylessFilters = { ...filters, q: '' };
+  const needsQueryless = Boolean(filters.q) && isOverviewFiltered(querylessFilters);
+  const [result, unfiltered, queryless] = await Promise.all([
     fetchOverview(filters),
     filtered ? fetchOverview(EMPTY_OVERVIEW_FILTERS) : Promise.resolve(null),
+    needsQueryless ? fetchOverview(querylessFilters) : Promise.resolve(null),
   ]);
 
   let failure: QuestionFailureKind | null = null;
@@ -108,5 +118,15 @@ export async function loadOverview(
   }
   const unfilteredOverview = filtered ? unfiltered?.data : result?.data;
   const hasQuestions = unfilteredOverview ? unfilteredOverview.counts.total > 0 : null;
-  return { overview, chapterChoices: choices, failure, requested, hasQuestions };
+  return {
+    overview,
+    chapterChoices: choices,
+    failure,
+    requested,
+    hasQuestions,
+    unfilteredOverview: unfilteredOverview ?? null,
+    querylessOverview: filters.q
+      ? ((needsQueryless ? queryless?.data : unfilteredOverview) ?? null)
+      : (result?.data ?? null),
+  };
 }

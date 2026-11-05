@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// SEARCH-01-AC12 (UX7-SEARCH): the live 문제 search box. Commits once typing pauses, never in the
+// SEARCH-01-AC12 (UX7-SEARCH, QSEARCH-CACHE): the live 문제 search box. Commits non-empty text once
+// typing pauses (350ms), commits immediately (0ms) when cleared to empty, never commits in the
 // middle of an IME composition, keeps what the user typed while its own commits come back through
 // the URL, and follows the URL when it changes from outside (Back/Forward).
 import './dom-setup';
@@ -14,6 +15,10 @@ import {
 } from '../src/lib/search/live-query';
 
 describe('live query writes', () => {
+  it('uses a 350ms debounce delay for non-empty queries', () => {
+    expect(LIVE_QUERY_DELAY_MS).toBe(350);
+  });
+
   it('normalizes like the URL does', () => {
     expect(normalizeQuery('  염소 ', 200)).toBe('염소');
     expect(normalizeQuery('x'.repeat(300), 200)).toHaveLength(200);
@@ -34,7 +39,17 @@ describe('live query writes', () => {
 
 function Box({ urlValue, onCommit }: { urlValue: string; onCommit: (q: string) => void }) {
   const query = useLiveQuery({ urlValue, max: 200, onCommit });
-  return <input type="search" aria-label="문제 검색" {...query.inputProps} />;
+  return (
+    <div>
+      <input type="search" aria-label="문제 검색" {...query.inputProps} />
+      <button type="button" onClick={() => query.flush()}>
+        flush
+      </button>
+      <button type="button" onClick={() => query.replace('')}>
+        reset
+      </button>
+    </div>
+  );
 }
 
 describe('useLiveQuery', () => {
@@ -52,23 +67,42 @@ describe('useLiveQuery', () => {
       vi.advanceTimersByTime(ms);
     });
 
-  it('commits once typing pauses, only the last value, and not twice', () => {
+  it('commits non-empty input after 350ms, only the last value, and clears immediately in 0ms', () => {
     const onCommit = vi.fn();
     render(<Box urlValue="" onCommit={onCommit} />);
     type('c');
-    pause(LIVE_QUERY_DELAY_MS - 50);
+    pause(349);
+    expect(onCommit).not.toHaveBeenCalled();
     type('ch');
-    pause(LIVE_QUERY_DELAY_MS - 50);
+    pause(349);
     expect(onCommit).not.toHaveBeenCalled();
     type('chl ');
-    pause();
+    pause(349);
+    expect(onCommit).not.toHaveBeenCalled();
+    pause(1);
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit).toHaveBeenLastCalledWith('chl');
     type('chl');
     pause();
     expect(onCommit).toHaveBeenCalledTimes(1); // same normalized value
+
+    // Start typing a longer query, then clear before the timer fires: 0ms immediate commit of '',
+    // and the cancelled timer never fires later.
+    type('chlorine');
+    expect(onCommit).toHaveBeenCalledTimes(1);
     type('');
+    expect(onCommit).toHaveBeenCalledTimes(2);
+    expect(onCommit).toHaveBeenLastCalledWith('');
+    pause(LIVE_QUERY_DELAY_MS * 2);
+    expect(onCommit).toHaveBeenCalledTimes(2);
+
+    // Clearing to whitespace-only also normalizes to '' and commits in 0ms.
+    type('water');
     pause();
+    expect(onCommit).toHaveBeenCalledTimes(3);
+    expect(onCommit).toHaveBeenLastCalledWith('water');
+    type('   ');
+    expect(onCommit).toHaveBeenCalledTimes(4);
     expect(onCommit).toHaveBeenLastCalledWith('');
   });
 
@@ -98,19 +132,55 @@ describe('useLiveQuery', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it('does not filter while an IME composition is in progress, then commits the composed text', () => {
+  it('does not commit or flush while an IME composition is in progress, then commits after 350ms or 0ms on empty', () => {
     const onCommit = vi.fn();
-    render(<Box urlValue="" onCommit={onCommit} />);
+    render(<Box urlValue="이전" onCommit={onCommit} />);
+
+    // Even if intermediate IME updates become empty or flush() is called, nothing commits mid-IME.
     fireEvent.compositionStart(box());
+    type('');
+    fireEvent.click(screen.getByRole('button', { name: 'flush' }));
     type('ㅇ');
     type('여');
     type('염');
     pause(LIVE_QUERY_DELAY_MS * 4);
     expect(onCommit).not.toHaveBeenCalled();
     expect(box().value).toBe('염');
+
+    // Non-empty compositionend schedules the 350ms debounce.
     fireEvent.compositionEnd(box(), { data: '염' });
-    pause();
+    pause(349);
+    expect(onCommit).not.toHaveBeenCalled();
+    pause(1);
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit).toHaveBeenLastCalledWith('염');
+
+    // Composition ending empty commits immediately in 0ms without advancing timers.
+    fireEvent.compositionStart(box());
+    type('');
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    fireEvent.compositionEnd(box(), { data: '' });
+    expect(onCommit).toHaveBeenCalledTimes(2);
+    expect(onCommit).toHaveBeenLastCalledWith('');
+  });
+
+  it('keeps committedRef and pending writes consistent across replace()', () => {
+    const onCommit = vi.fn();
+    const { rerender } = render(<Box urlValue="chlorine" onCommit={onCommit} />);
+
+    type('chlorine extra');
+    fireEvent.click(screen.getByRole('button', { name: 'reset' }));
+    expect(box().value).toBe('');
+    pause(LIVE_QUERY_DELAY_MS * 2);
+    expect(onCommit).not.toHaveBeenCalled();
+
+    // User immediately starts typing again before the URL catches up with the reset to '':
+    // when urlValue='' arrives, it settles as ours instead of clobbering the new input.
+    type('염소');
+    rerender(<Box urlValue="" onCommit={onCommit} />);
+    expect(box().value).toBe('염소');
+    pause();
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenLastCalledWith('염소');
   });
 });
