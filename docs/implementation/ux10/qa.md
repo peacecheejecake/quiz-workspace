@@ -20,6 +20,10 @@ main thread가 각 Task의 독립 Codex 로그·커밋·실제 검증 결과를 
 
 통합 후 make fmt-check, make lint, make typecheck, make test, make contracts-check. infra가 준비된 경우 affected make test-infra·make db-test·make db-lint. affected Playwright specs를 fixtures/test.ts로 실행하고 strict phase trace를 검사한다. phase 등록은 RED/GREEN과 동시에 조정한다. visual/a11y는 기존 suite를 재사용하고 신규 상태를 확장한다. 실제 정답·토큰·사용자 문서를 trace/screenshot에 남기지 않는다. CI는 여기서 사전 실행하지 않는다.
 
+## 최종 visual baseline 배치
+
+모든 UI/HOME/PLAY/AI/DOC 변경 통합 후 terra QA 수정 agent가 지정 Linux renderer에서 baseline을 한 번에 갱신하고 main thread가 결과 이미지를 검토한다. 기능 Task 리뷰 중 이 단계의 미갱신 baseline P2는 UX10-QA 후속으로 기록하며 기능 결함·실패 테스트를 이 단계로 숨기지 않는다. PR CI 전에는 이 후속까지 완료해야 한다. DOC 예약 ID는 document-editor, document-viewer-outline-open, document-viewer-outline-collapsed, document-viewer-vertical-text-first(desktop/iPad)이며 공통 버튼·홈·풀이 변경에 따른 다른 baseline도 실제 diff로 확인한다. baseline 삭제/skip으로 GREEN을 만들지 않는다.
+
 ## 수용 기준·DoD
 
 - UX10-QA-AC01: 모든 Task AC와 기존 영향 화면 AC가 GREEN이며 독립 리뷰 P0/P1 미해결이 없다.

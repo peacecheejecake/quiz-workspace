@@ -1068,3 +1068,5 @@ Task 착수/완료 시 orchestrator(main thread)가 이 표에 행을 추가·�
 | UX10-QVIEW | ◐ 구현·로컬 검증 | task/UX10-QVIEW | terra 1:1 agent, reset 조회 경로·경합 검증 |
 | UX10-DOC | ◐ 구현·로컬 검증 | task/UX10-DOC | terra 1:1 agent, 원본 기본 RED 확인 |
 | UX10-HOME·PLAY·AI·QA | ☐ 대기 | — | 각 Task 문서 기준으로 착수 |
+
+UX10-QA 후속(2026-11-05): 공통 primitive 외 feature CSS의 무테두리·무배경 버튼 전수 점검/수정(terra UI agent). DOC review의 Linux baseline P2는 전체 UI 통합 후 Linux renderer 배치로 담당, 문서 이미지 ID는 UX10-QA 문서에 기록. 기능 테스트 회귀·접근성 결함은 각 Task에서 먼저 수정하며 CI 전 후속도 완료한다.
