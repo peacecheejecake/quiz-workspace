@@ -5,8 +5,10 @@
 // fingerprints, search and editor values keep the original text.
 //
 // Rules: labels of one family and one format, consecutive from the family's first label, at least
-// two. A label starts the text or follows whitespace and is followed by whitespace and content
-// (so "(가)와 (나)에 …" is a mention, not a list). Option labels (①~⑳, ❶~❿, ➀~➓) and "1." are never
+// two; any such label of the paragraph out of order (or one of the family in another format inside
+// the list) means no list in that paragraph. Spaces inside brackets are ignored. A label starts the
+// text or follows whitespace and is followed by whitespace and content (so "(가)와 (나)에 …" is a
+// mention, not a list). Option labels (①~⑳, ❶~❿, ➀~➓) and "1." are never
 // item labels. A question sentence before the first item must end with ? . : ) 」 > (or fullwidth
 // ？ ： ）) or an empty answer mark ( ) / （ ）, whose mark is not shown. The list runs from the
 // first item to a blank line or the end.
@@ -84,6 +86,8 @@ ENCLOSED.forEach((members, i) =>
 
 /** The longest core is "VIII". */
 const MAX_CORE = 4;
+/** A core with a few spaces inside its brackets. */
+const MAX_BRACKETED = MAX_CORE + 4;
 
 function isBlank(ch: string | undefined): boolean {
   return ch !== undefined && /\s/u.test(ch);
@@ -110,8 +114,9 @@ function labelAt(s: string, p: number): Label | undefined {
   if (ch === '(' || ch === '（') {
     const close = ch === '(' ? ')' : '）';
     const j = s.indexOf(close, p + 1);
-    if (j < 0 || j - p - 1 > MAX_CORE) return undefined;
-    const found = readings(s.slice(p + 1, j), ch === '(' ? 'paren' : 'wide');
+    if (j < 0 || j - p - 1 > MAX_BRACKETED) return undefined;
+    // Spaces inside the brackets do not count: "( 가 )" reads as "(가)".
+    const found = readings(s.slice(p + 1, j).trim(), ch === '(' ? 'paren' : 'wide');
     return found.length > 0 ? { start: p, end: j + 1, readings: found } : undefined;
   }
   let j = p;
@@ -169,6 +174,32 @@ function paragraphs(text: string): string[] {
   return text.trim() === '' ? [] : stemParagraphs(text.trim());
 }
 
+function has(label: Label, family: number, format: Format, index?: number): boolean {
+  return label.readings.some(
+    (r) => r.family === family && r.format === format && (index === undefined || r.index === index),
+  );
+}
+
+/**
+ * The list of `family`/`format` in one block's labels: every such label must run 1..n in order
+ * (none missing, skipped or swapped) with no label of the same family in another format between
+ * them, at least two; otherwise none.
+ */
+function strictList(labels: readonly Label[], family: number, format: Format): Label[] | null {
+  const list = labels.filter((l) => has(l, family, format));
+  if (list.length < 2 || !list.every((l, k) => has(l, family, format, k))) return null;
+  const first = (list[0] as Label).start;
+  const last = (list[list.length - 1] as Label).start;
+  const interrupted = labels.some(
+    (l) =>
+      l.start > first &&
+      l.start < last &&
+      !has(l, family, format) &&
+      l.readings.some((r) => r.family === family),
+  );
+  return interrupted ? null : list;
+}
+
 /**
  * The stem's labelled item list with the paragraphs before and after it, or null when the stem
  * has none (it is then shown as before). Takes the stored or the displayed stem: the trailing
@@ -178,30 +209,17 @@ export function stemItems(stem: string): StemLayout | null {
   const s = displayStem(stem);
   for (const [start, end] of blocks(s)) {
     const labels = labelsIn(s, start, end);
-    for (let i = 0; i < labels.length; i += 1) {
-      const first = labels[i] as Label;
-      if (!leadEnds(s.slice(0, first.start))) continue;
-      for (const reading of first.readings) {
+    for (const label of labels) {
+      for (const reading of label.readings) {
         if (reading.index !== 0) continue;
-        const group = [first];
-        let next = reading.index + 1;
-        for (let k = i + 1; k < labels.length; k += 1) {
-          const label = labels[k] as Label;
-          const match = label.readings.some(
-            (r) => r.family === reading.family && r.format === reading.format && r.index === next,
-          );
-          if (match) {
-            group.push(label);
-            next += 1;
-          }
-        }
-        if (group.length < 2) continue;
-        const lead = s.slice(0, first.start).trimEnd();
+        const group = strictList(labels, reading.family, reading.format);
+        if (!group || group[0] !== label || !leadEnds(s.slice(0, label.start))) continue;
+        const lead = s.slice(0, label.start).trimEnd();
         return {
           lead: lead === '' ? [] : paragraphs(displayStem(lead)),
-          items: group.map((label, g) => ({
-            label: s.slice(label.start, label.end),
-            text: s.slice(label.end, group[g + 1]?.start ?? end).trim(),
+          items: group.map((item, g) => ({
+            label: s.slice(item.start, item.end),
+            text: s.slice(item.end, group[g + 1]?.start ?? end).trim(),
           })),
           trailing: paragraphs(s.slice(end)),
         };
