@@ -234,13 +234,13 @@ def start_mock_practice_session(
     body: PracticeSessionCreate | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
-    """Open a mock exam question: pins its active revision and shuffles MCQ options. No answers
-    in the response, nothing recorded outside the mock exam tables. With a run position the
-    caller's mock run of this workspace must hold this question there; the position's open
-    session is resumed, a submitted one is 409 `already-submitted`."""
+    """Open a mock exam question: pins its active revision and optionally shuffles MCQ options.
+    No answers in the response, nothing recorded outside the mock exam tables. With a run
+    position the caller's mock run must hold this question; an open session is resumed, and a
+    submitted one is 409 `already-submitted`."""
     body = body or PracticeSessionCreate()
     scope = f"POST /mock-exam-questions/{mock_exam_question_id}/practice-sessions"
-    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True))
+    body_hash = request_hash(body.model_dump(mode="json", exclude_none=True, exclude_defaults=True))
     if idempotency_key is not None:
         idempotency.lock(user.id, scope, idempotency_key)
         stored = idempotency.find(user.id, scope, idempotency_key)
@@ -286,8 +286,10 @@ def start_mock_practice_session(
     seed: int | None = None
     displayed: list[str] = []
     if target.question_type == "MCQ":
-        seed = new_shuffle_seed()
-        displayed = shuffled_option_ids([o["id"] for o in target.revision.options], seed)
+        displayed = [o["id"] for o in target.revision.options]
+        if body.shuffle_options:
+            seed = new_shuffle_seed()
+            displayed = shuffled_option_ids(displayed, seed)
     opened = repo.open_session(
         target,
         user.id,

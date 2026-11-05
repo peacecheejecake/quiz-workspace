@@ -20,6 +20,17 @@ import type { AskLauncher } from '../src/components/ask/ask-launcher';
 
 const openSession = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
 vi.mock('../src/lib/questions/practice-actions', () => ({
+  latestPracticeAction: vi.fn(async () => ({
+    ok: true,
+    data: {
+      session: null,
+      previous_revision: false,
+      reset_epoch: 0,
+      active_revision_id: '77777777-7777-4777-8777-777777777777',
+      latest_attempt_id: null,
+    },
+  })),
+  resetPracticeAction: vi.fn(),
   openPracticeSessionAction: (ws: string, q: string, key: string) => openSession(ws, q, key),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(),

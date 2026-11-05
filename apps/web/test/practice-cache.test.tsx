@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 // UX7-CACHE (QPLAY-01-AC06): the practice panel's session cache. The pure cache keeps only open,
 // answer-free sessions of its own workspace for a bounded time; the panel re-opens an unanswered
-// question without a request, never reuses a session whose submission started, and starts over
+// question after recent metadata verification without a new session, never reuses a submitted session, and starts over
 // in another workspace.
 import './dom-setup';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
@@ -133,9 +132,12 @@ describe('PracticeSessionCache', () => {
   });
 });
 
+const latest = vi.fn<() => Promise<unknown>>();
 const open = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
 const submit = vi.fn<(ws: string, sessionId: string, answer: unknown) => Promise<unknown>>();
 vi.mock('../src/lib/questions/practice-actions', () => ({
+  latestPracticeAction: () => latest(),
+  resetPracticeAction: vi.fn(),
   openPracticeSessionAction: (ws: string, q: string, key: string) => open(ws, q, key),
   submitPracticeAction: (ws: string, s: string, a: unknown) => submit(ws, s, a),
   selfGradePracticeAction: vi.fn(),
@@ -160,9 +162,11 @@ function question(id: string, n: number) {
 function Harness({
   workspaceId = WS,
   questionId,
+  onGraded,
 }: {
   readonly workspaceId?: string;
   readonly questionId: string | null;
+  readonly onGraded?: (id: string, result: 'correct' | 'incorrect' | 'pending') => void;
 }) {
   const q = questionId === Q1 ? question(Q1, 1) : questionId === Q2 ? question(Q2, 2) : null;
   return (
@@ -174,6 +178,7 @@ function Harness({
       onClose={() => undefined}
       onFlagsChange={() => undefined}
       onViewed={() => undefined}
+      onGraded={onGraded}
     />
   );
 }
@@ -181,6 +186,17 @@ function Harness({
 beforeEach(() => {
   open.mockReset();
   submit.mockReset();
+  latest.mockReset();
+  latest.mockResolvedValue({
+    ok: true,
+    data: {
+      session: null,
+      previous_revision: false,
+      reset_epoch: 0,
+      active_revision_id: '77777777-7777-4777-8777-777777777777',
+      latest_attempt_id: null,
+    },
+  });
   open.mockImplementation(async (ws, q) => ({
     ok: true,
     data: session(q, { workspace_id: ws, stem: `stem of ${q}` }),
@@ -188,19 +204,114 @@ beforeEach(() => {
 });
 
 describe('QuestionViewer practice session cache', () => {
-  it('re-opens a viewed unanswered question (close/reopen, previous/next) without a request', async () => {
+  it('re-opens a viewed unanswered question after metadata verification without a new session', async () => {
     const view = render(<Harness questionId={Q1} />);
     expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();
     view.rerender(<Harness questionId={Q2} />);
     expect(await screen.findByText(`stem of ${Q2}`)).toBeInTheDocument();
     view.rerender(<Harness questionId={null} />);
     view.rerender(<Harness questionId={Q1} />);
-    // Shown at once from the cache: no loading state, no new session.
-    expect(screen.getByText(`stem of ${Q1}`)).toBeInTheDocument();
-    expect(screen.queryByText(/불러오는 중/)).not.toBeInTheDocument();
+    // Recent metadata is checked before reusing either answer-free session.
+    expect(await screen.findByText(`stem of ${Q1}`)).toBeInTheDocument();
     view.rerender(<Harness questionId={Q2} />);
-    expect(screen.getByText(`stem of ${Q2}`)).toBeInTheDocument();
+    expect(await screen.findByText(`stem of ${Q2}`)).toBeInTheDocument();
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('revalidates cached sessions and restores a newer server result before allowing input', async () => {
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('radio', { name: '보기 가' });
+    view.rerender(<Harness questionId={null} />);
+    let release: (value: unknown) => void = () => undefined;
+    latest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument();
+    const result = {
+      attempt_id: 'attempt',
+      practice_session_id: session(Q1).id,
+      question_revision_id: session(Q1).question_revision_id,
+      result: 'correct',
+      correct_option_ids: ['o1'],
+      accepted_answers: null,
+      explanation: null,
+      rubric: null,
+    };
+    await act(async () =>
+      release({
+        ok: true,
+        data: {
+          reset_epoch: 0,
+          previous_revision: false,
+          active_revision_id: session(Q1).question_revision_id,
+          latest_attempt_id: 'attempt',
+          submitted_answer: { selected_option_ids: ['o1'] },
+          session: { ...session(Q1), state: 'graded', outcome: result },
+        },
+      }),
+    );
+    expect(await screen.findByText('정답입니다.')).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a retry when the latest attempt is the one that preceded it', async () => {
+    const user = userEvent.setup();
+    const previous = session(Q1);
+    const result = {
+      attempt_id: 'old-attempt',
+      practice_session_id: previous.id,
+      question_revision_id: previous.question_revision_id,
+      result: 'correct',
+      correct_option_ids: ['o1'],
+      accepted_answers: null,
+      explanation: null,
+      rubric: null,
+    };
+    latest.mockResolvedValue({
+      ok: true,
+      data: {
+        reset_epoch: 0,
+        previous_revision: false,
+        active_revision_id: previous.question_revision_id,
+        latest_attempt_id: 'old-attempt',
+        submitted_answer: { selected_option_ids: ['o1'] },
+        session: { ...previous, state: 'graded', outcome: result },
+      },
+    });
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByText('정답입니다.');
+    await user.click(screen.getByRole('button', { name: /한 번 더 풀기/ }));
+    await screen.findByRole('button', { name: '제출' });
+    expect(open).toHaveBeenCalledTimes(1);
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a current revision session when only an older revision was submitted', async () => {
+    latest.mockResolvedValue({
+      ok: true,
+      data: {
+        reset_epoch: 0,
+        previous_revision: true,
+        active_revision_id: '77777777-7777-4777-8777-777777777777',
+        latest_attempt_id: 'old-attempt',
+        submitted_answer: null,
+        session: null,
+      },
+    });
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.getByRole('link', { name: /이전 풀이 이력 보기/ })).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(1);
   });
 
   it('opens a new session after a submission instead of reusing the submitted one', async () => {
@@ -236,6 +347,24 @@ describe('QuestionViewer practice session cache', () => {
     expect(submit.mock.calls[1]?.[1]).not.toBe(submitted);
   });
 
+  it('reports a completed submission after navigating to another question', async () => {
+    const user = userEvent.setup();
+    const onGraded = vi.fn();
+    let release: (value: unknown) => void = () => undefined;
+    submit.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const view = render(<Harness questionId={Q1} onGraded={onGraded} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    view.rerender(<Harness questionId={Q2} onGraded={onGraded} />);
+    await act(async () => release({ ok: true, data: { result: 'correct' } }));
+    expect(onGraded).toHaveBeenCalledWith(Q1, 'correct');
+  });
+
   it('does not reuse a session whose submission failed or is still in flight', async () => {
     const user = userEvent.setup();
     let release: (v: unknown) => void = () => undefined;
@@ -251,53 +380,56 @@ describe('QuestionViewer practice session cache', () => {
     });
   });
 
+  it('does not open a session after a pending lookup is cancelled', async () => {
+    let release: () => void = () => undefined;
+    latest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              ok: true,
+              data: {
+                session: null,
+                previous_revision: false,
+                reset_epoch: 0,
+                active_revision_id: '77777777-7777-4777-8777-777777777777',
+                latest_attempt_id: null,
+              },
+            });
+        }),
+    );
+    const view = render(<Harness questionId={Q1} />);
+    await waitFor(() => expect(latest).toHaveBeenCalledTimes(1));
+    view.rerender(<Harness questionId={null} />);
+    await act(async () => release());
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it('a late duplicate open response never restores a session whose submission started', async () => {
     const user = userEvent.setup();
     const s1 = session(Q1);
     let releaseLate: () => void = () => undefined;
     open
-      .mockImplementationOnce(async () => ({ ok: true, data: s1 }))
       .mockImplementationOnce(
         () => new Promise((resolve) => (releaseLate = () => resolve({ ok: true, data: s1 }))),
-      );
+      )
+      .mockImplementationOnce(async () => ({ ok: true, data: s1 }));
     submit.mockImplementation(async () => ({
       ok: false,
       kind: 'unavailable',
       message: '일시적인 오류',
     }));
-    const view = render(
-      <StrictMode>
-        <Harness questionId={Q1} />
-      </StrictMode>,
-    );
-    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
-    expect(open.mock.calls[0]?.[2]).toBe(open.mock.calls[1]?.[2]);
-    // The first response is cached; close and reopen show it while the duplicate is pending.
-    view.rerender(
-      <StrictMode>
-        <Harness questionId={null} />
-      </StrictMode>,
-    );
-    view.rerender(
-      <StrictMode>
-        <Harness questionId={Q1} />
-      </StrictMode>,
-    );
+    const view = render(<Harness questionId={Q1} />);
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
     await user.click(await screen.findByRole('radio', { name: '보기 가' }));
     expect(open).toHaveBeenCalledTimes(2);
     await user.click(screen.getByRole('button', { name: '제출' }));
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
     await act(async () => releaseLate());
-    view.rerender(
-      <StrictMode>
-        <Harness questionId={null} />
-      </StrictMode>,
-    );
-    view.rerender(
-      <StrictMode>
-        <Harness questionId={Q1} />
-      </StrictMode>,
-    );
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
     await waitFor(() => expect(open).toHaveBeenCalledTimes(3));
   });
 
@@ -318,7 +450,7 @@ describe('QuestionViewer practice session cache', () => {
     expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
     view.rerender(<Harness questionId={null} />);
     view.rerender(<Harness questionId={Q1} />);
-    expect(screen.getByRole('radio', { name: '보기 가' })).not.toBeChecked();
+    expect(await screen.findByRole('radio', { name: '보기 가' })).not.toBeChecked();
     expect(open).toHaveBeenCalledTimes(1);
   });
 });

@@ -12,6 +12,10 @@ import type { PracticeSession, SubmitResult } from '../src/lib/questions/practic
 import type { PracticeRun, RunItem, RunUrlState } from '../src/lib/questions/practice-runs';
 import type { RunActionResult } from '../src/lib/questions/practice-run-problems';
 import type { RunClient } from '../src/components/questions/viewer/question-viewer';
+import {
+  publishPracticeReset,
+  rememberPracticeEpoch,
+} from '../src/lib/questions/practice-reset-events';
 
 vi.mock('../src/lib/questions/practice-actions', () => ({
   openPracticeSessionAction: vi.fn(),
@@ -25,7 +29,9 @@ vi.mock('../src/lib/questions/actions', () => ({
   getQuestionRevisionAction: vi.fn(),
 }));
 
-const { QuestionViewer } = await import('../src/components/questions/viewer/question-viewer');
+const { QuestionViewer, bankRunClient } =
+  await import('../src/components/questions/viewer/question-viewer');
+const actions = await import('../src/lib/questions/practice-actions');
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const QID = '22222222-2222-4222-8222-000000000001';
@@ -169,7 +175,13 @@ function client(overrides: Partial<RunClient> = {}): RunClient {
   } as RunClient;
 }
 
-function viewer(state: RunUrlState | null, c: RunClient, onNavigate = vi.fn()) {
+function viewer(
+  state: RunUrlState | null,
+  c: RunClient,
+  onNavigate = vi.fn(),
+  invalidated?: { questionId: string; seq: number },
+  onGraded?: (id: string, result: 'correct' | 'incorrect' | 'pending') => void,
+) {
   return (
     <QuestionViewer
       mode="sequence"
@@ -179,6 +191,8 @@ function viewer(state: RunUrlState | null, c: RunClient, onNavigate = vi.fn()) {
       onNavigate={onNavigate}
       onClose={() => undefined}
       client={c}
+      invalidated={invalidated}
+      onGraded={onGraded}
     />
   );
 }
@@ -186,6 +200,126 @@ function viewer(state: RunUrlState | null, c: RunClient, onNavigate = vi.fn()) {
 const PICKER: RunUrlState = { step: 'picker', source: 'bank', mockExamId: null };
 
 describe('sequence viewer async edges (QVIEW-W review)', () => {
+  it('sends the observed reset epoch with bank flag writes', async () => {
+    rememberPracticeEpoch(WS, QID, 17);
+    vi.mocked(actions.setMyStateAction).mockResolvedValueOnce({ ok: true, data: {} } as never);
+    await bankRunClient(WS).setFlags?.(QID, { is_favorite: true });
+    expect(actions.setMyStateAction).toHaveBeenCalledWith(WS, QID, { is_favorite: true }, 17);
+  });
+
+  it('discards a pending submitted item after a grouped reset before its question is known', async () => {
+    const oldItem = deferred<Awaited<ReturnType<RunClient['getItem']>>>();
+    const freshItem = deferred<Awaited<ReturnType<RunClient['getItem']>>>();
+    const getItem = vi
+      .fn()
+      .mockReturnValueOnce(oldItem.promise)
+      .mockReturnValueOnce(freshItem.promise);
+    const c = client({ getItem });
+    render(viewer({ step: 'solve', runId: RUN, position: 1 }, c));
+    await waitFor(() => expect(getItem).toHaveBeenCalledTimes(1));
+    act(() => publishPracticeReset(WS, { [QID]: 18, otherAlias: 4 }));
+    await waitFor(() => expect(getItem).toHaveBeenCalledTimes(2));
+    await act(async () =>
+      oldItem.resolve({
+        ok: true,
+        data: item({
+          session_state: 'graded',
+          attempt: {
+            ...GRADED,
+            submitted_answer: { selected_option_ids: ['o1'] },
+            explanation: 'stale submitted answer',
+          },
+        }),
+      }),
+    );
+    expect(screen.queryByText('stale submitted answer')).toBeNull();
+    await act(async () =>
+      freshItem.resolve({ ok: true, data: item({ stem: 'fresh after reset' }) }),
+    );
+    expect(await screen.findByRole('radio', { name: '증발' })).toBeTruthy();
+  });
+
+  it('reloads the active sequence item when a grouped reset includes an alias after it', async () => {
+    const c = client();
+    const state: RunUrlState = { step: 'solve', runId: RUN, position: 1 };
+    render(viewer(state, c));
+    await screen.findByRole('radio', { name: '증발' });
+    const before = vi.mocked(c.getItem).mock.calls.length;
+    act(() => publishPracticeReset(WS, { [QID]: 18, otherAlias: 4 }));
+    await waitFor(() => expect(vi.mocked(c.getItem).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('does not restore a pre-reset grade when a delayed submission returns', async () => {
+    const user = userEvent.setup();
+    const submitted = deferred<Awaited<ReturnType<RunClient['submit']>>>();
+    const c = client({ submit: vi.fn(() => submitted.promise) });
+    const onGraded = vi.fn();
+    const onNavigate = vi.fn();
+    const state: RunUrlState = { step: 'solve', runId: RUN, position: 1 };
+    const view = render(viewer(state, c, onNavigate, undefined, onGraded));
+    await user.click(await screen.findByRole('radio', { name: '증발' }));
+    await user.click(screen.getByRole('button', { name: SUBMIT }));
+    act(() => publishPracticeReset(WS, { [QID]: 18 }));
+    view.rerender(viewer(state, c, onNavigate, { questionId: QID, seq: 1 }, onGraded));
+    await act(async () => submitted.resolve({ ok: true, data: GRADED }));
+    expect(onGraded).not.toHaveBeenCalled();
+  });
+
+  it('does not restore a pre-reset self-grade when its response arrives late', async () => {
+    const user = userEvent.setup();
+    const grading = deferred<Awaited<ReturnType<RunClient['selfGrade']>>>();
+    const c = client({
+      submit: vi.fn(async () => ({
+        ok: true as const,
+        data: { ...GRADED, result: 'pending' as const },
+      })),
+      selfGrade: vi.fn(() => grading.promise),
+    });
+    const onGraded = vi.fn();
+    const onNavigate = vi.fn();
+    const state: RunUrlState = { step: 'solve', runId: RUN, position: 1 };
+    const view = render(viewer(state, c, onNavigate, undefined, onGraded));
+    await user.click(await screen.findByRole('radio', { name: '증발' }));
+    await user.click(screen.getByRole('button', { name: SUBMIT }));
+    await user.click(await screen.findByRole('button', { name: '맞음' }));
+    act(() => publishPracticeReset(WS, { [QID]: 18 }));
+    view.rerender(viewer(state, c, onNavigate, { questionId: QID, seq: 1 }, onGraded));
+    await act(async () =>
+      grading.resolve({ ok: true, data: { result: 'correct' } } as Awaited<
+        ReturnType<RunClient['selfGrade']>
+      >),
+    );
+    expect(onGraded).toHaveBeenCalledTimes(1);
+    expect(onGraded).toHaveBeenCalledWith(QID, 'pending');
+  });
+
+  it('reloads displayed run results when a bank question is reset', async () => {
+    const c = client();
+    const results: RunUrlState = { step: 'results', runId: RUN };
+    const onNavigate = vi.fn();
+    const view = render(viewer(results, c, onNavigate));
+    await screen.findByRole('list', { name: '문제별 결과' });
+    expect(c.results).toHaveBeenCalledTimes(1);
+    view.rerender(viewer(results, c, onNavigate, { questionId: QID, seq: 1 }));
+    await waitFor(() => expect(c.results).toHaveBeenCalledTimes(2));
+  });
+
+  it('offers a new run when an old position was reset', async () => {
+    const user = userEvent.setup();
+    const c = client({
+      getItem: vi.fn(async () => ({
+        ok: false as const,
+        kind: 'reset' as const,
+        message: '기록이 초기화되었습니다.',
+      })),
+    });
+    const onNavigate = vi.fn();
+    render(viewer({ step: 'solve', runId: RUN, position: 1 }, c, onNavigate));
+    const button = await screen.findByRole('button', { name: '새 풀이 시작' });
+    await user.click(button);
+    expect(onNavigate).toHaveBeenCalledWith(PICKER, 'replace');
+  });
+
   it('결과 보기 waits while the last position is being submitted', async () => {
     const user = userEvent.setup();
     const submitted = deferred<Awaited<ReturnType<RunClient['submit']>>>();

@@ -37,6 +37,17 @@ const lookupOverviewQuestionAction = vi.fn();
 const submitPracticeAction = vi.fn();
 const selfGradePracticeAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
+  latestPracticeAction: vi.fn(async () => ({
+    ok: true,
+    data: {
+      session: null,
+      previous_revision: false,
+      reset_epoch: 0,
+      active_revision_id: '88888888-8888-4888-8888-888888888888',
+      latest_attempt_id: null,
+    },
+  })),
+  resetPracticeAction: vi.fn(),
   submitPracticeAction: (...a: unknown[]) => submitPracticeAction(...a),
   selfGradePracticeAction: (...a: unknown[]) => selfGradePracticeAction(...a),
   openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
@@ -312,7 +323,7 @@ describe('QuestionsOverview practice panel', () => {
     const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
     expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
-    expect(setMyStateAction).toHaveBeenCalledWith(WS, id(1), { is_favorite: true });
+    expect(setMyStateAction).toHaveBeenCalledWith(WS, id(1), { is_favorite: true }, 0);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(dot(1)).toHaveAttribute('aria-label', expect.stringMatching(/즐겨찾기/));

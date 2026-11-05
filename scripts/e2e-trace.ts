@@ -107,6 +107,7 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // STEM-ITEMS (2026-11-05): stem item lists one per line in a 제시 항목 box (QPLAY-01-AC14).
   'STEM.0': ['QPLAY-01'],
   'UX10-UI.0': ['UX10-UI'],
+  'UX10-QVIEW.0': ['UX10-QVIEW'],
 };
 
 const LEADING_ID = new RegExp(

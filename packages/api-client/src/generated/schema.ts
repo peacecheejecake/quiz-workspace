@@ -734,10 +734,10 @@ export type paths = {
     put?: never;
     /**
      * Start Mock Practice Session
-     * @description Open a mock exam question: pins its active revision and shuffles MCQ options. No answers
-     *     in the response, nothing recorded outside the mock exam tables. With a run position the
-     *     caller's mock run of this workspace must hold this question there; the position's open
-     *     session is resumed, a submitted one is 409 `already-submitted`.
+     * @description Open a mock exam question: pins its active revision and optionally shuffles MCQ options.
+     *     No answers in the response, nothing recorded outside the mock exam tables. With a run
+     *     position the caller's mock run must hold this question; an open session is resumed, and a
+     *     submitted one is 409 `already-submitted`.
      */
     post: operations['startMockPracticeSession'];
     delete?: never;
@@ -1447,6 +1447,43 @@ export type paths = {
     patch: operations['updateMyQuestionState'];
     trace?: never;
   };
+  '/api/v1/questions/{question_id}/practice-recent': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Latest Question Practice */
+    get: operations['getLatestQuestionPractice'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/practice-reset': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reset Question Practice
+     * @description Reset personal study state; immutable attempts remain for audit.
+     */
+    post: operations['resetQuestionPractice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}/practice-sessions': {
     parameters: {
       query?: never;
@@ -1458,8 +1495,8 @@ export type paths = {
     put?: never;
     /**
      * Start Practice Session
-     * @description Open the practice panel on a CONFIRMED question: pins its active revision, shuffles MCQ
-     *     options, records the caller's view. No answers in the response. With a run position
+     * @description Open the practice panel on a CONFIRMED question: pins its active revision, optionally
+     *     shuffles MCQ options, records the caller's view. No answers in the response. With a run position
      *     (QVIEW-B) the caller's run of this workspace must hold this question there; the position's
      *     open session is resumed (another view), a submitted one is 409 `already-submitted`.
      */
@@ -4560,6 +4597,25 @@ export type components = {
        */
       updated_at: string;
     };
+    /** LatestPractice */
+    LatestPractice: {
+      /**
+       * Active Revision Id
+       * Format: uuid
+       */
+      active_revision_id: string;
+      /** Latest Attempt Id */
+      latest_attempt_id: string | null;
+      /** Previous Revision */
+      previous_revision: boolean;
+      /** Reset Epoch */
+      reset_epoch: number;
+      session: components['schemas']['PracticeSessionDetail'] | null;
+      /** Submitted Answer */
+      submitted_answer?: {
+        [key: string]: unknown;
+      } | null;
+    };
     /** LivenessReport */
     LivenessReport: {
       /**
@@ -5208,6 +5264,8 @@ export type components = {
      * @description Omitted flags are kept; at least one is required.
      */
     MyStateUpdate: {
+      /** Expected Reset Epoch */
+      expected_reset_epoch?: number | null;
       /** Is Favorite */
       is_favorite?: boolean | null;
       /**
@@ -5559,6 +5617,15 @@ export type components = {
       /** Text */
       text: string;
     };
+    /** PracticeResetResult */
+    PracticeResetResult: {
+      /** Epochs */
+      epochs: {
+        [key: string]: number;
+      };
+      /** Reset */
+      reset: boolean;
+    };
     /**
      * PracticeRun
      * @description Counts, progress and summary only: never the item list or question content.
@@ -5708,14 +5775,22 @@ export type components = {
     };
     /**
      * PracticeSessionCreate
-     * @description Empty for the practice panel; `practice_run_id` + `run_position` for a run position
-     *     (QVIEW-B): the position must hold this question; one session per position.
+     * @description Option order and reset precondition; a run requires both run id and position.
+     *
+     *     A run position must hold this question and has at most one session.
      */
     PracticeSessionCreate: {
+      /** Expected Reset Epoch */
+      expected_reset_epoch?: number | null;
       /** Practice Run Id */
       practice_run_id?: string | null;
       /** Run Position */
       run_position?: number | null;
+      /**
+       * Shuffle Options
+       * @default false
+       */
+      shuffle_options?: boolean;
     };
     /** PracticeSessionDetail */
     PracticeSessionDetail: {
@@ -6863,6 +6938,8 @@ export type components = {
       question_number: number | null;
       /** Question Type */
       question_type: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /** Reset Epoch */
+      reset_epoch?: number | null;
       /** Session State */
       session_state: ('open' | 'pending_grade' | 'graded') | null;
       /** Stem */
@@ -6907,7 +6984,7 @@ export type components = {
        * Result
        * @description null: not reached yet (open run).
        */
-      result: ('correct' | 'incorrect' | 'pending' | 'skipped') | null;
+      result: ('correct' | 'incorrect' | 'pending' | 'skipped' | 'reset') | null;
     };
     /** RunResults */
     RunResults: {
@@ -13792,6 +13869,143 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getLatestQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['LatestPractice'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  resetQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeResetResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

@@ -61,6 +61,7 @@ export interface PracticeRunApi {
     runId: string,
     position: number,
     key: string,
+    expectedResetEpoch?: number | null,
   ): Promise<RunActionResult<PracticeSession>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
@@ -137,11 +138,15 @@ export function createPracticeRunApi(
       ),
     getRun: async (runId) => own(await call<PracticeRun>(RUN_BFF_PATHS.run(runId))),
     getItem: (runId, position) => call<RunItem>(RUN_BFF_PATHS.item(runId, position)),
-    openSession: async (questionId, runId, position, key) =>
+    openSession: async (questionId, runId, position, key, expectedResetEpoch) =>
       own(
         await call<PracticeSession>(RUN_BFF_PATHS.session(questionId), {
           method: 'POST',
-          body: { practice_run_id: runId, run_position: position },
+          body: {
+            practice_run_id: runId,
+            run_position: position,
+            ...(expectedResetEpoch == null ? {} : { expected_reset_epoch: expectedResetEpoch }),
+          },
           key,
         }),
       ),

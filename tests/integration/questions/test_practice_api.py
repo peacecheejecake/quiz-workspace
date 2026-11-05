@@ -9,7 +9,9 @@ attempt history pagination. Fixtures come from conftest.py.
 from __future__ import annotations
 
 import itertools
+import os
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -20,7 +22,9 @@ from quiz_api.practice_grading import shuffled_option_ids
 
 pytestmark = pytest.mark.infra
 
-DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+DB_ADMIN_URL = os.environ.get(
+    "QUIZ_DB_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+)
 ANSWER_KEYS = {"correct_option_ids", "accepted_answers", "explanation", "rubric", "correct_answer"}
 
 
@@ -130,11 +134,30 @@ def test_idempotent_open_returns_the_same_session(seed: Any) -> None:
     assert count == 1
 
 
+def test_ux10_qview_ac01_default_order_is_authored_and_persisted(seed: Any) -> None:
+    alice = seed.client("ux10-qview-order")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("순서"), ["a", "b", "c", "d"], 0))
+    session = start(alice, q["id"])
+    expected = [o["id"] for o in q["revision"]["options"]]
+    assert session["displayed_option_ids"] == expected
+    resumed = alice.ok("GET", f"/practice-sessions/{session['id']}")
+    assert resumed["displayed_option_ids"] == expected
+    seed_value, displayed = _db_one(
+        "select shuffle_seed, displayed_option_ids from public.practice_sessions where id = %s",
+        (session["id"],),
+    )
+    assert seed_value is None
+    assert displayed == expected
+
+
 def test_the_stored_seed_reproduces_the_displayed_order(seed: Any) -> None:
     alice = seed.client("m52-seed")
     ws = alice.create_workspace()
     q = alice.create_question(ws["id"], seed.mcq(_stem("씨앗"), ["a", "b", "c", "d", "e"], 0))
-    session = start(alice, q["id"])
+    session = alice.ok(
+        "POST", f"/questions/{q['id']}/practice-sessions", {"shuffle_options": True}, (201,)
+    )
     seed_value, displayed = _db_one(
         "select shuffle_seed, displayed_option_ids from public.practice_sessions where id = %s",
         (session["id"],),
@@ -303,3 +326,343 @@ def _replays(events: list[dict[str, bool]], final: dict[str, bool]) -> bool:
             return False
         state.update(changed)
     return state == final
+
+
+def test_ux10_qview_ac04_reset_hides_immutable_history(seed: Any) -> None:
+    alice = seed.client("ux10-qview-reset")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("초기화"), ["a", "b"], 0))
+    session = start(alice, q["id"])
+    alice.ok(
+        "POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["opt-1"]}
+    )
+    key = {"Idempotency-Key": str(uuid.uuid4())}
+    path = f"/questions/{q['id']}/practice-reset"
+    assert alice.call_with_headers("POST", path, {}, key).status_code == 200
+    assert alice.call_with_headers("POST", path, {}, key).status_code == 200
+    assert alice.ok("GET", f"/questions/{q['id']}/attempts")["items"] == []
+    recent = alice.ok("GET", f"/questions/{q['id']}/practice-recent")
+    assert recent["latest_attempt_id"] is None
+    assert recent["session"] is None
+    assert alice.call("GET", f"/practice-sessions/{session['id']}").status_code == 409
+    (count,) = _db_one(
+        "select count(*) from public.question_attempts where question_id = %s", (q["id"],)
+    )
+    assert count == 1
+
+
+def test_ux10_qview_ac05_epoch_repository_in_rolled_back_transaction(seed: Any) -> None:
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from quiz_api.api.practice import reset_question_practice
+    from quiz_api.repositories.idempotency import IdempotencyStore
+    from quiz_api.repositories.practice import PracticeRepository
+    from quiz_api.repositories.tables import question_merges
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    alice = seed.client("ux10-qview-epoch")
+    other = seed.client("ux10-qview-epoch-other")
+    ws = alice.create_workspace()
+    seed.membership(ws["id"], other.user, "viewer")
+    q = alice.create_question(ws["id"], seed.mcq(_stem("경계"), ["a", "b"], 0))
+    duplicate = alice.create_question(ws["id"], seed.mcq(_stem("중복"), ["a", "b"], 0))
+    user_id = uuid.UUID(alice.user.id)
+    question_id = uuid.UUID(q["id"])
+    workspace_id = uuid.UUID(ws["id"])
+    revision_id = uuid.UUID(q["revision"]["id"])
+    migration = Path("supabase/migrations/20261106100000_practice_reset_epochs.sql").read_text()
+    engine = create_engine(DB_ADMIN_URL.replace("postgresql://", "postgresql+psycopg://"))
+    with engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            if (
+                connection.exec_driver_sql(
+                    "select to_regclass('public.practice_reset_epochs')"
+                ).scalar()
+                is None
+            ):
+                connection.exec_driver_sql(migration)
+            with Session(bind=connection) as db:
+                repo = PracticeRepository(db)
+                assert repo.lock_epoch(user_id, question_id) == 0
+                opened = repo.open_session(
+                    workspace_id=workspace_id,
+                    question_id=question_id,
+                    revision_id=revision_id,
+                    user_id=user_id,
+                    displayed_option_ids=["opt-1", "opt-2"],
+                    shuffle_seed=None,
+                )
+                session_id = opened.id
+                session = repo.get_session(session_id, user_id)
+                assert session is not None
+                assert session.reset_epoch == 0
+                repo.submit(
+                    session, submitted_answer={"selected_option_ids": ["opt-1"]}, result="correct"
+                )
+                alias_id = uuid.UUID(duplicate["id"])
+                alias = repo.open_session(
+                    workspace_id=workspace_id,
+                    question_id=alias_id,
+                    revision_id=uuid.UUID(duplicate["revision"]["id"]),
+                    user_id=user_id,
+                    displayed_option_ids=["opt-1", "opt-2"],
+                    shuffle_seed=None,
+                )
+                alias_session = repo.get_session(alias.id, user_id)
+                assert alias_session is not None
+                repo.submit(
+                    alias_session,
+                    submitted_answer={"selected_option_ids": ["opt-1"]},
+                    result="correct",
+                )
+                db.execute(
+                    question_merges.insert().values(
+                        workspace_id=workspace_id,
+                        duplicate_question_id=alias_id,
+                        kept_question_id=question_id,
+                        created_by=user_id,
+                    )
+                )
+                assert len(repo.attempts(question_id, user_id, limit=10)[0]) == 2
+                assert repo.latest_submitted_session(question_id, user_id) is not None
+                other_id = uuid.UUID(other.user.id)
+                other_open = repo.open_session(
+                    workspace_id=workspace_id,
+                    question_id=question_id,
+                    revision_id=revision_id,
+                    user_id=other_id,
+                    displayed_option_ids=["opt-1", "opt-2"],
+                    shuffle_seed=None,
+                )
+                other_session = repo.get_session(other_open.id, other_id)
+                assert other_session is not None
+                repo.submit(
+                    other_session,
+                    submitted_answer={"selected_option_ids": ["opt-1"]},
+                    result="correct",
+                )
+                store = IdempotencyStore(db)
+                access = SimpleNamespace(resource_id=question_id)
+                user = SimpleNamespace(id=user_id)
+                key = str(uuid.uuid4())
+                reset_result = reset_question_practice(access, repo, store, user, key)
+                assert reset_result["epochs"] == {str(question_id): 1, str(alias_id): 1}
+                assert repo.lock_epoch(user_id, question_id) == 1
+                assert repo.lock_epoch(user_id, alias_id) == 1
+                reset_question_practice(access, repo, store, user, key)
+                assert repo.lock_epoch(user_id, question_id) == 1
+                assert repo.lock_epoch(user_id, alias_id) == 1
+                assert repo.get_session(session_id, user_id).reset_epoch == 0
+                assert repo.attempts(question_id, user_id, limit=10)[0] == []
+                assert len(repo.attempts(question_id, other_id, limit=10)[0]) == 1
+                assert repo.latest_submitted_session(question_id, user_id) is None
+        finally:
+            transaction.rollback()
+    engine.dispose()
+
+
+def test_ux10_qview_ac05_reset_submit_race_and_idempotent_replay(seed: Any) -> None:
+    alice = seed.client("ux10-race")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("경합"), ["a", "b"], 0))
+    session = start(alice, q["id"])
+    path = f"/questions/{q['id']}/practice-reset"
+    key = {"Idempotency-Key": str(uuid.uuid4())}
+    submit_path = f"/practice-sessions/{session['id']}/submit"
+    responses = _race(
+        [
+            lambda: alice.call_with_headers("POST", path, {}, key),
+            lambda: alice.call("POST", submit_path, {"selected_option_ids": ["opt-1"]}),
+        ]
+    )
+    reset = next(r for r in responses if r.request.url.path.endswith("/practice-reset"))
+    submission = next(r for r in responses if r.request.url.path.endswith("/submit"))
+    assert reset.status_code == 200
+    assert reset.json()["epochs"] == {q["id"]: 1}
+    assert submission.status_code in (200, 409)
+    assert alice.ok("GET", f"/questions/{q['id']}/attempts")["items"] == []
+    fresh = start(alice, q["id"])
+    replayed = alice.call_with_headers("POST", path, {}, key)
+    assert replayed.status_code == 200
+    assert replayed.json() == reset.json()
+    assert replayed.headers.get("Idempotent-Replayed") == "true"
+    assert (
+        alice.call(
+            "POST", f"/practice-sessions/{fresh['id']}/submit", {"selected_option_ids": ["opt-1"]}
+        ).status_code
+        == 200
+    )
+    assert alice.call("GET", f"/practice-sessions/{session['id']}").status_code == 409
+
+
+def test_ux10_qview_ac05_reset_is_scoped_and_archived_is_read_only(seed: Any) -> None:
+    alice = seed.client("ux10-owner")
+    outsider = seed.client("ux10-outsider")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("격리"), ["a", "b"], 0))
+    path = f"/questions/{q['id']}/practice-reset"
+    assert outsider.call("POST", path, {}).status_code == 404
+    alice.ok("POST", f"/workspaces/{ws['id']}/archive")
+    assert alice.call("POST", path, {}).status_code == 403
+
+
+def test_ux10_qview_ac05_sensitive_get_keeps_lock_across_queries() -> None:
+    from types import SimpleNamespace
+
+    from quiz_api.db import Database, get_db_session
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(DB_ADMIN_URL.replace("postgresql://", "postgresql+psycopg://"))
+    database = Database(
+        engine=engine,
+        sessionmaker=sessionmaker(engine),
+        read_sessionmaker=sessionmaker(engine.execution_options(isolation_level="AUTOCOMMIT")),
+    )
+    paths = [
+        "/api/v1/practice-sessions/00000000-0000-4000-8000-000000000001",
+        "/api/v1/questions/00000000-0000-4000-8000-000000000001/practice-recent",
+        "/api/v1/practice-runs/00000000-0000-4000-8000-000000000001/items/1",
+    ]
+    for path in paths:
+        request = SimpleNamespace(
+            method="GET",
+            scope={"path": path},
+            app=SimpleNamespace(state=SimpleNamespace(database=database)),
+        )
+        dependency = get_db_session(request)
+        session = next(dependency)
+        lock_id = int.from_bytes(uuid.uuid4().bytes[:7], "big")
+        session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": lock_id})
+        session.execute(text("select 1"))
+        with engine.begin() as other:
+            assert not other.execute(
+                text("select pg_try_advisory_xact_lock(:key)"), {"key": lock_id}
+            ).scalar_one()
+        dependency.close()
+        with engine.begin() as other:
+            assert other.execute(
+                text("select pg_try_advisory_xact_lock(:key)"), {"key": lock_id}
+            ).scalar_one()
+    engine.dispose()
+
+
+def test_ux10_qview_ac05_create_respects_reset_epoch_in_both_orders(seed: Any) -> None:
+    alice = seed.client("ux10-open-reset-order")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("순서 경합"), ["a", "b"], 0))
+    recent_path = f"/questions/{q['id']}/practice-recent"
+    open_path = f"/questions/{q['id']}/practice-sessions"
+    reset_path = f"/questions/{q['id']}/practice-reset"
+    epoch = alice.ok("GET", recent_path)["reset_epoch"]
+    first = alice.ok("POST", open_path, {"expected_reset_epoch": epoch}, (201,))
+    alice.ok("POST", reset_path)
+    assert alice.call("GET", f"/practice-sessions/{first['id']}").status_code == 409
+    stale = alice.call("POST", open_path, {"expected_reset_epoch": epoch})
+    assert stale.status_code == 409
+    assert stale.json()["type"] == "urn:quiz-workspace:problem:practice-session-reset"
+    overview = alice.ok("GET", f"/workspaces/{ws['id']}/questions/overview")
+    [state] = [item for item in overview["items"] if item["question_id"] == q["id"]]
+    assert state["status"] == "unseen"
+    current = alice.ok("GET", recent_path)["reset_epoch"]
+    fresh = alice.ok("POST", open_path, {"expected_reset_epoch": current}, (201,))
+    assert fresh["state"] == "open"
+
+
+@pytest.mark.parametrize(
+    ("operation", "with_expected_epoch"), [("open", True), ("open", False), ("flag", False)]
+)
+def test_ux10_qview_ac05_queued_write_cannot_undo_reset(
+    seed: Any, operation: str, with_expected_epoch: bool
+) -> None:
+    alice = seed.client("ux10-queued-open")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("대기 경합"), ["a", "b"], 0))
+    epoch = alice.ok("GET", f"/questions/{q['id']}/practice-recent")["reset_epoch"]
+    lock_text = f"practice-reset:{alice.user.id}:{q['id']}"
+    responses: dict[str, httpx.Response] = {}
+    failures: list[BaseException] = []
+
+    def call(name: str, method: str, path: str, body: dict[str, Any]) -> None:
+        try:
+            responses[name] = alice.call(method, path, body)
+        except BaseException as exc:
+            failures.append(exc)
+
+    with psycopg.connect(DB_ADMIN_URL) as conn:
+        (lock_id,) = conn.execute("select hashtextextended(%s, 0)", (lock_text,)).fetchone()
+        conn.execute("select pg_advisory_xact_lock(%s)", (lock_id,))
+        high, low = (lock_id >> 32) & 0xFFFFFFFF, lock_id & 0xFFFFFFFF
+
+        def waiters(count: int) -> None:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                (waiting,) = conn.execute(
+                    "select count(*) from pg_locks where locktype = 'advisory' and not granted "
+                    "and classid = %s::oid and objid = %s::oid and objsubid = 1",
+                    (high, low),
+                ).fetchone()
+                if waiting >= count:
+                    return
+                time.sleep(0.02)
+            raise AssertionError(f"expected {count} waiting requests")
+
+        reset = threading.Thread(
+            target=call, args=("reset", "POST", f"/questions/{q['id']}/practice-reset", {})
+        )
+        opened = threading.Thread(
+            target=call,
+            args=(
+                "write",
+                "POST" if operation == "open" else "PATCH",
+                f"/questions/{q['id']}/practice-sessions"
+                if operation == "open"
+                else f"/questions/{q['id']}/my-state",
+                ({"expected_reset_epoch": epoch} if with_expected_epoch else {})
+                if operation == "open"
+                else {"is_favorite": True},
+            ),
+        )
+        try:
+            reset.start()
+            waiters(1)
+            opened.start()
+            waiters(2)
+        finally:
+            conn.commit()
+            reset.join(timeout=10)
+            if opened.ident is not None:
+                opened.join(timeout=10)
+    assert failures == []
+    assert responses["reset"].status_code == 200
+    assert responses["write"].status_code == 409
+    overview = alice.ok("GET", f"/workspaces/{ws['id']}/questions/overview")
+    [state] = [item for item in overview["items"] if item["question_id"] == q["id"]]
+    assert state["status"] == "unseen"
+    assert state["is_favorite"] is False
+    if operation == "flag":
+        fresh = alice.ok("PATCH", f"/questions/{q['id']}/my-state", {"is_favorite": True})
+        assert fresh["is_favorite"] is True
+
+
+def test_ux10_qview_ac05_delayed_flag_epoch_is_rejected_after_reset(seed: Any) -> None:
+    alice = seed.client("ux10-delayed-flag")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("지연 표시"), ["a", "b"], 0))
+    recent = f"/questions/{q['id']}/practice-recent"
+    state = f"/questions/{q['id']}/my-state"
+    epoch = alice.ok("GET", recent)["reset_epoch"]
+    alice.ok("POST", f"/questions/{q['id']}/practice-reset")
+    stale = alice.call("PATCH", state, {"is_favorite": True, "expected_reset_epoch": epoch})
+    assert stale.status_code == 409
+    assert stale.json()["type"] == "urn:quiz-workspace:problem:practice-session-reset"
+    overview = alice.ok("GET", f"/workspaces/{ws['id']}/questions/overview")
+    [item] = [entry for entry in overview["items"] if entry["question_id"] == q["id"]]
+    assert item["status"] == "unseen"
+    assert item["is_favorite"] is False
+    fresh_epoch = alice.ok("GET", recent)["reset_epoch"]
+    fresh = alice.ok("PATCH", state, {"is_favorite": True, "expected_reset_epoch": fresh_epoch})
+    assert fresh["is_favorite"] is True

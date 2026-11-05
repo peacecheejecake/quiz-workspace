@@ -121,6 +121,7 @@ export {
   attemptRevision,
   forgetImportRuns,
   holdDocumentProcessing,
+  practiceSessionIds,
   seedBookChapters,
   seedGradedAttempt,
   seedImportDraftCopies,

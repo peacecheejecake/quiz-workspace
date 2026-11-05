@@ -204,7 +204,9 @@ def test_qplay_01_ac02_grading_uses_option_ids_across_100_shuffles(seed: Any) ->
     orders: dict[str, list[str]] = {}
     position_hits = 0
     for i in range(100):
-        session = start(alice, q["id"])
+        session = alice.ok(
+            "POST", f"/questions/{q['id']}/practice-sessions", {"shuffle_options": True}, (201,)
+        )
         displayed = [o["id"] for o in session["options"]]
         assert sorted(displayed) == all_ids
         orders[session["id"]] = displayed
@@ -506,3 +508,42 @@ def test_qplay_01_other_users_cannot_reach_sessions_state_or_history(seed: Any) 
     state = item(alice, ws["id"], q["id"])
     assert (state["status"], state["is_favorite"]) == ("correct", False)
     assert [a["result"] for a in attempts(alice, essay["id"])] == ["pending"]
+
+
+def test_ux10_qview_ac03_recent_result_is_private_and_revision_scoped(seed: Any) -> None:
+    owner = seed.client("ux10-recent-owner")
+    viewer = seed.client("ux10-recent-viewer")
+    ws = owner.create_workspace()
+    seed.membership(ws["id"], viewer.user, "viewer")
+    body = seed.mcq(_stem("이전 결과"), ["a", "b"], 0)
+    q = owner.create_question(ws["id"], body)
+    session = start(owner, q["id"])
+    path = f"/questions/{q['id']}/practice-recent"
+    assert owner.ok("GET", path)["session"] is None
+    assert choose(owner, session["id"], "opt-1") == "correct"
+    prior = owner.ok("GET", path)
+    assert prior["session"]["outcome"]["result"] == "correct"
+    assert prior["latest_attempt_id"] == prior["session"]["outcome"]["attempt_id"]
+    assert prior["active_revision_id"] == q["revision"]["id"]
+    assert prior["submitted_answer"] == {"selected_option_ids": ["opt-1"]}
+    foreign = viewer.ok("GET", path)
+    assert foreign["session"] is None
+    assert answer_keys(foreign) == []
+    edit = {**body, "base_revision_id": q["revision"]["id"], "stem": _stem("새 문제")}
+    owner.ok("PATCH", f"/questions/{q['id']}", edit)
+    revised = owner.ok("GET", path)
+    assert revised["session"] is None
+    assert revised["previous_revision"] is True
+    assert revised["latest_attempt_id"] == prior["latest_attempt_id"]
+    assert revised["active_revision_id"] != prior["active_revision_id"]
+    assert answer_keys(revised) == []
+
+
+def test_ux10_qview_ac03_pending_result_is_not_graded(seed: Any) -> None:
+    owner = seed.client("ux10-recent-pending")
+    ws = owner.create_workspace()
+    q = owner.create_question(ws["id"], {"question_type": "ESSAY", "stem": _stem("서술")})
+    session = start(owner, q["id"])
+    submit_ok(owner, session["id"], {"answer_text": "답"})
+    recent = owner.ok("GET", f"/questions/{q['id']}/practice-recent")
+    assert recent["session"]["outcome"]["result"] == "pending"

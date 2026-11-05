@@ -65,6 +65,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { PracticeViewerScope } from '@/components/questions/viewer/practice-viewer-scope';
 import { DocumentLibraryFeedback } from '@/components/documents/document-library-feedback';
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
@@ -210,7 +211,15 @@ export interface WorkspaceHomeProps {
   };
 }
 
-export function WorkspaceHome({
+export function WorkspaceHome(props: WorkspaceHomeProps) {
+  return (
+    <PracticeViewerScope viewerId={props.viewerId}>
+      <WorkspaceHomeContent key={props.viewerId} {...props} />
+    </PracticeViewerScope>
+  );
+}
+
+function WorkspaceHomeContent({
   workspace,
   viewerId,
   filters,

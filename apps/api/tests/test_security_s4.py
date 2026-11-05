@@ -285,7 +285,10 @@ def test_every_environment_serves_exactly_the_contract(env: Environment) -> None
     assert sum(len(r.methods - {"HEAD"}) for r in endpoints) == len(contract)
     for route in endpoints:
         assert route.include_in_schema, f"hidden route {route.path}"
-        assert not any(word in route.path.lower() for word in _SUSPICIOUS), route.path
+        if route.path == "/questions/{question_id}/practice-reset":
+            assert route.methods == {"POST"}
+        else:
+            assert not any(word in route.path.lower() for word in _SUSPICIOUS), route.path
     if env is Environment.PRODUCTION:
         assert "/api/v1/docs" not in {r.path for r in routes}, "interactive docs in production"
         assert app.docs_url is None

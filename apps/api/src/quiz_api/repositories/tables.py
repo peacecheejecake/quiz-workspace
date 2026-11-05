@@ -235,6 +235,15 @@ question_merged_user_states = Table(
     Column("merged_states", BigInteger, nullable=False),
 )
 
+practice_reset_epochs = Table(
+    "practice_reset_epochs",
+    metadata,
+    Column("user_id", Uuid, primary_key=True),
+    Column("question_id", Uuid, primary_key=True),
+    Column("epoch", BigInteger, nullable=False),
+    _ts("reset_at"),
+)
+
 practice_sessions = Table(
     "practice_sessions",
     metadata,
@@ -245,6 +254,7 @@ practice_sessions = Table(
     Column("user_id", Uuid, nullable=False),
     Column("displayed_option_ids", ARRAY(Text), nullable=False),
     Column("shuffle_seed", BigInteger),
+    Column("reset_epoch", BigInteger, nullable=False),
     Column("state", Text, nullable=False),
     _ts("opened_at", nullable=False),
     _ts("submitted_at"),
