@@ -21,7 +21,7 @@ interface DocScreen {
 function parseScreensIndex(markdown: string): DocScreen[] {
   const rows: DocScreen[] = [];
   for (const line of markdown.split(/\r?\n/)) {
-    const m = /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
+    const m = /^\|\s*([A-Z]+(?:-[A-Z]+)*-\d+|UX10-[A-Z]+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|/.exec(line);
     if (!m) continue;
     const [, id, name, routeCell] = m as unknown as [string, string, string, string];
     const route = /^`(\/[^`]*)`$/.exec(routeCell)?.[1];
@@ -74,6 +74,11 @@ function pageFile(path: string): string {
 }
 
 describe('screen route table', () => {
+  it('recognizes UX10 auxiliary screens without adding legacy nonphase rows', () => {
+    const rows = parseScreensIndex('| UX10-UI | UI | — |\n| UX9-SCROLL | Scroll | — |');
+    expect(rows.map((row) => row.id)).toEqual(['UX10-UI']);
+  });
+
   it('lists every screen of the e2e-trace phases in docs/screens/index.md', () => {
     const phaseIds = Object.values(PHASES)
       .flat()
