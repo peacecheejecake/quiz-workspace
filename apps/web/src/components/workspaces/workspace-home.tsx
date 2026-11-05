@@ -98,7 +98,11 @@ import { EMPTY_SCOPE, unavailableReason, unavailableText } from '@/lib/ask/model
 import { loginRedirectPath } from '@/lib/auth/routes';
 import { QuestionMenu } from './question-menu';
 import type { DocumentSummary } from '@/lib/documents/client-api';
-import { fetchQuestionOverview, OverviewCache } from '@/lib/questions/overview-cache';
+import {
+  fetchCurrentQuestionOverview,
+  seedOverviewCache,
+  type OverviewCache,
+} from '@/lib/questions/overview-cache';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
@@ -169,20 +173,6 @@ function effectiveOverviewFilters(
   return isChapterNoteOpen(params) ? { ...parsed, chapter: null } : parsed;
 }
 
-function seedOverviewCache(
-  workspaceId: string,
-  viewerId: string | null,
-  filters: OverviewFilters,
-  overview: QuestionOverview,
-  failure: QuestionFailureKind | null,
-  unfilteredOverview: QuestionOverview | null,
-): OverviewCache {
-  const seeded = new OverviewCache(workspaceId, viewerId);
-  if (unfilteredOverview) seeded.put(EMPTY_OVERVIEW_FILTERS, unfilteredOverview);
-  if (!failure) seeded.put(filters, overview);
-  return seeded;
-}
-
 export interface WorkspaceHomeProps {
   readonly workspace: {
     readonly id: string;
@@ -197,6 +187,7 @@ export interface WorkspaceHomeProps {
   readonly overview: QuestionOverview;
   /** Unfiltered heatmap when SSR loaded it alongside a filtered URL (QSEARCH-CACHE). */
   readonly unfilteredOverview?: QuestionOverview | null;
+  readonly querylessOverview?: QuestionOverview | null;
   readonly chapterChoices: readonly ChapterChoice[];
   readonly failure: QuestionFailureKind | null;
   readonly requested: PlacedQuestion | null;
@@ -225,6 +216,7 @@ export function WorkspaceHome({
   filters,
   overview,
   unfilteredOverview = null,
+  querylessOverview = null,
   chapterChoices,
   failure,
   requested,
@@ -512,7 +504,15 @@ export function WorkspaceHome({
   );
 
   const [cache, setCache] = useState(() =>
-    seedOverviewCache(workspace.id, viewerId, filters, overview, failure, unfilteredOverview),
+    seedOverviewCache(
+      workspace.id,
+      viewerId,
+      filters,
+      overview,
+      failure,
+      unfilteredOverview,
+      querylessOverview,
+    ),
   );
   const [shown, setShown] = useState<{
     readonly overview: QuestionOverview;
@@ -536,6 +536,7 @@ export function WorkspaceHome({
     filtersKey: ssrFiltersKey,
     overview,
     unfilteredOverview,
+    querylessOverview,
     failure,
   });
   if (
@@ -544,6 +545,7 @@ export function WorkspaceHome({
     ssrSnapshot.filtersKey !== ssrFiltersKey ||
     ssrSnapshot.overview !== overview ||
     ssrSnapshot.unfilteredOverview !== unfilteredOverview ||
+    ssrSnapshot.querylessOverview !== querylessOverview ||
     ssrSnapshot.failure !== failure
   ) {
     setSsrSnapshot({
@@ -552,6 +554,7 @@ export function WorkspaceHome({
       filtersKey: ssrFiltersKey,
       overview,
       unfilteredOverview,
+      querylessOverview,
       failure,
     });
     const freshCache = seedOverviewCache(
@@ -561,6 +564,7 @@ export function WorkspaceHome({
       overview,
       failure,
       unfilteredOverview,
+      querylessOverview,
     );
     setCache(freshCache);
     if (urlFiltersKey === ssrFiltersKey) {
@@ -654,17 +658,21 @@ export function WorkspaceHome({
 
       abortInFlight();
       const controller = new AbortController();
-      const epochAtStart = mutationEpochRef.current;
       inFlightRef.current = { controller, key: nextKey, source: targetCache };
       setFetchingKey(nextKey);
       setShown((prev) => (prev.failure !== null ? { ...prev, failure: null } : prev));
 
-      void fetchQuestionOverview(workspace.id, nextFilters, controller.signal).then((result) => {
+      void fetchCurrentQuestionOverview(
+        workspace.id,
+        nextFilters,
+        controller.signal,
+        () => mutationEpochRef.current,
+      ).then((result) => {
         if (inFlightRef.current?.controller !== controller) return;
         inFlightRef.current = null;
         if (result.ok) {
           setFetchingKey(null);
-          if (cacheRef.current === targetCache && mutationEpochRef.current === epochAtStart) {
+          if (cacheRef.current === targetCache) {
             targetCache.put(nextFilters, result.data);
           }
           setShown({

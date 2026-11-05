@@ -5,6 +5,8 @@ import type * as Bff from '../src/lib/documents/bff';
 import {
   answerFreeOverview,
   fetchQuestionOverview,
+  fetchCurrentQuestionOverview,
+  seedOverviewCache,
   OVERVIEW_CACHE_MAX_ENTRIES,
   OVERVIEW_CACHE_TTL_MS,
   OverviewCache,
@@ -267,5 +269,77 @@ describe('GET /api/workspaces/[workspaceId]/questions/overview BFF route', () =>
     );
     expect(okMax.status).toBe(200);
     expect(relay.relayToApi).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('overview request consistency', () => {
+  it('re-reads after a mutation instead of returning a pre-mutation response', async () => {
+    let epoch = 0;
+    let finishOld!: (response: Response) => void;
+    const old = new Promise<Response>((resolve) => {
+      finishOld = resolve;
+    });
+    const current = sampleOverview('current');
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(old)
+      .mockResolvedValueOnce(Response.json(current));
+    const pending = fetchCurrentQuestionOverview(
+      WORKSPACE_ID,
+      EMPTY_OVERVIEW_FILTERS,
+      new AbortController().signal,
+      () => epoch,
+      fetchImpl,
+    );
+    epoch += 1;
+    finishOld(Response.json(sampleOverview('stale')));
+    expect(await pending).toEqual({ ok: true, data: current });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry an invalidated request after navigation aborts it', async () => {
+    const controller = new AbortController();
+    let epoch = 0;
+    let finish!: (response: Response) => void;
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = fetchCurrentQuestionOverview(
+      WORKSPACE_ID,
+      EMPTY_OVERVIEW_FILTERS,
+      controller.signal,
+      () => epoch,
+      fetchImpl,
+    );
+    epoch += 1;
+    controller.abort();
+    finish(Response.json(sampleOverview('stale')));
+    expect(await pending).toEqual({ ok: false, aborted: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('seeds keyword clearing under the original chapter, type and state filters', () => {
+    const filters: OverviewFilters = {
+      ...EMPTY_OVERVIEW_FILTERS,
+      chapter: CHAPTER_ID,
+      type: 'MCQ',
+      favorite: true,
+      q: 'chlorine',
+    };
+    const scoped = sampleOverview('all matching favorites');
+    const cache = seedOverviewCache(
+      WORKSPACE_ID,
+      VIEWER_A,
+      filters,
+      sampleOverview('chlorine'),
+      null,
+      sampleOverview('all questions'),
+      scoped,
+    );
+    expect(cache.get({ ...filters, q: '' })).toEqual(scoped);
+    expect(cache.get(EMPTY_OVERVIEW_FILTERS)?.items[0]?.preview).toContain('all questions');
   });
 });

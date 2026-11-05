@@ -820,6 +820,20 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(3);
     await expect(page).toHaveURL((url) => !url.searchParams.has('q'));
     expect(overviewRequests).toHaveLength(beforeLandingClear);
+
+    // Clearing on a scoped direct entry retains the type/chapter filters without another read.
+    await page.goto(`${homePath(ws.id)}?type=MCQ&chapter=none&q=${encodeURIComponent('염소')}`);
+    await expect(overviewUi.dots(page)).toHaveCount(1);
+    const beforeScopedClear = overviewRequests.length;
+    await homeUi.questionSearch(page).fill('');
+    await expect(overviewUi.dots(page)).toHaveCount(3);
+    await expect(page).toHaveURL(
+      (url) =>
+        !url.searchParams.has('q') &&
+        url.searchParams.get('type') === 'MCQ' &&
+        url.searchParams.get('chapter') === 'none',
+    );
+    expect(overviewRequests).toHaveLength(beforeScopedClear);
   },
 );
 

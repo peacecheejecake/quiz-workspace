@@ -57,6 +57,7 @@ export default async function Page({
         filters={filters}
         overview={data.overview}
         unfilteredOverview={data.unfilteredOverview}
+        querylessOverview={data.querylessOverview}
         chapterChoices={data.chapterChoices}
         failure={data.failure}
         requested={data.requested}

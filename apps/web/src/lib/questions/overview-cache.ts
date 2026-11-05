@@ -5,6 +5,7 @@
 // memory. Keyed by canonical `overviewSearch(filters)` (`""` = unfiltered full list).
 import type { QuestionOverview } from './overview-data';
 import {
+  EMPTY_OVERVIEW_FILTERS,
   overviewFilterParams,
   overviewSearch,
   parseOverviewFilters,
@@ -191,4 +192,38 @@ export async function fetchQuestionOverview(
     return { ok: false, aborted: false, kind: 'unavailable' };
   }
   return { ok: true, data: answerFreeOverview(body) };
+}
+
+/** SSR snapshots include the empty keyword under the same scope/state filters. */
+export function seedOverviewCache(
+  workspaceId: string,
+  viewerId: string | null,
+  filters: OverviewFilters,
+  overview: QuestionOverview,
+  failure: QuestionFailureKind | null,
+  unfilteredOverview: QuestionOverview | null,
+  querylessOverview: QuestionOverview | null,
+): OverviewCache {
+  const seeded = new OverviewCache(workspaceId, viewerId);
+  if (unfilteredOverview) seeded.put(EMPTY_OVERVIEW_FILTERS, unfilteredOverview);
+  if (querylessOverview) seeded.put({ ...filters, q: '' }, querylessOverview);
+  if (!failure) seeded.put(filters, overview);
+  return seeded;
+}
+
+/** A mutation can settle while a read is in flight; only a read of its latest epoch is usable. */
+export async function fetchCurrentQuestionOverview(
+  workspaceId: string,
+  filters: OverviewFilters,
+  signal: AbortSignal,
+  mutationEpoch: () => number,
+  fetchImpl?: typeof fetch,
+): Promise<OverviewFetchResult> {
+  while (!signal.aborted) {
+    const epochAtStart = mutationEpoch();
+    const result = await fetchQuestionOverview(workspaceId, filters, signal, fetchImpl);
+    if (signal.aborted) return { ok: false, aborted: true };
+    if (mutationEpoch() === epochAtStart) return result;
+  }
+  return { ok: false, aborted: true };
 }
