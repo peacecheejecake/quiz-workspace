@@ -5,13 +5,14 @@ workspace and membership rows locked FOR SHARE); writes lock the link row itself
 concurrent revoke / rotate / policy edits of one link serialise. Every write records an
 `activity_events` row in the same transaction; nothing here commits on its own.
 
-`token_digest` is written here and never read back: no method returns it.
+`token_digest` stays server-only (`repr=False` on `ShareLinkRecord`), used solely to verify
+deterministic owner URL reconstruction; it is never serialized into API responses or logs.
 """
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -41,6 +42,7 @@ _STATUS = case(
 _COLUMNS = (
     _t.c.id,
     _t.c.workspace_id,
+    _t.c.token_digest,
     _t.c.allow_fork,
     _t.c.expires_at,
     _t.c.revoked_at,
@@ -62,6 +64,7 @@ class ShareLinkRecord:
     created_at: datetime
     updated_at: datetime
     status: ShareLinkStatus
+    token_digest: bytes = field(repr=False)
 
 
 def _record(row: Any) -> ShareLinkRecord:
@@ -75,6 +78,7 @@ def _record(row: Any) -> ShareLinkRecord:
         created_at=row.created_at,
         updated_at=row.updated_at,
         status=cast(ShareLinkStatus, row.status),
+        token_digest=bytes(row.token_digest),
     )
 
 
@@ -119,8 +123,11 @@ class ShareLinkRepository:
         token_digest: bytes,
         allow_fork: bool,
         expires_at: datetime | None,
+        link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
-        record = self._insert(workspace_id, actor_id, token_digest, allow_fork, expires_at, None)
+        record = self._insert(
+            workspace_id, actor_id, token_digest, allow_fork, expires_at, None, link_id=link_id
+        )
         self._event(
             record,
             actor_id,
@@ -152,7 +159,12 @@ class ShareLinkRepository:
         return record
 
     def rotate(
-        self, link: ShareLinkRecord, actor_id: uuid.UUID, *, token_digest: bytes
+        self,
+        link: ShareLinkRecord,
+        actor_id: uuid.UUID,
+        *,
+        token_digest: bytes,
+        link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
         """Revoke `link` and issue its replacement (same policy, new id and digest) atomically."""
         self._update(link.id, revoked_at=func.now())
@@ -163,6 +175,7 @@ class ShareLinkRepository:
             link.allow_fork,
             link.expires_at,
             link.id,
+            link_id=link_id,
         )
         self._event(link, actor_id, "share_link.rotated", {"replacement_id": str(replacement.id)})
         return replacement
@@ -175,19 +188,20 @@ class ShareLinkRepository:
         allow_fork: bool,
         expires_at: datetime | None,
         rotated_from_id: uuid.UUID | None,
+        *,
+        link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
-        row = self._session.execute(
-            insert(_t)
-            .values(
-                workspace_id=workspace_id,
-                created_by=actor_id,
-                token_digest=token_digest,
-                allow_fork=allow_fork,
-                expires_at=expires_at,
-                rotated_from_id=rotated_from_id,
-            )
-            .returning(*_COLUMNS)
-        ).one()
+        values: dict[str, Any] = {
+            "workspace_id": workspace_id,
+            "created_by": actor_id,
+            "token_digest": token_digest,
+            "allow_fork": allow_fork,
+            "expires_at": expires_at,
+            "rotated_from_id": rotated_from_id,
+        }
+        if link_id is not None:
+            values["id"] = link_id
+        row = self._session.execute(insert(_t).values(**values).returning(*_COLUMNS)).one()
         return _record(row)
 
     def _update(self, link_id: uuid.UUID, **values: Any) -> ShareLinkRecord:

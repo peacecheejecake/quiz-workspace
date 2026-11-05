@@ -105,7 +105,7 @@ export function parseExpiryDate(value: string, now: Date = new Date()): ExpiryPa
 
 const SECRET = /^[A-Za-z0-9_-]{43,}$/;
 
-/** True for `<http(s) origin>/share/{linkId}#k={secret}` (the URL shown once after issuing). */
+/** True for `<http(s) origin>/share/{linkId}#k={secret}` (the owner's share URL). */
 export function isShareUrl(value: unknown, linkId: string): value is string {
   if (typeof value !== 'string') return false;
   let url: URL;

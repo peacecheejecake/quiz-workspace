@@ -29,12 +29,12 @@
 //      (new id, new secret); the old id answers like any unusable link.
 //   S2 Owner API bodies
 //      POST  /workspaces/{id}/share-links {allow_fork?, expires_at?} → 201 IssuedShareLink
-//      GET   /workspaces/{id}/share-links → 200 {items: ShareLink[]} (newest first, no secret,
-//            no digest)
+//      GET   /workspaces/{id}/share-links → 200 {items: ShareLink[]} (newest first, no raw secret
+//            or digest; share_url reconstructed for non-revoked links)
 //      PATCH /workspaces/{id}/share-links/{linkId} {allow_fork?, expires_at?} → 200 ShareLink
-//      POST  …/{linkId}/revoke → 200 ShareLink (revoked_at set; idempotent)
+//      POST  …/{linkId}/revoke → 200 ShareLink (revoked_at set, share_url null; idempotent)
 //      POST  …/{linkId}/rotate → 201 IssuedShareLink (the replacement link)
-//      ShareLink = {id, workspace_id, allow_fork, expires_at, revoked_at, created_at}
+//      ShareLink = {id, workspace_id, allow_fork, expires_at, revoked_at, share_url, created_at}
 //      IssuedShareLink = ShareLink + {secret, share_url}; `secret` is base64url without padding
 //      (≥ 32 bytes → ≥ 43 chars) and share_url = `<web origin>/share/{id}#k={secret}`.
 //      Archived workspace: PATCH and revoke allowed; create and rotate → 403 workspace-archived.
@@ -231,6 +231,7 @@ export interface ShareLink {
   readonly revoked_at: string | null;
   /** Derived by the API from revoked_at / expires_at. */
   readonly status: 'active' | 'expired' | 'revoked';
+  readonly share_url?: string | null;
   readonly created_at: string;
 }
 
@@ -415,6 +416,12 @@ export function expectPrivacyHeaders(res: RawResponse, what: string): void {
 // Owner API (S1, S2)
 // ---------------------------------------------------------------------------------------------
 
+function registerShareUrl(shareUrl: string | null | undefined): void {
+  if (!shareUrl) return;
+  const idx = shareUrl.indexOf('#k=');
+  if (idx >= 0) registerShareSecret(shareUrl.slice(idx + 3));
+}
+
 export async function createShareLink(
   owner: Member,
   workspaceId: string,
@@ -437,6 +444,7 @@ export async function listShareLinks(owner: Member, workspaceId: string): Promis
     undefined,
     [200],
   );
+  for (const item of res.items) registerShareUrl(item.share_url);
   return res.items;
 }
 
@@ -446,12 +454,14 @@ export async function updateShareLink(
   linkId: string,
   patch: { allow_fork?: boolean; expires_at?: string | null },
 ): Promise<ShareLink> {
-  return owner.api.ok<ShareLink>(
+  const link = await owner.api.ok<ShareLink>(
     'PATCH',
     `/workspaces/${workspaceId}/share-links/${linkId}`,
     patch,
     [200],
   );
+  registerShareUrl(link.share_url);
+  return link;
 }
 
 export async function revokeShareLink(

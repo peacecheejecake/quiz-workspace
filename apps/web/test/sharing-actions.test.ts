@@ -24,9 +24,10 @@ vi.mock('../src/lib/api/server', () => ({
   NotAuthenticatedError: class NotAuthenticatedError extends Error {},
 }));
 
-const { revokeShareLinksAction } = await import('../src/lib/sharing/actions');
+const { listShareLinksAction, revokeShareLinksAction } = await import('../src/lib/sharing/actions');
 
 const WS = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
+const SECRET = 'S'.repeat(43);
 const ids = Array.from(
   { length: 25 },
   (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
@@ -34,6 +35,68 @@ const ids = Array.from(
 
 beforeEach(() => {
   calls.length = 0;
+  api.GET.mockImplementation(async (path: string, init: { params: unknown }) => {
+    calls.push({ method: 'GET', path, params: init.params });
+    return { data: { items: [] }, response: new Response(null, { status: 200 }) };
+  });
+});
+
+describe('listShareLinksAction', () => {
+  it('preserves valid share_url for matching link ids and strips malformed or mismatched URLs to null', async () => {
+    const [a = '', b = '', c = ''] = ids;
+    const validUrl = `http://127.0.0.1:3000/share/${a}#k=${SECRET}`;
+    api.GET.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            id: a,
+            workspace_id: WS,
+            allow_fork: false,
+            expires_at: null,
+            revoked_at: null,
+            rotated_from_id: null,
+            status: 'active',
+            share_url: validUrl,
+            created_at: '2026-10-18T00:00:00Z',
+            updated_at: '2026-10-18T00:00:00Z',
+          },
+          {
+            id: b,
+            workspace_id: WS,
+            allow_fork: false,
+            expires_at: null,
+            revoked_at: null,
+            rotated_from_id: null,
+            status: 'active',
+            share_url: `http://127.0.0.1:3000/share/${a}#k=${SECRET}`,
+            created_at: '2026-10-17T00:00:00Z',
+            updated_at: '2026-10-17T00:00:00Z',
+          },
+          {
+            id: c,
+            workspace_id: WS,
+            allow_fork: false,
+            expires_at: null,
+            revoked_at: '2026-10-18T00:00:00Z',
+            rotated_from_id: null,
+            status: 'revoked',
+            share_url: null,
+            created_at: '2026-10-16T00:00:00Z',
+            updated_at: '2026-10-18T00:00:00Z',
+          },
+        ] as never,
+      },
+      response: new Response(null, { status: 200 }),
+    });
+    const result = await listShareLinksAction(WS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.links.map((l) => [l.id, l.share_url])).toEqual([
+      [a, validUrl],
+      [b, null],
+      [c, null],
+    ]);
+  });
 });
 
 describe('revokeShareLinksAction', () => {

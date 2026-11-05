@@ -1,12 +1,14 @@
 """Share-link secrets (docs/workspace-sharing.md §2).
 
-A secret is 32 bytes from the OS CSPRNG, handed out once as unpadded base64url (43 characters)
-inside the URL fragment `#k=`. The server stores only `SHA-256(secret bytes)`.
+A secret is 32 bytes (256 bits), encoded as unpadded base64url (43 characters) inside the URL
+fragment `#k=`. PostgreSQL stores only `SHA-256(secret bytes)` (`token_digest`).
 
-Why plain SHA-256 and no server-side pepper (HMAC): the secret carries 256 bits of entropy, so a
-leaked digest can be neither inverted nor brute-forced offline; a pepper would add a key that has
-to be provisioned per environment and whose rotation silently kills every link, for no gain in
-this threat model. (Peppers matter for low-entropy inputs such as passwords.)
+Owner links derive those 32 bytes deterministically via domain-separated HMAC-SHA-256 from the
+server's `ShareSessionKey` (`SHARE_SESSION_SECRET`) and the link's UUID (`derive_secret`). That
+lets the server reconstruct `share_url` on owner reads (`reconstruct_secret`) only when the
+candidate's SHA-256 matches `token_digest` — while keeping the DB strictly digest-only (a leaked
+table reveals neither the link secret nor the server key) and never emitting a broken URL for
+legacy random-secret rows or key changes.
 
 Secrets never go to logs, exceptions, activity metadata or the idempotency store; `IssuedSecret`
 keeps the value out of `repr()`.
@@ -19,10 +21,12 @@ import hashlib
 import hmac
 import re
 import secrets
+import uuid
 from dataclasses import dataclass, field
 
 SECRET_BYTES = 32
 DIGEST_BYTES = 32
+LINK_SECRET_DOMAIN = b"quiz-share-link/v1|"
 # Unpadded base64url of exactly 32 bytes.
 _SECRET_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}")
 
@@ -44,6 +48,20 @@ def _digest(raw: bytes) -> bytes:
 def issue_secret() -> IssuedSecret:
     raw = secrets.token_bytes(SECRET_BYTES)
     return IssuedSecret(value=_encode(raw), digest=_digest(raw))
+
+
+def derive_secret(key_bytes: bytes, link_id: uuid.UUID) -> IssuedSecret:
+    """Domain-separated deterministic secret for `link_id` under `key_bytes`."""
+    raw = hmac.new(key_bytes, LINK_SECRET_DOMAIN + link_id.bytes, hashlib.sha256).digest()
+    return IssuedSecret(value=_encode(raw), digest=_digest(raw))
+
+
+def reconstruct_secret(key_bytes: bytes, link_id: uuid.UUID, stored_digest: bytes) -> str | None:
+    """Re-derive `link_id`'s secret when its SHA-256 matches `stored_digest`; else None."""
+    candidate = derive_secret(key_bytes, link_id)
+    if hmac.compare_digest(candidate.digest, stored_digest):
+        return candidate.value
+    return None
 
 
 def digest_of(secret: str) -> bytes | None:

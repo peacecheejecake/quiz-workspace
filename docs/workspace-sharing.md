@@ -18,7 +18,7 @@
 
 ## 2. 링크 비밀값과 접근 제어
 
-- 링크 생성 시 최소 32바이트 CSPRNG 비밀값을 생성하고 서버에는 SHA-256/HMAC digest만 저장. 평문은 발급 응답에서 단 한 번 제공. 이후 필요하면 rotate.
+- 링크 생성·재발급 시 서버는 `SHARE_SESSION_SECRET`에서 도메인 분리 파생한 키(`ShareSessionKey`)와 `link_id`로 32바이트(256비트) HMAC-SHA256 비밀값을 결정적으로 유도(`quiz-share-link/v1|` + `link_id`)하고, DB(`workspace_share_links.token_digest`)에는 평문 비밀값 없이 `SHA-256(secret bytes)` digest만 저장한다(SHARE-PERSIST 2026-11-05). 원시 `secret` 필드는 발급·재발급 201 응답에서만 반환하며, DB·로그·`activity_events`·`idempotency_keys`에는 평문 비밀값이나 `share_url`을 절대 기록하지 않는다. Owner의 `GET /api/v1/workspaces/{id}/share-links` 및 `PATCH /api/v1/workspaces/{id}/share-links/{linkId}`는 철회되지 않은(`revoked_at is null`) 링크에 한해 파생 후보의 SHA-256이 `token_digest`와 일치할 때만 `share_url`을 재구성해 돌려주므로, Owner는 dialog를 닫았다 다시 열거나 새로 고침·다른 기기에서도 같은 링크 주소를 확인·복사할 수 있고(철회 즉시 `share_url: null`, 재발급은 `rotate`), 이전에 무작위로 만든 레거시 링크나 키 불일치 행은 깨진 URL 대신 `share_url: null`을 반환한다.
 - 예시: `https://app.example.com/share/{shareId}#k={secret}`. URL Fragment는 HTTP 요청/Referer에 전달되지 않으며, 클라이언트가 `POST /api/v1/shared/{shareId}/sessions`로 1회 교환한다. 교환 후 fragment 삭제.
 - 짧은 수명의 공유 전용 세션을 `HttpOnly; Secure; SameSite=Lax` cookie로 발급한다. 이 세션에는 workspace ID·share ID·읽기 범위만 담고 실제 Supabase 로그인과 혼합하지 않는다.
 - 서버는 공유 read 요청마다 현재 share link의 revoked/expired/deleted 상태를 재검증한다. Qdrant Workspace 필터는 서버에서 강제한다.
@@ -74,10 +74,10 @@ workspace_forks(
 ## 5. REST API 계약
 
 Owner 전용:
-- `POST /api/v1/workspaces/{id}/share-links`: 비밀 링크 발급; 기본 Fork OFF
-- `GET /api/v1/workspaces/{id}/share-links`: 비밀값 없는 링크 메타 조회
-- `PATCH /api/v1/workspaces/{id}/share-links/{linkId}`: Fork 허용·만료 수정
-- `POST /api/v1/workspaces/{id}/share-links/{linkId}/revoke`: 접근 즉시 철회
+- `POST /api/v1/workspaces/{id}/share-links`: 비밀 링크 발급(`secret` + `share_url` 반환; `idempotency_keys` 재실행 응답에는 `secret: null`, `share_url: null`); 기본 Fork OFF
+- `GET /api/v1/workspaces/{id}/share-links`: 링크 목록 조회(원시 `secret`·`token_digest` 미포함; 철회되지 않은 링크는 서버 키로 검증된 `share_url` 포함, 철회·복원 불가 시 `null`)
+- `PATCH /api/v1/workspaces/{id}/share-links/{linkId}`: Fork 허용·만료 수정(철회되지 않은 링크의 `share_url` 포함)
+- `POST /api/v1/workspaces/{id}/share-links/{linkId}/revoke`: 접근 즉시 철회(`share_url: null`)
 - `POST /api/v1/workspaces/{id}/share-links/{linkId}/rotate`: 기존 철회 후 새 비밀 링크 발급
 
 Shared viewer (공유 session에만 허용):

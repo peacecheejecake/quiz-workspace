@@ -87,11 +87,11 @@ beforeEach(() => {
 });
 
 describe('WorkspaceSharingPanel', () => {
-  it('starts OFF with notices, then shows the created URL once and only in memory', async () => {
+  it('starts OFF with notices, then shows the created URL in memory without web storage', async () => {
     const user = userEvent.setup();
     actions.create.mockResolvedValue({
       ok: true,
-      links: [link(L1)],
+      links: [link(L1, { share_url: url(L1, SECRET_1) })],
       issued: { linkId: L1, shareUrl: url(L1, SECRET_1) },
     });
     renderScreen([]);
@@ -108,9 +108,11 @@ describe('WorkspaceSharingPanel', () => {
     const field = await within(panel).findByRole('textbox', { name: '공유 링크' });
     expect(field).toHaveValue(url(L1, SECRET_1));
     expect(field).toHaveAttribute('readonly');
-    expect(within(panel).getByText(/한 번만 표시/)).toBeVisible();
+    expect(within(panel).getByText(/주소를 바꾸려면 링크를 재발급하세요/)).toBeVisible();
+    expect(within(panel).queryByText(/한 번만/)).toBeNull();
     expect(within(panel).getByRole('button', { name: '링크 복사' })).toBeEnabled();
     expect(within(panel).getByText('공유 중')).toBeVisible();
+    expect(screen.getByText('보기 전용 링크를 만들었습니다.')).toBeVisible();
 
     const [workspaceId, policy, key] = actions.create.mock.calls[0] ?? [];
     expect(workspaceId).toBe(WS);
@@ -121,6 +123,41 @@ describe('WorkspaceSharingPanel', () => {
     expect(window.location.href.includes(SECRET_1)).toBe(false);
   });
 
+  it('shows the existing share_url across remount/reload until revoked, and falls back cleanly for legacy links', async () => {
+    const firstRender = renderScreen([link(L1, { share_url: url(L1, SECRET_1) })]);
+    let panel = await loadedPanel();
+    expect(within(panel).getByRole('textbox', { name: '공유 링크' })).toHaveValue(
+      url(L1, SECRET_1),
+    );
+    expect(within(panel).getByRole('button', { name: '링크 복사' })).toBeEnabled();
+    expect(within(panel).queryByText(/한 번만/)).toBeNull();
+    expect(JSON.stringify({ ...localStorage, ...sessionStorage }).includes(SECRET_1)).toBe(false);
+    firstRender.unmount();
+
+    // Remounting (dialog close/reopen or reload) keeps showing the URL, even if expired (not revoked).
+    const secondRender = renderScreen([
+      link(L1, {
+        status: 'expired',
+        expires_at: '2026-10-01T14:59:59.999Z',
+        share_url: url(L1, SECRET_1),
+      }),
+    ]);
+    panel = await loadedPanel();
+    expect(within(panel).getByRole('textbox', { name: '공유 링크' })).toHaveValue(
+      url(L1, SECRET_1),
+    );
+    expect(within(panel).getByRole('button', { name: '링크 복사' })).toBeEnabled();
+    secondRender.unmount();
+
+    // Legacy link (share_url: null) shows no textbox and guides the owner to rotate.
+    renderScreen([link(L1, { share_url: null })]);
+    panel = await loadedPanel();
+    expect(within(panel).queryByRole('textbox', { name: '공유 링크' })).toBeNull();
+    expect(
+      within(panel).getByText(/이전에 만든 링크라 주소를 다시 불러올 수 없습니다/),
+    ).toBeVisible();
+  });
+
   it('saves Fork and expiry changes of the current link on change', async () => {
     const user = userEvent.setup();
     actions.update.mockImplementation(async (_ws, _id, policy) => ({
@@ -129,13 +166,15 @@ describe('WorkspaceSharingPanel', () => {
         link(L1, {
           allow_fork: (policy as { allowFork?: boolean }).allowFork ?? true,
           expires_at: (policy as { expiresAt?: string | null }).expiresAt ?? null,
+          share_url: url(L1, SECRET_1),
         }),
       ],
     }));
-    renderScreen([link(L1)]);
+    renderScreen([link(L1, { share_url: url(L1, SECRET_1) })]);
     const panel = await loadedPanel();
-    // No URL after a reload: only the metadata is known.
-    expect(within(panel).queryByRole('textbox', { name: '공유 링크' })).toBeNull();
+    expect(within(panel).getByRole('textbox', { name: '공유 링크' })).toHaveValue(
+      url(L1, SECRET_1),
+    );
 
     const fork = within(panel).getByRole('switch', { name: 'Fork 허용' });
     await user.click(fork);

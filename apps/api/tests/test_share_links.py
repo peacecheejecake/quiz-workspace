@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -27,8 +27,15 @@ from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
 from quiz_api.repositories.idempotency import StoredResponse
 from quiz_api.repositories.share_links import ShareLinkRecord
-from quiz_api.settings import InsecureConfigurationError, Settings
-from quiz_api.share_secrets import digest_of, issue_secret, secret_matches
+from quiz_api.settings import Environment, InsecureConfigurationError, Settings
+from quiz_api.share_secrets import (
+    derive_secret,
+    digest_of,
+    issue_secret,
+    reconstruct_secret,
+    secret_matches,
+)
+from quiz_api.share_sessions import ShareSessionKey, issue_token
 
 PROBLEM = "application/problem+json"
 T0 = datetime(2026, 10, 1, tzinfo=UTC)
@@ -62,6 +69,30 @@ def test_digest_accepts_only_the_canonical_encoding() -> None:
     alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     sibling = secret.value[:-1] + alphabet[alphabet.index(last) ^ 1]
     assert digest_of(sibling) is None
+
+
+def test_derived_secrets_are_deterministic_domain_separated_and_verified_by_digest() -> None:
+    key = ShareSessionKey.from_secret("k" * 40)
+    other_key = ShareSessionKey.from_secret("m" * 40)
+    link_a, link_b = uuid.uuid4(), uuid.uuid4()
+
+    derived = derive_secret(key.value, link_a)
+    assert derived == derive_secret(key.value, link_a)
+    raw = base64.urlsafe_b64decode(derived.value + "=")
+    assert len(derived.value) == 43
+    assert len(raw) == 32
+    assert derived.digest == hashlib.sha256(raw).digest()
+    assert secret_matches(derived.value, derived.digest)
+    assert derive_secret(key.value, link_b).value != derived.value
+    assert derive_secret(other_key.value, link_a).value != derived.value
+
+    cookie, _ = issue_token(key, link_a, derived.digest, 600, now=1_800_000_000.0)
+    assert derived.value not in cookie
+
+    assert reconstruct_secret(key.value, link_a, derived.digest) == derived.value
+    assert reconstruct_secret(other_key.value, link_a, derived.digest) is None
+    assert reconstruct_secret(key.value, link_b, derived.digest) is None
+    assert reconstruct_secret(key.value, link_a, issue_secret().digest) is None
 
 
 # --- settings -----------------------------------------------------------------------------------
@@ -146,8 +177,27 @@ class World(TwoStepResourceMembership):
         assert link.workspace_id == workspace_id
         return link
 
-    def _new(self, ws: uuid.UUID, digest: bytes, fork: bool, expires: Any, src: Any) -> Any:
-        rec = ShareLinkRecord(uuid.uuid4(), ws, fork, expires, None, src, T0, T0, "active")
+    def _new(
+        self,
+        ws: uuid.UUID,
+        digest: bytes,
+        fork: bool,
+        expires: Any,
+        src: Any,
+        link_id: uuid.UUID | None = None,
+    ) -> ShareLinkRecord:
+        rec = ShareLinkRecord(
+            link_id or uuid.uuid4(),
+            ws,
+            fork,
+            expires,
+            None,
+            src,
+            T0,
+            T0,
+            "active",
+            token_digest=digest,
+        )
         self.links[rec.id] = rec
         self.digests[rec.id] = digest
         return rec
@@ -160,10 +210,11 @@ class World(TwoStepResourceMembership):
         token_digest: bytes,
         allow_fork: bool,
         expires_at: Any,
+        link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
-        rec = self._new(ws, token_digest, allow_fork, expires_at, None)
+        rec = self._new(ws, token_digest, allow_fork, expires_at, None, link_id=link_id)
         self.events.append(("share_link.created", rec.id))
-        return rec  # type: ignore[no-any-return]
+        return rec
 
     def update_policy(
         self, link: ShareLinkRecord, actor: uuid.UUID, changes: dict[str, Any]
@@ -179,12 +230,24 @@ class World(TwoStepResourceMembership):
         return self.links[link.id]
 
     def rotate(
-        self, link: ShareLinkRecord, actor: uuid.UUID, *, token_digest: bytes
+        self,
+        link: ShareLinkRecord,
+        actor: uuid.UUID,
+        *,
+        token_digest: bytes,
+        link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
         self.links[link.id] = replace(link, revoked_at=T0, status="revoked")
-        rec = self._new(link.workspace_id, token_digest, link.allow_fork, link.expires_at, link.id)
+        rec = self._new(
+            link.workspace_id,
+            token_digest,
+            link.allow_fork,
+            link.expires_at,
+            link.id,
+            link_id=link_id,
+        )
         self.events.append(("share_link.rotated", link.id))
-        return rec  # type: ignore[no-any-return]
+        return rec
 
 
 @dataclass
@@ -272,7 +335,7 @@ def test_every_route_requires_a_token(
     assert world.locks == []
 
 
-def test_create_returns_the_secret_once_with_a_fragment_url(
+def test_create_returns_secret_once_and_reconstructs_owner_share_url_until_revoked(
     api: TestClient, world: World, bearer: Any
 ) -> None:
     owner = uuid.uuid4()
@@ -283,20 +346,55 @@ def test_create_returns_the_secret_once_with_a_fragment_url(
     assert res.headers["referrer-policy"] == "no-referrer"
     body = res.json()
     secret = body["secret"]
-    assert body["share_url"] == f"https://web.example/share/{body['id']}#k={secret}"
+    expected_url = f"https://web.example/share/{body['id']}#k={secret}"
+    assert body["share_url"] == expected_url
     assert body["allow_fork"] is False
     assert body["status"] == "active"
     assert body["secret_already_issued"] is False
-    assert world.digests[uuid.UUID(body["id"])] == digest_of(secret)
+    link_uuid = uuid.UUID(body["id"])
+    assert world.digests[link_uuid] == digest_of(secret)
+    assert secret not in repr(world.links[link_uuid])
     assert world.locks == [LockMode.SHARE]
     assert world.commits == 1
 
     listed = api.get(_base(ws), headers=bearer(owner))
     assert listed.status_code == 200
-    assert secret not in listed.text
     (item,) = listed.json()["items"]
-    assert not {"secret", "share_url", "token_digest", "secret_already_issued"} & set(item)
+    assert item["share_url"] == expected_url
+    assert not {"secret", "token_digest", "secret_already_issued"} & set(item)
     assert world.locks[-1] == LockMode.NONE
+
+    # Expired (non-revoked) links still reconstruct share_url so extending expiry reopens
+    # the same URL.
+    world.links[link_uuid] = replace(world.links[link_uuid], status="expired")
+    expired_item = api.get(_base(ws), headers=bearer(owner)).json()["items"][0]
+    assert expired_item["share_url"] == expected_url
+
+    # Legacy random-secret rows (digest mismatch) return share_url=None instead of a broken URL.
+    legacy = world._new(ws, issue_secret().digest, False, None, None)
+    by_id = {x["id"]: x for x in api.get(_base(ws), headers=bearer(owner)).json()["items"]}
+    assert by_id[str(legacy.id)]["share_url"] is None
+
+
+def test_deployed_without_share_session_secret_answers_503_except_revoke(
+    api: TestClient, world: World, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    app = cast(FastAPI, api.app)
+    created = api.post(_base(ws), json={}, headers=bearer(owner)).json()
+    app.state.share_session_key = None
+    app.state.settings = Settings.model_construct(
+        app_env=Environment.PRODUCTION,
+        supabase_jwt_issuer=app.state.settings.supabase_jwt_issuer,
+        supabase_jwks_url=app.state.settings.supabase_jwks_url,
+        web_origin="https://web.example",
+    )
+    assert api.post(_base(ws), json={}, headers=bearer(owner)).status_code == 503
+    assert api.get(_base(ws), headers=bearer(owner)).status_code == 503
+    revoked = api.post(f"{_base(ws)}/{created['id']}/revoke", headers=bearer(owner))
+    assert revoked.status_code == 200
+    assert revoked.json()["share_url"] is None
 
 
 def test_create_validates_the_body(api: TestClient, world: World, bearer: Any) -> None:
@@ -420,10 +518,12 @@ def test_patch_revoke_and_rotate(api: TestClient, world: World, bearer: Any) -> 
     res = api.patch(url, json={"allow_fork": True, "expires_at": FUTURE}, headers=bearer(owner))
     assert res.status_code == 200
     assert res.json()["allow_fork"] is True
+    assert res.json()["share_url"] == first["share_url"]
     _problem(api.patch(url, json={"allow_fork": None}, headers=bearer(owner)), 422)
     cleared = api.patch(url, json={"expires_at": None}, headers=bearer(owner))
     assert cleared.json()["expires_at"] is None
     assert cleared.json()["allow_fork"] is True
+    assert cleared.json()["share_url"] == first["share_url"]
 
     rotated = api.post(f"{url}/rotate", headers=bearer(owner))
     assert rotated.status_code == 201
@@ -442,7 +542,12 @@ def test_patch_revoke_and_rotate(api: TestClient, world: World, bearer: Any) -> 
         409,
         ProblemType.SHARE_LINK_INACTIVE,
     )
-    assert api.post(f"{url}/revoke", headers=bearer(owner)).json()["status"] == "revoked"
+    revoked_body = api.post(f"{url}/revoke", headers=bearer(owner)).json()
+    assert revoked_body["status"] == "revoked"
+    assert revoked_body["share_url"] is None
+    by_id = {x["id"]: x for x in api.get(_base(ws), headers=bearer(owner)).json()["items"]}
+    assert by_id[first["id"]]["share_url"] is None
+    assert by_id[second["id"]]["share_url"] == second["share_url"]
     assert [e for e, _ in world.events].count("share_link.revoked") == 0
 
 
@@ -490,4 +595,6 @@ def test_openapi_documents_the_share_link_routes(api: TestClient) -> None:
     }
     schemas = spec["components"]["schemas"]
     assert "secret" not in schemas["ShareLink"]["properties"]
+    assert "token_digest" not in schemas["ShareLink"]["properties"]
+    assert "share_url" in schemas["ShareLink"]["properties"]
     assert "token_digest" not in schemas["IssuedShareLink"]["properties"]

@@ -15,7 +15,12 @@ const WS = '3f2b6f0e-8a4c-4d7e-9a51-1c2d3e4f5a6b';
 const ID = '0b6a5c0e-1d2f-4a3b-8c4d-5e6f7a8b9c0d';
 const SECRET = 'A'.repeat(43);
 
-function link(id: string, status: ShareLink['status'], createdAt: string): ShareLink {
+function link(
+  id: string,
+  status: ShareLink['status'],
+  createdAt: string,
+  shareUrl: string | null = null,
+): ShareLink {
   return {
     id,
     workspace_id: WS,
@@ -23,6 +28,7 @@ function link(id: string, status: ShareLink['status'], createdAt: string): Share
     expires_at: null,
     revoked_at: status === 'revoked' ? createdAt : null,
     rotated_from_id: null,
+    share_url: shareUrl,
     status,
     created_at: createdAt,
     updated_at: createdAt,
@@ -52,11 +58,13 @@ describe('sharingState', () => {
   });
 
   it('keeps an expired, non-revoked link manageable so its expiry can be extended', () => {
+    const expiredUrl = `https://app.example.com/share/${ID}#k=${SECRET}`;
     const state = sharingState([
-      link('a', 'expired', '2026-10-01T00:00:00Z'),
+      link(ID, 'expired', '2026-10-01T00:00:00Z', expiredUrl),
       link('b', 'revoked', '2026-10-02T00:00:00Z'),
     ]);
-    expect(state.current?.id).toBe('a');
+    expect(state.current?.id).toBe(ID);
+    expect(state.current?.share_url).toBe(expiredUrl);
     expect(state.active).toBe(false);
     expect(state.lastEnded).toBe('expired');
   });
@@ -123,5 +131,7 @@ describe('isShareUrl', () => {
     expect(isShareUrl(`https://app.example.com/share/${ID}#k=short`, ID)).toBe(false);
     expect(isShareUrl(`javascript:alert(1)//share/${ID}#k=${SECRET}`, ID)).toBe(false);
     expect(isShareUrl(null, ID)).toBe(false);
+    expect(isShareUrl(undefined, ID)).toBe(false);
+    expect(isShareUrl('', ID)).toBe(false);
   });
 });

@@ -102,6 +102,7 @@ from quiz_api.share_sessions import (
     ShareSessionKey,
     issue_token,
     parse_token,
+    resolve_share_key,
     verify_token,
 )
 from quiz_api.storage import SOURCE_BUCKET, StorageUnavailableError
@@ -213,19 +214,7 @@ def get_session_key(request: Request) -> ShareSessionKey:
     if state.settings.is_deployed and not relay_configured(state.settings):
         # Without the relay secret every guest would share the relay's rate-limit buckets.
         raise HTTPException(status_code=503, detail="Shared access is not configured.")
-    key: ShareSessionKey | None = getattr(state, "share_session_key", None)
-    if key is not None:
-        return key
-    settings: Settings = state.settings
-    secret = settings.share_session_secret
-    if secret is not None and secret.get_secret_value():
-        key = ShareSessionKey.from_secret(secret.get_secret_value())
-    elif settings.is_deployed:
-        raise HTTPException(status_code=503, detail="Shared access is not configured.")
-    else:
-        key = ShareSessionKey.random()
-    state.share_session_key = key
-    return key
+    return resolve_share_key(request)
 
 
 SessionKey = Annotated[ShareSessionKey, Depends(get_session_key)]

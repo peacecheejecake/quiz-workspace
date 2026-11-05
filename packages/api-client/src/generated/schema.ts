@@ -2400,7 +2400,7 @@ export type paths = {
     };
     /**
      * List Share Links
-     * @description Every link of the workspace (revoked and expired included), newest first; no secrets.
+     * @description Every link of the workspace (revoked and expired included), newest first; no raw secrets.
      */
     get: operations['listShareLinks'];
     put?: never;
@@ -2408,7 +2408,7 @@ export type paths = {
      * Create Share Link
      * @description Issue a read-only share link (WS-SHARE-01-AC02). Fork is off unless `allow_fork`.
      *
-     *     The secret appears only in this response. A link is not a membership.
+     *     The raw `secret` appears only in this response. A link is not a membership.
      */
     post: operations['createShareLink'];
     delete?: never;
@@ -7428,7 +7428,7 @@ export type components = {
     };
     /**
      * ShareLink
-     * @description A share link's metadata (never its secret or digest).
+     * @description A share link's metadata (never its raw `secret` or `token_digest`).
      */
     ShareLink: {
       /**
@@ -7459,6 +7459,11 @@ export type components = {
        * @description The revoked link this one replaced (rotate).
        */
       rotated_from_id: string | null;
+      /**
+       * Share Url
+       * @description `<web origin>/share/{id}#k={secret}` for non-revoked links whose secret can be reconstructed by the server; null when revoked or unavailable.
+       */
+      share_url?: string | null;
       /**
        * Status
        * @description Derived from revoked_at / expires_at.
