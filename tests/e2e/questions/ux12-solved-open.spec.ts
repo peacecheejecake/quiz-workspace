@@ -287,3 +287,50 @@ test(
     await expectQuestionFirst(await openDot(page, 1));
   },
 );
+
+test(
+  'UX12-SOLVEDOPEN-AC09 going back shows what this opening loaded with nothing loading',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'ux12-solvedopen-9', 3);
+    await openHome(page, s);
+
+    // 1번 is left unanswered, 2번 is solved here, and the next openings wait on the server.
+    const first = await openDot(page, 1);
+    await expect(panelUi.submit(first)).toBeVisible();
+    await panelUi.next(first).click();
+    const second = panelUi.numbered(page, 2);
+    await panelUi.option(second, optionText(at(s, 2), 0)).check();
+    await panelUi.submit(second).click();
+    await expect(panelUi.result(second)).toContainText(RESULT_TEXT.correct);
+    await panelUi.next(second).click();
+    const third = panelUi.numbered(page, 3);
+    await expect(panelUi.submit(third)).toBeVisible();
+
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/practice-open', async (route) => {
+      await held;
+      await route.continue();
+    });
+
+    await panelUi.previous(third).click();
+    const solved = panelUi.numbered(page, 2);
+    await expect(panelUi.result(solved)).toContainText(RESULT_TEXT.correct);
+    await expect(solved).toContainText(EXPLANATION);
+    await expect(solved.getByText(/문제를 불러오는 중|loading questions/i)).toHaveCount(0);
+
+    await panelUi.previous(solved).click();
+    const unanswered = panelUi.numbered(page, 1);
+    await expect(panelUi.options(unanswered)).toHaveCount(4);
+    await expect(unanswered.locator('[aria-busy="true"]')).toHaveCount(0);
+    await expect(unanswered.getByText(/문제를 불러오는 중|loading questions/i)).toHaveCount(0);
+
+    release();
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await panelUi.option(unanswered, optionText(at(s, 1), 0)).check();
+    await expect(panelUi.submit(unanswered)).toBeEnabled();
+    await panelUi.submit(unanswered).click();
+    await expect(panelUi.result(unanswered)).toContainText(RESULT_TEXT.correct);
+  },
+);

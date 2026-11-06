@@ -139,3 +139,28 @@ export class PracticeSessionCache {
     return this.entries.size;
   }
 }
+
+/**
+ * What one opening of the panel already put on screen, by question: previous/next shows it at once
+ * (UX12-SOLVEDOPEN-AC09). Unlike `PracticeSessionCache`, it may hold a result, but only one this
+ * opening has shown: closing the panel clears it, and it never reaches browser storage.
+ */
+export class OpeningViews<T> {
+  private readonly views = new Map<string, T>();
+
+  get(questionId: string): T | undefined {
+    return this.views.get(questionId.toLowerCase());
+  }
+
+  put(questionId: string, view: T): void {
+    this.views.set(questionId.toLowerCase(), view);
+  }
+
+  drop(questionId: string): void {
+    this.views.delete(questionId.toLowerCase());
+  }
+
+  clear(): void {
+    this.views.clear();
+  }
+}

@@ -13,6 +13,7 @@ import type { Invalidation } from '../src/components/questions/viewer/practice-v
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
 import {
   answerFreeSession,
+  OpeningViews,
   PracticeSessionCache,
   PRACTICE_CACHE_TTL_MS,
 } from '../src/lib/questions/practice-cache';
@@ -46,6 +47,19 @@ function session(questionId: string, overrides: Partial<PracticeSession> = {}): 
     ...overrides,
   };
 }
+
+describe('OpeningViews', () => {
+  it('UX12-SOLVEDOPEN-AC09 keeps one view per question until it is dropped or cleared', () => {
+    const views = new OpeningViews<string>();
+    views.put(Q1.toUpperCase(), 'first');
+    views.put(Q2, 'second');
+    expect(views.get(Q1)).toBe('first');
+    views.drop(Q1);
+    expect(views.get(Q1)).toBeUndefined();
+    views.clear();
+    expect(views.get(Q2)).toBeUndefined();
+  });
+});
 
 describe('PracticeSessionCache', () => {
   it('returns an open session of its workspace by question id (any case)', () => {
@@ -551,6 +565,18 @@ describe('UX12-SOLVEDOPEN the question first, 해설 보기 on request', () => {
       session: { ...previous, state: 'graded', outcome },
     },
   };
+  /** The next check waits for `release`; a navigation asks only after its pause (`called`). */
+  function holdLatest() {
+    let release: (value: unknown) => void = () => undefined;
+    const called = new Promise<void>((started) => {
+      latest.mockImplementationOnce(() => {
+        started();
+        return new Promise((resolve) => (release = resolve));
+      });
+    });
+    return { called, release: (value: unknown) => release(value) };
+  }
+
   let sessions = 0;
   beforeEach(() => {
     sessions = 0;
@@ -662,20 +688,95 @@ describe('UX12-SOLVEDOPEN the question first, 해설 보기 on request', () => {
     expect(screen.queryByText('이전 해설')).toBeNull();
   });
 
-  it('AC07 a result that can no longer be read falls back to an ordinary opening', async () => {
+  it('AC09 going back shows what this opening loaded at once, with no loading text', async () => {
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('radio', { name: '보기 가' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeInTheDocument();
+    expect(screen.queryByText(/문제를 불러오는 중/)).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    await act(async () => {
+      await held.called;
+      held.release({
+        ok: true,
+        data: {
+          session: null,
+          previous_revision: false,
+          reset_epoch: 0,
+          active_revision_id: previous.question_revision_id,
+          latest_attempt_id: null,
+        },
+      });
+    });
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('AC09 nothing can be submitted until the kept session is confirmed', async () => {
+    const user = userEvent.setup();
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('radio', { name: '보기 가' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await user.click(screen.getByRole('radio', { name: '보기 가' }));
+    expect(screen.getByRole('button', { name: '제출' })).toBeDisabled();
+    await act(async () => {
+      await held.called;
+      held.release({
+        ok: true,
+        data: {
+          session: null,
+          previous_revision: false,
+          reset_epoch: 0,
+          active_revision_id: previous.question_revision_id,
+          latest_attempt_id: null,
+        },
+      });
+    });
+    expect(screen.getByRole('button', { name: '제출' })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
+  });
+
+  it('AC09 a kept result comes back without any request', async () => {
     const user = userEvent.setup();
     latest.mockResolvedValue(solved);
     const view = render(<Harness questionId={Q1} />);
     await user.click(await screen.findByRole('button', { name: '해설 보기' }));
     await screen.findByText('이전 해설');
     view.rerender(<Harness questionId={Q2} />);
-    await screen.findByRole('button', { name: '제출' });
-    latest.mockResolvedValue({
-      ok: true,
-      data: { ...solved.data, previous_revision: true, session: null },
-    });
+    await screen.findByRole('button', { name: '해설 보기' });
+    latest.mockClear();
     view.rerender(<Harness questionId={Q1} />);
-    await screen.findByRole('button', { name: '제출' });
-    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(screen.getByText('이전 해설')).toBeInTheDocument();
+    expect(screen.queryByText(/문제를 불러오는 중/)).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(latest).not.toHaveBeenCalled();
+  });
+
+  it('AC09 해설 보기 pressed during the quiet check keeps the result', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await act(async () => {
+      await held.called;
+    });
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+    await act(async () => held.release(solved));
+    expect(screen.getByText('이전 해설')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
   });
 });
