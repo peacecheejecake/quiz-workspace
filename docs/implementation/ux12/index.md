@@ -337,6 +337,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-1 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 흔들림·하단 버튼은 Chromium 측정으로 전후 확인, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-2 | 9 | 완료 | Codex P1·P2는 MOCKUX-1 합류와 merge에서 반영, 모든 멤버 추가, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-3 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 공용 footer, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
-| MOCKUX-4 | 9 | 진행 | |
+| MOCKUX-4 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 홈 버튼 모의고사 포함, shuffle_options는 range jsonb, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-5 | 9 | 진행 | |
 | MOCKUX-6 | 9 | 진행 | |
