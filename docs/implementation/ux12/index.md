@@ -204,6 +204,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-8 단계 순서·문구 | 범위 먼저, 이름 기본값, 설명 묶기 | 1단계를 범위, 2단계를 옵션으로 바꾼다. 이름 기본값은 고른 챕터 이름이다. 안내 문구 3개를 지운다. `변형 유형` 옆 물음표 버튼 하나의 툴팁에 유형 설명을 모은다 | 사용자 요청(2026-11-06). MOCKUX-1의 step UI를 이어받는다 | M·MOCKUX-1 |
 | MOCKUX-9 보기 섞기 실행 시점 | 실행마다 새로 섞기 | `보기 섞기`는 모의고사를 실행할 때마다 문제를 보는 시점에 새로 섞고, 한 번의 실행 안에서는 유지한다. `보기 섞기`만 고르면 문제를 미리 만들지 않는다 | 사용자 요청(2026-11-06) | M·MOCKUX-4 |
 | MOCKUX-10 동시 생성 실패 | 문제 추출 중 모의고사 생성 안 됨 | 문제 추출과 모의고사 생성을 함께 돌릴 때 생성이 안 되는 원인을 찾아 고친다(추출 대기 때문인지, 생성 자체 문제인지) | 사용자 보고(2026-11-06) | M·없음 |
+| MOCKUX-11 풀이 화면 먼저, 챕터 풀기 삭제 | 푼 문제 열기, `해설 보기`, 챕터별 버튼 | Heatmap cell로 열면 이전에 푼 문제도 문제부터 보이고, 하단 `해설 보기`로 이전 결과와 해설을 연다. MOCKUX-4의 챕터별 `풀기` 버튼을 지운다 | 사용자 요청(2026-11-06). MOCKUX-5의 범위를 모든 푼 문제로 넓힌다 | M·MOCKUX-4, 5 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -282,7 +283,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -387,6 +388,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-7 | 10 | 완료 | 문서 관리 행 수로 변경, UX6-UPLOAD 결정 대체, Codex P2(CI phase)는 merge에서 반영 |
 | CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
 | CHAPTER-8 | 10 | 진행 | |
+| MOCKUX-11 | 10 | 진행 | |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
