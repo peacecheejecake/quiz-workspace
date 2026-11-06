@@ -22,6 +22,8 @@ export interface ChapterChoice {
   /** Chapter id, or `'none'` for the "챕터 없음" group. */
   readonly value: string;
   readonly title: string;
+  /** Top level first; the home filter nests the chapter under them (CHMAN-01-AC07). */
+  readonly ancestors: readonly { readonly id: string; readonly title: string }[];
 }
 
 export interface OverviewData {
@@ -60,7 +62,11 @@ export function overviewPath(workspaceId: string): string {
 }
 
 export function chapterChoices(chapters: readonly OverviewChapter[]): ChapterChoice[] {
-  return chapters.map((c) => ({ value: c.id ?? 'none', title: c.title }));
+  return chapters.map((c) => ({
+    value: c.id ?? 'none',
+    title: c.title,
+    ancestors: c.ancestors ?? [],
+  }));
 }
 
 export async function loadOverview(
@@ -108,7 +114,11 @@ export async function loadOverview(
   // A chapter chosen in the URL stays selectable even when the unfiltered read failed.
   if (filters.chapter && !choices.some((c) => c.value === filters.chapter)) {
     const current = overview.chapters.find((c) => (c.id ?? 'none') === filters.chapter);
-    choices.push({ value: filters.chapter, title: current?.title ?? '선택한 챕터' });
+    choices.push({
+      value: filters.chapter,
+      title: current?.title ?? '선택한 챕터',
+      ancestors: current?.ancestors ?? [],
+    });
   }
   let requested: PlacedQuestion | null = null;
   if (questionId && !overview.items.some((i) => i.question_id === questionId)) {

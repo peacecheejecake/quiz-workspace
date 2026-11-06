@@ -14,7 +14,7 @@ function sized(el: HTMLElement, { height, content, top = 0 }: Record<string, num
   el.scrollTop = top;
 }
 
-function touch(target: Element, type: string, y: number, fingers = 1): TouchEvent {
+function touch(target: EventTarget, type: string, y: number, fingers = 1): TouchEvent {
   const event = new TouchEvent(type, { bubbles: true, cancelable: true });
   const point = { identifier: 1, target, clientX: 10, clientY: y };
   const active = type === 'touchend' ? [] : Array.from({ length: fingers }, () => point);
@@ -38,7 +38,7 @@ function byId(id: string): HTMLElement {
   return el;
 }
 
-function wheel(target: Element, deltaY: number, init: WheelEventInit = {}): boolean {
+function wheel(target: EventTarget, deltaY: number, init: WheelEventInit = {}): boolean {
   const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, ...init });
   target.dispatchEvent(event);
   return event.defaultPrevented;
@@ -108,6 +108,40 @@ describe('containOverscroll', () => {
     const { header } = surface();
     expect(swipe(header, -80, 2)).toBe(false);
     expect(swipe(byId('range'), -80)).toBe(false);
+  });
+
+  it('hides what it leaves to the browser from document listeners, not what it cancels', () => {
+    const { body, header, text } = surface();
+    sized(body, { height: 100, content: 500, top: 200 });
+    const seen: EventTarget[] = [];
+    const listener = (event: Event) => {
+      if (event.target) seen.push(event.target);
+    };
+    document.addEventListener('wheel', listener);
+    document.addEventListener('touchmove', listener);
+    wheel(text, 100);
+    swipe(text, -80);
+    expect(seen).toEqual([]);
+    wheel(header, 100);
+    swipe(header, -80);
+    expect(seen).toEqual([header, header]);
+    document.removeEventListener('wheel', listener);
+    document.removeEventListener('touchmove', listener);
+  });
+
+  it('decides nothing within the touch slop, then judges the distance from the touch', () => {
+    const { header } = surface();
+    touch(header, 'touchstart', 300);
+    expect(touch(header, 'touchmove', 301.5).defaultPrevented).toBe(false);
+    expect(touch(header, 'touchmove', 303).defaultPrevented).toBe(false);
+    expect(touch(header, 'touchmove', 305).defaultPrevented).toBe(true);
+    touch(header, 'touchend', 305);
+  });
+
+  it('reads a gesture reported on a text node from its element', () => {
+    const { body, text } = surface();
+    sized(body, { height: 100, content: 500, top: 0 });
+    expect(wheel(text.firstChild as Text, 100)).toBe(false);
   });
 
   it('stops guarding once released, and never touches events outside the surface', () => {

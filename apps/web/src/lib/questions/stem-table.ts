@@ -15,7 +15,7 @@ export type StemSegment =
   | { readonly kind: 'table'; readonly text: string; readonly table: PipeTable };
 
 /** Raw cells of a `| a | b |` row (`\|` stays inside its cell), null for any other line. */
-function pipeCells(line: string): string[] | null {
+export function pipeCells(line: string): string[] | null {
   const row = line.trim();
   if (row.length < 2 || !row.startsWith('|')) return null;
   const cells: string[] = [];
@@ -51,6 +51,31 @@ function table(rows: readonly (readonly string[])[]): PipeTable {
   return { header: header.map(cellText), rows: body.map((row) => row.map(cellText)) };
 }
 
+/** The consecutive `| ... |` lines from `start`, as cells, and the line after them. */
+function pipeRun(lines: readonly string[], start: number) {
+  const rows: string[][] = [];
+  let end = start;
+  for (;;) {
+    const cells = end < lines.length ? pipeCells(lines[end] as string) : null;
+    if (!cells) return { rows, end };
+    rows.push(cells);
+    end += 1;
+  }
+}
+
+/** The `[start, end)` lines of each table of the stem, in order. */
+export function stemTableRanges(stem: string): { readonly start: number; readonly end: number }[] {
+  const lines = stem.split('\n');
+  const ranges: { readonly start: number; readonly end: number }[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const { rows, end } = pipeRun(lines, i);
+    if (isPipeTable(rows)) ranges.push({ start: i, end });
+    i = Math.max(end, i + 1);
+  }
+  return ranges;
+}
+
 /**
  * The stem as text and table segments in order, trimmed, empty ones dropped. A table is a run of
  * consecutive `| ... |` lines that passes `isPipeTable`; any other run stays text, whole.
@@ -66,14 +91,7 @@ export function stemSegments(stem: string): StemSegment[] {
   const lines = stem.split('\n');
   let i = 0;
   while (i < lines.length) {
-    const rows: string[][] = [];
-    let end = i;
-    for (;;) {
-      const cells = end < lines.length ? pipeCells(lines[end] as string) : null;
-      if (!cells) break;
-      rows.push(cells);
-      end += 1;
-    }
+    const { rows, end } = pipeRun(lines, i);
     if (isPipeTable(rows)) {
       flush();
       const text = lines

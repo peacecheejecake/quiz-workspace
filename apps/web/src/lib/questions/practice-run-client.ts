@@ -25,7 +25,8 @@ export interface RangeQuery {
   readonly status: readonly string[];
   readonly favorite: boolean;
   readonly retry: boolean;
-  readonly type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY' | null;
+  /** Empty: every type. */
+  readonly types: readonly ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[];
 }
 
 export const RUN_BFF_PATHS = {
@@ -40,6 +41,8 @@ export const RUN_BFF_PATHS = {
     `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/retry-session`,
   results: (runId: string, offset: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/results?offset=${offset}&limit=${RUN_RESULTS_PAGE}`,
+  reopen: (runId: string, position: number) =>
+    `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/reopen`,
   finish: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}/finish`,
   session: (questionId: string) =>
     `/api/questions/${encodeURIComponent(questionId)}/practice-sessions`,
@@ -60,6 +63,7 @@ export interface PracticeRunApi {
     randomOrder: boolean,
     key: string,
     count?: number | null,
+    shuffleOptions?: boolean,
   ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
@@ -76,6 +80,7 @@ export interface PracticeRunApi {
     key: string,
     expectedResetEpoch?: number | null,
   ): Promise<RunActionResult<PracticeSession>>;
+  reopenPosition(runId: string, position: number): Promise<RunActionResult<null>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
 }
@@ -105,6 +110,7 @@ export function createPracticeRunApi(
     } catch {
       return failed('unavailable');
     }
+    if (response.status === 204) return { ok: true, data: null as T };
     let body: unknown;
     try {
       body = await response.json();
@@ -133,7 +139,7 @@ export function createPracticeRunApi(
       else for (const status of query.status) params.append('status', status);
       if (query.favorite) params.set('favorite', 'true');
       if (query.retry) params.set('retry', 'true');
-      if (query.type) params.set('type', query.type);
+      for (const type of query.types) params.append('type', type);
       const search = params.toString();
       const result = await call<QuestionOverview>(
         `${RUN_BFF_PATHS.overview(workspaceId)}${search ? `?${search}` : ''}`,
@@ -142,11 +148,17 @@ export function createPracticeRunApi(
         ? { ok: true, data: { chapters: result.data.chapters, items: result.data.items } }
         : result;
     },
-    create: async (range, randomOrder, key, count) =>
+    create: async (range, randomOrder, key, count, shuffleOptions) =>
       own(
         await call<PracticeRun>(RUN_BFF_PATHS.create(workspaceId), {
           method: 'POST',
-          body: { source: 'bank', range, random_order: randomOrder, question_count: count ?? null },
+          body: {
+            source: 'bank',
+            range,
+            random_order: randomOrder,
+            question_count: count ?? null,
+            ...(shuffleOptions ? { shuffle_options: true } : {}),
+          },
           key,
         }),
       ),
@@ -172,6 +184,8 @@ export function createPracticeRunApi(
           key,
         }),
       ),
+    reopenPosition: (runId, position) =>
+      call<null>(RUN_BFF_PATHS.reopen(runId, position), { method: 'POST' }),
     finish: async (runId) =>
       own(await call<PracticeRun>(RUN_BFF_PATHS.finish(runId), { method: 'POST' })),
     results: (runId, offset) => call<RunResults>(RUN_BFF_PATHS.results(runId, offset)),

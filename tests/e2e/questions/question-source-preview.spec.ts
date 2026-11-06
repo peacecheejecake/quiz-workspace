@@ -419,8 +419,7 @@ test(
 
 /** Moves a range-practice position forward without answering. */
 async function advance(panel: Locator): Promise<void> {
-  const next = runUi.next(panel);
-  await ((await next.isVisible()) ? next : runUi.skip(panel)).click();
+  await runUi.next(panel).click();
 }
 
 test(
@@ -471,7 +470,6 @@ test(
       .poll(() => traffic.statuses.get(s.manual.id), { message: 'manual region answered 404' })
       .toBe(404);
     await expect(sourceUi.button(run)).toHaveCount(0);
-    await page.keyboard.press('Escape');
 
     // 문제 상세 (manage) as a viewer: panel `문제 정보` › `정답·해설 보기`.
     await page.context().clearCookies();
@@ -511,7 +509,6 @@ test(
           .toBe(404);
         await expect(sourceUi.button(mockPanel)).toHaveCount(0);
       }
-      await page.keyboard.press('Escape');
       await page.goto(mockExamsPath(s.workspaceId));
       await mockUi.open(mockUi.row(mockUi.dialog(page), mock.title), mock.title).click();
       await questionRow(mockUi.dialog(page), 1).click();

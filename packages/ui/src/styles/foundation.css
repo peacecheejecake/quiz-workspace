@@ -244,7 +244,7 @@
     gap: var(--space-1);
     min-width: 0;
 
-    > .marker {
+    .marker {
       display: inline-grid;
       flex: none;
       place-items: center;
@@ -263,16 +263,54 @@
       }
     }
 
-    > .label {
+    .label {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
+    /* StepList: a done step that goes back. The underline says it can be pressed. */
+    > .action {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      min-width: 0;
+      min-height: 24px;
+      margin: 0;
+      padding: 0 var(--space-2) 0 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+
+      > .label {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 2px;
+      }
+
+      @media (hover: hover) {
+        &:hover:not(:disabled) {
+          background: var(--color-state-hover);
+        }
+      }
+    }
+
     &[data-state='done'] {
       color: var(--color-text-primary);
 
-      > .marker {
+      .marker {
         border-color: var(--color-accent);
         background: var(--color-accent);
         color: var(--color-on-accent);
@@ -283,7 +321,7 @@
       color: var(--color-text-primary);
       font-weight: var(--font-weight-semibold);
 
-      > .marker {
+      .marker {
         border-color: var(--color-accent);
         color: var(--color-accent);
       }
@@ -315,7 +353,7 @@
     background: Highlight;
   }
 
-  .qz-step-progress .step[data-state='done'] > .marker {
+  .qz-step-progress .step[data-state='done'] .marker {
     background: Highlight;
     color: HighlightText;
   }

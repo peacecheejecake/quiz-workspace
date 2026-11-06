@@ -15,7 +15,9 @@ select columns_are('public', 'questions',
 select columns_are('public', 'question_revisions',
   array['id', 'workspace_id', 'question_id', 'version', 'stem', 'options', 'correct_option_ids',
         'accepted_answers', 'is_multi_answer', 'explanation', 'rubric', 'created_by',
-        'created_at']);
+        'created_at',
+        -- UX12 EXTRACT-9
+        'stem_tables']);
 select columns_are('public', 'question_sources',
   array['id', 'workspace_id', 'question_id', 'document_id', 'document_revision_id', 'page_start',
         'page_end', 'block_ids', 'locations', 'import_run_id', 'created_at']);
@@ -30,7 +32,9 @@ select columns_are('public', 'practice_sessions',
         -- QVIEW-B run link
         'practice_run_id', 'run_position',
         -- UX10-QVIEW reset boundary
-        'reset_epoch']);
+        'reset_epoch',
+        -- UX12-RETRYINPLACE
+        'superseded_at']);
 select columns_are('public', 'question_attempts',
   array['id', 'workspace_id', 'question_id', 'question_revision_id', 'practice_session_id',
         'user_id', 'displayed_option_ids', 'submitted_answer', 'result', 'grading_method',

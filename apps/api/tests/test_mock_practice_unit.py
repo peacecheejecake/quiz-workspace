@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,16 +21,18 @@ from quiz_api.api.mock_practice import (
     session_out,
 )
 from quiz_api.api.practice import SubmitBody, grade_submission
-from quiz_api.api.practice_runs import select_mock_range
+from quiz_api.api.practice_runs import _mock_item, select_mock_range
 from quiz_api.errors import ProblemException, ProblemType
 from quiz_api.openapi_export import render_openapi
-from quiz_api.practice_grading import shuffled_option_ids
+from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
 from quiz_api.question_ranges import QuestionRange
 from quiz_api.repositories.mock_practice import (
+    LiveMockQuestion,
     MockRevision,
     MockRunCandidate,
     MockSessionRecord,
 )
+from quiz_api.repositories.practice_runs import RunRecord
 
 ANSWER_KEYS = {
     "correct_option_ids",
@@ -49,6 +52,7 @@ SESSION_FIELDS = {
     "revision_id",
     "question_type",
     "stem",
+    "stem_tables",
     "is_multi_answer",
     "options",
     "displayed_option_ids",
@@ -58,6 +62,7 @@ SESSION_FIELDS = {
     "run_position",
 }
 EXPLANATION = "모의 해설 비밀"
+NOW = datetime(2026, 11, 6, tzinfo=UTC)
 
 
 def _revision(
@@ -208,6 +213,74 @@ def test_answers_are_revealed_only_by_the_submit_result() -> None:
 # --- mock run ranges ----------------------------------------------------------------------------
 
 
+@dataclass
+class _ItemRepo:
+    """`_mock_item`'s reads: a live question without a session."""
+
+    question: LiveMockQuestion
+
+    def live_question(self, workspace_id: uuid.UUID, question_id: uuid.UUID) -> LiveMockQuestion:
+        return self.question
+
+    def run_session(self, run_id: uuid.UUID, position: int, user_id: uuid.UUID) -> None:
+        return None
+
+
+def _run(seed: int) -> RunRecord:
+    return RunRecord(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        source="mock",
+        mock_exam_id=uuid.uuid4(),
+        random_order=False,
+        seed=seed,
+        total=2,
+        created_at=NOW,
+        finished_at=None,
+    )
+
+
+def _live(*, shuffles: bool) -> LiveMockQuestion:
+    return LiveMockQuestion(
+        id=uuid.uuid4(),
+        question_type="MCQ",
+        stem="stem",
+        options=[{"id": f"o{i}", "text": str(i)} for i in range(5)],
+        is_multi_answer=False,
+        shuffles_options=shuffles,
+    )
+
+
+def _shown(run: RunRecord, position: int, live: LiveMockQuestion) -> list[str]:
+    item = _mock_item(run, position, live.id, _ItemRepo(live))  # type: ignore[arg-type]
+    return [o.id for o in item.options or []]
+
+
+def test_ux12_mockshuffle_c03_a_shuffle_copy_shows_the_runs_order_before_its_session() -> None:
+    live = _live(shuffles=True)
+    stored = [o["id"] for o in live.options]
+    run = _run(11)
+    expected = shuffled_option_ids(stored, run_option_seed(11, 2))
+    assert _shown(run, 2, live) == expected
+    assert _shown(run, 2, live) == expected
+    assert _shown(_run(12), 2, live) != expected
+
+
+def test_ux12_mockshuffle_c03_ai_items_and_questions_without_options_keep_their_order() -> None:
+    plain = _live(shuffles=False)
+    assert _shown(_run(11), 2, plain) == [o["id"] for o in plain.options]
+    essay = LiveMockQuestion(
+        id=uuid.uuid4(),
+        question_type="ESSAY",
+        stem="stem",
+        options=[],
+        is_multi_answer=False,
+        shuffles_options=True,
+    )
+    assert _shown(_run(11), 2, essay) == []
+
+
 def _candidates(*types: str) -> list[MockRunCandidate]:
     return [MockRunCandidate(uuid.uuid4(), t) for t in types]  # type: ignore[arg-type]
 
@@ -226,6 +299,12 @@ def test_a_mock_range_keeps_mock_exam_order_and_applies_exclusions_and_type() ->
         c.id,
     ]
     assert select_mock_range(rows, _range(all=True, filters={"type": "ESSAY"})) == [b.id]
+    assert select_mock_range(rows, _range(all=True, filters={"types": ["ESSAY"]})) == [b.id]
+    assert select_mock_range(rows, _range(all=True, filters={"types": ["MCQ", "ESSAY"]})) == [
+        a.id,
+        b.id,
+        c.id,
+    ]
     assert select_mock_range(rows, _range()) == []
 
 

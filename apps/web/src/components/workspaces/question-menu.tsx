@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@quiz/ui';
+import { DocumentsIcon } from './home-icons';
 import styles from './workspace-home.module.css';
 
 /** Why the workspace is read-only for this member, or null when they can edit. */
@@ -52,7 +53,8 @@ interface QuestionMenuAction {
  * opens records the trigger as its opener and closing the dialog brings focus back there.
  * 중복 문제 정리 (UX7-DEDUP, QOV-01-AC16: `?panel=question-duplicates`) merges questions, so it is
  * editor-only like 직접 추가; so is 챕터 재분배 (CHREDIST-01: `?panel=chapter-redistribution`), which
- * moves questions between chapters, after it in the same group.
+ * moves questions between chapters, after it in the same group, and 챕터 관리 (CHMAN-01:
+ * `?panel=chapter-management`), which edits the chapter tree, after that.
  * 보관·초안 문제 (UX7-BANK-2, QOV-01-AC15: the floating dialog of draft and archived questions,
  * `?panel=inactive-questions`) is readable by every member, so it stays enabled.
 
@@ -65,6 +67,7 @@ export function QuestionMenu({
   onCreate,
   onDuplicates,
   onRedistribute,
+  onManageChapters,
   onInactive,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
@@ -74,6 +77,7 @@ export function QuestionMenu({
   readonly onCreate: () => void;
   readonly onDuplicates: () => void;
   readonly onRedistribute: () => void;
+  readonly onManageChapters: () => void;
   readonly onInactive: () => void;
 }) {
   const reasonId = useId();
@@ -90,6 +94,7 @@ export function QuestionMenu({
     },
     { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
     { key: 'redistribute', label: '챕터 재분배', requiresEdit: true, onSelect: onRedistribute },
+    { key: 'chapters', label: '챕터 관리', requiresEdit: true, onSelect: onManageChapters },
     {
       key: 'inactive',
       label: '보관·초안 문제',
@@ -103,9 +108,17 @@ export function QuestionMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button ref={triggerRef}>
-          문서 <span className={styles.count}>{documentCount}</span>
-          <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+        <Button ref={triggerRef} className={styles.compactButton}>
+          <DocumentsIcon width={16} height={16} className={styles.compactIcon} />
+          <span className={styles.documentsLabel}>
+            문서 <span className={styles.count}>{documentCount}</span>
+          </span>
+          <ChevronDownIcon
+            width={16}
+            height={16}
+            aria-hidden="true"
+            className={styles.documentsChevron}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

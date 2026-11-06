@@ -183,6 +183,7 @@ function RelatedSourcesArea({
                     block_id: source.block_id,
                   }),
                   documentTitle: source.document_title,
+                  block: { id: source.block_id, revisionId: source.revision_id },
                 })
               }
             />

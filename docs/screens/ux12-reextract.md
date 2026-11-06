@@ -25,7 +25,7 @@ linked_tests: [UX12-REEXTRACT-AC01, UX12-REEXTRACT-AC02, UX12-REEXTRACT-AC03, UX
 
 ### UX12-REEXTRACT-AC02
 
-다시 추출한 검토 화면은 달라진 것을 글로 보인다. 목록 위에 `다시 추출 결과: 변경 n개 · 새 문제 n개 · 같음 n개`, 이전에 있었지만 이번에 없는 문제가 있으면 그 번호를 보인다. 이전 문제와 다른 초안에는 `변경됨` 표시, 대응하는 이전 문제 번호, 달라진 항목(`유형`, `발문`, `보기`, `정답`)이 있고 `이전 문제 보기` 링크가 그 문제의 풀이 panel을 연다. 대응하는 이전 문제가 없는 초안에는 `새 문제`가 보인다. 내용이 같은 초안에는 `변경됨`이 없고 기존 `중복` 표시가 그대로다.
+다시 추출한 검토 화면은 달라진 것을 글로 보인다. 목록 위에 `다시 추출 결과: 변경 n개 · 새 문제 n개 · 같음 n개`, 이전에 있었지만 이번에 없는 문제가 있으면 그 번호를 보인다. 이전 문제와 다른 초안에는 `변경됨` 표시, 대응하는 이전 문제 번호, 달라진 항목(`유형`, `발문`, `표`, `보기`, `정답`)이 있고 `이전 문제 보기` 링크가 그 문제의 풀이 panel을 연다. 대응하는 이전 문제가 없는 초안에는 `새 문제`가 보인다. 내용이 같은 초안에는 `변경됨`이 없고 기존 `중복` 표시가 그대로다.
 
 ### UX12-REEXTRACT-AC03
 
@@ -58,4 +58,4 @@ linked_tests: [UX12-REEXTRACT-AC01, UX12-REEXTRACT-AC02, UX12-REEXTRACT-AC03, UX
 | UX12-REEXTRACT-C03 | 보기 권한 403 `insufficient-role`, 보관된 Workspace 403 `workspace-archived`, 비구성원과 다른 Workspace는 같은 404. 문서가 삭제됐거나 처리 중이면 409 `document-not-ready`. |
 | UX12-REEXTRACT-C05 | `source-region` 응답의 `figures`는 `regions`와 같은 모양(문서 id, revision id, 쪽, bbox)이고 쪽, 위, 왼쪽 순서다. 문제 자기 영역 안의 `image` 블록 위치만 든다. 글 블록, 영역 밖 이미지(정답 뒤 이미지), 첫 근거 위치, `content_blocks`에 없는 블록은 없다. 그림이 없으면 빈 목록이다. 삭제된 문서는 전과 같이 404다. 인가와 `Cache-Control`은 QSRC-01-C03과 같다(`tests/integration/questions/source_region/test_source_region_contract.py`). |
 | UX12-REEXTRACT-C06 | 모의고사 `source-region`은 원본 문제의 `figures`를 돌려주고 AI 변형은 전과 같이 404다. 등록(`publish`)이 초안의 그림 근거를 출처 행으로 옮기면 그 그림이 `figures`에 든다. |
-| UX12-REEXTRACT-C04 | `ImportDraft`와 `ImportDraftSummary`의 `previous`는 다시 추출한 run에서만 값이 있다: `{question_id, revision_id, number, changed}`. `question_id`는 살아 있는 확정 문제가 있을 때만 있고 `changed`는 `type`·`stem`·`options`·`answer` 순서의 목록이다. 짝이 없으면 null. 요약에는 정답 값이나 발문이 없다. `draft-summaries`의 `missing_previous`는 이번 run에 없는 이전 문제 번호다. |
+| UX12-REEXTRACT-C04 | `ImportDraft`와 `ImportDraftSummary`의 `previous`는 다시 추출한 run에서만 값이 있다: `{question_id, revision_id, number, changed}`. `question_id`는 살아 있는 확정 문제가 있을 때만 있고 `changed`는 `type`·`stem`·`table`·`options`·`answer` 순서의 목록이다. `table`은 발문이 같아도 병합 셀이 다를 때다([UX12-STEMTABLE](ux12-stemtable.md)). 짝이 없으면 null. 요약에는 정답 값이나 발문이 없다. `draft-summaries`의 `missing_previous`는 이번 run에 없는 이전 문제 번호다. |

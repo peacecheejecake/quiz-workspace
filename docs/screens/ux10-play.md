@@ -1,4 +1,4 @@
-# UX10-PLAY — 통합 문제 풀기
+# UX10-PLAY — 통합 모의고사
 
 **Route:** `/workspaces/:workspaceId?panel=mock-exams&mock=new` (기존 모의고사 목록과 상세 URL 유지)
 
@@ -14,7 +14,7 @@ linked_tests: [UX10-PLAY-AC01, UX10-PLAY-AC02, UX10-PLAY-AC03, UX10-PLAY-AC04, U
 
 ### UX10-PLAY-AC01
 
-홈의 풀기에서 통합 옵션을 열고 변형이 없으면 은행 풀이, 변형이 있으면 모의고사 경로를 사용한다. 두 기록은 격리된다.
+홈의 `모의고사`가 연 모의고사 목록의 `추가`에서 통합 옵션을 열고(UX12-MOCKNAV) 변형이 없으면 은행 풀이, 변형이 있으면 모의고사 경로를 사용한다. 두 기록은 격리된다.
 
 ### UX10-PLAY-AC02
 

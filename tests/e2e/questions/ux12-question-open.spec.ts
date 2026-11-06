@@ -93,7 +93,7 @@ test(
 );
 
 test(
-  'UX12-OPEN-AC02 a submitted question shows its result in one call',
+  'UX12-OPEN-AC02 a submitted question opens in one call, and its result takes one more',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-open-result');
@@ -110,8 +110,14 @@ test(
     traffic.posts.length = 0;
 
     const again = await openPanel(page);
-    await expect(panelUi.result(again)).toContainText(RESULT_TEXT.correct);
+    await expect(panelUi.reveal(again)).toBeVisible();
+    await expect(panelUi.result(again)).toHaveCount(0);
     expect(traffic.posts).toEqual([openPost(question)]);
+
+    traffic.posts.length = 0;
+    await panelUi.reveal(again).click();
+    await expect(panelUi.result(again)).toContainText(RESULT_TEXT.correct);
+    expect(traffic.posts).toEqual([`/api/questions/${question.id}/practice-reveal`]);
 
     traffic.posts.length = 0;
     await again.getByRole('button', { name: AGAIN }).click();
@@ -146,11 +152,12 @@ test(
     });
     await closePanel(page, second);
 
-    // Another tab or device finished that session: the cache must not hide its result.
+    // Another tab or device finished that session: a new session, with its result on request.
     const optionId = question.revision.options[0]?.id;
     if (!optionId) throw new Error('no option');
     await submitPractice(owner, session.session.id, { selected_option_ids: [optionId] });
     const third = await openPanel(page);
+    await panelUi.reveal(third).click();
     await expect(panelUi.result(third)).toContainText(RESULT_TEXT.correct);
     await expect(panelUi.submit(third)).toHaveCount(0);
   },
@@ -172,10 +179,17 @@ test(
 
     const opened = await openPanel(page);
     await expect(panelUi.submit(opened)).toBeVisible();
-    // In the page, so the two clicks fall inside the pause however busy the machine is.
+    // In the page, so the two clicks fall inside the pause however busy the machine is. The second
+    // waits for question 2 on screen: until that commit, 다음 문제 still points at question 2.
     await opened.getByRole('button', { name: NEXT }).evaluate(async (button: HTMLElement) => {
+      const title = () => {
+        const id = button.closest('[role="dialog"]')?.getAttribute('aria-labelledby');
+        return id ? document.getElementById(id)?.textContent : null;
+      };
       button.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      while (!title()?.includes('2번')) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
       button.click();
     });
 

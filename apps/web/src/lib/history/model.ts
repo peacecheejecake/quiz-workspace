@@ -23,6 +23,10 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'document.block_corrected': '문서 교정',
   'document.publish_requested': '교정 게시 요청',
   'document.revision_restored': '이전 개정 복원',
+  'document.chapter_created': '챕터 추가',
+  'document.chapter_renamed': '챕터 이름 변경',
+  'document.chapters_moved': '챕터 이동',
+  'document.chapter_deleted': '챕터 삭제',
   // DOCSUM-01: turning the summary's auto refresh on (요약 만들기) / off; ids only, no text.
   'document.summary_enabled': '요약 만들기',
   'document.summary_auto_disabled': '자동 갱신 끄기',

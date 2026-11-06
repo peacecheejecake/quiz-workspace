@@ -49,6 +49,14 @@ describe('PERF-1 page loaders', () => {
             ],
           });
         }
+        if (path === '/api/v1/workspaces/{workspace_id}/chapter-tree') {
+          return ok({
+            workspace: {
+              title: 'Workspace 챕터',
+              chapters: [{ id: 'w1', title: '범위', level: 1 }],
+            },
+          });
+        }
         return ok({
           items: [
             { id: 'c1', title: ' Ch 1 ', level: 1, children: [{ id: 'c2', title: '01 Q?' }] },
@@ -68,7 +76,14 @@ describe('PERF-1 page loaders', () => {
       { id: 'c1', title: 'Ch 1', level: 1, documentId: 'b1', documentTitle: 'Book' },
       { id: 'c2', title: '01 Q?', level: 2, documentId: 'b1', documentTitle: 'Book' },
       { id: 'c1', title: 'Ch 1', level: 1, documentId: 'p1', documentTitle: 'Paper' },
+      {
+        id: 'w1',
+        title: '범위',
+        level: 1,
+        documentId: 'workspace',
+        documentTitle: 'Workspace 챕터',
+      },
     ]);
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
   });
 });

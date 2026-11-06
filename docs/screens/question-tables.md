@@ -12,7 +12,7 @@ linked_tests: [QTABLE-01-AC01, QTABLE-01-AC02, QTABLE-01-AC03, QTABLE-01-AC04, Q
 
 **명세:** [UX12 EXTRACT](../implementation/ux12/index.md), [questions.md §4 11·§6](../questions.md), [QIMPORT-01](questions-import.md), [QPLAY-01](questions-practice.md), [QSRC-01](question-source-preview.md)
 
-시험지 발문의 표는 경고 없이 버려졌다(3개년 A형 180문항 중 21문항, 표 23개). 표로 인쇄된 보기는 `칸 | 칸` 글자로 보였다. 표는 `stem` 안 GFM pipe 표로 저장한다(D-11). 구조화 셀 저장은 후속 EXTRACT-9다. 병합 셀은 Docling처럼 칸마다 글자가 반복되고, 원본 확인은 `문제 원문 보기`(QSRC-01)로 한다.
+시험지 발문의 표는 경고 없이 버려졌다(3개년 A형 180문항 중 21문항, 표 23개). 표로 인쇄된 보기는 `칸 | 칸` 글자로 보였다. 표는 `stem` 안 GFM pipe 표로 저장한다(D-11). 병합 셀은 Docling처럼 칸마다 글자가 반복되고, 원본 확인은 `문제 원문 보기`(QSRC-01)로 한다. 구조화 셀과 표 편집은 [UX12-STEMTABLE](ux12-stemtable.md)이다. `stem_tables`가 있으면 그 묶음은 병합 칸으로 보이고, 없으면 이 문서대로 GFM으로 보인다.
 
 **저장 형식:** 표 하나는 발문 안의 한 묶음이고 앞뒤에 빈 줄을 둔다. 첫 행이 머리글, 둘째 행이 `| --- |` 구분 행이다. 칸의 `|`는 `\|`, `\`는 `\\`, 칸 안 줄바꿈은 `<br>`이다(문서 내보내기 DOC-03과 같은 함수). 표 묶음 판정은 Python `split_pipe_blocks`와 TS `stemSegments`가 같은 규칙이다: `|`로 시작하고 끝나는 연속된 줄이 2줄 이상이고, 둘째 줄이 구분 행이며, 모든 줄의 칸 수가 같아야 한다. 하나라도 어긋나면 표가 아니라 글자다.
 

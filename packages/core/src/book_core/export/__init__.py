@@ -20,9 +20,9 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 
-from book_core.contracts.document import Block, BlockType, DocumentRevision
+from book_core.contracts.document import Block, BlockType, DocumentRevision, TableContent
 
-__all__ = ["FIGURE_PLACEHOLDER", "ExportFormat", "md_table", "render_revision"]
+__all__ = ["FIGURE_PLACEHOLDER", "ExportFormat", "gfm_table", "md_table", "render_revision"]
 
 MAX_MARKDOWN_HEADING = 6
 FIGURE_PLACEHOLDER = "[그림 p.{page}]"
@@ -71,9 +71,15 @@ def _txt_cell(cell: str) -> str:
 
 
 def md_table(block: Block) -> str:
-    """A table block as a GFM table (also how a question stem stores it, QTABLE-01)."""
+    """A table block as a GFM table."""
     assert block.table is not None  # noqa: S101 - callers check
-    rows = [[_md_cell(cell) for cell in row] for row in block.table.rows]
+    return gfm_table(block.table)
+
+
+def gfm_table(table: TableContent) -> str:
+    """Cells as a GFM table (also how a question stem stores it, QTABLE-01; `tableGfm` in
+    apps/web writes the same text)."""
+    rows = [[_md_cell(cell) for cell in row] for row in table.rows]
     width = len(rows[0])
     lines = ["| " + " | ".join(rows[0]) + " |", "|" + " --- |" * width]
     lines += ["| " + " | ".join(row) + " |" for row in rows[1:]]

@@ -201,7 +201,11 @@ const DraftItem = memo(function DraftItem({
         {draft.answerMissing ? <Badge tone="warning">정답 없음</Badge> : null}
       </div>
 
-      <StemText stem={grid?.stem ?? draft.stem} className={styles.stem} />
+      <StemText
+        stem={grid?.stem ?? draft.stem}
+        stemTables={draft.stemTables}
+        className={styles.stem}
+      />
 
       {draft.type === 'MCQ' ? (
         <div className={styles.options}>

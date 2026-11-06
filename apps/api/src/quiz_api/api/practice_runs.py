@@ -7,7 +7,11 @@ docs/questions.md §12, architecture.md §6).
     GET  /practice-runs/{id}                        the run's creator; counts, progress, summary
     GET  /practice-runs/{id}/items/{position}       the run's creator; one position (1-based)
     GET  /practice-runs/{id}/results?offset&limit   the run's creator; one page (limit <= 200)
+    POST /practice-runs/{id}/items/{position}/reopen  the run's creator; `다시 풀기`
     POST /practice-runs/{id}/finish                 the run's creator; fix the summary
+    GET  /workspaces/{id}/practice-runs/unfinished  member; the caller's own unfinished bank runs
+                                                    (UX12-RESUME); no content, at most 20
+    POST /practice-runs/{id}/dismiss                the run's creator; out of the 이어 풀기 lists
 
 A position is practised through the practice API (quiz_api.api.practice): POST
 /questions/{id}/practice-sessions with `{practice_run_id, run_position}`, then the usual submit /
@@ -22,6 +26,14 @@ request's, else chosen by the server (a CSPRNG; under APP_ENV=test the fixed PRA
 QVIEW-01-AC03 "fake seed 고정") and stored; a run's ids and seed never change. Body fields other
 than the documented ones (e.g. a client `workspace_id`/`user_id`) are ignored: the workspace is
 the path's, the user the verified JWT's.
+
+Option shuffle (QVIEW-01-C11): `shuffle_options` is a bank run's setting, kept in the
+`practice_runs.range` jsonb (`run_range`; no key means off, as on every older run). A position of
+such a run shows `shuffled_option_ids` under `run_option_seed(seed, position)` whether or not its
+session is open yet, the session stores that order and grading stays on option ids. A retry of a
+position draws a new shuffle. A mock run refuses the field (422): its 보기 섞기 questions shuffle
+the same way by their variation type, whatever the run (UX12-MOCKSHUFFLE-C03), and its other
+questions keep their stored order.
 
 No answers (C03): `PracticeRun` and `RunResults` carry no question content and no answers.
 `RunItem` carries the question without answers; the answers of a position appear only in its
@@ -85,7 +97,12 @@ from quiz_api.authz import (
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
-from quiz_api.practice_grading import AttemptResult
+from quiz_api.practice_grading import (
+    AttemptResult,
+    new_shuffle_seed,
+    run_option_seed,
+    shuffled_option_ids,
+)
 from quiz_api.question_ranges import (
     MAX_RANGE_QUESTIONS,
     QuestionRange,
@@ -110,6 +127,7 @@ from quiz_api.repositories.practice_runs import (
 )
 from quiz_api.repositories.question_overview import QuestionOverviewRepository
 from quiz_api.settings import Environment, Settings
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
 
@@ -120,6 +138,7 @@ MAX_SEED = 2**53 - 1  # a JSON-safe integer
 PRACTICE_RUN_TEST_SEED = 20261101
 DEFAULT_RESULTS_PAGE = 200
 MAX_RESULTS_PAGE = 200
+MAX_UNFINISHED = 20
 
 RunSource = Literal["bank", "mock"]
 PositionResult = Literal["correct", "incorrect", "pending", "skipped", "reset"]
@@ -138,6 +157,9 @@ class PracticeRunCreate(BaseModel):
     mock_exam_id: uuid.UUID | None = None
     range: QuestionRange
     random_order: bool = False
+    shuffle_options: bool = Field(
+        default=False, description="Shuffle each MCQ's options for this run (bank only)."
+    )
     question_count: int | None = Field(default=None, ge=1, le=MAX_RUN)
     seed: int | None = Field(
         default=None, ge=0, le=MAX_SEED, description="Shuffle seed; the server picks one if absent."
@@ -149,6 +171,8 @@ class PracticeRunCreate(BaseModel):
             raise ValueError("mock_exam_id is required for source=mock and only for it.")
         if self.source == "mock" and self.question_count is not None:
             raise ValueError("question_count is only supported for source=bank.")
+        if self.source == "mock" and self.shuffle_options:
+            raise ValueError("shuffle_options is only supported for source=bank.")
         return self
 
 
@@ -161,6 +185,9 @@ class RetrySession(BaseModel):
     chapter_id: uuid.UUID | None
     question_number: int | None
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool
     options: list[RunOption]
     displayed_option_ids: list[str]
@@ -191,6 +218,7 @@ class PracticeRun(BaseModel):
     source: RunSource
     mock_exam_id: uuid.UUID | None
     random_order: bool
+    shuffle_options: bool
     seed: int
     total: int = Field(description="Positions 1..total.")
     answered: int = Field(description="Positions submitted.")
@@ -236,6 +264,9 @@ class RunItem(BaseModel):
     chapter_title: str | None
     question_number: int | None
     stem: str | None
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool | None
     options: list[RunOption] = Field(
         description="MCQ options; in the session's displayed order once a session is open."
@@ -264,6 +295,22 @@ class RunResults(BaseModel):
     offset: int
     limit: int
     items: list[RunResultItem]
+
+
+class UnfinishedRun(BaseModel):
+    """A row of the `이어 풀기` list: progress and where to resume, never question content."""
+
+    id: uuid.UUID
+    total: int = Field(description="Positions 1..total.")
+    answered: int = Field(description="Positions submitted.")
+    next_position: int = Field(description="The first position still answerable.")
+    chapter_title: str | None = Field(description="Set when the live questions share a chapter.")
+    created_at: datetime
+    last_touched_at: datetime
+
+
+class UnfinishedRunList(BaseModel):
+    items: list[UnfinishedRun]
 
 
 # --- dependencies -------------------------------------------------------------------------------
@@ -331,6 +378,15 @@ def _create_workspace(
     )
 
 
+def _read_workspace(
+    workspace_id: Annotated[uuid.UUID, Path()], user: CurrentUser, repo: AccessRepo
+) -> WorkspaceAccess:
+    # The caller's own runs: every role, archived workspace included.
+    return authorize_workspace(
+        repo, user.id, workspace_id, Action.READ, LockMode.NONE, not_found_detail=NOT_FOUND
+    )
+
+
 def _own_run(lock: LockMode) -> Any:
     def dependency(
         run_id: Annotated[uuid.UUID, Path()], user: CurrentUser, runs: RunRepo
@@ -367,6 +423,23 @@ def run_order(heatmap_ids: list[uuid.UUID], random_order: bool, seed: int) -> li
     return out
 
 
+def run_range(body: PracticeRunCreate) -> dict[str, Any]:
+    """`practice_runs.range`: the range as sent, plus `shuffle_options` when the run has it."""
+    stored = stored_range(body.range)
+    return {**stored, "shuffle_options": True} if body.shuffle_options else stored
+
+
+def position_options(
+    run: RunRecord, position: int, options: list[Any], *, shuffle: bool = False
+) -> list[RunOption]:
+    """The options of a position without a session, in the order its session will show."""
+    by_id = {o["id"]: o["text"] for o in options}
+    ids = list(by_id)
+    if run.shuffle_options or shuffle:
+        ids = shuffled_option_ids(ids, run_option_seed(run.seed, position))
+    return [RunOption(id=i, text=by_id[i]) for i in ids]
+
+
 def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange) -> list[uuid.UUID]:
     """The mock exam questions a range selects, in mock exam order (pure; see the module
     docstring). Raises `range-invalid` for chapters, personal state filters and ids the mock exam
@@ -384,7 +457,7 @@ def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange)
         for c in candidates
         if (range_.all or c.id in picked)
         and c.id not in excluded
-        and (f.type is None or c.question_type == f.type)
+        and (f.types is None or c.question_type in f.types)
     ]
 
 
@@ -422,6 +495,7 @@ def _run_out(run: RunRecord, progress: RunProgress) -> PracticeRun:
         source=run.source,  # type: ignore[arg-type]
         mock_exam_id=run.mock_exam_id,
         random_order=run.random_order,
+        shuffle_options=run.shuffle_options,
         seed=run.seed,
         total=run.total,
         answered=progress.submitted,
@@ -493,9 +567,11 @@ def _mock_item(
         texts = {o["id"]: o["text"] for o in session.revision.options}
         options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
         stem, multi = session.revision.stem, session.revision.is_multi_answer
+        stem_tables = session.revision.stem_tables
     else:
-        options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
+        options = position_options(run, position, live.options, shuffle=live.shuffles_options)
         stem, multi = live.stem, live.is_multi_answer
+        stem_tables = live.stem_tables
     return RunItem(
         position=position,
         total=run.total,
@@ -507,6 +583,7 @@ def _mock_item(
         chapter_title=None,
         question_number=None,
         stem=stem,
+        stem_tables=stem_tables_out(stem_tables),
         is_multi_answer=multi,
         options=options,
         practice_session_id=session.id if session else None,
@@ -580,7 +657,7 @@ def create_practice_run(
         source=body.source,
         mock_exam_id=body.mock_exam_id if body.source == "mock" else None,
         mock_exam_generation_id=generation_id,
-        range_=stored_range(body.range),
+        range_=run_range(body),
         random_order=body.random_order,
         seed=seed,
         item_ids=ordered,
@@ -674,7 +751,10 @@ def start_run_item_retry_session(
             runs,
             idempotency,
             user,
-            PracticeSessionCreate(expected_reset_epoch=body.expected_reset_epoch),
+            PracticeSessionCreate(
+                expected_reset_epoch=body.expected_reset_epoch,
+                shuffle_options=run.shuffle_options,
+            ),
             scoped_key,
         )
 
@@ -699,11 +779,14 @@ def start_run_item_retry_session(
         if target.question_type == "MCQ"
         else []
     )
+    retry_seed = new_shuffle_seed() if displayed and target.shuffles_options else None
+    if retry_seed is not None:
+        displayed = shuffled_option_ids(displayed, retry_seed)
     opened = mocks.open_session(
         target,
         user.id,
         displayed_option_ids=displayed,
-        shuffle_seed=None,
+        shuffle_seed=retry_seed,
         retry_origin_run_id=run.id,
         retry_origin_position=position,
     )
@@ -720,6 +803,7 @@ def start_run_item_retry_session(
         chapter_id=None,
         question_number=None,
         stem=mock.stem,
+        stem_tables=mock.stem_tables,
         is_multi_answer=mock.is_multi_answer,
         options=[RunOption(id=o.id, text=o.text) for o in mock.options],
         displayed_option_ids=mock.displayed_option_ids,
@@ -770,9 +854,11 @@ def get_practice_run_item(
         texts = {o["id"]: o["text"] for o in session.revision.options}
         options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
         stem, multi = session.revision.stem, session.revision.is_multi_answer
+        stem_tables = session.revision.stem_tables
     else:
-        options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
+        options = position_options(run, position, live.options)
         stem, multi = live.stem, live.is_multi_answer
+        stem_tables = live.stem_tables
     numbers = _chapter_numbers(overview, [live.chapter_id])
     return RunItem(
         position=position,
@@ -785,6 +871,7 @@ def get_practice_run_item(
         chapter_title=live.chapter_title,
         question_number=live.question_number,
         stem=stem,
+        stem_tables=stem_tables_out(stem_tables),
         is_multi_answer=multi,
         options=options,
         practice_session_id=session.id if session else None,
@@ -832,6 +919,76 @@ def list_practice_run_results(
     )
 
 
+@router.post(
+    "/practice-runs/{run_id}/items/{position}/reopen",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="reopenRunItem",
+    responses=problem_responses(409),
+)
+def reopen_run_item(
+    run: WriteRun,
+    position: Annotated[int, Path(ge=1)],
+    runs: RunRepo,
+    practice: PracticeRepo,
+    mocks: MockRepo,
+    access_repo: AccessRepo,
+    user: CurrentUser,
+) -> None:
+    """`다시 풀기` in an unfinished run (UX12-RETRYINPLACE): the position goes back to unanswered
+    and its next opening is a new session. The graded session stays linked and its attempts stay;
+    the position's result is the live session's. A position with no graded session is left as it
+    is, so a repeated call changes nothing; one waiting for self-grading is 409."""
+    if position > run.total:
+        raise _not_found()
+    question_id = runs.question_at(run.id, position)
+    if question_id is None:
+        raise _not_found()
+    authorize_workspace(
+        access_repo,
+        user.id,
+        run.workspace_id,
+        Action.PRACTICE,
+        LockMode.SHARE,
+        not_found_detail=NOT_FOUND,
+    )
+    # Serialises with opening a position and with finishing the run.
+    locked = runs.get_in_workspace(run.id, user.id, run.workspace_id)
+    if locked is None:
+        raise _not_found()
+    if locked.finished_at is not None:
+        raise run_finished()
+    state: str | None = None
+    session_id: uuid.UUID | None = None
+    if run.source == "bank":
+        if runs.live_question(run.workspace_id, question_id) is None:
+            raise _not_found()
+        epoch = practice.lock_epoch(user.id, question_id)
+        session = practice.run_session(run.id, position, user.id)
+        if session is not None:
+            if session.reset_epoch != epoch:
+                raise ProblemException(
+                    409,
+                    ProblemType.PRACTICE_SESSION_RESET,
+                    detail="This practice session was reset. Start a new run.",
+                )
+            state, session_id = session.state, session.id
+    else:
+        target = mocks.target(question_id)
+        if target is None or target.removed or target.workspace_id != run.workspace_id:
+            raise _not_found()
+        mock_session = mocks.run_session(run.id, position, user.id)
+        if mock_session is not None:
+            state, session_id = mock_session.state, mock_session.id
+    if state == "pending_grade":
+        raise already_submitted()
+    if state == "graded" and session_id is not None:
+        if run.source == "bank":
+            practice.supersede_run_session(session_id)
+        else:
+            mocks.supersede_run_session(session_id)
+    practice.commit()
+
+
 @router.post("/practice-runs/{run_id}/finish", operation_id="finishPracticeRun")
 def finish_practice_run(run: WriteRun, runs: RunRepo, mocks: MockRepo) -> PracticeRun:
     """End the run: unsubmitted positions count as skipped and no position can be submitted
@@ -843,6 +1000,44 @@ def finish_practice_run(run: WriteRun, runs: RunRepo, mocks: MockRepo) -> Practi
     out = _run_out(finished, _progress(finished, runs, mocks))
     runs.commit()
     return out
+
+
+@router.get(
+    "/workspaces/{workspace_id}/practice-runs/unfinished",
+    operation_id="listUnfinishedPracticeRuns",
+)
+def list_unfinished_practice_runs(
+    access: Annotated[WorkspaceAccess, Depends(_read_workspace)], runs: RunRepo
+) -> UnfinishedRunList:
+    """The caller's own unfinished bank runs in this workspace, most recently touched first:
+    runs not finished, not dismissed and with a position left to answer (UX12-RESUME)."""
+    rows = runs.unfinished(access.workspace_id, access.user_id, MAX_UNFINISHED)
+    return UnfinishedRunList(
+        items=[
+            UnfinishedRun(
+                id=r.id,
+                total=r.total,
+                answered=r.answered,
+                next_position=r.next_position,
+                chapter_title=r.chapter_title,
+                created_at=r.created_at,
+                last_touched_at=r.last_touched_at,
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.post(
+    "/practice-runs/{run_id}/dismiss",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="dismissPracticeRun",
+)
+def dismiss_practice_run(run: WriteRun, runs: RunRepo) -> None:
+    """Stop offering the run for `이어 풀기` (the mock exam list's group or a mock exam's row).
+    The run, its sessions and attempts stay as they are, and it still opens by its URL."""
+    runs.dismiss(run.id)
+    runs.commit()
 
 
 # --- the practice API's run link (quiz_api.api.practice) ----------------------------------------

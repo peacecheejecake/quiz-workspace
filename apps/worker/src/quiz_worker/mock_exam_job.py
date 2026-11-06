@@ -12,7 +12,8 @@ Pipeline, serialised per mock exam by an advisory lock:
    mock exam (`mock_exam_unavailable`) or a workspace the user can no longer edit; AI variation
    types need the feature (`WORKER_MOCK_EXAMS`) and an LLM (`mock_llm_disabled`);
 2. mark it running and create the per-item checkpoints once (`mock_exam_generation_items`);
-3. `OPTION_SHUFFLE` items: the pinned revision copied with a seeded option order (no LLM);
+3. `OPTION_SHUFFLE` items: the pinned revision copied in its source option order (no LLM; the
+   order is drawn per run, UX12-MOCKSHUFFLE-C05);
 4. AI items: each source's cited-page passages (`quiz_worker.question_sources`), packed
    into as few calls as the budgets allow (`book_core.mock_exam.pack_batches`); oversized
    sources are narrowed or skipped `source_too_large`. Batches run up to
@@ -67,11 +68,11 @@ from book_core.mock_exam import (
     estimate_tokens,
     halves,
     pack_batches,
-    shuffled_options,
     source_block,
     source_tag,
 )
 from book_core.mock_exam.prompts import passage_block
+from book_core.question import stem_tables_json, variant_stem_tables
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from quiz_worker.adapters import WorkerNotConfiguredError
@@ -309,7 +310,10 @@ class _Pipeline:
                     source_question_id=row.question_id,
                     source_question_revision_id=row.revision_id,
                     stem=row.stem,
-                    options=shuffled_options(row.options, self.generation.seed, position),
+                    stem_tables=stem_tables_json(
+                        variant_stem_tables(row.stem, row.stem, pinned.stem_tables)
+                    ),
+                    options=row.options,
                     correct_option_ids=row.correct_option_ids,
                     accepted_answers=row.accepted_answers,
                     is_multi_answer=row.is_multi_answer,
@@ -535,6 +539,7 @@ class _Pipeline:
         multi = content.question_type is QuestionType.MCQ and (
             len(content.correct_option_ids or ()) > 1
         )
+        pinned = self.pinned.get(uuid.UUID(source.revision_id))
         return MadeQuestion(
             position=outcome.position,
             question_type=content.question_type.value,
@@ -542,6 +547,12 @@ class _Pipeline:
             source_question_id=uuid.UUID(source.question_id),
             source_question_revision_id=uuid.UUID(source.revision_id),
             stem=content.stem,
+            # A rewritten stem keeps no cells: they would say something else than its text.
+            stem_tables=stem_tables_json(
+                variant_stem_tables(content.stem, pinned.row.stem, pinned.stem_tables)
+                if pinned is not None
+                else None
+            ),
             options=[{"id": o.id, "text": o.text} for o in content.options],
             correct_option_ids=list(content.correct_option_ids)
             if content.correct_option_ids is not None

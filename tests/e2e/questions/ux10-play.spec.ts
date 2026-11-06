@@ -1,5 +1,6 @@
 import { test, expect, createNumberedQuestions, homePath, signInAs } from '../fixtures/test.ts';
 import type { Locator, Page } from '@playwright/test';
+import { confirmRunClose } from '../fixtures/practice-runs.ts';
 import {
   createMockExam,
   getMockExam,
@@ -50,13 +51,14 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await createNumberedQuestions(owner, workspace.id, 'ux10-play', 3);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id));
-  await page.getByRole('button', { name: /^풀기$/ }).click();
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  await page.getByRole('button', { name: /^모의고사$/ }).click();
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await expect(dialog).toBeVisible();
+  await mockUi.add(dialog).click();
+  await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+  await dialog.getByRole('button', { name: /다음|next/i }).click();
   await expect(dialog.getByRole('checkbox', { name: /보기 섞기|shuffle/i })).not.toBeChecked();
   await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/i }).check();
-  await dialog.getByRole('button', { name: /다음|next/i }).click();
-  await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
   const request = page.waitForRequest(
     (r) => r.method() === 'POST' && /\/practice-runs$/.test(new URL(r.url()).pathname),
   );
@@ -68,7 +70,8 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await expect(page.getByText(/ux10-play-1 문제/)).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('heading', { name: /1번/ })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
+  await confirmRunClose(page);
+  await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeFocused();
   const mocks = await owner.api.ok<{ items: unknown[] }>(
     'GET',
     `/workspaces/${workspace.id}/mock-exams`,
@@ -87,10 +90,10 @@ test('UX10-PLAY-AC02 rejects a count larger than the selected range', async ({
   await createNumberedQuestions(owner, workspace.id, 'count', 3);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
-  await dialog.getByLabel(/문항 수|question count/i).fill('4');
-  await dialog.getByRole('button', { name: /다음|next/i }).click();
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+  await dialog.getByRole('button', { name: /다음|next/i }).click();
+  await dialog.getByLabel(/문항 수|question count/i).fill('4');
   await expect(dialog.getByRole('button', { name: /시작|start/i })).toBeDisabled();
   await expect(dialog.getByText(/선택한 범위보다 문항 수가 많습니다/)).toBeVisible();
 });
@@ -103,8 +106,8 @@ test('UX10-PLAY-AC03 uses steps instead of a generation progressbar', async ({
   const workspace = await workspaceFactory.create(owner);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
-  await expect(dialog.getByRole('list', { name: /풀기 단계/ })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+  await expect(dialog.getByRole('list', { name: /모의고사 단계/ })).toBeVisible();
   await expect(dialog.getByRole('progressbar')).toHaveCount(0);
 });
 
@@ -115,9 +118,12 @@ test('UX10-PLAY-AC03 aligns 문항 수 and 난이도 on desktop and stacks them 
   const owner = await workspaceFactory.member('ux10-form-row');
   const workspace = await workspaceFactory.create(owner);
   await page.setViewportSize({ width: 1280, height: 800 });
+  await createNumberedQuestions(owner, workspace.id, 'form-row', 1);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+  await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+  await dialog.getByRole('button', { name: /다음|next/i }).click();
   await mockUi.variation(dialog, 'PARAPHRASE').check();
 
   const count = await boxOf(mockUi.questionCount(dialog));
@@ -149,7 +155,7 @@ test('UX10-PLAY-AC04 keeps action rows at the dialog bottom and fields reachable
   ]) {
     await page.setViewportSize(viewport);
     await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-    const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     const next = dialog.getByRole('button', { name: /다음|next/i });
     await expect(next).toBeInViewport();
     const dialogBox = await dialog.boundingBox();
@@ -158,14 +164,14 @@ test('UX10-PLAY-AC04 keeps action rows at the dialog bottom and fields reachable
     expect(
       Math.abs(dialogBox.y + dialogBox.height - (footerBox.y + footerBox.height)),
     ).toBeLessThanOrEqual(2);
-    await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-    await next.click();
     const selectAll = dialog.getByRole('checkbox', { name: /^전체 선택|select all/i });
     await selectAll.check();
     await dialog.getByRole('button', { name: /챕터 없음.*펼치기/ }).click();
     const lastQuestion = dialog.getByRole('checkbox', { name: /1번 · footer-1/ });
     await lastQuestion.uncheck();
     await lastQuestion.check();
+    await next.click();
+    await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
     const start = dialog.getByRole('button', { name: /시작|start/i });
     await expect(start).toBeInViewport();
     const rangeFooter = await start.locator('..').boundingBox();
@@ -194,7 +200,7 @@ test('UX10-PLAY-AC05 groups results and returns to the same run position', async
   const panel = page.getByRole('dialog', { name: /풀이 결과|results/i });
   const group = panel.getByRole('list', { name: /문제별 결과/ });
   await expect(group.getByRole('heading', { name: /장 없음/ })).toBeVisible();
-  await expect(group.getByText(/건너뜀/).first()).toBeVisible();
+  await expect(group.getByRole('cell', { name: /건너뜀/ }).first()).toBeVisible();
   await group.getByRole('button', { name: /2번/ }).click();
   await expect(page).toHaveURL(new RegExp(`practice=${run.id}.*i=2`));
   await expect(page.getByText(/results-2 문제/)).toBeVisible();
@@ -262,7 +268,7 @@ test('UX10-PLAY-AC06 the detail header rename keeps its input and 풀기 off unt
   const practise = dialog.getByRole('button', { name: /^풀기$/ });
   await expect(practise).toBeEnabled();
 
-  await mockUi.rename(dialog).click();
+  await mockUi.chooseDetailAction(dialog, 'rename');
   await expect(practise).toBeDisabled();
   await expectActionsUnderInput(dialog);
 
@@ -331,11 +337,11 @@ test('UX10-PLAY-AC01 selecting shuffle creates a mock instead of a bank run', as
   await createNumberedQuestions(owner, workspace.id, 'mock-route', 2);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+  await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+  await dialog.getByRole('button', { name: /다음|next/i }).click();
   await dialog.getByRole('checkbox', { name: /보기 섞기/ }).check();
   await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-  await dialog.getByRole('button', { name: /다음|next/i }).click();
-  await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
   const request = page.waitForRequest(
     (r) => r.method() === 'POST' && /\/mock-exams$/.test(new URL(r.url()).pathname),
   );

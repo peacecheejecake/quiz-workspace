@@ -41,6 +41,8 @@ from quiz_api.repositories.tables import (
 
 # Characters of the stem fetched for a results preview (as for bank runs).
 STEM_HEAD = 1000
+# Its MCQ options are ordered per run or session, not by the copy (UX12-MOCKSHUFFLE-C03, C04).
+OPTION_SHUFFLE = "OPTION_SHUFFLE"
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,7 @@ class MockRevision:
     is_multi_answer: bool
     explanation: str | None
     rubric: str | None
+    stem_tables: list[Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,10 @@ class MockQuestionTarget:
     exam_deleted: bool
     current_generation_id: uuid.UUID | None
     revision: MockRevision
+
+    @property
+    def shuffles_options(self) -> bool:
+        return self.variation_type == OPTION_SHUFFLE
 
     @property
     def shown(self) -> bool:
@@ -155,6 +162,8 @@ class LiveMockQuestion:
     stem: str
     options: list[dict[str, str]]
     is_multi_answer: bool
+    stem_tables: list[Any] | None = None
+    shuffles_options: bool = False
 
 
 def _revision(row: Any) -> MockRevision:
@@ -172,6 +181,7 @@ def _revision(row: Any) -> MockRevision:
         is_multi_answer=bool(row.rev_is_multi_answer),
         explanation=row.rev_explanation,
         rubric=row.rev_rubric,
+        stem_tables=row.rev_stem_tables,
     )
 
 
@@ -182,7 +192,8 @@ _TARGET = """
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
            r.options as rev_options, r.correct_option_ids as rev_correct_option_ids,
            r.accepted_answers as rev_accepted_answers, r.is_multi_answer as rev_is_multi_answer,
-           r.explanation as rev_explanation, r.rubric as rev_rubric
+           r.explanation as rev_explanation, r.rubric as rev_rubric,
+           r.stem_tables as rev_stem_tables
       from public.mock_exam_questions q
       join public.mock_exams e on e.id = q.mock_exam_id and e.workspace_id = q.workspace_id
       join public.mock_exam_question_revisions r
@@ -206,7 +217,8 @@ _SESSION = """
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
            r.options as rev_options, r.correct_option_ids as rev_correct_option_ids,
            r.accepted_answers as rev_accepted_answers, r.is_multi_answer as rev_is_multi_answer,
-           r.explanation as rev_explanation, r.rubric as rev_rubric
+           r.explanation as rev_explanation, r.rubric as rev_rubric,
+           r.stem_tables as rev_stem_tables
       from public.mock_exam_practice_sessions s
       join public.mock_exam_questions q
         on q.id = s.mock_exam_question_id and q.workspace_id = s.workspace_id
@@ -370,11 +382,33 @@ class MockPracticeRepository:
         row = self._session.execute(
             text(
                 _SESSION + " where s.practice_run_id = :r and s.run_position = :p "
-                "and s.user_id = :u"
+                "and s.user_id = :u and s.superseded_at is null"
             ),
             {"r": run_id, "p": position, "u": user_id},
         ).one_or_none()
         return _session(row) if row is not None else None
+
+    def supersede_run_session(self, session_id: uuid.UUID) -> None:
+        """`다시 풀기`: the position has no live session any more (UX12-RETRYINPLACE)."""
+        self._session.execute(
+            text(
+                "update public.mock_exam_practice_sessions set superseded_at = now() where id = :s"
+            ),
+            {"s": session_id},
+        )
+
+    def run_position_reopened(self, run_id: uuid.UUID, position: int) -> bool:
+        """Whether the position was reopened: its next session draws a new option order."""
+        return bool(
+            self._session.execute(
+                text(
+                    "select exists (select 1 from public.mock_exam_practice_sessions "
+                    "where practice_run_id = :r and run_position = :p "
+                    "and superseded_at is not null)"
+                ),
+                {"r": run_id, "p": position},
+            ).scalar_one()
+        )
 
     def open_session(
         self,
@@ -559,8 +593,8 @@ class MockPracticeRepository:
     ) -> LiveMockQuestion | None:
         row = self._session.execute(
             text(
-                "select q.id, q.question_type, r.stem, r.options, r.is_multi_answer "
-                "from public.mock_exam_questions q "
+                "select q.id, q.question_type, q.variation_type, r.stem, r.options, "
+                "r.is_multi_answer, r.stem_tables from public.mock_exam_questions q "
                 "join public.mock_exam_question_revisions r "
                 "on r.id = q.active_revision_id and r.mock_exam_question_id = q.id "
                 "where q.id = :q and q.workspace_id = :w and q.removed_at is null"
@@ -575,6 +609,8 @@ class MockPracticeRepository:
             stem=row.stem,
             options=list(row.options or []),
             is_multi_answer=bool(row.is_multi_answer),
+            stem_tables=row.stem_tables,
+            shuffles_options=row.variation_type == OPTION_SHUFFLE,
         )
 
     def progress(self, run: RunRecord) -> RunProgress:
@@ -590,7 +626,7 @@ class MockPracticeRepository:
                     left join public.mock_exam_questions q
                       on q.id = s.mock_exam_question_id and q.workspace_id = :w
                      and q.removed_at is null
-                   where s.practice_run_id = :r
+                   where s.practice_run_id = :r and s.superseded_at is null
                 ), m as (select coalesce(max(position), 0) as reached from s)
                 select m.reached,
                        count(s.*) filter (where s.state <> 'open' and s.eligible) as submitted,
@@ -648,6 +684,7 @@ class MockPracticeRepository:
                     select s.state, {_LATEST_RESULT} as result
                       from public.mock_exam_practice_sessions s
                      where s.practice_run_id = :r and s.run_position = page.position
+                       and s.superseded_at is null
                   ) res on q.id is not null
                  order by page.position
                 """  # noqa: S608 - constant SQL fragments only

@@ -57,7 +57,7 @@ class OverviewFilter:
 
     chapter_id: uuid.UUID | None = None
     no_chapter: bool = False
-    question_type: QuestionType | None = None
+    question_types: tuple[QuestionType, ...] = ()
     text: str | None = None
 
 
@@ -143,8 +143,8 @@ def overview_statement(
         conditions.append(chapters.c.id.is_(None))
     elif flt.chapter_id is not None:
         conditions.append(chapters.c.id == flt.chapter_id)
-    if flt.question_type is not None:
-        conditions.append(questions.c.question_type == flt.question_type)
+    if flt.question_types:
+        conditions.append(questions.c.question_type.in_(flt.question_types))
     if flt.text:
         conditions.append(question_revisions.c.stem.ilike(_like_pattern(flt.text), "\\"))
 
@@ -247,6 +247,37 @@ class QuestionOverviewRepository:
             )
             for r in result
         ]
+
+    def chapter_ancestors(
+        self, chapter_ids: Iterable[uuid.UUID]
+    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, str]]]:
+        """chapter id -> (id, title) of its ancestors, top level first, without itself."""
+        ids = list(set(chapter_ids))
+        if not ids:
+            return {}
+        base = select(
+            chapters.c.id.label("start_id"),
+            chapters.c.parent_id,
+            literal(1).label("depth"),
+        ).where(chapters.c.id.in_(ids), chapters.c.parent_id.is_not(None))
+        path = base.cte("chapter_ancestors", recursive=True)
+        parent = chapters.alias("ancestor")
+        path = path.union_all(
+            select(path.c.start_id, parent.c.parent_id, path.c.depth + 1).where(
+                parent.c.id == path.c.parent_id,
+                parent.c.parent_id.is_not(None),
+                path.c.depth < 32,
+            )
+        )
+        rows = self._session.execute(
+            select(path.c.start_id, chapters.c.id, chapters.c.title)
+            .join(chapters, chapters.c.id == path.c.parent_id)
+            .order_by(path.c.start_id, path.c.depth.desc())
+        )
+        out: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {i: [] for i in ids}
+        for r in rows:
+            out[r.start_id].append((r.id, r.title))
+        return out
 
     def chapter_lineage(self, chapter_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
         """chapter id -> titles from its top-level ancestor down to itself (outline path)."""

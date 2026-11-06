@@ -2,8 +2,11 @@
 
 import { Dialog } from 'radix-ui';
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentProps,
@@ -11,6 +14,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useAnimatedHeight } from '../internal/animated-height';
 import { useBackdropClose } from '../internal/backdrop';
 import { cx } from '../internal/cx';
@@ -38,6 +42,33 @@ function controllerOf(id: string | undefined): HTMLElement | null {
     if (el.getAttribute('aria-controls')?.split(/\s+/).includes(id)) return el;
   }
   return null;
+}
+
+interface PanelSlots {
+  readonly pinned: HTMLElement | null;
+  readonly footer: HTMLElement | null;
+}
+
+const PanelSlotsContext = createContext<PanelSlots | null>(null);
+
+function usePanelSlot(slot: keyof PanelSlots, children: ReactNode): ReactNode {
+  const slots = useContext(PanelSlotsContext);
+  if (!slots) return children;
+  const host = slots[slot];
+  return host ? createPortal(children, host) : null;
+}
+
+/**
+ * Shows its children in the panel's fixed area above the scrolling body, from anywhere inside the
+ * panel. Outside a panel they render in place.
+ */
+export function FloatingPanelPinned({ children }: { readonly children: ReactNode }) {
+  return usePanelSlot('pinned', children);
+}
+
+/** `FloatingPanelPinned` for the fixed area below the body: a view's own action row. */
+export function FloatingPanelFooter({ children }: { readonly children: ReactNode }) {
+  return usePanelSlot('footer', children);
 }
 
 export interface PanelSteps {
@@ -254,6 +285,12 @@ export function FloatingSidePanel({
   };
   const layer = useFloatingLayer(isOpen, raiseKey, aboveModals, modal);
   const registry = useDirtyRegistry();
+  const [pinnedHost, setPinnedHost] = useState<HTMLElement | null>(null);
+  const [footerHost, setFooterHost] = useState<HTMLElement | null>(null);
+  const slots = useMemo(
+    () => ({ pinned: pinnedHost, footer: footerHost }),
+    [pinnedHost, footerHost],
+  );
   const swipe = useDragDismiss({
     surface: contentRef,
     rank: layer.rank,
@@ -423,10 +460,14 @@ export function FloatingSidePanel({
                     <IconButton label={closeLabel} icon={<CloseIcon />} />
                   </Dialog.Close>
                 </div>
-                <ScrollRegion className="body" scrollKey={scrollKey}>
-                  {children}
-                </ScrollRegion>
+                <div className="pinned" ref={setPinnedHost} />
+                <PanelSlotsContext.Provider value={slots}>
+                  <ScrollRegion className="body" scrollKey={scrollKey}>
+                    {children}
+                  </ScrollRegion>
+                </PanelSlotsContext.Provider>
                 {footer ? <div className="footer">{footer}</div> : null}
+                <div className="footer" ref={setFooterHost} />
               </DirtyProvider>
             </LayerProvider>
           </Dialog.Content>

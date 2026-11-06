@@ -1,0 +1,41 @@
+/* Question placeholders: the same gaps and row heights as the answer form. */
+
+.question {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.stem {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-relaxed);
+}
+
+.options {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* A one-line option row: 44px touch height. */
+.option {
+  display: block;
+  block-size: 2.75rem;
+}
+
+.answer {
+  display: block;
+  block-size: 7rem;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.row {
+  display: block;
+  block-size: 2.75rem;
+}

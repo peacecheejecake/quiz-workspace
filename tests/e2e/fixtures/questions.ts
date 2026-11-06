@@ -150,9 +150,9 @@
 //   QOV-01    route /workspaces/{id} (the workspace home, UX3c); role=group "문제 heatmap" holding one button per
 //             CONFIRMED question, named by questionDotLabel and carrying data-status; inside it the
 //             marker svg data-testid="question-marker" with data-shape square|star (design-system
-//             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
-//             (toggle button "상태 필터", collapsed by default); no status summary or legend since
-//             UX3c and no question count line since UX4.
+//             §6.1, packages/ui/src/questions); preview role=tooltip; group "상태 필터" in the
+//             필터 popover (UX12-HOMEFILTER, `openStatusFilters`); no status summary or legend
+//             since UX3c and no question count line since UX4.
 //   QPLAY-01  modal dialog named by the question title (`12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
@@ -243,9 +243,24 @@ export interface QuestionSource {
   readonly page_end: number | null;
 }
 
+export interface StemTableCells {
+  readonly rows: readonly (readonly string[])[];
+  readonly header_rows: number;
+  readonly spans?:
+    | readonly {
+        readonly row: number;
+        readonly col: number;
+        readonly row_span: number;
+        readonly col_span: number;
+      }[]
+    | null;
+}
+
 export interface QuestionInput {
   readonly question_type: QuestionType;
   readonly stem: string;
+  /** UX12-STEMTABLE: the cells of the stem's pipe blocks. */
+  readonly stem_tables?: readonly (StemTableCells | null)[] | null;
   readonly options?: readonly QuestionOption[];
   readonly correct_option_ids?: readonly string[] | null;
   readonly is_multi_answer?: boolean;
@@ -264,6 +279,7 @@ export interface QuestionRevision {
   readonly id: string;
   readonly version: number;
   readonly stem: string;
+  readonly stem_tables?: readonly (StemTableCells | null)[] | null;
   readonly options: readonly QuestionOption[];
   readonly correct_option_ids: readonly string[] | null;
   readonly accepted_answers: readonly string[] | null;
@@ -857,6 +873,9 @@ export const panelUi = {
   options: (panel: Locator) => panel.getByRole('radio').or(panel.getByRole('checkbox')),
   answerText: (panel: Locator) => panel.getByRole('textbox', { name: /답안|answer/i }),
   submit: (panel: Locator) => panel.getByRole('button', { name: /^(답안 )?제출|^submit/i }),
+  // UX12-SOLVEDOPEN: a solved question opens to be answered; this asks for the earlier result.
+  reveal: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(해설 보기|show explanation)$/i }),
   // The result line is the first status of the panel; 관련 본문 (RELSRC-01) adds its own below it.
   result: (panel: Locator) => panel.getByRole('status').first(),
   selfGradeCorrect: (panel: Locator) =>

@@ -7,7 +7,8 @@
 // Hidden panes stay mounted (`hidden`), so edits, the PDF page and scroll positions survive mode
 // switches; swapping reorders keyed panes, which moves their DOM instead of remounting it.
 // Settings live in this browser only (lib/documents/viewer-settings.ts); nothing here calls the API
-// or touches the address.
+// or touches the address. The chrome is a glass bar over the panes: it hides after 3 seconds without
+// moving them, and comes back from the top edge, a tap on the PDF or keyboard focus (UX12-PDFPREVIEW).
 import { FloatingSidePanel, SplitView } from '@quiz/ui';
 import {
   useCallback,
@@ -181,6 +182,10 @@ const ORIENTATION_OPTIONS: readonly RadioOption<SplitOrientation>[] = [
 const SPLIT_MIN_SIZE = { horizontal: 320, vertical: 200 } as const;
 /** Pointer travel before a pane-header press becomes a drag. */
 const DRAG_SLOP_PX = 4;
+/** A touch that stays this close, this briefly, is a tap on the page rather than a scroll. */
+const TAP_SLOP_PX = 10;
+const TAP_MS = 500;
+const TAP_IGNORED = 'a, button, input, select, textarea, label, [role="separator"]';
 
 interface HeaderDrag {
   readonly pane: PaneId;
@@ -215,6 +220,11 @@ export function DocumentViewerLayout({
     setChromeVisible(true);
     setActivity((n) => n + 1);
   }, []);
+  const chromeShown = chromeVisible || preventAutoHide || alertVisible || chromeFocused;
+  const chromeShownRef = useRef(chromeShown);
+  useEffect(() => {
+    chromeShownRef.current = chromeShown;
+  }, [chromeShown]);
   useEffect(() => {
     if (!preventAutoHide && !alertVisible) return undefined;
     const timer = window.setTimeout(showChrome, 0);
@@ -332,6 +342,46 @@ export function DocumentViewerLayout({
       toolbarHost.removeEventListener('pointermove', showChrome);
     };
   }, [toolbarHost, showChrome]);
+  // A touch has no hover, so a tap on the PDF toggles the chrome. Whether it was shown is read at the
+  // press: the top-edge rule below may show it before the release.
+  useEffect(() => {
+    if (!host) return undefined;
+    let press: { id: number; x: number; y: number; at: number; shown: boolean } | null = null;
+    const onDown = (event: globalThis.PointerEvent) => {
+      press = null;
+      if (event.pointerType === 'mouse' || event.isPrimary === false) return;
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('[data-pane="pdf"]')) return;
+      if (target.closest(TAP_IGNORED)) return;
+      press = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        at: Date.now(),
+        shown: chromeShownRef.current,
+      };
+    };
+    const onUp = (event: globalThis.PointerEvent) => {
+      const down = press;
+      press = null;
+      if (!down || event.pointerId !== down.id || Date.now() - down.at > TAP_MS) return;
+      const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+      if (moved > TAP_SLOP_PX) return;
+      if (down.shown) setChromeVisible(false);
+      else showChrome();
+    };
+    const onCancel = () => {
+      press = null;
+    };
+    host.addEventListener('pointerdown', onDown, true);
+    host.addEventListener('pointerup', onUp, true);
+    host.addEventListener('pointercancel', onCancel, true);
+    return () => {
+      host.removeEventListener('pointerdown', onDown, true);
+      host.removeEventListener('pointerup', onUp, true);
+      host.removeEventListener('pointercancel', onCancel, true);
+    };
+  }, [host, showChrome]);
   useEffect(() => {
     const onPointer = (event: globalThis.PointerEvent) => {
       if (event.clientY <= 48) showChrome();
@@ -561,10 +611,8 @@ export function DocumentViewerLayout({
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         ref={chromeRef}
-        className={styles.chrome}
-        data-hidden={
-          !(chromeVisible || preventAutoHide || alertVisible || chromeFocused) || undefined
-        }
+        className={`${styles.chrome} glass-surface`}
+        data-hidden={!chromeShown || undefined}
         onPointerDown={showChrome}
         onPointerMove={showChrome}
         onKeyDown={showChrome}
@@ -632,7 +680,7 @@ export function DocumentViewerLayout({
             </>
           ) : null}
         </div>
-        <div ref={setToolbarHost} hidden={!viewer.pdfVisible} />
+        <div ref={setToolbarHost} className={styles.toolbarHost} hidden={!viewer.pdfVisible} />
       </div>
       <div
         ref={setHost}

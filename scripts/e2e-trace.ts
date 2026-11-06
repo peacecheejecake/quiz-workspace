@@ -116,6 +116,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX10-HOME.0': ['UX10-HOME'],
   'UX11-RETURN': ['UX11-RETURN'],
   'UX12-PLAY.0': ['UX12-PLAY'],
+  // UX12 MOCKUX-2: the home 풀기 opens the list, the detail's 더보기 menu, 문제 풀기 → 모의고사.
+  'UX12-MOCKNAV.0': ['UX12-MOCKNAV'],
   'UX12-HOME.0': ['UX12-HOME'],
   // UX12 HOME-4: the sticky 문서 N · 풀기 line and the single 문서 N menu (D-7).
   'UX12-HEADER.0': ['UX12-HEADER'],
@@ -142,8 +144,18 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
   // UX12 ASK: the conversation list's FAB, the floating composer and the answer labels (D-10).
   'UX12-ASK.0': ['UX12-ASK'],
+  // UX12 ASK-3: tables and the rest of Markdown in an AI answer, safe while streaming.
+  'UX12-ASKMD.0': ['UX12-ASKMD'],
   // UX12 VIEW-1: sequence arrows, footer 다시 풀기·초기화, panel body back to the top.
   'UX12-VIEW.0': ['UX12-VIEW'],
+  // UX12 MOCKUX-3: the run's footer matches the Heatmap path; `건너뛰기` is gone.
+  'UX12-RUNBAR.0': ['UX12-RUNBAR'],
+  // UX12 MOCKUX-11: every solved question opens to be answered; 해설 보기 asks for the result.
+  'UX12-SOLVEDOPEN.0': ['UX12-SOLVEDOPEN'],
+  // UX12 MOCKUX-5: a question marked 다시 풀기 opens to be answered, without its last result.
+  'UX12-RETRYOPEN.0': ['UX12-RETRYOPEN'],
+  // UX12 MOCKUX-6: a mock exam run's 질문하기 appears once the position is graded.
+  'UX12-RUNASK.0': ['UX12-RUNASK'],
   // UX12 VIEW-3: drag handle for the editor's options, multi-line option input.
   'UX12-QEDIT.0': ['UX12-QEDIT'],
   // UX12 VIEW-6: pending mark on page links; DOC-02 keeps its 404 (no loading boundary).
@@ -160,8 +172,11 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-OPEN.0': ['UX12-OPEN'],
   // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
   'UX12-GLASS.0': ['UX12-GLASS'],
+  'UX12-GLASS2.0': ['UX12-GLASSBTN'],
   // UX12 DOCS-2: source page links open the 원본 PDF dialog in place (D-13).
   'UX12-SOURCE.0': ['UX12-SOURCE'],
+  // UX12 DOCS-3, DOCS-4: PDF sources open at the cited place with their neighbours; the PDF header.
+  'UX12-PDFPREVIEW.0': ['UX12-PDFPREVIEW'],
   // UX12 SHELL-3/4/6 (D-5, D-6): theme control, drag auto-copy, the static help page.
   'UX12-SETTINGS.0': ['UX12-SETTINGS', 'UX12-HELP'],
   // UX12 SHELL-5: header, panels and the AI 질문 composer stay in view over the virtual keyboard.
@@ -170,11 +185,39 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SHARE.0': ['UX12-SHARE'],
   // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
   'UX12-PICKER.0': ['UX12-PICKER'],
+  // CHAPTER-8 (2026-11-06): 새 챕터 in the question's dropdown, Workspace chapters without a book.
+  'UX12-CHAPTERADD.0': ['UX12-CHAPTERADD'],
   // UX12 VIEW-7: <제목> passages in stems, each in its own box, with item lines.
   'UX12-PASSAGE.0': ['UX12-PASSAGE'],
+  // UX12 VIEW-8: `- 이름 : 값` items run together on one line get a line each and the item box.
+  'UX12-PASSAGE2.0': ['UX12-PASSAGE2'],
   // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.
   // UX12 EXTRACT-7: question figures from the PDF above the options.
   'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
+  // UX12 EXTRACT-9: structured cells beside the stem's GFM tables, and editing them as tables.
+  'UX12-STEMTABLE.0': ['UX12-STEMTABLE'],
+  // UX12 HOME-6: the status filter in the 필터 popover, 검색·필터 on the sticky line.
+  'UX12-HOMEFILTER.0': ['UX12-HOMEFILTER'],
+  // UX12 MOCKUX-1: the mock exam create and 설정 바꾸기 screens.
+  'UX12-MOCKFORM.0': ['UX12-MOCKFORM'],
+  // UX12 MOCKUX-8: 범위 before 옵션, the name default and one help button for the types.
+  'UX12-MOCKFORM2.0': ['UX12-MOCKFORM2'],
+  // UX12 MOCKUX-9: 보기 섞기 is drawn per run; 보기 섞기 only saves at once, without a job.
+  'UX12-MOCKSHUFFLE.0': ['UX12-MOCKSHUFFLE'],
+  // UX12 MOCKUX-14: the results step's table of numbers and O/X marks.
+  'UX12-RESULTTABLE.0': ['UX12-RESULTTABLE'],
+  // UX12 MOCKUX-7: the viewer's unfinished bank runs in the mock exam list.
+  'UX12-RESUME.0': ['UX12-RESUME'],
+  // UX12 MOCKUX-12: the caller's unfinished run on a saved mock exam's row and detail.
+  'UX12-MOCKRESUME.0': ['UX12-MOCKRESUME'],
+  // UX12 MOCKUX-13: closing an unfinished run asks first.
+  'UX12-RUNCLOSE.0': ['UX12-RUNCLOSE'],
+  // UX12 MOCKUX-15: 다시 풀기 reopens the position in the same panel.
+  'UX12-RETRYINPLACE.0': ['UX12-RETRYINPLACE'],
+  // UX12 HOME-7 + CHAPTER-7: 문서 N counts every PDF; lists in floating layers scroll by touch.
+  'UX12-CHAPTERSCROLL.0': ['UX12-CHAPTERSCROLL'],
+  // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).
+  'CHMAN.0': ['CHMAN-01'],
 };
 
 const LEADING_ID = new RegExp(

@@ -53,13 +53,14 @@ import {
   type ExplanationState,
 } from '../fixtures/ai-explanations.ts';
 import { expectAccessible } from '../fixtures/a11y.ts';
-import { listMockQuestions, type MockQuestion } from '../fixtures/mock-exams.ts';
+import { listMockQuestions, mockUi, type MockQuestion } from '../fixtures/mock-exams.ts';
 import {
   createShuffleMockExam,
   mockAttemptCount,
   openRangePicker,
   questionAttemptCount,
   runUi,
+  confirmRunClose,
 } from '../fixtures/practice-runs.ts';
 import {
   createShareLink,
@@ -711,6 +712,7 @@ test(
       await expect(explUi.create(panel)).toHaveCount(0);
       await panelUi.close(panel).click();
       panel = await openPanel(page, 6);
+      await panelUi.reveal(panel).click();
       await expect(result(panel)).toContainText(RESULT_TEXT.correct);
       await expectDone(explUi.area(panel));
       const session = await submittedSession(s.owner, withoutExpl);
@@ -831,7 +833,7 @@ test(
     ]);
     const q1Calls = explainCalls(q1.id);
 
-    // A: 문제 › 문제 풀기 over both, submit position 1, make its explanation, 다음, 이전.
+    // A: a bank range run over both, submit position 1, make its explanation, 다음, 이전.
     await openHome(page, a, s.workspaceId);
     let run = await openRangePicker(page);
     await runUi.selectAll(run).check();
@@ -858,9 +860,11 @@ test(
 
     await expectDone(area);
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(run).toBeHidden();
     // The same cache from the Heatmap's practice panel.
     const panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     await expect(result(panel)).toContainText(RESULT_TEXT.correct);
     await expectDone(explUi.area(panel));
     const viaPanel = await getExplanation(a, bank(q1.id), {
@@ -928,14 +932,16 @@ test(
     const other = await contextFor(browser, b);
     try {
       const p = other.page;
-      const startMock = async (): Promise<Locator> => {
+      const startMock = async (unfinished = false): Promise<Locator> => {
         await p.goto(homePath(s.workspaceId, 'panel=mock-exams'));
-        await p
-          .getByRole('dialog', { name: /^(모의고사|mock exams?)$/i })
-          .getByRole('listitem')
-          .filter({ hasText: name })
-          .getByRole('button', { name: /^(풀기|practi[sc]e|start)$/i })
-          .click();
+        const row = mockUi.row(mockUi.dialog(p), name);
+        // With an unfinished run the row leads with 이어 풀기 and 풀기 is in its menu.
+        if (unfinished) {
+          await mockUi.rowMenu(row, name).click();
+          await mockUi.menuAction(p, /^(풀기|practi[cs]e)$/i).click();
+        } else {
+          await mockUi.practise(row).click();
+        }
         await runUi.start(runUi.panel(p)).click();
         const r = runUi.panel(p);
         await expect(runUi.mockTitle(r, 1)).toBeVisible();
@@ -948,14 +954,13 @@ test(
 
       await expectDone(explUi.area(r));
       expect(explainCalls(mq.id)).toBe(1);
-      await p.keyboard.press('Escape');
       await s.owner.api.ok(
         'PATCH',
         `/mock-exam-questions/${mq.id}`,
         { base_revision_id: mq.revision.id, explanation: `${label} 고친 모의고사 해설` },
         [200],
       );
-      r = await startMock();
+      r = await startMock(true);
       await expect(explUi.create(explUi.area(r))).toBeVisible();
       await expect(explUi.show(explUi.area(r))).toHaveCount(0);
     } finally {

@@ -39,7 +39,6 @@ from book_core.mock_exam.prompts import (
     source_block,
     source_tag,
 )
-from book_core.mock_exam.shuffle import shuffled_options
 from book_core.mock_exam.validation import (
     ItemOutcome,
     accept_for_mock_exam,
@@ -80,7 +79,6 @@ __all__ = [
     "halves",
     "make_plan",
     "pack_batches",
-    "shuffled_options",
     "source_block",
     "source_tag",
     "uses_llm",

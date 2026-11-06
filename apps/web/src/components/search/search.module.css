@@ -166,8 +166,10 @@
   cursor: pointer;
 }
 
-.hitTitle:hover {
-  text-decoration-color: currentcolor;
+@media (hover: hover) {
+  .hitTitle:hover {
+    text-decoration-color: currentcolor;
+  }
 }
 
 @media (hover: hover) {

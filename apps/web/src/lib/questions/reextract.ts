@@ -7,6 +7,7 @@ export type DraftPrevious = Schemas['DraftPrevious'];
 const CHANGED_LABELS: Readonly<Record<DraftPrevious['changed'][number], string>> = {
   type: '유형',
   stem: '발문',
+  table: '표',
   options: '보기',
   answer: '정답',
 };

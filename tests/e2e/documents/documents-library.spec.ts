@@ -372,7 +372,7 @@ test(
 );
 
 test(
-  'DOC-01-AC06 the 문서 n button opens 문서 관리 with every PDF and its kind badge; n counts PDFs with body text',
+  'DOC-01-AC06 the 문서 n button opens 문서 관리 with every PDF and its kind badge; n counts every PDF',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     test.setTimeout(3 * JOB_TIMEOUT_MS + 60_000);
@@ -388,7 +388,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
-    await expect(button).toHaveText(/문서\s*2$/); // 교재 + 교재+문제; not the 문제지
+    await expect(button).toHaveText(/문서\s*3$/); // every row of 문서 관리 (UX12-CHAPTERSCROLL-AC01)
     await homeUi.openDocuments(page);
     await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
     const dialog = homeUi.documentsDialog(page);
@@ -436,7 +436,7 @@ test(
     const confirm = page.getByRole('alertdialog', { name: /삭제|delete/i });
     await confirm.getByRole('button', { name: /^(삭제|delete)$/i }).click();
     await expect(rows).toHaveCount(2);
-    await expect(button).toHaveText(/문서\s*1$/);
+    await expect(button).toHaveText(/문서\s*2$/);
     await expect
       .poll(async () => (await listDocuments(owner, ws.id)).map((d) => d.kind).sort())
       .toEqual(['mixed', 'question_paper']);
@@ -496,7 +496,7 @@ test(
     await expect(docUi.reviewLink(paperRow)).toBeVisible({ timeout: JOB_TIMEOUT_MS });
     await expect(docUi.reviewLink(bookRow)).toHaveCount(0);
     await expect(docUi.extractButton(bookRow)).toHaveCount(0);
-    await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*1$/);
+    await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*2$/);
 
     const docs = await listDocuments(owner, ws.id);
     expect(docs).toHaveLength(2);
@@ -548,7 +548,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
-    await expect(button).toHaveText(/문서\s*1$/);
+    await expect(button).toHaveText(/문서\s*2$/);
     await homeUi.openDocuments(page);
     const paperRow = docUi.item(page, /questions-ko/);
     const bookRow = docUi.item(page, /book-ko/);

@@ -13,7 +13,9 @@ test('UX12-PLAY-AC01 asks for a name only when a variation makes a mock exam', a
   await createNumberedQuestions(owner, workspace.id, 'ux12-play', 2);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+  await rangePickerUi.selectAll(dialog).check();
+  await mockUi.next(dialog).click();
 
   // 변형 없음 = a bank run: nothing stores a name.
   await expect(mockUi.variations(dialog).first()).toBeVisible();
@@ -23,14 +25,14 @@ test('UX12-PLAY-AC01 asks for a name only when a variation makes a mock exam', a
   await mockUi.variation(dialog, 'PARAPHRASE').check();
   await expect(mockUi.title(dialog)).toBeVisible();
   await mockUi.title(dialog).fill('');
-  await mockUi.next(dialog).click();
+  await mockUi.make(dialog).click();
   await expect(dialog.getByText(/이름을 입력하세요/)).toBeVisible();
   await expect(mockUi.title(dialog)).toBeFocused();
 
-  // Back to a bank run: the empty name no longer blocks 다음.
+  // Back to a bank run: the empty name no longer blocks 시작.
   await mockUi.variation(dialog, 'PARAPHRASE').uncheck();
   await expect(mockUi.title(dialog)).toHaveCount(0);
   await expect(dialog.getByText(/이름을 입력하세요/)).toHaveCount(0);
-  await mockUi.next(dialog).click();
-  await expect(rangePickerUi.selectAll(dialog)).toBeVisible();
+  await dialog.getByRole('button', { name: /^(시작|start)$/i }).click();
+  await expect(page).toHaveURL(/practice=/);
 });

@@ -6,7 +6,7 @@
 //   - 만들기 that answers after the user left the form never navigates; its idempotency key is
 //     kept for retries of the same opening, retired by its own success, fresh for a new opening.
 import './dom-setup';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -65,6 +65,7 @@ describe('mock run session routing', () => {
           source: 'mock',
           mock_exam_id: EXAM,
           random_order: false,
+          shuffle_options: false,
           seed: 1,
           total: 1,
           answered: 1,
@@ -99,6 +100,22 @@ describe('mock run session routing', () => {
     expect(calls.some((u) => u.endsWith(`/mock-practice-sessions/${SESSION}/self-grade`))).toBe(
       true,
     );
+  });
+
+  it('QVIEW-01-C11 the home client passes 보기 섞기 on to a bank run', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return json({ id: RUN, workspace_id: WS, source: 'bank', mock_exam_id: null }, 201);
+      }),
+    );
+    const created = await homeRunClient(WS, null).create({ all: true }, true, 'key', true);
+    expect(created.ok).toBe(true);
+    expect(bodies).toEqual([
+      expect.objectContaining({ random_order: true, shuffle_options: true }),
+    ]);
   });
 });
 
@@ -164,7 +181,9 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
         onSubmit={onSubmit}
       />,
     );
-    await user.click(screen.getByRole('button', { name: '다음' }));
+    const next = screen.getByRole('button', { name: '다음' });
+    await waitFor(() => expect(next).toBeEnabled());
+    await user.click(next);
     const remake = screen.getByRole('button', { name: '다시 만들기' });
     await waitFor(() => expect(remake).toBeEnabled());
     await user.click(remake);
@@ -194,10 +213,208 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
         onSubmit={vi.fn()}
       />,
     );
+    const next = screen.getByRole('button', { name: '다음' });
+    await waitFor(() => expect(next).toBeEnabled());
+    await userEvent.setup().click(next);
     expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeChecked();
-    expect(screen.queryByRole('checkbox', { name: /발문/ })).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.queryByRole('checkbox', { name: /문구 변형/ })).toBeNull();
+    expect(screen.queryByText(/이 환경에서는 AI 변형을/)).toBeNull();
     expect(await screen.findByRole('button', { name: '다시 만들기' })).toBeInTheDocument();
+  });
+});
+
+describe('UX12-MOCKFORM2 범위 first', () => {
+  const C2 = '11111111-1111-4111-8111-000000000002';
+  function twoChapters() {
+    const base = overview();
+    return {
+      ...base,
+      chapters: [
+        ...base.chapters,
+        { id: C2, title: '2장 정수 처리', number: 2, question_count: 1, document_id: null },
+      ],
+      items: base.items.map((item, i) => (i === 2 ? { ...item, chapter_id: C2 } : item)),
+    };
+  }
+  function create(onSubmit = vi.fn()) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(twoChapters())),
+    );
+    render(
+      <MockExamForm
+        workspaceId={WS}
+        mode="create"
+        initial={{
+          title: '모의고사 1',
+          types: [],
+          count: '20',
+          wholeRange: false,
+          difficulty: null,
+        }}
+        llmAvailable
+        busy={false}
+        error={null}
+        onSubmit={onSubmit}
+        onBankSubmit={vi.fn()}
+      />,
+    );
+    return { user: userEvent.setup(), onSubmit };
+  }
+  const chapter = (name: RegExp) => screen.findByRole('checkbox', { name });
+
+  it('AC01 starts on 범위: 다음 waits for a selection and the last step holds the action', async () => {
+    const { user } = create();
+    await chapter(/^1장 물의 순환/);
+    const next = screen.getByRole('button', { name: '다음' });
+    expect(next).toBeDisabled();
+    expect(next).toHaveAccessibleDescription('출제 범위를 고르세요');
+    expect(screen.queryByRole('checkbox', { name: /보기 섞기/ })).toBeNull();
+    expect(screen.queryByText(/문항을 만듭니다/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(만들기|시작)$/ })).toBeNull();
+
+    await user.click(await chapter(/^1장 물의 순환/));
+    expect(screen.getByText('선택 2문제')).toBeInTheDocument();
+    await user.click(next);
+
+    expect(screen.getByRole('heading', { name: '옵션' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '시작' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '다음' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '이전' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: /문구 변형/ }));
+    expect(screen.getByRole('button', { name: '만들기' })).toBeInTheDocument();
+    expect(screen.getByText(/AI 서비스로 전송됩니다/)).toBeInTheDocument();
+    expect(screen.getByText('선택 2문제 중 2문항을 만듭니다')).toBeInTheDocument();
+  });
+
+  it('AC02 names the exam after the chapters until the name is edited', async () => {
+    const { user } = create();
+    await user.click(await chapter(/^1장 물의 순환/));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await user.click(screen.getByRole('checkbox', { name: /문구 변형/ }));
+    expect(screen.getByRole('textbox', { name: /이름/ })).toHaveValue('1장 물의 순환');
+
+    // Not edited: the name follows a changed range.
+    const back = () => screen.getByRole('button', { name: '범위 단계로 돌아가기' });
+    await user.click(back());
+    await user.click(await chapter(/^2장 정수 처리/));
+    await user.click(await chapter(/^1장 물의 순환/));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByRole('textbox', { name: /이름/ })).toHaveValue('2장 정수 처리');
+
+    // Edited: never again, even with the range changed.
+    await user.type(screen.getByRole('textbox', { name: /이름/ }), ' 복습');
+    await user.click(back());
+    await user.click(await chapter(/^1장 물의 순환/));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByRole('textbox', { name: /이름/ })).toHaveValue('2장 정수 처리 복습');
+  });
+
+  it('AC02 keeps the default name for 전체 선택 and the saved name in 설정 바꾸기', async () => {
+    const { user } = create();
+    await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await user.click(screen.getByRole('checkbox', { name: /문구 변형/ }));
+    expect(screen.getByRole('textbox', { name: /이름/ })).toHaveValue('모의고사 1');
+    cleanup();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json(twoChapters())),
+    );
+    render(
+      <MockExamForm
+        workspaceId={WS}
+        mode="settings"
+        initial={{
+          title: '중간 점검',
+          types: ['PARAPHRASE'],
+          count: '2',
+          wholeRange: false,
+          difficulty: null,
+        }}
+        initialRange={{
+          all: false,
+          chapter_ids: [C1],
+          question_ids: [],
+          excluded_question_ids: [],
+        }}
+        llmAvailable
+        busy={false}
+        error={null}
+        onSubmit={vi.fn()}
+      />,
+    );
+    const next = screen.getByRole('button', { name: '다음' });
+    await waitFor(() => expect(next).toBeEnabled());
+    await user.click(next);
+    expect(screen.getByRole('textbox', { name: /이름/ })).toHaveValue('중간 점검');
+    expect(screen.getByRole('spinbutton', { name: /문항 수/ })).toHaveValue(2);
+  });
+
+  it('AC03 drops the three notes', async () => {
+    const { user } = create();
+    await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await user.click(screen.getByRole('checkbox', { name: /보기 섞기/ }));
+    expect(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' })).toBeInTheDocument();
+    expect(screen.queryByText(/선택 범위까지 풀 수 있습니다/)).toBeNull();
+    expect(screen.queryByText(/난이도는 원본과 같습니다/)).toBeNull();
+    expect(screen.queryByText(/선택한 범위의 문제를 모두 사용합니다/)).toBeNull();
+  });
+
+  it('AC04 has one help button whose Popover opens by press and gathers every type', async () => {
+    const { user } = create();
+    await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByRole('group', { name: '변형 유형' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: / 설명$/ })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: '변형 유형 설명' }));
+    const help = await screen.findByRole('dialog', { name: '변형 유형 설명' });
+    expect(help).toHaveTextContent('보기 순서만 섞습니다');
+    expect(help).toHaveTextContent('문제 문구를 바꿉니다');
+    expect(help).toHaveTextContent("'옳은 것'을 묻도록 뒤집습니다");
+    expect(help).toHaveTextContent('비슷한 개념을 묻는 문제를 만듭니다');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('button', { name: '변형 유형 설명' })).toHaveFocus();
+  });
+
+  it('AC06 checks the options at the last action, Enter included', async () => {
+    const { user, onSubmit } = create();
+    await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await user.click(screen.getByRole('checkbox', { name: /문구 변형/ }));
+    const name = screen.getByRole('textbox', { name: /이름/ });
+    await user.clear(name);
+    await user.click(screen.getByRole('button', { name: '만들기' }));
+    expect(screen.getByText('이름을 입력하세요.')).toBeInTheDocument();
+    expect(name).toHaveFocus();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.type(name, '점검{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0]?.[0].title).toBe('점검');
+    expect(onSubmit.mock.calls[0]?.[0].config.question_count).toBe(3);
+  });
+
+  it('AC06 starts 문항 수 at the selection and never overwrites a typed one', async () => {
+    const { user } = create();
+    await user.click(await chapter(/^1장 물의 순환/));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    const count = () => screen.getByRole('spinbutton', { name: /문항 수/ });
+    expect(count()).toHaveValue(2);
+    expect(screen.getByRole('button', { name: '시작' })).toBeEnabled();
+
+    await user.clear(count());
+    await user.type(count(), '5');
+    const start = screen.getByRole('button', { name: '시작' });
+    expect(start).toBeDisabled();
+    expect(start).toHaveAccessibleDescription('선택한 범위보다 문항 수가 많습니다.');
+    await user.click(screen.getByRole('button', { name: '범위 단계로 돌아가기' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(count()).toHaveValue(5);
   });
 });
 
@@ -240,6 +457,8 @@ describe('만들기 after leaving the form', () => {
       questions: async () => ({ ok: true, data: [] }),
       editQuestion: vi.fn(),
       removeQuestion: vi.fn(),
+      unfinishedRuns: async () => ({ ok: true, data: [] }),
+      dismissRun: vi.fn(),
     };
     const onViewChange = vi.fn();
     const props = {
@@ -251,15 +470,16 @@ describe('만들기 after leaving the form', () => {
       onViewChange,
       onPractise: () => undefined,
       onBankStarted: () => undefined,
+      onResume: () => undefined,
       api,
     };
     const user = userEvent.setup();
     const { rerender } = render(<MockExamsPanel {...props} view={{ view: 'create' }} />);
     async function make() {
-      await user.click(await screen.findByRole('checkbox', { name: /보기 섞기/ }));
-      await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
-      await user.click(await screen.findByRole('button', { name: '다음' }));
       await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+      await user.click(screen.getByRole('button', { name: '다음' }));
+      await user.click(screen.getByRole('checkbox', { name: /보기 섞기/ }));
+      await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
       await user.click(screen.getByRole('button', { name: '만들기' }));
     }
 
@@ -288,6 +508,83 @@ describe('만들기 after leaving the form', () => {
   });
 });
 
+describe('MOCK-01-C12 a round no worker took yet', () => {
+  function round(status: 'queued' | 'running') {
+    return {
+      ...exam(EXAM),
+      latest_generation: {
+        id: EXAM,
+        version: 1,
+        status,
+        job_id: null,
+        requested_count: 4,
+        created_count: 0,
+        skipped_count: 0,
+        error_code: null,
+        progress: { done: 0, total: 4 },
+        seed: 1,
+        created_at: '2026-11-02T00:00:00Z',
+        finished_at: null,
+      },
+    } satisfies MockExam;
+  }
+
+  function stubApi(reads: () => MockExam): MockExamApi {
+    return {
+      list: async () => ({ ok: true, data: { llm_available: false, items: [reads()] } }),
+      get: async () => ({ ok: true, data: reads() }),
+      create: vi.fn(),
+      regenerate: vi.fn(),
+      rename: vi.fn(),
+      remove: vi.fn(),
+      questions: async () => ({ ok: true, data: [] }),
+      editQuestion: vi.fn(),
+      removeQuestion: vi.fn(),
+      unfinishedRuns: async () => ({ ok: true, data: [] }),
+      dismissRun: vi.fn(),
+    };
+  }
+
+  const props = {
+    open: true,
+    onOpenChange: () => undefined,
+    container: null,
+    workspaceId: WS,
+    canEdit: true,
+    onViewChange: () => undefined,
+    onPractise: () => undefined,
+    onBankStarted: () => undefined,
+    onResume: () => undefined,
+  };
+
+  it('says 대기 중 with the reason in the list and keeps reading until a worker takes it', async () => {
+    let shown = round('queued');
+    render(<MockExamsPanel {...props} api={stubApi(() => shown)} view={{ view: 'list' }} />);
+
+    expect(await screen.findByText('대기 중')).toBeVisible();
+    expect(screen.getByText(/앞선 작업을 기다리고 있습니다/)).toBeVisible();
+    expect(screen.getByRole('progressbar', { name: '문제 생성 진행률' })).toBeVisible();
+
+    shown = round('running');
+    expect(await screen.findByText('만드는 중', undefined, { timeout: 4000 })).toBeVisible();
+    expect(screen.queryByText(/앞선 작업을 기다리고 있습니다/)).toBeNull();
+  });
+
+  it('says it on the detail view instead of 만드는 중', async () => {
+    render(
+      <MockExamsPanel
+        {...props}
+        api={stubApi(() => round('queued'))}
+        view={{ view: 'detail', mockExamId: EXAM }}
+      />,
+    );
+
+    expect(await screen.findByText('대기 중')).toBeVisible();
+    expect(screen.getByText(/4개 중 0개 · 앞선 작업을 기다리고 있습니다/)).toBeVisible();
+    expect(screen.queryByText(/문제를 만드는 중입니다/)).toBeNull();
+  });
+});
+
 describe('UX10-PLAY-AC01 unified bank mode', () => {
   it('keeps empty types with AI off and starts all selected questions as bank without mock config', async () => {
     vi.stubGlobal(
@@ -309,10 +606,10 @@ describe('UX10-PLAY-AC01 unified bank mode', () => {
         onBankSubmit={onBankSubmit}
       />,
     );
-    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).not.toBeChecked();
     expect(screen.queryByRole('progressbar')).toBeNull();
-    await user.click(screen.getByRole('button', { name: '다음' }));
     await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).not.toBeChecked();
     await user.click(screen.getByRole('button', { name: '시작' }));
     expect(onBankSubmit).toHaveBeenCalledWith(expect.objectContaining({ all: true }), null, false);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -343,7 +640,10 @@ it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation'
       return json(overview());
     }),
   );
-  const api = { list: async () => ({ ok: true, data: { llm_available: false, items: [] } }) };
+  const api = {
+    list: async () => ({ ok: true, data: { llm_available: false, items: [] } }),
+    unfinishedRuns: async () => ({ ok: true, data: [] }),
+  };
   const onBankStarted = vi.fn();
   const user = userEvent.setup();
   render(
@@ -357,12 +657,13 @@ it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation'
       onViewChange={() => undefined}
       onPractise={() => undefined}
       onBankStarted={onBankStarted}
+      onResume={() => undefined}
       api={api as never}
     />,
   );
-  await user.click(await screen.findByRole('checkbox', { name: '선택 범위의 모든 문항' }));
-  await user.click(screen.getByRole('button', { name: '다음' }));
   await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+  await user.click(screen.getByRole('button', { name: '다음' }));
+  await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
   await user.click(screen.getByRole('button', { name: '시작' }));
   await waitFor(() => expect(onBankStarted).toHaveBeenCalledWith(RUN));
 });

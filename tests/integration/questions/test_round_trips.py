@@ -7,6 +7,10 @@ local stack through a counting TCP proxy: a round trip is a burst of client byte
 the server last answered (BEGIN, each statement, COMMIT/ROLLBACK and pings all count; libpq
 tracing would be exact but is Linux-only). Budgets are upper bounds: lower is fine, higher fails.
 
+psycopg's auto-prepare is off here. It spends one extra round trip the fifth time a connection
+runs a statement, once per connection and statement, so a count with it on depends on what ran
+earlier in this module instead of on the path measured.
+
 Fixtures come from conftest.py (`seed`, `stack`); users and workspaces are per test.
 """
 
@@ -27,6 +31,7 @@ import pytest
 from fastapi.testclient import TestClient
 from quiz_api.main import create_app
 from quiz_api.settings import Settings
+from sqlalchemy import Engine, event
 
 pytestmark = pytest.mark.infra
 
@@ -92,6 +97,10 @@ class CountingProxy:
         self._listener.close()
 
 
+def _no_auto_prepare(dbapi_connection: Any, _record: Any) -> None:
+    dbapi_connection.prepare_threshold = None
+
+
 @pytest.fixture(scope="module")
 def measured(stack: Any) -> Iterator[tuple[TestClient, CountingProxy]]:
     db_url = os.environ.get(
@@ -108,10 +117,12 @@ def measured(stack: Any) -> Iterator[tuple[TestClient, CountingProxy]]:
         SUPABASE_JWT_ISSUER=issuer,
         SUPABASE_JWKS_URL=f"{issuer}/.well-known/jwks.json",
     )
+    event.listen(Engine, "connect", _no_auto_prepare)
     try:
         with TestClient(create_app(settings, readiness_checkers=[])) as client:
             yield client, proxy
     finally:
+        event.remove(Engine, "connect", _no_auto_prepare)
         proxy.close()
 
 
@@ -179,15 +190,18 @@ def test_ux12_open_ac07_opening_stays_within_its_budget_and_reports_timing(
     meter.trips(
         "POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["opt-1"]}
     )
-    result, shown = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
+    solved, clean = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
+    assert clean["result"] is None  # UX12-SOLVEDOPEN: a solved question opens like a new one
+    revealed, shown = meter.trips("POST", f"/questions/{q['id']}/practice-reveal", {})
     assert shown["result"]["id"] == session["id"]
 
     # Before UX12-OPEN one opening took a practice-recent (9) and a practice-sessions (10).
-    used = {"fresh": fresh, "cached": cached, "result": result}
+    used = {"fresh": fresh, "cached": cached, "solved": solved, "revealed": revealed}
     assert used == {
         "fresh": min(fresh, 10),
         "cached": min(cached, 8),
-        "result": min(result, 7),
+        "solved": min(solved, 10),
+        "revealed": min(revealed, 10),
     }, used
 
     timing = http.post(

@@ -100,8 +100,8 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 - **점 1개 = `CONFIRMED` 문제 1개**. `DRAFT`, 삭제됨, 숨김 처리한 문제는 점이 없다.
 - 기본 정렬: 챕터의 `sort_order`, 문제 번호/등록 순서. 필터를 바꿔도 같은 문제의 기본 위치를 불필요하게 흔들지 않는다.
 - 챕터별 제목과 문제 수를 표시하고, 각 챕터를 독립된 정사각형 그리드로 묶는다. GitHub 잔디 형태와 유사하지만 **날짜 축이 아니라 문제 순서 기반**이다.
-- 기본 marker는 둥근 모서리 정사각형(데스크톱 `21x21px`, touch `18x18px`; viewBox 24 중 18), radius는 viewBox `4.5`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 같은 SVG box(셀 크기)를 쓴다; 두 모양 모두 상태 색상을 적용한다.
-- 각 marker를 중심 정렬한 클릭 영역 `28x28px`(UX12-HOME-1 2026-11-06 사용자 요청, 이전 `24x24px`), 그리드 셀 간격 `0`(mobile touch는 24px 셀: UX9-STROKE 2026-11-02 사용자 요청, 이전 최소 32px). 이웃 marker 사이 보이는 간격은 marker 폭의 1/3 이하(`7px`, touch `6px`, UX5-UI 2026-10-23). **hover/focus-visible** 시 marker만 `scale(1.3)`(토큰으로 관리, UX12 D-12), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
+- 기본 marker는 둥근 모서리 정사각형(모든 화면 `28x28px`, UX12 DESIGN-6; viewBox 24 중 18을 셀 크기로 그린다), radius는 viewBox `4.5`. 즐겨찾기는 **모서리가 부드러운 5각 star silhouette(SVG `stroke-linejoin=round`)**로 교체한다. favorite도 같은 SVG box(셀 크기)를 쓴다; 두 모양 모두 상태 색상을 적용한다.
+- 각 marker를 중심 정렬한 클릭 영역 `28x28px`(mobile touch도 같다, UX12 DESIGN-6 2026-11-06 사용자 요청, 이전 `24x24px`), 그리드 셀 간격 `7px`. 이웃 marker 사이 보이는 간격은 marker 폭의 1/3 이하(UX5-UI 2026-10-23). **hover/focus-visible** 시 marker만 `scale(1.5)`(토큰으로 관리, UX12 DESIGN-6), 정렬·셀 크기는 그대로 두어 레이아웃이 움직이지 않는다. `prefers-reduced-motion`에서는 애니메이션을 비활성화한다.
 - viewport 폭에 따라 열 수 자동 변경. 챕터별 줄바꿈; 매우 많은 문제(예: 2,000개 이상)에서는 windowing/virtualization 검토.
 - 현재 필터에 포함된 문제 수, 상태 필터(색 견본 + 텍스트, 기본 접힘), 즐겨찾기·다시 풀기 필터 제공. 상태 범례와 상태별 집계는 UX3c(2026-10-20, 사용자 결정)로 삭제했다 — 펼친 상태 필터가 범례 역할을 한다.
 
@@ -118,8 +118,8 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 
 ## 4. 문제 풀이 및 채점 정책
 
-1. Heatmap dot click → `POST /questions/{id}/practice-open` → 서버는 최신 결과를 확인하고, 없으면 정답/해설이 없는 문제 데이터를 반환(UX12-OPEN).
-2. 객관식 보기는 기본적으로 원본 revision 순서다. 명시적으로 섞기만 선택하면 `shuffle_seed`로 섞고, 표시 순서 목록을 `practice_session`/`attempt`에 저장한다(UX10-QVIEW-AC01).
+1. Heatmap dot click → `POST /questions/{id}/practice-open` → 서버는 정답/해설이 없는 문제 데이터를 반환한다(UX12-OPEN). 이미 푼 문제도 같고, 이전 결과는 `해설 보기`(`POST /questions/{id}/practice-reveal`)로 받으며 그때 열린 session은 닫힌다. 가장 최근 제출이 채점 대기이면 그 결과를 준다([UX12-SOLVEDOPEN](screens/ux12-solved-open.md)).
+2. 객관식 보기는 기본적으로 원본 revision 순서다. 명시적으로 섞기만 선택하면 `shuffle_seed`로 섞고, 표시 순서 목록을 `practice_session`/`attempt`에 저장한다(UX10-QVIEW-AC01). 모의고사의 `보기 섞기` 문제는 항상 섞는다(UX12-MOCKSHUFFLE-C03, C04).
 3. 답 제출 시 server-side correct option IDs 기준 채점. 선택지 위치(A/B/C)가 아니라 변하지 않는 option ID로 비교한다.
 4. 객관식 단일·복수 선택 지원. 단답식은 등록된 허용 답안과 정규화 규칙으로 자동 채점 가능한 경우에만 채점.
 5. 서술형과 자동 채점 불가능한 단답식은 `PENDING`을 반환한 뒤 사용자의 자기평가(`correct`/`incorrect`) 또는 검토자의 채점을 받는다. 향후 AI 자동 채점은 별도 opt-in 기능으로 확장.
@@ -133,7 +133,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
     - **보기와의 구분:** 보기 기호인 `①`~`⑳`·`❶`~`❿`·`➀`~`➓`는 제시 항목 기호로 쓰지 않는다(그런 줄은 보기 또는 본문 그대로 둔다). 아라비아 숫자 계열은 괄호형 `(1)`·`⑴`·`1)`만이며 `1.`은 쓰지 않는다(보기 번호 `1.`과 헷갈림). 보기는 지금처럼 문제 내용 밖의 별도 목록(`보기`, `1.` 번호)이고, 제시 항목은 그 위의 박스 안에 인쇄된 기호로 보여 둘이 섞이지 않는다.
     - **본문 속 언급은 항목이 아니다:** 기호 앞은 줄 시작 또는 공백, 기호 뒤는 공백(또는 줄바꿈)이고 그 뒤에 내용이 있어야 한다. 그래서 "(가)와 (나)에 들어갈 말", "빈칸 (가)에" 같은 문장 속 언급은 나누지 않는다. 첫 항목 앞의 질문 문장이 있으면 그 문장은 `?`·`.`·`:`·`)`·`」`·`>`(전각 `？`·`：`·`）` 포함) 또는 빈 답 괄호(`( )`·`（ ）`)로 끝나야 한다(문장 한가운데에서 시작하는 목록은 나누지 않음).
     - **범위:** 묶음은 첫 항목부터 문단 나눔(빈 줄) 또는 문제 내용 끝까지이며, 마지막 항목 뒤에 빈 줄로 나뉜 문단(예: "위에서 옳은 것을 고르면?")은 박스 아래 문단으로 남는다. 묶음 앞 질문 문장 끝의 빈 답 괄호는 §4 10과 같이 지운다(박스 앞이 그 문장의 끝이므로). 항목 묶음이 없는 문제 내용은 지금과 같다.
-    - **발문의 표 (UX12-EXTRACT-3 2026-11-06, [QTABLE-01](screens/question-tables.md)):** 발문 안 GFM pipe 표 묶음은 같은 자리에 표로 보인다(`StemBlocks`·`StemText`, 좁은 화면은 표 영역 안 가로 스크롤). 제시 항목 판정은 표 묶음 사이의 글자에만 적용하고 칸 안의 기호는 항목이 아니다. 표 앞 문장 끝의 빈 답 괄호는 §4 10처럼 지운다. 형식이 어긋난 표는 글자로 보인다. 보기 전부가 ` | `로 나뉘어 같은 칸 수(2 이상)면 보기 행 안에서 열을 맞추고, 발문 끝의 표 머리글 행은 보기 위 열 머리글로 옮겨 보인다(`optionGrid`, 표시 전용, 보기 행마다 판정하므로 섞어도 안전).
+    - **발문의 표 (UX12-EXTRACT-3 2026-11-06, [QTABLE-01](screens/question-tables.md)):** 발문 안 GFM pipe 표 묶음은 같은 자리에 표로 보인다(`StemBlocks`·`StemText`, 좁은 화면은 표 영역 안 가로 스크롤). 구조화 셀 `stem_tables`가 맞물리는 묶음은 병합 칸으로 보이고, 없거나 어긋나면 GFM으로 보인다. 편집에서 표로 고치면 GFM 묶음을 구조화 셀에서 다시 쓰고, 묶음을 글자로 직접 고쳐 어긋나면 그 표는 GFM이 된다([UX12-STEMTABLE](screens/ux12-stemtable.md)). AI, 검색, fingerprint, 중복 판정은 `stem`만 읽는다. 제시 항목 판정은 표 묶음 사이의 글자에만 적용하고 칸 안의 기호는 항목이 아니다. 표 앞 문장 끝의 빈 답 괄호는 §4 10처럼 지운다. 형식이 어긋난 표는 글자로 보인다. 보기 전부가 ` | `로 나뉘어 같은 칸 수(2 이상)면 보기 행 안에서 열을 맞추고, 발문 끝의 표 머리글 행은 보기 위 열 머리글로 옮겨 보인다(`optionGrid`, 표시 전용, 보기 행마다 판정하므로 섞어도 안전).
     - **표시 전용**이다(§4 10과 같음): 저장값·revision·API·fingerprint·검색·편집기 입력값은 바뀌지 않는다. 한 줄 미리보기(Heatmap preview, 목록 행, 각주, 묶음 목록)는 지금처럼 공백을 하나로 접어 보인다. 문제 내용 전체를 보이는 곳 — 풀이 panel·순서 풀이·모의고사(QVIEW-01 `QuestionStem`), 문제 상세 dialog, 가져오기 초안 검토·원본 비교, 모의고사 문제 dialog, 문서 편집기의 문제 카드(DOC-02), 공유 보기 panel — 이 같은 한 순수 함수(`apps/web/src/lib/questions/stem-items.ts`)와 같은 부품을 쓴다. 박스는 semantic token(테두리 `--color-border`, 반경·간격 token, 옅은 표면)만 쓴다.
     - **가져오기(새 추출):** 이 규칙은 줄 모양에만 쓴다 — 어떤 줄이 보기인지 새 문제인지 가르는 추출기의 판단(예: 제시 항목 아래의 `1. (가)` 보기)은 이 규칙보다 넓게 그대로 둔다(줄 모양 규칙에 맞지 않는 항목 목록이어도 보기를 잃지 않음). 추출기는 제시 항목 줄을 공백이 아니라 줄바꿈으로 잇고, 질문 문장과 첫 항목 사이에 빈 줄을 둔다(줄이 넘친 항목의 이어지는 줄은 공백으로 이음). AI 보조 정리 프롬프트(`questions.extract/v3` 이후)도 같은 모양을 요구하며, 원문 대조는 공백·줄바꿈을 무시하므로 바뀌지 않는다. 이미 저장된 문제는 고치지 않는다(위 표시 규칙이 보인다). 세부: [QPLAY-01](screens/questions-practice.md) AC14.
 12. **제시문은 박스로 나누어 보인다 (UX12 VIEW-7 2026-11-06, 사용자 요청):** 시험지는 질문 문장 뒤에 `<제목>`이 붙은 제시문을 둘 수 있고, 가져온 문제는 이것까지 한 줄로 저장되어 있을 수 있다. 화면은 문제 내용 전체를 보이는 곳에서 제목마다 박스(제목으로 이름 붙은 `section`, 인쇄된 대로의 제목 = heading)를 그린다. 질문 문장은 박스 밖 문단이고, §4 11의 제시 항목 목록은 제시문 박스 뒤에 전과 같은 박스로 따로 있다. 세부: [UX12-PASSAGE](screens/ux12-stem-passages.md).
@@ -141,8 +141,9 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
     - **범위:** 제시문은 다음 제목, 제시 항목 목록의 첫 항목, 빈 줄 중 먼저 오는 곳에서 끝난다. 빈 줄 뒤가 바로 제목이면 제시문이 이어진다. 그 뒤의 글은 §4 11대로 읽는다. 제시문 뒤에서는 목록 앞 문장 끝 조건을 묻지 않는다(마지막 항목이 "… 5억원"처럼 끝날 수 있음).
     - **본문 없는 제목은 제시문이 아니다:** `옳은 것은? <보기> (가) … (나) …`는 전과 같이 `<보기>`가 질문 문단 끝에 남고 목록이 박스로 보인다. 앞선 제시문이 있으면 그 제시문은 `<보기>` 앞에서 끝나고 `<보기>`는 뒤의 글로 남는다. 목록 뒤의 제목까지 포함해 어느 제시문이든 본문이 `?`로 끝나면(빈 답 괄호 제외) 질문이 본문에 섞인 것이므로 그 문제는 제시문으로 나누지 않는다.
     - **줄 나눔:** 제시문 안에서 `∙`·`•`·`·`·`ㆍ`는 본문·줄의 시작, 문장 끝이나 `:` 뒤에서 항목을 시작하고, 같은 기호가 공백 뒤에 다시 오면 다음 항목이다. 글자에 붙은 `A·B`, 숫자 사이(`3 ∙ 4`)는 항목이 아니다. `-`는 줄 시작이거나, 앞뒤에 공백이 있고 숫자에 붙지 않으며 문장 끝 뒤이거나, 뒤가 `이름 : 값` 모양이고 같은 항목 안의 다른 `-`와 무리를 이룰 때 항목이다(혼자인 `월요일 - 금요일 : 휴무`는 낱말 범위라 한 줄로 남는다). 앞선 기호 항목이 있으면 그 아래 들여쓴 하위 항목이고, 없으면 제시문의 항목이다. 범위(`~`), 숫자 빼기, 문장 속 하이픈은 나누지 않는다. 첫 항목 앞의 글은 박스 안 문단이다.
+    - **제목 없는 `- 이름 : 값` 나열 (UX12 VIEW-8 2026-11-06, 사용자 보고):** 질문 문장 뒤에 제목 없이 `- 가람 항목 : 값 , 값 - 누리 항목 : 값 , 값`이 이어지면 §4 11의 제시 항목 목록(같은 박스, 기호 `-`)이다. 첫 `- `는 줄 시작이거나 앞이 §4 11의 질문 문장 끝이어야 하고, 항목은 줄 시작이거나 ` - ` 뒤가 `이름 : 값` 모양이며(이름은 30자 이하, 숫자로 시작하거나 끝나지 않음, `:`·`：`), 둘 이상이어야 한다. 항목은 빈 줄이나 글 끝까지다. 그 밖의 ` - `는 항목 글자로 남는다. 모양이 맞지 않으면(`A - B`, `1 - 2`, `2023-01`, 복합어, 문장 속 하이픈 하나, 항목 하나, `월요일 - 금요일 : 휴무`) 전과 같이 문단이다. `<보기>` 같은 제목 뒤에 오면 위 **줄 나눔**대로 그 제시문 박스 안에서 나뉜다. 세부: [UX12-PASSAGE2](screens/ux12-stem-items.md).
     - **표시 전용**이다(§4 11과 같음). 한 줄 미리보기는 지금처럼 공백을 접어 보인다. 표(§4 11, QTABLE-01)가 있으면 표 앞뒤의 글을 각각 이 규칙으로 읽는다.
-    - **가져오기(새 추출):** `break_stem_items`가 같은 규칙으로 제시문 앞뒤에 빈 줄, 제목과 항목마다 줄바꿈을 넣는다. 결과는 다시 넣어도 바뀌지 않고 화면은 같은 모양으로 읽는다. AI 보조 정리 프롬프트(`questions.extract/v5`)도 같은 모양을 요구한다. 공통 사례: `tests/fixtures/stem-passages.json`.
+    - **가져오기(새 추출):** `break_stem_items`가 같은 규칙으로 제시문 앞뒤에 빈 줄, 제목과 항목마다 줄바꿈을 넣는다. 결과는 다시 넣어도 바뀌지 않고 화면은 같은 모양으로 읽는다. PDF에서 항목 기호(`-`·`∙`·`•`·`·`·`ㆍ`)로 시작하는 줄은 줄바꿈을 그대로 둔다(UX12 VIEW-8: 줄을 공백으로 잇던 것을 고침). AI 보조 정리 프롬프트(`questions.extract/v5`)도 같은 모양을 요구한다. 공통 사례: `tests/fixtures/stem-passages.json`.
 
 ## 5. 문제 변형 출제
 
@@ -202,7 +203,7 @@ Confirmed question
 
 읽기 순서(UX12-EXTRACT-2 2026-11-06): Docling 본문 순서는 인쇄 순서와 다를 수 있다(뒤 쪽 블록이 앞에 온다). import, LLM 요청, 분류는 모두 같은 `book_core.extractor.reading_order(blocks)`를 거친 목록을 읽고, 출처 영역도 같은 목록에서 계산한다. 순서: 블록이 시작하는 쪽 → 행(첫 블록과 y0 차이 3pt 이내) 위에서 아래로 → 행 안에서 x0 왼쪽부터. 단순 y 정렬은 한 줄의 칸을 뒤바꿔(보기 라벨과 내용) 쓰지 않는다. 2단 쪽(본문 가운데 양쪽에 폭 60pt 초과 블록이 각각 4개 이상이고 가운데를 가로지르는 블록이 3개 이하)과 bbox 없는 블록이 있는 쪽은 parser 순서를 유지한다. 2×2로 인쇄된 보기는 2단이 아니다. 본문 영역(쪽마다 텍스트 범위의 중앙값; 텍스트 쪽이 4쪽 이상일 때만) 왼쪽·오른쪽·위에 완전히 벗어나고 캡션이 없는 이미지는 여백 장식으로 보고 같은 단계에서 뺀다(정렬만 하면 장식이 앞 문제에 붙어 영역이 다음 쪽까지 늘어난다). 높이 2pt 미만의 문장 부호 한 글자도 인쇄 흔적으로 보고 뺀다(높이가 보통인 `)`는 발문의 일부다). 순서를 고쳐 문제가 가진 텍스트 블록이나 순서가 달라지면 초안에 `reading_order_repaired` 참고 안내를 남긴다(확인 대상이 아니라 `전체 선택`에 남는다). 보기 수가 문서 최빈값과 다르고 그 수가 객관식 10문제 이상 중 10% 미만이면 `option_count_outlier`, 보기 없는 문제 바로 뒤 문제의 보기 번호가 겹치면 두 문제 모두 `options_on_next_question` 경고다. 이미 만든 초안과 문제는 다시 추출하기 전까지 그대로다. `다시 추출`은 새 run과 새 초안을 만들 뿐 등록된 문제를 바꾸지 않는다([UX12-REEXTRACT](screens/ux12-reextract.md)). 문서 뷰어는 초안의 원문 블록을 카드로 바꾸지 않고, 선택한 블록이 초안에 속하면 문제 전체 영역을 표시한다(UX12-EXTRACT-AC01).
 
-표(UX12-EXTRACT-4 2026-11-06, D-11): 문제 안에서 보기가 아닌 표는 `stem`의 인쇄 위치에 GFM pipe 표로 넣는다(앞뒤 빈 줄, 형식은 문서 내보내기 DOC-03과 같은 함수, 구조화 셀은 후속 EXTRACT-9). 보기 뒤에 나온 비보기 표는 버리지 않고 발문 끝에 둔다. 표 칸은 제시 항목 줄 나눔(`break_stem_items`)을 타지 않는다. 표가 든 초안에는 `table_in_stem` 안내가 붙는다. 이 안내는 추출에 대한 참고이므로 `전체 선택`을 막지 않는다. AI 보조 정리 입력에도 같은 표 행이 들어가고, 프롬프트(`questions.extract/v4`)는 pipe 행을 그대로 옮기게 한다. 공백을 뺀 글자가 같아도 표 행이 무너진 AI 발문은 쓰지 않는다. 보기 표는 행 시작 칸의 원문자로 찾는다: 라벨만 있는 칸(`①`), 내용이 붙은 칸(`①xxx`), 한 행의 여러 칸(`① x | ② y`)을 읽는다. 첫 열이 라벨 열이면 그 옆 칸은 라벨을 언급해도(`①, ②`) 보기 내용이다. 라벨로 시작하는 행을 하나라도 읽지 못하면 행을 지우지 않고 표 전체를 발문에 둔다. 첫 칸에 라벨이 없는 행은 보기 행이 아니고, 라벨은 ①부터 빠짐없이 이어져야 한다(이어지는 쪽의 표는 그 표 안에서만 연속). 조건에 맞지 않는 표는 발문 표다. 분류(`classify_content`)의 coverage는 발문 표를 세지 않으므로 바뀌지 않는다. 수정은 새 추출에만 적용되고 등록된 문제의 발문은 그대로다(EXTRACT-6).
+표(UX12-EXTRACT-4 2026-11-06, D-11): 문제 안에서 보기가 아닌 표는 `stem`의 인쇄 위치에 GFM pipe 표로 넣는다(앞뒤 빈 줄, 형식은 문서 내보내기 DOC-03과 같은 함수), 그 옆에 병합 정보를 가진 구조화 셀 `stem_tables`를 채운다(EXTRACT-9, [UX12-STEMTABLE](screens/ux12-stemtable.md)). AI 보조 정리가 표를 바꾸면 그 항목은 쓰지 않는다. 보기 뒤에 나온 비보기 표는 버리지 않고 발문 끝에 둔다. 표 칸은 제시 항목 줄 나눔(`break_stem_items`)을 타지 않는다. 표가 든 초안에는 `table_in_stem` 안내가 붙는다. 이 안내는 추출에 대한 참고이므로 `전체 선택`을 막지 않는다. AI 보조 정리 입력에도 같은 표 행이 들어가고, 프롬프트(`questions.extract/v4`)는 pipe 행을 그대로 옮기게 한다. 공백을 뺀 글자가 같아도 표 행이 무너진 AI 발문은 쓰지 않는다. 보기 표는 행 시작 칸의 원문자로 찾는다: 라벨만 있는 칸(`①`), 내용이 붙은 칸(`①xxx`), 한 행의 여러 칸(`① x | ② y`)을 읽는다. 첫 열이 라벨 열이면 그 옆 칸은 라벨을 언급해도(`①, ②`) 보기 내용이다. 라벨로 시작하는 행을 하나라도 읽지 못하면 행을 지우지 않고 표 전체를 발문에 둔다. 첫 칸에 라벨이 없는 행은 보기 행이 아니고, 라벨은 ①부터 빠짐없이 이어져야 한다(이어지는 쪽의 표는 그 표 안에서만 연속). 조건에 맞지 않는 표는 발문 표다. 분류(`classify_content`)의 coverage는 발문 표를 세지 않으므로 바뀌지 않는다. 수정은 새 추출에만 적용되고 등록된 문제의 발문은 그대로다(EXTRACT-6).
 
 정답 출처는 인쇄된 정답지뿐이다: 별도 정답 섹션(문제 번호로 매칭) 또는 문제 바로 뒤에 인쇄된 `정답: ②` 줄(그 문제에만 적용되므로 장마다 번호가 1부터 다시 시작해도 된다). `정답:` 줄 뒤의 인쇄된 해설은 초안의 해설(explanation)로 보존하고 선택지로 읽지 않는다. 마침표 없는 번호(`01 …`)는 heading 줄이거나 질문 단서(`?`, `시오`, 답란 `( )`)가 있을 때만 문제로 읽는다. 문제의 출처 영역(provenance)은 발문과 모든 선택지(표로 인쇄된 선택지 포함)를 쪽마다 하나로 묶은 영역이며, 정답 줄과 해설은 포함하지 않는다. PDF import draft는 생성 draft와 공통 review 컴포넌트를 사용하되 source type을 별도로 보존한다.
 
@@ -292,7 +293,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **정의:** 이름 + 출제 설정(변형 유형 §5 표 중 하나 이상, 문항 수, 난이도) + 범위(§12의 범위 고르기) → 서버가 범위의 확정 문제에서 원본을 seed로 골라 원본마다 문제 하나를 만든다. 모의고사는 Workspace 단위로 저장되고 이름 바꾸기·문제 편집·빼기·설정 바꿔 다시 만들기·삭제가 된다.
 - **은행 밖 (사용자 결정 2 — 의도된 예외):** 모의고사 문제는 그 모의고사 안에만 있다. 만들어지는 즉시 풀 수 있고 `CONFIRMED` 문제·Heatmap 점(§3.1)·홈 집계(§7)·검색·정리 노트(§9) 입력이 아니다. 따라서 "생성·가져온 문제는 사람이 승인할 때까지 초안" 규칙은 적용되지 않는다 — 모의고사 문제를 은행에 등록하는 경로 자체가 없다. 대신 §5의 기계 검증(형식·정답 개수·정오 반전 정답 불일치·중복·출처 근거) 중 승인을 막던 검증을 통과해야만 저장된다. LLM이 선언한 정답은 검증 없이 쓰지 않는다.
 - **호출 묶기 (사용자 결정 2026-11-01 "API 호출 최소화"):** AI 변형은 원본마다 호출하지 않고 token 예산(`MOCK_EXAM_MAX_PROMPT_TOKENS`·`MOCK_EXAM_MAX_OUTPUT_TOKENS`)에 맞는 만큼 원본을 한 호출에 모은다(passage를 공유하는 원본끼리, passage는 한 번만). 항목마다 따로 검증하고, 실패 항목은 모아서 한 번 다시 요청하며, 해석할 수 없는 응답은 반으로 나눠 다시 요청한다. 문항 수는 AI 유형이 있으면 최대 100(기본 20, 사용자 결정 2026-11-01) — 100문항 ≈ 호출 3~4번. 세부는 MOCK-01 "LLM 호출 묶기".
-- **`보기 섞기`:** 원본 revision의 내용을 그대로 복사하고 보기 순서만 섞은 모의고사 문제(LLM 없음). 원본과 같은 option ID를 쓰므로 채점은 option ID 기준 그대로다.
+- **`보기 섞기`:** 원본 revision의 내용을 원본 보기 순서 그대로 복사한 모의고사 문제(LLM 없음). 보기 순서는 저장하지 않고 풀이마다 정한다: run 위치마다 run의 seed로 섞어 한 실행 안에서 유지하고, 새 실행과 run 밖의 새 세션은 새로 뽑는다. `보기 섞기`만 고른 모의고사는 worker job 없이 요청 안에서 저장되어 바로 `준비됨`이다([UX12-MOCKSHUFFLE](screens/ux12-mock-shuffle.md)). 원본과 같은 option ID를 쓰므로 채점은 option ID 기준 그대로다.
 - **원본과의 관계:** 모의고사 문제는 원본 문제와 고정된 원본 revision을 가리키지만 lineage(§5)는 만들지 않는다. 원본을 편집·삭제해도 모의고사 문제는 바뀌지 않는다.
 - **편집·회차:** 편집은 새 revision(이전 풀이는 그때의 revision을 가리킴). 다시 만들기는 새 회차로 문제 목록을 바꾸고 이전 회차와 풀이 기록은 지우지 않는다(사용자 결정 2026-11-01, MOCK-01).
 - **풀이 상태:** 모의고사 문제의 풀이는 `mock_exam_attempts`에 사람마다 저장되고 §2의 `question_user_state`·Heatmap 색을 바꾸지 않는다. 즐겨찾기·다시 풀기는 없다(사용자 결정 2026-11-01).
@@ -357,7 +358,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 ### 14.3 옮기기 계약
 
 - `POST /workspaces/{id}/questions/chapter-assignments` — 편집 권한·활성 Workspace, 1~5,000문제를 **한 트랜잭션**으로(전부 아니면 전무), `Idempotency-Key`. 잠금 순서는 문제 쓰기의 규칙 그대로 **문서 → 문제**다: Workspace FOR SHARE → 대상 장의 책 문서와 보낸 문제들의 지금 장 문서를 문서 id 순 FOR SHARE(`QuestionRepository.lock_documents`) → 문제 id 순 FOR UPDATE. 교정 발행은 문서 FOR UPDATE 뒤 `documents_remap_question_chapters`로 그 장의 문제를 고치므로 반대 순서(문제 → 문서)는 deadlock이 된다. 문서를 잠근 동안 `종류 변경`도 기다리므로 대상 문서가 `question_paper`로 바뀌었으면 잠근 뒤의 검사에서 422 `chapter-invalid`. 멱등은 `Idempotency-Key`로만 하고, 키 없는 재실행은 `expected_chapter_id`가 지금 장과 달라 409 `chapter-changed`다(CHREDIST-01-C03). 대상 장은 이 Workspace의 살아 있는 `book` 문서의 현재 발행 revision 장이거나 null. 세부 오류 코드는 CHREDIST-01-C02.
-- 이력: `question_chapter_changes(id, workspace_id, question_id, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import, changed_by, changed_at)` append-only(UX9부터; 이전 변경은 없음). 활동 `questions.chapters_reassigned`(요청마다, 개수·source만).
+- 이력: `question_chapter_changes(id, workspace_id, question_id, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import|chapter_edit, changed_by, changed_at)` append-only(UX9부터; 이전 변경은 없음). 활동 `questions.chapters_reassigned`(요청마다, 개수·source만).
 - **정리 노트:** 옮긴 문제가 있던 장과 새 장의 노트는 stale(§9 "장 이동", CHNOTE-01-C03 fingerprint). 노트 본문·각주는 그대로이고, 옮긴 문제의 옛 장 노트 각주는 구성원에게 "삭제되었거나 옮긴 문제"로 보인다. 공유 게스트·Fork의 출처 일치 판정은 바뀌지 않는다(인용 문제의 상태·revision이 그대로이므로 계속 보임 — 내용은 이미 공개 범위).
 - **이미 만든 것:** 범위 풀이 묶음(`practice_runs.item_ids`)·모의고사 문제·그 풀이는 바뀌지 않는다. 모의고사 범위 고르기의 출처 장 묶음은 원본의 지금 장(MOCK-01-C10)이라 새 장으로 보인다. 문제의 해설 하이라이트(§15)는 문제를 따라 새 장의 `내 하이라이트`로 간다.
 - **문제 번호:** 번호는 바꾸지 않는다. 다른 장에서 옮겨 와 같은 장에 같은 번호가 둘이면 Heatmap 순서(`sort_order`, 번호, 등록 순)대로 둘 다 보인다(사용자 결정 2026-11-02).
@@ -367,6 +368,27 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **폴백:** 등록된 문제의 추천(§14.2 4)이 `no_match`이거나 장 번호·level로도 `ambiguous`이면 문제지(또는 `mixed`의 문제 구간) 자신의 장 — 시작 블록 장의 **최상위(level 1) 조상**을, 그 문서의 현재 revision의 같은 `section_key` 장으로 옮겨 추천한다(`reason = paper_chapter`). 가장 깊은 노드는 쓰지 않는다(워크북 outline의 `01 …?`·`정답: ②` 같은 가짜 level-2 heading). `no_source_chapter`(시작 블록에 장 없음)·`no_source`에는 폴백이 없다. 폴백 장은 Heatmap 장 목록에 교재 장처럼 나온다. 가져오기 초안의 추천은 교재 장만 쓴다(등록이 비교재 장을 거절하므로); 초안이 `챕터 없음`으로 등록되면 아래 재매칭이 폴백을 붙인다.
 - **자동 재매칭(사용자 결정 2026-11-04: worker, 교재가 준비된 직후 한 번):** `document.parse`가 교재(`question_paper`가 아닌 문서)의 새 revision을 활성화한 뒤(publish 트랜잭션 밖, 실패해도 job은 성공) `quiz_worker.chapter_rematch`가 그 Workspace의 대상 문제를 같은 matcher(`book_core.chapter_matching`)로 다시 매칭한다. 대상은 CONFIRMED 살아 있는 문제 중 `chapter_source = auto`이고 챕터가 없거나 문제지 폴백 장인 것뿐이다 — **`manual`(사람이 정하거나 바꾼 챕터)은 절대 건드리지 않는다**. 쓰기는 SECURITY DEFINER `public.worker_rematch_chapters(workspace, moves jsonb)` 하나뿐이다(quiz_worker만 실행; 테이블 권한 추가 없음): 활성 Workspace 확인 → 문서 FOR SHARE(id 순) → 문제 FOR UPDATE(id 순) 뒤 항목마다 다시 확인(CONFIRMED·`auto`·`expected_chapter_id`와 같은 지금 장·옛 장은 없음 또는 비교재 장·새 장은 이 Workspace의 살아 있는 문서의 활성 revision 장이며 교재 장이거나 챕터 없는 문제에만 문제지 level-1 장). 하나라도 어긋난 항목은 건너뛰므로 멱등이고 재전달이 두 번 옮기지 않는다. 옮긴 문제는 `chapter_source = auto`·`chapter_set_by = null`·이력 `recommendation`(`changed_by` null)으로 쓴다. API 쪽 endpoint는 없다.
 - **문제 편집 챕터 선택:** 교재 장 전부와 문제지의 level-1 장.
+
+
+### 14.5 챕터 편집 (UX12 CHAPTER-3, 사용자 결정 D-9)
+
+화면·계약은 [CHMAN-01](screens/chapter-management.md). 교재 챕터의 추가·이름 변경·이동·삭제는 draft 없이 활성 revision에 바로 적용한다.
+
+- **불변 예외:** `revision_content_guard`는 `chapter_edit` SECURITY DEFINER 함수 안에서만 발행 revision을 풀어 준다: 장의 `title`·`parent_id`·`level`·`sort_order` 변경, `user-<uuid>` key 장 추가, 장 삭제, 블록의 `chapter_id` 변경뿐이다. 같은 경로가 `document_revisions.content_hash`를 다시 쓴다(해시는 장 구조를 포함하고 worker가 읽을 때 검사한다). `quiz_api`는 이 함수의 EXECUTE만 새로 받고 테이블 권한은 늘지 않는다.
+- **잠금:** §14.3과 같이 Workspace FOR SHARE → 문서 → 문제 id 순. 쓰기는 문서를 FOR UPDATE로 잡고 `documents.chapter_tree_version`을 올린다. 교정 발행 job이 대기·실행 중이면 409 `publish-in-progress`다. 활성 revision이 바뀌어도 version이 올라가므로 낡은 화면의 일괄 이동은 409 `chapter-tree-changed`다.
+- **교정 draft:** 편집은 같은 요청에서 교정 draft에 구조로 반영된다(key 기준으로 없는 장 추가, 상위·level·순서 맞춤, 활성에 없는 장 제거와 블록을 살아남은 상위로 이동). 그래서 발행의 `section_key` 재연결이 `user-*` 장의 문제를 null로 만들지 않는다. 이전 revision 복원(DOC-02)도 같은 동기화를 거친다.
+- **삭제:** 문제는 §14.1의 `manual` 옮기기와 같다: `chapter_id`·`chapter_source = manual`·`chapter_set_by/at`이 바뀌고 `question_chapter_changes` 행(source `chapter_edit`)이 남으며 새 revision은 없다. 자동 재매칭(§14.4)은 `manual`을 건드리지 않는다. 이력 행의 `from_chapter_id`는 장이 지워지며 FK로 null이 된다. 활동은 `document.chapter_deleted`(id·개수만) 하나다. 범위 JSON(`mock_exams.range.chapter_ids`, `ask_conversations.scope`)의 지운 장 id는 없는 것으로 읽는다.
+
+### 14.6 Workspace 챕터 (UX12 CHAPTER-8, 사용자 결정 2026-11-06)
+
+화면·계약·확인한 읽기 경로는 [UX12-CHAPTERADD](screens/ux12-chapter-add.md). 교재가 없는 Workspace에도 문제를 묶을 챕터가 필요해서, 문서에 속하지 않는 장을 둔다.
+
+- **모델:** `chapters`의 `document_id`·`document_revision_id`가 함께 null인 행이다. key는 `user-<uuid>`, 쪽·제목 블록 없음. 발행 revision의 내용이 아니므로 `revision_content_guard`와 `chapter_edit` 경로를 거치지 않고, 교정 draft·`content_hash`·`chapter_tree_version`과도 무관하다. `quiz_api`의 기존 `chapters` 권한으로 쓴다.
+- **문제와의 관계:** `questions.chapter_id`는 다른 장과 같다. Heatmap 묶음은 교재 장 뒤, `챕터 없음` 앞이다. 고른 것은 `chapter_source = manual`이고 자동 재매칭은 건드리지 않는다. 자동 추천(`ChapterMatcher`)의 후보가 아니다: 본문이 없다.
+- **본문 기능:** 정리 노트·요약·본문 검색·AI 질문 범위의 대상이 아니다. `section_key`에 묶인 노트는 문서가 있어야 하고 입력이 본문이다.
+- **잠금:** §14.3 앞에 트리 행이 오고 맨 끝에 초안이 온다: Workspace FOR SHARE → `workspace_chapter_trees` → 문서 → 문제 → 초안(`question_drafts`). 장 삭제가 이 순서로 초안을 옮기므로, 초안을 잠그는 쓰기도 장의 주인을 먼저 잠근다. 초안 수정은 고른 장의 주인, 등록은 트리 행과 살아 있는 문서 전부(어떤 장인지는 초안을 잠근 뒤에야 안다), 등록 job은 항목의 장의 주인을 잠근 뒤 초안을 잠그고 읽는다. Workspace 챕터 쓰기는 트리 행 FOR UPDATE, 그 장을 고르는 문제 저장·재분배·import와 Fork 커밋은 FOR SHARE다. 등록 요청은 장의 주인을 잠그지 않으므로 run → 초안만 잡고, 장 삭제도 run을 초안보다 먼저 옮긴다.
+- **Dropdown의 자리:** 지금 고른 장이 살아 있는 교재의 장이면 그 교재, 아니면 Workspace 챕터다.
+- **삭제:** §14.5와 같다. 하위 장은 상위로 올라가고 문제는 고른 곳으로 옮겨지며 `question_chapter_changes`(source `chapter_edit`)가 남는다.
 
 ## 15. 하이라이트와 `내 하이라이트` (UX9-SPEC 2026-11-02)
 
@@ -403,4 +425,5 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 5. **기존 데이터는 그대로 (사용자 결정 2026-11-04 변경).** 이미 켜져 있는 플래그는 migration이 끄지 않는다(데이터를 바꾸는 단계 없음). 마지막 채점 결과가 정답이 아닌 문제에 켜진 기존 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오지만, toggle은 보이지 않는다(1~2항) — 그 문제를 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 새 오답 채점이 오면 4항대로 꺼진다.
 6. **이력 불변.** attempt와 `last_graded_result`는 바뀌지 않는다. 플래그만 꺼진다.
 6a. **오래된 화면의 409 (D2).** 켜기가 409 `retry-requires-correct`로 거절되면 화면은 전용 문구 "정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다."를 알리고, 문제 상태를 다시 읽어 toggle을 숨긴다.
+6b. **열기 (MOCKUX-5, MOCKUX-11 2026-11-06).** 푼 문제는 이 플래그와 상관없이 풀이 화면부터 열린다([UX12-SOLVEDOPEN](screens/ux12-solved-open.md)). 플래그는 필터와 Heatmap 표시에만 쓴다.
 7. **알려진 가장자리.** 중복 정리(merge)·되돌리기로 합친 상태의 판정이 바뀌어 플래그가 정답이 아닌 문제에 남을 수 있다 — 그 문제는 toggle이 없고 Heatmap은 `retry`로 보이며, 다음 오답 채점 또는 끄기 PATCH가 정리한다(follow-up).

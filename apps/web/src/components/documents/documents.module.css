@@ -84,8 +84,10 @@
   white-space: nowrap;
 }
 
-a.title:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  a.title:hover {
+    text-decoration: underline;
+  }
 }
 
 .title:focus-visible {

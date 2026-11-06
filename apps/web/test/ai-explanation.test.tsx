@@ -227,8 +227,9 @@ describe('AIEXPL-01 area states', () => {
     pending.answer?.(stateOf({ explanation: explanation(), can_create: false }));
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.create).toHaveBeenCalledWith(target, gate);
-    // The area mounts with the result; focus moves to its heading.
-    expect(await within(region).findByRole('heading', { name: 'AI 해설', level: 3 })).toHaveFocus();
+    // The area mounts with the result; focus moves to its heading in the effect after that commit.
+    const heading = await within(region).findByRole('heading', { name: 'AI 해설', level: 3 });
+    await waitFor(() => expect(heading).toHaveFocus());
     // A cache hit: shown open at once, every option by its text and a footnote button.
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
     expect(within(region).getByText('1. 증발')).toBeInTheDocument();
@@ -258,6 +259,29 @@ describe('AIEXPL-01 area states', () => {
     expect(within(area()).queryByText('AI 생성')).toBeNull();
     expect(within(area()).queryByRole('button', { name: '다시 만들기' })).toBeNull();
     expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it('UX12-ASKMD shares the answer Markdown: tables, footnotes in cells, headings below its h4', async () => {
+    const base = explanation();
+    const api = fakeClient(
+      stateOf({
+        can_create: false,
+        explanation: {
+          ...base,
+          body: {
+            ...(base.body as NonNullable<Explanation['body']>),
+            summary_md: '# 요점\n\n| 구분 | 설명 |\n| --- | --- |\n| 증발 | 기체가 됨 [1] |',
+          },
+        },
+      }),
+    );
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+    const table = await within(area()).findByRole('table');
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
+    expect(within(table).getByRole('button', { name: /출처 1|^\[1\]$|1/ })).toBeInTheDocument();
+    expect(within(area()).getByRole('heading', { name: '요점', level: 5 })).toBeInTheDocument();
   });
 
   it('editors get 다시 만들기 (version meta), and its refusal reads as text', async () => {
@@ -696,6 +720,7 @@ const RUN_DATA: PracticeRun = {
   source: 'bank',
   mock_exam_id: null,
   random_order: false,
+  shuffle_options: false,
   seed: 1,
   total: 1,
   answered: 0,

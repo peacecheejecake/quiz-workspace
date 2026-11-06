@@ -1,5 +1,5 @@
-// UX12-FILTER (docs/screens/ux12-home-filter.md): the search and filter line under the sticky line.
-// The search box opens from an icon button next to 필터; 챕터 and 유형 live in the 필터 popover.
+// UX12-FILTER (docs/screens/ux12-home-filter.md): 검색 and 필터 on the sticky line (UX12-HOMEFILTER).
+// The search box opens from an icon button next to 필터; the filters live in the 필터 popover.
 
 import type { Locator, Page } from '@playwright/test';
 import {
@@ -13,6 +13,7 @@ import {
   main,
   openQuestionSearch,
   openSearchOptions,
+  openStatusFilters,
   overviewUi,
   setMyState,
   signInAs,
@@ -35,7 +36,7 @@ const FILTER_ACTIVE = /필터 적용 중|filters? (on|applied)/i;
 const filterButton = (page: Page) => homeUi.searchSettingsButton(page, 'questions');
 const filterPopover = (page: Page) => homeUi.searchSettings(page, 'questions');
 const statusChip = (page: Page, status: string) =>
-  main(page).locator(`button[data-status="${status}"][aria-pressed]`);
+  homeUi.statusFilters(page).locator(`button[data-status="${status}"][aria-pressed]`);
 /** The grid whose middle column opens: the search button's parent. */
 const searchLine = (page: Page) => homeUi.questionSearchButton(page).locator('..');
 
@@ -71,7 +72,7 @@ async function expectClosedBox(page: Page): Promise<void> {
 }
 
 test(
-  'UX12-FILTER-AC01 the line holds 검색 and 필터 under the sticky line and the old controls are gone',
+  'UX12-FILTER-AC01 the sticky line holds 검색 and 필터 and the old controls are gone',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await ownerHome(page, workspaceFactory, 'ux12-filter-01');
@@ -84,7 +85,8 @@ test(
       box(filter),
       box(main(page).locator('[data-home-toolbar]')),
     ]);
-    expect(searchBox.y).toBeGreaterThanOrEqual(toolbar.y + toolbar.height);
+    expect(searchBox.y).toBeGreaterThanOrEqual(toolbar.y);
+    expect(searchBox.y + searchBox.height).toBeLessThanOrEqual(toolbar.y + toolbar.height);
     expect(filterBox.y).toBe(searchBox.y);
     expect(filterBox.x).toBeGreaterThan(searchBox.x);
     await expectClosedBox(page);
@@ -100,8 +102,7 @@ test(
     for (const gone of [/^다시 풀기만$/, /^필터 초기화$/]) {
       await expect(main(page).getByRole('button', { name: gone })).toHaveCount(0);
     }
-    const statuses = homeUi.statusFilters(page);
-    await expect(statuses).toBeVisible();
+    const statuses = await openStatusFilters(page);
     await expect(statuses.getByRole('button', { name: /^즐겨찾기만$/ })).toBeVisible();
     await expect(statuses.getByRole('button', { name: /^다시 풀기$/ })).toBeVisible();
   },
@@ -328,6 +329,7 @@ test(
 
     await page.goto(`${homePath(ws.id)}?retry=true`);
     await expect(overviewUi.dots(page)).toHaveCount(1);
+    await openStatusFilters(page);
     await expect(statusChip(page, 'retry')).toHaveAttribute('aria-pressed', 'true');
     await expect(statusChip(page, 'unseen')).toHaveAttribute('aria-pressed', 'false');
 

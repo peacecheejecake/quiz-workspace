@@ -122,7 +122,7 @@ describe('overviewApiQuery', () => {
       }),
     ).toEqual({
       chapter: 'none',
-      type: 'MCQ',
+      type: ['MCQ'],
       q: 'softmax',
       status: ['viewed', 'correct'],
       favorite: true,

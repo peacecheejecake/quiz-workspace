@@ -5,7 +5,7 @@
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
 // UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 (QOV-01-AC16). QVIEW-W adds
-// 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
+// the range run (QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
 // 모의고사 (MOCK-01) between them, enabled for every member too. UX9-REDIST-W adds 챕터 재분배
 // (CHREDIST-01) after 중복 문제 정리, editor-only too.
 import './dom-setup';
@@ -22,6 +22,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
     onRedistribute: vi.fn(),
+    onManageChapters: vi.fn(),
     onInactive: vi.fn(),
   };
   render(
@@ -36,6 +37,14 @@ function menu(readOnly: QuestionMenuReadOnly) {
 }
 
 describe('home `문제` menu', () => {
+  it('UX12-HOMEFILTER-AC08 keeps the 문서 N name when the open search hides its words', () => {
+    menu(null);
+    const trigger = screen.getByRole('button', { name: '문서 3' });
+    const icons = [...trigger.querySelectorAll('svg')];
+    expect(icons).toHaveLength(2); // the compact icon and the chevron; CSS shows one or the other
+    for (const icon of icons) expect(icon).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('QOV-01-AC11 offers 직접 추가, 중복 문제 정리 and 챕터 재분배 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
@@ -50,6 +59,7 @@ describe('home `문제` menu', () => {
       '직접 추가',
       '중복 문제 정리',
       '챕터 재분배',
+      '챕터 관리',
       '보관·초안 문제',
     ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
@@ -111,6 +121,7 @@ describe('home `문제` menu', () => {
         '직접 추가',
         '중복 문제 정리',
         '챕터 재분배',
+        '챕터 관리',
         '보관·초안 문제',
       ]);
       const items = all.slice(2, 5);

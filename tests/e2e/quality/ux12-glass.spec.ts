@@ -1,8 +1,7 @@
 // UX12 DESIGN-4 + SHELL-2 — the themed glass gradient, and the return bar's shape (user feedback
 // 2026-11-06, decision D-3). Reads computed styles: pixel output is the visual suite's job, and
 // prefers-reduced-transparency cannot be emulated here (packages/design-tokens/test covers it).
-// A positive blur is not asserted: the production CSS build keeps only -webkit-backdrop-filter,
-// so Chromium reports `none` on every glass surface.
+// The blur and the top bar without its gradient are UX12-GLASSBTN (ux12-glass-buttons.spec.ts).
 import type { Locator, Page } from '@playwright/test';
 import { seedViewerSettings, viewerUi } from '../fixtures/document-viewer.ts';
 import {
@@ -26,7 +25,7 @@ const RETURN_BAR = '[data-app-global-control="practice-return"] > div';
 const RETURN_LABEL = '보던 문제로 돌아가기';
 const GRADIENT = /^linear-gradient\(.*rgba\(.*rgba\(/;
 const OPAQUE = /^rgb\(/;
-const TRANSLUCENT = /^rgba\(\d+, \d+, \d+, 0\.97\)$/;
+const TRANSLUCENT = /^rgba\(\d+, \d+, \d+, 0\.\d+\)$/;
 
 function surfaceOf(locator: Locator) {
   return locator.evaluate((element) => {
@@ -87,7 +86,7 @@ async function showReturnBar(page: Page) {
 }
 
 test(
-  'UX12-GLASS-AC01 the top bar, menus and side panels draw the themed gradient over the glass color',
+  'UX12-GLASS-AC01 menus and side panels draw the themed gradient over the glass color',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-glass-01');
@@ -103,13 +102,12 @@ test(
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });
       const bar = await surfaceOf(page.getByRole('banner'));
-      expect(bar.image, `top bar in ${colorScheme}`).toMatch(GRADIENT);
       expect(bar.color).toMatch(TRANSLUCENT);
-      gradients.add(bar.image);
 
       await wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), name)).click();
       const menu = await surfaceOf(page.getByRole('menu'));
-      expect(menu.image, `menu in ${colorScheme}`).toBe(bar.image);
+      expect(menu.image, `menu in ${colorScheme}`).toMatch(GRADIENT);
+      gradients.add(menu.image);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('menu')).toBeHidden();
     }

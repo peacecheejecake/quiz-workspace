@@ -543,8 +543,25 @@
   gap: var(--space-2);
 }
 
-.filterGroup[hidden] {
-  display: none;
+.typeGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.typeLegend {
+  margin-block-end: var(--space-1);
+  padding: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.typeGroup > .hint {
+  flex-basis: 100%;
 }
 
 .groups {
@@ -616,4 +633,10 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);
+}
+
+@media (hover: hover) {
+  .sourceLink:hover {
+    color: var(--color-accent-hover);
+  }
 }

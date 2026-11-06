@@ -42,7 +42,27 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runName {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
 }
 
 .itemMain {
@@ -73,8 +93,10 @@
   cursor: pointer;
 }
 
-.titleButton:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .titleButton:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (hover: hover) {
@@ -181,7 +203,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   text-align: start;
@@ -189,8 +211,10 @@
   cursor: pointer;
 }
 
-.questionButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .questionButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .questionTitle {
@@ -231,10 +255,26 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.variation {
+.legendRow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-1);
+}
+
+.variationHelp {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.variationHelp dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.variationHelp dd {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
 .formRow {
@@ -299,59 +339,12 @@
   }
 }
 
-.steps {
-  display: flex;
-  gap: var(--space-4);
-  padding: 0;
-  list-style: none;
-}
-.steps [aria-current='step'] {
-  font-weight: var(--font-weight-semibold);
+/* A step change or a long chapter must not change the content's width (classic scrollbars). */
+:global(.qz-panel > .body):has(.playForm) {
+  scrollbar-gutter: stable;
 }
 
-.body:has(.playForm),
-.form:has(.playForm),
-.playForm {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
-
-.form:has(.playForm),
-.playForm {
-  flex: 1 0 auto;
-}
-
-.playFooter {
-  position: sticky;
-  bottom: calc(-1 * var(--space-4));
-  z-index: 1;
-  margin-block-start: auto;
-  margin-block-end: calc(-1 * var(--space-4));
-  margin-inline: calc(-1 * var(--space-5));
-  padding: var(--space-3) var(--space-5) max(var(--space-3), env(safe-area-inset-bottom));
-  background: var(--color-surface);
-}
-
-@media (max-height: 500px) {
-  .playForm {
-    padding-block-end: calc(5rem + env(safe-area-inset-bottom));
-  }
-
-  .playFooter {
-    position: fixed;
-    inset-block-end: 0;
-    inset-inline-end: var(--space-4);
-    box-sizing: border-box;
-    width: min(var(--floating-panel-width), calc(100vw - 2 * var(--space-4)));
-    margin: 0;
-    padding-inline: var(--space-4);
-  }
-}
-
-@media (max-height: 500px) and (max-width: 600px) {
-  .playFooter {
-    inset-inline-end: 0;
-    width: 100%;
-  }
+/* An error takes its own line above the buttons of the panel's footer. */
+.footerLine {
+  flex-basis: 100%;
 }

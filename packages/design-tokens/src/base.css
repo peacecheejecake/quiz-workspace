@@ -5,6 +5,13 @@
  * transparency, so the layer keeps the same color either way. --glass-gradient (UX12 DESIGN-4) is
  * a longhand layer above the color: the `background` shorthand of the fallbacks drops it, and a
  * surface that only needs an opaque base sets `background-color` to keep it.
+ *
+ * Declare -webkit-backdrop-filter first, everywhere: Next's minifier (Lightning CSS) treats the two
+ * as one property when the value holds var() and keeps the last, so standard-then-prefixed ships
+ * no standard declaration and Chromium never blurred (UX12 DESIGN-5).
+ *
+ * --glass-brightness pushes the blurred backdrop toward the surface tone, so text keeps AA while
+ * the layer stays see-through. Inside glass, accent text steps darker and primary hover with it.
  */
 .glass-surface {
   background-color: var(--color-glass);
@@ -12,8 +19,10 @@
   background-origin: border-box;
   border: 1px solid var(--color-glass-stroke);
   box-shadow: var(--shadow-floating);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
+  --color-accent: var(--color-accent-on-glass);
+  --color-accent-hover: var(--color-accent-pressed);
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -25,8 +34,8 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass-surface {
     background: var(--color-glass-solid);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 

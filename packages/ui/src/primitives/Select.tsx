@@ -4,6 +4,7 @@ import { Select as RadixSelect } from 'radix-ui';
 import { useRef, useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { useLayerStyle } from '../internal/layer';
+import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';
 import { CheckIcon, ChevronDownIcon } from './icons';
 
@@ -95,6 +96,7 @@ export function Select({
   const ids = useFieldIds(id, description, error, ariaDescribedBy);
   const labelId = `${ids.id}-label`;
   const layerStyle = useLayerStyle();
+  const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   return (
     <FieldFrame
       ids={ids}
@@ -162,6 +164,7 @@ export function Select({
         </RadixSelect.Trigger>
         <RadixSelect.Portal>
           <RadixSelect.Content
+            ref={guardOverscroll}
             position="popper"
             sideOffset={4}
             className="qz-select-content glass-surface"

@@ -81,6 +81,15 @@ def test_publisher_needs_a_broker() -> None:
     publisher.close()
 
 
+def test_mock_exam_c11_generation_goes_to_the_on_demand_queue_like_the_worker_routes_it() -> None:
+    """MOCK-01-C11: not the default queue a long extraction keeps busy."""
+    from quiz_api.jobs import ONDEMAND_QUEUE, queue_for
+
+    assert ONDEMAND_QUEUE == celery_app.ONDEMAND_QUEUE
+    assert queue_for("mock_exam.generate") == ONDEMAND_QUEUE
+    assert queue_for("question.import") == queue_for("document.parse") == DEFAULT_QUEUE
+
+
 def test_ask_answer_goes_to_the_interactive_queue_like_the_worker_routes_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

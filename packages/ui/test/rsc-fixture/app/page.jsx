@@ -19,6 +19,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   FilterIcon,
+  FloatingPanelFooter,
+  FloatingPanelPinned,
+  StepList,
   PlusIcon,
   ChevronUpIcon,
   HistoryIcon,
@@ -292,6 +295,9 @@ export default function Page() {
           <ModalDialog title="대화상자" trigger={<Button>열기</Button>}>
             <DialogClose>닫기</DialogClose>
           </ModalDialog>
+          <StepList label="단계" steps={[{ id: 'a', label: '옵션' }]} current={0} />
+          <FloatingPanelPinned>고정</FloatingPanelPinned>
+          <FloatingPanelFooter>아래</FloatingPanelFooter>
           <FloatingSidePanel title="패널" modal={false} trigger={<Button>패널</Button>}>
             <div {...ownEscapeProps}>본문</div>
           </FloatingSidePanel>

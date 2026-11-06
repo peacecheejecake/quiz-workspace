@@ -50,10 +50,9 @@ test('favorite keeps the status color and the cell-sized box of every status', a
     const [sq, st, sqDot, stDot] = await Promise.all(
       [squareMarker, starMarker, square, star].map((l) => l.boundingBox()),
     );
-    expect(sq).toMatchObject({ width: 24, height: 24 });
-    expect(st).toMatchObject({ width: 24, height: 24 });
-    expect(sqDot).toMatchObject({ width: 24, height: 24 });
-    expect(stDot).toMatchObject({ width: 24, height: 24 });
+    expect(st).toMatchObject({ width: sq?.width, height: sq?.height });
+    expect(sqDot).toMatchObject({ width: 28, height: 28 });
+    expect(stDot).toMatchObject({ width: 28, height: 28 });
   }
 });
 
@@ -95,7 +94,7 @@ async function drawnGap(page: Page, left: string, right: string) {
   const shape = (id: string) => page.locator(`[data-question-id="${id}"] .shape`).boundingBox();
   const [a, b] = await Promise.all([shape(left), shape(right)]);
   if (!a || !b) throw new Error('marker shape not rendered');
-  expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+  expect(Math.abs(a.y - b.y)).toBeLessThan(a.height / 4); // one row: a star sits a little lower
   return { gap: b.x - (a.x + a.width), width: a.width };
 }
 
@@ -112,33 +111,35 @@ test('UX5-UI the gap between heatmap markers is at most 1/3 of the marker width'
   expect(mobile.gap).toBeLessThanOrEqual(mobile.width / 3);
 });
 
-// UX9-STROKE: touch cells are 24px (the WCAG 2.2 target-size minimum).
+// UX12 DESIGN-6: touch cells are 28px too, above the WCAG 2.2 target-size minimum.
 test('UX12-HOME-AC03 desktop heatmap cells are 28px', async ({ page }) => {
   await openStory(page, 'questions-questionheatmap--full');
   const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
   expect(box).toMatchObject({ width: 28, height: 28 });
 });
 
-test('mobile uses 24px cells', async ({ page }) => {
+test('mobile uses 28px cells', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openStory(page, 'questions-questionheatmap--full');
   const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
-  expect(box).toMatchObject({ width: 24, height: 24 });
+  expect(box).toMatchObject({ width: 28, height: 28 });
 });
 
-test('a standalone dot (no heatmap ancestor) is 24px on desktop and on mobile', async ({
+test('a standalone dot (no heatmap ancestor) is 28px on desktop and on mobile', async ({
   page,
 }) => {
   await openStory(page, 'questions-questiondot--default');
   const dot = page.locator('[data-question-id]');
-  expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
-  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '24px');
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await dot.boundingBox()).toMatchObject({ width: 24, height: 24 });
-  await expect(dot.getByTestId('question-marker')).toHaveCSS('width', '24px');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await dot.boundingBox()).toMatchObject({ width: 28, height: 28 });
+    const shape = await dot.locator('.shape').boundingBox();
+    expect(shape?.width).toBeCloseTo(28, 0);
+    expect(shape?.height).toBeCloseTo(28, 0);
+  }
 });
 
-test('a standalone dot is 24px for a coarse pointer at desktop width', async ({ browser }) => {
+test('a standalone dot is 28px for a coarse pointer at desktop width', async ({ browser }) => {
   const context = await browser.newContext({
     hasTouch: true,
     isMobile: true,
@@ -148,14 +149,14 @@ test('a standalone dot is 24px for a coarse pointer at desktop width', async ({ 
   await openStory(page, 'questions-questiondot--default');
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
   expect(await page.locator('[data-question-id]').boundingBox()).toMatchObject({
-    width: 24,
-    height: 24,
+    width: 28,
+    height: 28,
   });
   await context.close();
 });
 
 // UX9-STROKE: the current dot's ring hugs the square (no inner space) in a near-black/near-white
-// text-primary color; focus stays a ring on the cell edge around a scaled marker.
+// text-primary color; focus is a ring just outside the scaled marker.
 for (const theme of ['light', 'dark'] as const) {
   test(`the current ring hugs the marker square in text-primary (${theme})`, async ({ page }) => {
     await openStory(page, 'questions-questionheatmap--full', theme);
@@ -166,20 +167,22 @@ for (const theme of ['light', 'dark'] as const) {
       await tokenColor(page, '--color-text-primary'),
     );
     await expect(current).toHaveCSS('outline-width', '2px');
-    // The marker box is the cell and its square is x=3..21 of the 24-unit viewBox, so an outline
-    // inset by cell/8, rounded up to a whole pixel, leaves no gap around the square.
+    // The square is x=3..21 of the 24-unit viewBox and fills the cell (UX12 DESIGN-6): the SVG box
+    // overflows the cell evenly, so an outline on the cell edge leaves no gap around the square.
     const [cell, marker] = await Promise.all([
       current.boundingBox(),
       current.getByTestId('question-marker').boundingBox(),
     ]);
     if (!cell || !marker) throw new Error('current dot not rendered');
-    expect(marker).toEqual(cell);
-    await expect(current).toHaveCSS('outline-offset', `-${Math.ceil(cell.width / 8)}px`);
+    expect(marker.width).toBeCloseTo((cell.width * 24) / 18, 1);
+    expect(marker.x + marker.width / 2).toBeCloseTo(cell.x + cell.width / 2, 1);
+    expect(marker.y + marker.height / 2).toBeCloseTo(cell.y + cell.height / 2, 1);
+    await expect(current).toHaveCSS('outline-offset', '0px');
 
     await page.keyboard.press('Tab');
     await expect(current).toBeFocused();
     await expect(current).toHaveCSS('outline-color', await tokenColor(page, '--color-focus'));
-    await expect(current).toHaveCSS('outline-offset', '0px');
+    await expect(current).toHaveCSS('outline-offset', '8px'); // 1px outside the 42px scaled square
   });
 }
 

@@ -6,7 +6,7 @@
 import type { Schemas } from '@quiz/api-client';
 import type { ChapterPickerNode } from '@quiz/ui';
 import type { RangeGroup } from '@/components/questions/viewer/range-model';
-import { chapterPickerNodes } from './chapter-picker';
+import { chapterGroupId, chapterPickerNodes } from './chapter-picker';
 import { displayStem } from './display-stem';
 import { NO_CHAPTER_KEY } from './overview-placement';
 
@@ -79,7 +79,7 @@ export function targetPickerNodes(list: RedistributionList): ChapterPickerNode[]
         id: c.id,
         title: c.title,
         level: c.depth,
-        documentId: doc.document_id,
+        documentId: chapterGroupId(doc.document_id),
         documentTitle: doc.document_title,
       })),
     ),

@@ -31,6 +31,7 @@ SESSION_FIELDS = {
     "chapter_id",
     "question_number",
     "stem",
+    "stem_tables",
     "is_multi_answer",
     "options",
     "displayed_option_ids",

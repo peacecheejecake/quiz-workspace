@@ -79,11 +79,14 @@ async function keyTo(page: Page, target: Locator, key = 'Tab', max = 60): Promis
 
 /** Opens the primary practice flow using the keyboard. */
 async function openPlayByKeyboard(page: Page): Promise<Locator> {
-  const play = page.getByRole('button', { name: /^풀기$/ });
+  const play = page.getByRole('button', { name: /^모의고사$/ });
   await keyTo(page, play);
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await expect(dialog).toBeVisible();
+  await keyTo(page, mockUi.add(dialog));
+  await page.keyboard.press('Enter');
+  await expect(mockUi.next(dialog)).toBeVisible();
   return dialog;
 }
 
@@ -220,27 +223,32 @@ test(
       await page.keyboard.press('Enter');
       await expect(mockUi.renameField(dialog)).toHaveCount(0);
 
-      // Create, step 1 (options) and step 2 (range, AI notice, filters open).
+      // Create, step 1 (range, filters open) and step 2 (options, AI notice, help open).
       await mockUi.add(dialog).click();
       await expect(mockUi.steps(dialog)).toBeVisible();
-      await expect(mockUi.variations(dialog)).toHaveCount(4);
-      await settle(page);
-      await expectAccessible(page, 'mock exam create, options step');
-      await mockUi.variation(dialog, 'PARAPHRASE').check();
-      await mockUi.title(dialog).fill('접근성 점검');
-      await mockUi.next(dialog).click();
       await expect(picker.selectAll(dialog)).toBeVisible();
-      await expect(mockUi.make(dialog)).toBeDisabled();
+      await expect(mockUi.next(dialog)).toBeDisabled();
       await expect(dialog.getByText(MOCK_TEXT.noRange)).toBeVisible();
+      await settle(page);
       await expectAccessible(page, 'mock exam create, range step with nothing selected');
       await picker.chapter(dialog, CH1).check();
       await picker.expand(dialog, CH1).click();
       await picker.question(dialog, 1, 1).uncheck();
       await expect(picker.selectAll(dialog)).toHaveAttribute('aria-checked', 'mixed');
       await openRangeFilters(dialog);
+      await expectAccessible(page, 'mock exam create, range step mixed with filters');
+      await mockUi.next(dialog).click();
+      await expect(mockUi.variations(dialog)).toHaveCount(4);
+      await mockUi.variation(dialog, 'PARAPHRASE').check();
+      await mockUi.title(dialog).fill('접근성 점검');
       await expect(dialog.getByText(MOCK_TEXT.aiNotice)).toBeVisible();
-      await expectAccessible(page, 'mock exam create, range step mixed with filters and AI notice');
-      await mockUi.previous(dialog).click();
+      await expectAccessible(page, 'mock exam create, options step with AI notice');
+      await mockUi.variationHelp(dialog).click();
+      await expect(mockUi.variationHelpPanel(page)).toBeVisible();
+      await expectAccessible(page, 'mock exam create, variation types help');
+      await page.keyboard.press('Escape');
+      await expect(mockUi.variationHelpPanel(page)).toBeHidden();
+      await mockUi.backToRange(dialog).click();
       await mockUi.backToList(dialog).click();
 
       // Detail while generating (held), then failed, partly made and round 2.
@@ -273,14 +281,17 @@ test(
       await settle(page);
       await expectAccessible(page, 'mock exam detail in round 2 with its questions');
 
-      // 다시 만들기 and 삭제 confirmations (both cancelled).
-      await mockUi.remake(dialog).click();
+      // The 더보기 menu, then its 다시 만들기 and 삭제 confirmations (both cancelled).
+      await mockUi.more(dialog).click();
+      await expect(mockUi.detailAction(page, 'remake')).toBeVisible();
+      await expectAccessible(page, 'mock exam detail menu');
+      await mockUi.detailAction(page, 'remake').click();
       let confirm = mockUi.confirm(page);
       await expect(confirm).toContainText(MOCK_TEXT.replaceConfirm);
       await expectAccessible(page, 'mock exam regenerate confirmation');
       await page.keyboard.press('Escape');
       await expect(confirm).toHaveCount(0);
-      await mockUi.delete(dialog).click();
+      await mockUi.chooseDetailAction(dialog, 'delete');
       confirm = mockUi.confirm(page);
       await expect(confirm).toContainText(/삭제할까요|delete/i);
       await expectAccessible(page, 'mock exam delete confirmation');
@@ -288,12 +299,13 @@ test(
       await expect(confirm).toHaveCount(0);
 
       // 설정 바꾸기 (the two steps with the current values).
-      await mockUi.changeSettings(dialog).click();
-      await expect(mockUi.variation(dialog, 'PARAPHRASE')).toBeChecked();
-      await expectAccessible(page, 'mock exam change settings, options step');
-      await mockUi.next(dialog).click();
-      await expect(mockUi.remake(dialog)).toBeVisible();
+      await mockUi.chooseDetailAction(dialog, 'settings');
+      await expect(mockUi.next(dialog)).toBeEnabled();
       await expectAccessible(page, 'mock exam change settings, range step');
+      await mockUi.next(dialog).click();
+      await expect(mockUi.variation(dialog, 'PARAPHRASE')).toBeChecked();
+      await expect(mockUi.remake(dialog)).toBeVisible();
+      await expectAccessible(page, 'mock exam change settings, options step');
       await mockUi.backToList(dialog).click();
       await mockUi.open(mockUi.row(dialog, '중간 점검'), '중간 점검').click();
 
@@ -323,7 +335,7 @@ test(
 );
 
 test(
-  'A11Y-14 keyboard only: 풀기, both steps, 만들기, then practise to the results',
+  'A11Y-14 keyboard only: 모의고사, both steps, 만들기, then practise to the results',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await bookWorkspace(workspaceFactory, 'a11y14-keys');
@@ -332,8 +344,13 @@ test(
     await page.locator('body').focus();
 
     let dialog = await openPlayByKeyboard(page);
+    // Step 1: Space on 1장, Tab to 다음.
+    await spaceTo(page, picker.chapter(dialog, CH1), true);
+    await keyTo(page, mockUi.next(dialog));
+    await page.keyboard.press('Enter');
+
+    // Step 2: name, 문구 변형 only, 2 questions, Tab to 만들기.
     await spaceTo(page, mockUi.variation(dialog, 'PARAPHRASE'), true);
-    // Step 1: name, 문구 변형 only, 2 questions → 다음.
     await keyTo(page, mockUi.title(dialog));
     await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type('키보드 점검');
@@ -343,11 +360,6 @@ test(
     await keyTo(page, mockUi.questionCount(dialog));
     await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type('2');
-    await keyTo(page, mockUi.next(dialog));
-    await page.keyboard.press('Enter');
-
-    // Step 2: Space on 1장, Tab to 만들기.
-    await spaceTo(page, picker.chapter(dialog, CH1), true);
     await keyTo(page, mockUi.make(dialog));
     await page.keyboard.press('Enter');
     dialog = mockUi.dialog(page);
@@ -508,7 +520,7 @@ test(
 );
 
 test(
-  'A11Y-15 keyboard only: 풀기, a chapter by Space, 시작, answer, 결과 보기 and back to 풀기',
+  'A11Y-15 keyboard only: 모의고사, a chapter by Space, 시작, answer, 결과 보기 and back to 모의고사',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await rangeWorkspace(workspaceFactory, 'a11y15-keys');
@@ -518,11 +530,6 @@ test(
     await page.locator('body').focus();
 
     const dialog = await openPlayByKeyboard(page);
-    await keyTo(page, mockUi.questionCount(dialog));
-    await page.keyboard.press('ControlOrMeta+A');
-    await page.keyboard.type('2');
-    await keyTo(page, mockUi.next(dialog));
-    await page.keyboard.press('Enter');
     await spaceTo(page, picker.chapter(dialog, CH2), true);
     await expect(picker.selected(dialog, 2)).toBeVisible();
     await keyTo(page, picker.expand(dialog, CH2));
@@ -532,6 +539,8 @@ test(
     await expect(picker.selected(dialog, 1)).toBeVisible();
     await expect(picker.chapter(dialog, CH2)).toHaveAttribute('aria-checked', 'mixed');
     await spaceTo(page, picker.question(dialog, 2, 2), true);
+    await keyTo(page, mockUi.next(dialog));
+    await page.keyboard.press('Enter');
     await keyTo(page, dialog.getByRole('button', { name: /^(시작|start)$/i }));
     await page.keyboard.press('Enter');
     const panel = runUi.panel(page);
@@ -558,6 +567,6 @@ test(
     ).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
+    await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeFocused();
   },
 );

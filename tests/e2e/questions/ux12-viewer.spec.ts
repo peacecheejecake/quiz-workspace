@@ -86,7 +86,7 @@ async function heightOf(locator: Locator): Promise<number | undefined> {
 }
 
 test(
-  'UX12-VIEW-AC01 sequence moves by arrow buttons as tall as 제출, keeping their names',
+  'UX12-VIEW-AC01 sequence moves by arrow buttons as tall as 제출',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-view-arrows', 2);
@@ -101,20 +101,11 @@ test(
     await expect(previous).toHaveAttribute('aria-disabled', 'true');
     await expect(previous.locator('svg')).toBeVisible();
     await expect(previous).toHaveText('');
-    const skip = runUi.skip(panel);
-    await expect(skip.locator('svg')).toBeVisible();
-    await expect(skip).toHaveText('');
-    const height = await heightOf(runUi.submit(panel));
-    expect(await heightOf(previous)).toBe(height);
-    expect(await heightOf(skip)).toBe(height);
-
-    await runUi.option(panel, firstOption(first)).check();
-    await runUi.submit(panel).click();
-    await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     const next = runUi.next(panel);
     await expect(next.locator('svg')).toBeVisible();
     await expect(next).toHaveText('');
-    await expect(next).toHaveAttribute('data-variant', 'primary');
+    const height = await heightOf(runUi.submit(panel));
+    expect(await heightOf(previous)).toBe(height);
     expect(await heightOf(next)).toBe(height);
 
     await next.click();
@@ -137,6 +128,7 @@ test(
     await signInAs(page, s.owner.user);
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     const again = panel.getByRole('button', { name: AGAIN });
     await expect(again).toBeEnabled();
     await expect(again).toHaveAttribute('data-variant', 'secondary');
@@ -211,7 +203,7 @@ test(
 );
 
 test(
-  'UX12-VIEW-AC05 reopening a submitted question starts at the top, a live submit focuses the result',
+  'UX12-VIEW-AC05 coming back to a result starts at the top, a live submit focuses the result',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await page.setViewportSize({ width: 1280, height: 600 });
@@ -225,6 +217,11 @@ test(
     await page.goto(overviewPath(s.workspaceId));
 
     let panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await panelUi.next(panel).click();
+    await panelUi.previous(panelUi.numbered(page, 2)).click();
+    panel = panelUi.numbered(page, 1);
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     expect(await overflows(panel)).toBe(true);
     await expect(gradedOptions(panel)).not.toBeFocused();
@@ -257,7 +254,7 @@ test(
     await keepTall(panel);
     expect(await scrollToEnd(panel)).toBeGreaterThan(0);
 
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await expect(runUi.option(panel, firstOption(second))).toBeVisible();
     expect(await overflows(panel)).toBe(true);
     expect(await scrollTop(panel)).toBe(0);

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from book_core.question import stem_tables_json
 from sqlalchemy import (
     ColumnElement,
     and_,
@@ -26,6 +27,7 @@ from sqlalchemy import (
     func,
     insert,
     literal,
+    or_,
     select,
     tuple_,
     update,
@@ -42,7 +44,9 @@ from quiz_api.repositories.tables import (
     question_revisions,
     question_sources,
     questions,
+    workspace_chapter_trees,
 )
+from quiz_api.stem_tables import parse_stem_tables
 
 # Sort key for questions without a display number (int4 max): they follow numbered ones.
 UNNUMBERED = 2147483647
@@ -50,7 +54,7 @@ UNNUMBERED = 2147483647
 # UX9 (docs/questions.md §14.1): how a question's chapter was decided.
 ChapterSource = Literal["manual", "auto"]
 # Why a chapter changed (`question_chapter_changes.source`).
-ChapterChangeSource = Literal["manual", "recommendation", "edit", "import"]
+ChapterChangeSource = Literal["manual", "recommendation", "edit", "import", "chapter_edit"]
 
 ActivityEventType = Literal[
     "question.created",
@@ -73,6 +77,7 @@ class RevisionRecord:
     explanation: str | None
     rubric: str | None
     created_at: datetime
+    stem_tables: list[Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +90,7 @@ class RevisionSummaryRecord:
 @dataclass(frozen=True)
 class ChapterRecord:
     id: uuid.UUID
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None  # None: a Workspace chapter
     title: str
 
 
@@ -133,6 +138,7 @@ class QuestionRecord:
             else None,
             explanation=rev.explanation,
             rubric=rev.rubric,
+            stem_tables=parse_stem_tables(rev.stem_tables),
         )
 
 
@@ -182,6 +188,7 @@ _REVISION_COLUMNS = (
     question_revisions.c.is_multi_answer.label("rev_is_multi_answer"),
     question_revisions.c.explanation.label("rev_explanation"),
     question_revisions.c.rubric.label("rev_rubric"),
+    question_revisions.c.stem_tables.label("rev_stem_tables"),
     question_revisions.c.created_at.label("rev_created_at"),
 )
 
@@ -203,6 +210,15 @@ _QUESTION_COLUMNS = (
 )
 
 _NUMBER_KEY = func.coalesce(questions.c.question_number, literal(UNNUMBERED))
+
+
+def lock_workspace_tree_shared(session: Session, workspace_id: uuid.UUID) -> None:
+    """FOR SHARE on the Workspace chapter tree row, before any document (questions.md §14.6)."""
+    session.execute(
+        select(workspace_chapter_trees.c.workspace_id)
+        .where(workspace_chapter_trees.c.workspace_id == workspace_id)
+        .with_for_update(read=True)
+    ).all()
 
 
 def _base_select() -> Any:
@@ -238,6 +254,7 @@ def _revision(row: Any) -> RevisionRecord:
         is_multi_answer=row.rev_is_multi_answer,
         explanation=row.rev_explanation,
         rubric=row.rev_rubric,
+        stem_tables=row.rev_stem_tables,
         created_at=row.rev_created_at,
     )
 
@@ -444,11 +461,12 @@ class QuestionRepository:
         return _revision(row) if row is not None else None
 
     def chapter_is_current(self, workspace_id: uuid.UUID, chapter_id: uuid.UUID) -> bool:
-        """The chapter is an outline node of the active revision of a live document here."""
+        """The chapter is an outline node of the active revision of a live document here, or a
+        Workspace chapter."""
         found = self._session.execute(
             select(literal(1))
             .select_from(
-                chapters.join(
+                chapters.outerjoin(
                     documents,
                     and_(
                         documents.c.workspace_id == chapters.c.workspace_id,
@@ -459,8 +477,13 @@ class QuestionRepository:
             .where(
                 chapters.c.workspace_id == workspace_id,
                 chapters.c.id == chapter_id,
-                documents.c.deleted_at.is_(None),
-                documents.c.active_revision_id == chapters.c.document_revision_id,
+                or_(
+                    chapters.c.document_revision_id.is_(None),
+                    and_(
+                        documents.c.deleted_at.is_(None),
+                        documents.c.active_revision_id == chapters.c.document_revision_id,
+                    ),
+                ),
             )
         ).first()
         return found is not None
@@ -482,17 +505,23 @@ class QuestionRepository:
         with the save: `chapter_is_current` and the active revision a source cites
         (`live_documents`) are read after a publish either committed (and are then the new
         revision) or while it waits until this question is saved (and then remaps it).
+
+        A Workspace chapter has no document: the workspace's chapter tree row stands for it, first
+        (docs/questions.md §14.6), so a delete of that chapter never crosses this save.
         """
         wanted = {c for c in chapter_ids if c is not None}
         ids = set(document_ids)
         if wanted:
-            ids.update(
+            found = set(
                 self._session.execute(
                     select(chapters.c.document_id).where(
                         chapters.c.workspace_id == workspace_id, chapters.c.id.in_(wanted)
                     )
                 ).scalars()
             )
+            if None in found:
+                lock_workspace_tree_shared(self._session, workspace_id)
+            ids.update(d for d in found if d is not None)
         if not ids:
             return
         self._session.execute(
@@ -554,6 +583,7 @@ class QuestionRepository:
                 is_multi_answer=content.is_multi_answer,
                 explanation=content.explanation,
                 rubric=content.rubric,
+                stem_tables=stem_tables_json(content.stem_tables),
                 created_by=actor_id,
             )
         )

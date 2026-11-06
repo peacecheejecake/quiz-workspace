@@ -6,7 +6,8 @@
 // answer-free `PracticeSession` fields (copied field by field, so an unexpected field never gets
 // in) of sessions that are still open; a session whose submission started is never handed out
 // again (not even when a late duplicate open response for it arrives), and submit results
-// (answers, explanations) are never stored.
+// (answers, explanations) are never stored. `해설 보기` retires the session on the server, so it
+// is dropped here too.
 import type { PracticeSession } from './practice-actions';
 
 /** How long an open session is reused (an edit made elsewhere shows up at most this late). */
@@ -37,6 +38,7 @@ export function answerFreeSession(session: PracticeSession): PracticeSession {
     question_type: session.question_type,
     chapter_id: session.chapter_id,
     stem: session.stem,
+    stem_tables: session.stem_tables,
     is_multi_answer: session.is_multi_answer,
     displayed_option_ids: [...session.displayed_option_ids],
     options: session.options.map((o) => ({ id: o.id, text: o.text })),
@@ -135,5 +137,41 @@ export class PracticeSessionCache {
 
   get size(): number {
     return this.entries.size;
+  }
+}
+
+/**
+ * What one opening of the panel already put on screen, by question: previous/next shows it at once
+ * (UX12-SOLVEDOPEN-AC09). Unlike `PracticeSessionCache`, it may hold a result, but only one this
+ * opening has shown: closing the panel clears it, and it never reaches browser storage.
+ */
+export class OpeningViews<T> {
+  private readonly views = new Map<string, T>();
+  private readonly drops = new Map<string, number>();
+  private opening = 0;
+
+  get(questionId: string): T | undefined {
+    return this.views.get(questionId.toLowerCase());
+  }
+
+  /** Taken before awaiting: `put` refuses it once the question or the opening has been dropped. */
+  token(questionId: string): string {
+    return `${this.opening}:${this.drops.get(questionId.toLowerCase()) ?? 0}`;
+  }
+
+  put(questionId: string, view: T, token: string): void {
+    if (token === this.token(questionId)) this.views.set(questionId.toLowerCase(), view);
+  }
+
+  drop(questionId: string): void {
+    const key = questionId.toLowerCase();
+    this.views.delete(key);
+    this.drops.set(key, (this.drops.get(key) ?? 0) + 1);
+  }
+
+  clear(): void {
+    this.views.clear();
+    this.drops.clear();
+    this.opening += 1;
   }
 }

@@ -4,7 +4,7 @@
 // question after recent metadata verification without a new session, never reuses a submitted session, and starts over
 // in another workspace.
 import './dom-setup';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -13,6 +13,7 @@ import type { Invalidation } from '../src/components/questions/viewer/practice-v
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
 import {
   answerFreeSession,
+  OpeningViews,
   PracticeSessionCache,
   PRACTICE_CACHE_TTL_MS,
 } from '../src/lib/questions/practice-cache';
@@ -46,6 +47,37 @@ function session(questionId: string, overrides: Partial<PracticeSession> = {}): 
     ...overrides,
   };
 }
+
+describe('OpeningViews', () => {
+  it('UX12-SOLVEDOPEN-AC09 keeps one view per question until it is dropped or cleared', () => {
+    const views = new OpeningViews<string>();
+    views.put(Q1.toUpperCase(), 'first', views.token(Q1));
+    views.put(Q2, 'second', views.token(Q2));
+    expect(views.get(Q1)).toBe('first');
+    views.drop(Q1);
+    expect(views.get(Q1)).toBeUndefined();
+    views.clear();
+    expect(views.get(Q2)).toBeUndefined();
+  });
+
+  it('UX12-SOLVEDOPEN-AC09 a write begun before a clear or a drop lands nowhere', () => {
+    const views = new OpeningViews<string>();
+    const beforeClear = views.token(Q1);
+    views.clear();
+    views.put(Q1, 'late', beforeClear);
+    expect(views.get(Q1)).toBeUndefined();
+
+    const beforeDrop = views.token(Q2);
+    const other = views.token(Q1);
+    views.drop(Q2);
+    views.put(Q2, 'late', beforeDrop);
+    expect(views.get(Q2)).toBeUndefined();
+    views.put(Q1, 'kept', other);
+    expect(views.get(Q1)).toBe('kept');
+    views.put(Q2, 'new', views.token(Q2));
+    expect(views.get(Q2)).toBe('new');
+  });
+});
 
 describe('PracticeSessionCache', () => {
   it('returns an open session of its workspace by question id (any case)', () => {
@@ -145,12 +177,13 @@ vi.mock('../src/components/practice-return/practice-return-provider', () => ({
   useOptionalPracticeReturn: () => ({ recordActivity: recordReturn }),
 }));
 vi.mock('../src/lib/questions/practice-open-client', async () => {
-  const { fakePracticeOpen } = await import('./practice-open-fake');
+  const { fakePracticeOpen, fakePracticeReveal } = await import('./practice-open-fake');
   return {
     openQuestionPractice: fakePracticeOpen({
       latest: () => latest(),
       open: (ws: string, q: string, key: string) => open(ws, q, key),
     }),
+    revealQuestionPractice: fakePracticeReveal({ latest: () => latest() }),
   };
 });
 vi.mock('../src/lib/questions/practice-actions', () => ({
@@ -248,7 +281,7 @@ describe('QuestionViewer practice session cache', () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
-  it('revalidates cached sessions and restores a newer server result before allowing input', async () => {
+  it('UX12-SOLVEDOPEN-AC01 a result made elsewhere opens a new session, not the result', async () => {
     const view = render(<Harness questionId={Q1} />);
     await screen.findByRole('radio', { name: '보기 가' });
     view.rerender(<Harness questionId={null} />);
@@ -284,8 +317,9 @@ describe('QuestionViewer practice session cache', () => {
         },
       }),
     );
-    expect(await screen.findByText('정답입니다.')).toBeInTheDocument();
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: '해설 보기' })).toBeInTheDocument();
+    expect(screen.queryByText('정답입니다.')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(2);
   });
 
   it('UX11-RETURN-AC01 opens a fresh session without resetting history and reuses that retry', async () => {
@@ -312,16 +346,25 @@ describe('QuestionViewer practice session cache', () => {
         session: { ...previous, state: 'graded', outcome: result },
       },
     });
+    open.mockImplementationOnce(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: 'first-session', workspace_id: ws }),
+    }));
+    open.mockImplementationOnce(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: 'second-session', workspace_id: ws }),
+    }));
     const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
     await screen.findByText('정답입니다.');
     await user.click(screen.getByRole('button', { name: /^다시 풀기$/ }));
     await screen.findByRole('button', { name: '제출' });
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(reset).not.toHaveBeenCalled();
     view.rerender(<Harness questionId={null} />);
     view.rerender(<Harness questionId={Q1} />);
     await screen.findByRole('button', { name: '제출' });
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(reset).not.toHaveBeenCalled();
   });
 
@@ -514,5 +557,292 @@ describe('QuestionViewer practice session cache', () => {
     view.rerender(<Harness questionId={Q1} />);
     expect(await screen.findByRole('radio', { name: '보기 가' })).not.toBeChecked();
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('UX12-SOLVEDOPEN the question first, 해설 보기 on request', () => {
+  const previous = session(Q1);
+  const outcome = {
+    attempt_id: 'old-attempt',
+    practice_session_id: previous.id,
+    question_revision_id: previous.question_revision_id,
+    result: 'correct',
+    correct_option_ids: ['o1'],
+    accepted_answers: null,
+    explanation: '이전 해설',
+    rubric: null,
+  };
+  const solved = {
+    ok: true,
+    data: {
+      reset_epoch: 0,
+      previous_revision: false,
+      active_revision_id: previous.question_revision_id,
+      latest_attempt_id: 'old-attempt',
+      submitted_answer: { selected_option_ids: ['o1'] },
+      session: { ...previous, state: 'graded', outcome },
+    },
+  };
+  /** The next check waits for `release`; a navigation asks only after its pause (`called`). */
+  function holdLatest() {
+    let release: (value: unknown) => void = () => undefined;
+    const called = new Promise<void>((started) => {
+      latest.mockImplementationOnce(() => {
+        started();
+        return new Promise((resolve) => (release = resolve));
+      });
+    });
+    return { called, release: (value: unknown) => release(value) };
+  }
+
+  let sessions = 0;
+  beforeEach(() => {
+    sessions = 0;
+    open.mockImplementation(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: `opened-${(sessions += 1)}`, workspace_id: ws }),
+    }));
+  });
+
+  it('AC01 a solved question opens to be answered, with 해설 보기', async () => {
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    expect(await screen.findByRole('button', { name: '해설 보기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '제출' })).toBeInTheDocument();
+    expect(screen.queryByText('정답입니다.')).toBeNull();
+    expect(screen.queryByText('이전 해설')).toBeNull();
+  });
+
+  it('AC02 a question never solved has no 해설 보기', async () => {
+    render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+  });
+
+  it('AC02 a question solved only on an older revision has no 해설 보기', async () => {
+    latest.mockResolvedValue({
+      ok: true,
+      data: { ...solved.data, previous_revision: true, session: null },
+    });
+    render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+  });
+
+  it('AC03 해설 보기 shows the earlier result in place of the form', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(screen.getByText('정답입니다.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^다시 풀기$/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('AC04 an answer being written waits for a confirm and is never submitted', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: '취소' }));
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
+    expect(screen.queryByText('이전 해설')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    const again = await screen.findByRole('alertdialog');
+    await user.click(within(again).getByRole('button', { name: '해설 보기' }));
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('AC07 a revealed question comes back with its result until the panel closes', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(open).toHaveBeenCalledTimes(2);
+    view.rerender(<Harness questionId={Q1} />);
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
+  it('AC07 a question submitted here comes back with its result; 다시 풀기 ends that', async () => {
+    const user = userEvent.setup();
+    submit.mockResolvedValue({ ok: true, data: outcome });
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await screen.findByText('이전 해설');
+    latest.mockResolvedValue(solved);
+
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(/보기 가/);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByText('이전 해설');
+
+    await user.click(screen.getByRole('button', { name: /^다시 풀기$/ }));
+    await screen.findByRole('button', { name: '제출' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+  });
+
+  it('AC09 going back shows what this opening loaded at once, with no loading text', async () => {
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('radio', { name: '보기 가' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeInTheDocument();
+    expect(screen.queryByText(/문제를 불러오는 중/)).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    await act(async () => {
+      await held.called;
+      held.release({
+        ok: true,
+        data: {
+          session: null,
+          previous_revision: false,
+          reset_epoch: 0,
+          active_revision_id: previous.question_revision_id,
+          latest_attempt_id: null,
+        },
+      });
+    });
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('AC09 nothing can be submitted until the kept session is confirmed', async () => {
+    const user = userEvent.setup();
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('radio', { name: '보기 가' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await user.click(screen.getByRole('radio', { name: '보기 가' }));
+    expect(screen.getByRole('button', { name: '제출' })).toBeDisabled();
+    await act(async () => {
+      await held.called;
+      held.release({
+        ok: true,
+        data: {
+          session: null,
+          previous_revision: false,
+          reset_epoch: 0,
+          active_revision_id: previous.question_revision_id,
+          latest_attempt_id: null,
+        },
+      });
+    });
+    expect(screen.getByRole('button', { name: '제출' })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
+  });
+
+  it('AC09 a kept result comes back without any request', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    latest.mockClear();
+    view.rerender(<Harness questionId={Q1} />);
+    expect(screen.getByText('이전 해설')).toBeInTheDocument();
+    expect(screen.queryByText(/문제를 불러오는 중/)).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(latest).not.toHaveBeenCalled();
+  });
+
+  it('AC09 a submission that lands after the panel closed cannot fill the next opening', async () => {
+    const user = userEvent.setup();
+    let finish: (value: unknown) => void = () => undefined;
+    submit.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    view.rerender(<Harness questionId={null} />);
+    await act(async () => finish({ ok: true, data: outcome }));
+
+    latest.mockResolvedValue(solved);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('AC09 a reveal that fails after the quiet check returned leaves the session usable', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+
+    const check = holdLatest();
+    const failing = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await act(async () => {
+      await check.called;
+    });
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    await act(async () => {
+      await failing.called;
+    });
+    await act(async () => check.release(solved));
+    expect(screen.getByRole('button', { name: '제출' })).toBeDisabled();
+    await act(async () =>
+      failing.release({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+
+    await screen.findByText('일시적인 오류입니다.');
+    await user.click(screen.getByRole('radio', { name: '보기 가' }));
+    expect(screen.getByRole('button', { name: '제출' })).toBeEnabled();
+    expect(screen.queryByText('이전 해설')).toBeNull();
+  });
+
+  it('AC09 해설 보기 pressed during the quiet check keeps the result', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+    const held = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await act(async () => {
+      await held.called;
+    });
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+    await act(async () => held.release(solved));
+    expect(screen.getByText('이전 해설')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
   });
 });

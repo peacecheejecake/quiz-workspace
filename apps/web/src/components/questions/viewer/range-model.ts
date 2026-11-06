@@ -103,14 +103,15 @@ export interface RangeFilterState {
   readonly status: readonly QuestionDotStatus[];
   readonly favorite: boolean;
   readonly retry: boolean;
-  readonly type: QuestionType | null;
+  /** Empty: every type. */
+  readonly types: readonly QuestionType[];
 }
 
 export const EMPTY_RANGE_FILTERS: RangeFilterState = {
   status: QUESTION_DOT_STATUSES,
   favorite: false,
   retry: false,
-  type: null,
+  types: [],
 };
 
 export function isRangeFiltered(filters: RangeFilterState): boolean {
@@ -118,7 +119,7 @@ export function isRangeFiltered(filters: RangeFilterState): boolean {
     filters.status.length !== QUESTION_DOT_STATUSES.length ||
     filters.favorite ||
     filters.retry ||
-    filters.type !== null
+    filters.types.length > 0
   );
 }
 
@@ -131,7 +132,7 @@ export function rangeApiFilters(filters: RangeFilterState): RunRangeFilters | un
       : {}),
     ...(filters.favorite ? { favorite: true } : {}),
     ...(filters.retry ? { retry: true } : {}),
-    ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.types.length > 0 ? { types: [...filters.types] } : {}),
   };
 }
 

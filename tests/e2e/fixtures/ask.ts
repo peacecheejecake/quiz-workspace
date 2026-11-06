@@ -161,6 +161,7 @@ export const ASK_MARKERS = {
   noAnswer: 'E2E-ASK-NOANSWER',
   leakProbe: 'E2E-ASK-LEAK-PROBE',
   uncited: 'E2E-ASK-UNCITED',
+  markdown: 'E2E-ASK-MARKDOWN',
   hold: 'E2E-ASK-HOLD',
 } as const;
 

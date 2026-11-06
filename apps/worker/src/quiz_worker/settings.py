@@ -285,7 +285,8 @@ class WorkerSettings(BaseSettings):
     # the same variable (409 ask-disabled). ⛔ staging/production need approval.
     ask_llm: bool = Field(default=False, validation_alias="WORKER_ASK_LLM")
     # Which queue this process consumes: `default` (quiz.jobs, with the embedded beat) or
-    # `interactive` (ask.answer only, ASK_WORKER_CONCURRENCY processes, no beat) — run one of each
+    # `interactive` (ask.answer, AI 해설, ASK_WORKER_CONCURRENCY processes, no beat); both also read
+    # the on-demand queue (mock exams, MOCK-01-C11) — run one of each
     # so a long document job never delays an answer.
     queue: str = Field(
         default="default", pattern=r"^(default|interactive)$", validation_alias="WORKER_QUEUE"

@@ -56,6 +56,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Any
 
+from book_core.question import StemTables
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from psycopg import errors as pg_errors
@@ -112,6 +113,15 @@ from quiz_api.repositories.questions import (
     RevisionRecord,
     SourceInputRecord,
     SourceRecord,
+)
+from quiz_api.stem_tables import (
+    STEM_TABLES_DESCRIPTION,
+    STEM_TABLES_EDIT_DESCRIPTION,
+    StemTable,
+    StemTablesInput,
+    edited_stem_tables,
+    sent_stem_tables,
+    stem_tables_out,
 )
 
 router = APIRouter(tags=["questions"], responses=problem_responses(503))
@@ -189,12 +199,15 @@ class QuestionRevision(BaseModel):
     is_multi_answer: bool
     explanation: str | None
     rubric: str | None
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     created_at: datetime
 
 
 class ChapterRef(BaseModel):
     id: uuid.UUID
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: a Workspace chapter.")
     title: str
 
 
@@ -268,6 +281,7 @@ class QuestionCreate(BaseModel):
     )
     explanation: str | None = _LongText
     rubric: str | None = _LongText
+    stem_tables: StemTablesInput | None = Field(default=None, description=STEM_TABLES_DESCRIPTION)
     chapter_id: uuid.UUID | None = None
     question_number: int | None = Field(default=None, ge=1, le=INT4_MAX)
     sources: list[QuestionSourceInput] = Field(default_factory=list, max_length=MAX_SOURCES)
@@ -303,6 +317,10 @@ class QuestionUpdate(BaseModel):
     accepted_answers: list[str] | None = Field(default=None, max_length=MAX_ACCEPTED_ANSWERS)
     explanation: str | None = _LongText
     rubric: str | None = _LongText
+    stem_tables: StemTablesInput | None = Field(
+        default=None,
+        description=STEM_TABLES_EDIT_DESCRIPTION,
+    )
     chapter_id: uuid.UUID | None = None
     question_number: int | None = Field(default=None, ge=1, le=INT4_MAX)
     sources: list[QuestionSourceInput] | None = Field(default=None, max_length=MAX_SOURCES)
@@ -381,6 +399,7 @@ def _revision_out(rev: RevisionRecord) -> QuestionRevision:
         is_multi_answer=rev.is_multi_answer,
         explanation=rev.explanation,
         rubric=rev.rubric,
+        stem_tables=stem_tables_out(rev.stem_tables),
         created_at=rev.created_at,
     )
 
@@ -416,6 +435,7 @@ def _content(
     accepted_answers: list[str] | None,
     explanation: str | None,
     rubric: str | None,
+    stem_tables: StemTables | None = None,
 ) -> QuestionContent:
     return QuestionContent(
         question_type=question_type,
@@ -426,6 +446,7 @@ def _content(
         accepted_answers=tuple(accepted_answers) if accepted_answers is not None else None,
         explanation=explanation,
         rubric=rubric,
+        stem_tables=stem_tables,
     )
 
 
@@ -595,6 +616,7 @@ def create_question(
         body.accepted_answers,
         body.explanation,
         body.rubric,
+        sent_stem_tables(body.stem, body.stem_tables),
     )
     issues.items.extend(content_issues(content, body.publication_status).items)
 
@@ -782,9 +804,10 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
 
         old = current.content()
         rev = current.revision
+        stem = body.stem if "stem" in sent and body.stem is not None else rev.stem
         content = _content(
             current.question_type,
-            body.stem if "stem" in sent and body.stem is not None else rev.stem,
+            stem,
             body.options
             if "options" in sent and body.options is not None
             else [QuestionOption(id=o["id"], text=o["text"]) for o in rev.options],
@@ -795,6 +818,12 @@ def update_question(access: EditQuestion, body: QuestionUpdate, repo: QuestionRe
             body.accepted_answers if "accepted_answers" in sent else rev.accepted_answers,
             body.explanation if "explanation" in sent else rev.explanation,
             body.rubric if "rubric" in sent else rev.rubric,
+            edited_stem_tables(
+                stem,
+                sent="stem_tables" in sent,
+                tables=body.stem_tables,
+                stored=old.stem_tables,
+            ),
         )
         content_changed = content != old
         if content_changed or target != current.publication_status:

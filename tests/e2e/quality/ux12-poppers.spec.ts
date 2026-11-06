@@ -44,12 +44,17 @@ async function focusInPlace(trigger: Locator): Promise<void> {
   await trigger.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
 }
 
-/** A kit Tooltip's trigger: 변형 유형's `?` button in the 풀기 form (the home line has none). */
+/**
+ * A kit Tooltip's trigger: a 검색 방식 row in the 본문 검색 settings (the home line has none). The
+ * row holds the Tooltip; focus reaches it through its radio, an unchecked one because opening the
+ * settings focuses the checked one, and a Tooltip opened there would not follow a pinned row.
+ */
 async function tooltipTrigger(page: Page, workspaceId: string): Promise<Locator> {
-  await page.goto(homePath(workspaceId, 'panel=mock-exams&mock=new'));
-  const trigger = page.getByRole('button', { name: / 설명$/ }).first();
-  await expect(trigger).toBeVisible();
-  return trigger;
+  await page.goto(homePath(workspaceId));
+  const settings = await openSearchOptions(page, 'body');
+  const radio = settings.getByRole('radio', { checked: false }).first();
+  await expect(radio).toBeVisible();
+  return radio.locator('xpath=ancestor::*[@data-description="tooltip"][1]');
 }
 
 async function expectSafeMargin(page: Page, surface: Locator): Promise<void> {
@@ -111,7 +116,7 @@ for (const edge of ['left', 'right'] as const) {
       await signInAs(page, owner.user);
       const trigger = await tooltipTrigger(page, ws.id);
       await pinToEdge(trigger, edge);
-      await focusInPlace(trigger);
+      await focusInPlace(trigger.getByRole('radio'));
       await expectSafeMargin(page, page.getByRole('tooltip'));
     },
   );
@@ -147,7 +152,8 @@ test.describe('narrow viewport', () => {
       const owner = await workspaceFactory.member('ux12-pop-02');
       const ws = await workspaceFactory.create(owner);
       await signInAs(page, owner.user);
-      await focusInPlace(await tooltipTrigger(page, ws.id));
+      const trigger = await tooltipTrigger(page, ws.id);
+      await focusInPlace(trigger.getByRole('radio'));
       const surface = page.getByRole('tooltip');
       await expect(surface).toBeVisible();
       await surface.evaluate((element, text) => {

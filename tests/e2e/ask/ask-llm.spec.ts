@@ -115,6 +115,7 @@ import {
   searchUi,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   submitPractice,
   startPractice,
   uploadReadyBook,
@@ -374,6 +375,7 @@ test(
     await expect(excerpt).toContainText(PASSAGES.book);
     await expect(excerpt).toContainText(pageLabel(2));
     await searchUi.openInPdf(excerpt).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname.endsWith(`/documents/${s.book.documentId}`) &&
@@ -662,6 +664,7 @@ test(
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId, q.id)}`);
       const offPractice = panelUi.panel(page);
       await expect(offPractice).toBeVisible();
+      await panelUi.reveal(offPractice).click(); // a solved question opens to be answered
       await expect(
         offPractice.getByRole('status').filter({ hasText: RESULT_TEXT.incorrect }),
       ).toBeVisible();
@@ -1375,7 +1378,7 @@ test(
 );
 
 test(
-  'ASK-01-AC12 mock exam questions attach hint-only before submitting and full after, above the run panel, and lose their context once the mock exam is deleted',
+  'ASK-01-AC12 mock exam questions attach full once graded, above the run panel, and lose their context once the mock exam is deleted',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('ask01-ac12');
@@ -1386,7 +1389,7 @@ test(
     const stateBefore = (await overviewItem(viewer, s.workspaceId, source.id)).status;
     const bankAttempts = questionAttemptCount(s.workspaceId);
 
-    // Viewer: 풀기 → 시작, pick a wrong option, 질문하기 before submitting.
+    // Viewer: 풀기 → 시작, a wrong option: no 질문하기 until it is submitted and graded.
     await signInAs(page, viewer.user);
     await page.goto(mockExamsPath(s.workspaceId));
     const list = mockUi.dialog(page);
@@ -1400,25 +1403,29 @@ test(
     const wrong = run.getByRole('radio', { name: /^보기 가 \d$/ });
     await wrong.check();
     const opener = askUi.questionButton(run);
-    await expect(opener, 'the mock exam run header has 질문하기').toBeVisible();
+    await expect(opener, 'no 질문하기 before submitting').toHaveCount(0);
+    await runUi.submit(run).click();
+    await expect(runUi.result(run)).toContainText(/오답|incorrect/i);
+    await expect(opener, 'the graded position has 질문하기').toBeVisible();
+
+    // After submitting: a new conversation with the answer, explanation and chapter 1's source.
     await opener.click();
     let panel = askUi.panel(page);
     await expect(panel).toBeVisible();
     await expect.poll(() => panel.evaluate((el) => el.contains(document.activeElement))).toBe(true);
     await expect(askUi.chip(panel)).toContainText(/문제 1 · /);
-    await expect(askUi.chip(panel).getByText(ASK_TEXT.hint)).toBeVisible();
-    const hint = await ask(panel, PROBE);
-    await waitDone(hint);
-    await expect(hint).toContainText(label);
-    await expect(hint).toContainText(SECRETS.mockCorrectOption);
-    await expect(hint).not.toContainText(SECRETS.mockExplanation);
+    await expect(askUi.chip(panel).getByText(ASK_TEXT.afterSubmit)).toBeVisible();
+    const full = await ask(panel, PROBE);
+    await waitDone(full);
     const firstConversation = conversationOf(page);
-    const hintMessage = await lastAnswer(viewer, firstConversation);
-    const picked = probeSelected(hintMessage.text);
-    expect(picked, 'the chosen option, by its display number').toHaveLength(1);
-    expect(picked[0]).toMatch(/^보기 가 \d$/);
-    expect(hintMessage.disclosure).toBe('hint');
-    expectNoAnswerFields(hintMessage.text, 'mock hint probe');
+    for (const text of [SECRETS.mockExplanation, SECRETS.mockCorrectOption, PASSAGES.book]) {
+      await expect(full).toContainText(text);
+    }
+    const fullMessage = await lastAnswer(viewer, firstConversation);
+    expect(fullMessage.disclosure).toBe('full');
+    expect(fullMessage.text).toMatch(/submitted_answer\s*:/);
+    expect(fullMessage.text).toMatch(/result\s*:\s*(incorrect|오답)/);
+    expect(fullMessage.text).toMatch(new RegExp(`question_sources\\s*:.*${PASSAGES.book}`, 's'));
 
     // Back once closes only the AI panel; the run keeps its position and choice.
     await page.goBack();
@@ -1430,26 +1437,6 @@ test(
     await expect(opener).toBeFocused();
     await expect(wrong).toBeChecked();
     await expect(runUi.progress(run)).toHaveAttribute('aria-valuetext', progressText(1, 2));
-
-    // After submitting: a new conversation with the answer, explanation and chapter 1's source.
-    await runUi.submit(run).click();
-    await expect(runUi.result(run)).toContainText(/오답|incorrect/i);
-    await opener.click();
-    panel = askUi.panel(page);
-    await expect(askUi.chip(panel).getByText(ASK_TEXT.afterSubmit)).toBeVisible();
-    const full = await ask(panel, PROBE);
-    await waitDone(full);
-    expect(conversationOf(page)).not.toBe(firstConversation);
-    for (const text of [SECRETS.mockExplanation, SECRETS.mockCorrectOption, PASSAGES.book]) {
-      await expect(full).toContainText(text);
-    }
-    const fullMessage = await lastAnswer(viewer, conversationOf(page));
-    expect(fullMessage.disclosure).toBe('full');
-    expect(fullMessage.text).toMatch(/submitted_answer\s*:/);
-    expect(fullMessage.text).toMatch(/result\s*:\s*(incorrect|오답)/);
-    expect(fullMessage.text).toMatch(new RegExp(`question_sources\\s*:.*${PASSAGES.book}`, 's'));
-    await page.keyboard.press('Escape');
-    await expect(panel).toBeHidden();
     expect(mockAttemptCount(exam.id), 'only the submit wrote a mock attempt').toBe(1);
     expect(questionAttemptCount(s.workspaceId)).toBe(bankAttempts);
     expect((await overviewItem(viewer, s.workspaceId, source.id)).status).toBe(stateBefore);
@@ -1481,7 +1468,7 @@ test(
     await expect(gone).toContainText('attachment: none');
     await askUi.close(panel).click();
 
-    // The bank's range run (문제 풀기) has no 질문하기.
+    // The bank's range run has no 질문하기.
     await page.goto(homePath(s.workspaceId));
     const picker = await openRangePicker(page);
     await runUi.selectAll(picker).check();

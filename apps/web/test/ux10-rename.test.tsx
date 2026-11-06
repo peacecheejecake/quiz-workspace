@@ -72,6 +72,9 @@ it('UX10-PLAY-AC06 disables detail play during rename and restores it on cancel'
       openSettings={false}
       onSettingsShown={() => undefined}
       onPractise={() => undefined}
+      onResume={() => undefined}
+      onDismissRun={() => undefined}
+      dismissError={null}
       onBankSubmit={() => undefined}
       bankBusy={false}
       bankError={null}
@@ -82,10 +85,11 @@ it('UX10-PLAY-AC06 disables detail play during rename and restores it on cancel'
   );
   const play = await screen.findByRole('button', { name: '풀기' });
   expect(play).toBeEnabled();
-  await user.click(screen.getByRole('button', { name: '이름 바꾸기' }));
-  expect(play).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: '더보기' }));
+  await user.click(await screen.findByRole('menuitem', { name: '이름 바꾸기' }));
+  expect(await screen.findByRole('button', { name: '풀기' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: '취소' }));
-  expect(play).toBeEnabled();
+  expect(await screen.findByRole('button', { name: '풀기' })).toBeEnabled();
 });
 
 it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled after failure', async () => {
@@ -107,6 +111,7 @@ it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled afte
   const api = {
     list: async () => ({ ok: true, data: { items: exams, llm_available: false } }),
     rename: async () => ({ ok: false, message: '저장 실패' }),
+    unfinishedRuns: async () => ({ ok: true, data: [] }),
   };
   const user = userEvent.setup();
   render(
@@ -120,6 +125,7 @@ it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled afte
       onViewChange={() => undefined}
       onPractise={() => undefined}
       onBankStarted={() => undefined}
+      onResume={() => undefined}
       api={api as never}
     />,
   );

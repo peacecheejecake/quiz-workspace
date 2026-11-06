@@ -29,6 +29,7 @@ from typing import Any
 
 import psycopg
 import pytest
+from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
 from quiz_api.settings import LOCAL_CORS_ORIGINS
 
 pytestmark = pytest.mark.infra
@@ -272,7 +273,7 @@ def create_mock_exam(client: Any, workspace_id: str, question_ids: list[str]) ->
         },
         (202,),
     )
-    client.wait_for_job(str(exam["latest_generation"]["job_id"]))
+    assert exam["status"] == "ready"
     current: dict[str, Any] = client.ok("GET", f"/mock-exams/{exam['id']}")
     assert current["status"] == "ready", current["status"]
     return current
@@ -463,6 +464,49 @@ def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed:
     run = owner.ok("GET", f"/practice-runs/{ordered['id']}")
     assert not (_keys(run) & ({"item_ids", "items", "stem", "options"} | ANSWER_KEYS))
     assert set(run["summary"]) >= {"correct", "incorrect", "pending", "skipped"}
+
+
+def test_qview_01_c11_a_shuffled_run_fixes_each_positions_options(seed: Any) -> None:
+    r = Range(seed, "shuffle")
+    owner = r.owner
+    plain = created(owner, r.ws_id, bank({"chapter_ids": [r.ch1]}))
+    assert plain["shuffle_options"] is False
+    run = created(owner, r.ws_id, bank({"chapter_ids": [r.ch1]}, shuffle_options=True, seed=7))
+    assert run["shuffle_options"] is True
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["shuffle_options"] is True
+
+    before = item(owner, run["id"], 1)
+    shown = [o["id"] for o in before["options"]]
+    canonical = [o["id"] for o in item(owner, plain["id"], 1)["options"]]
+    assert shown == shuffled_option_ids(canonical, run_option_seed(7, 1))
+
+    # The session stores the order the item promised, and a resumed one keeps it.
+    res = run_session(owner, before["question_id"], run["id"], 1)
+    session = owner.ok_response(res, "POST", "run session", (201,))
+    assert session["displayed_option_ids"] == shown
+    assert [o["id"] for o in item(owner, run["id"], 1)["options"]] == shown
+    res = run_session(owner, before["question_id"], run["id"], 1)
+    resumed = owner.ok_response(res, "POST", "run session", (201,))
+    assert resumed["displayed_option_ids"] == shown
+
+    # Grading stays on stable ids, wherever the correct option is shown.
+    question = next(q for q in r.confirmed if q["id"] == before["question_id"])
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+    done = item(owner, run["id"], 1)
+    assert done["attempt"]["result"] == "correct"
+    assert [o["id"] for o in done["options"]] == shown
+    assert admin(
+        "select displayed_option_ids from public.question_attempts where practice_session_id = %s",
+        (session["id"],),
+    ) == [(shown,)]
+
+    # A mock run has its own question copies and refuses the setting.
+    body = {"source": "mock", "mock_exam_id": RANDOM_ID, "range": {"all": True}}
+    assert start(owner, r.ws_id, {**body, "shuffle_options": True}).status_code == 422
 
 
 # ---------------------------------------------------------------------------------------------
@@ -1100,7 +1144,7 @@ def test_c04_mock_run_positions_are_submitted_once_and_keep_their_questions(seed
     assert mock_submit(owner, second["id"], [mock_wrong(mq[1])]).status_code == 404
     # 다시 만들기 mid-run (decision n): the run keeps the questions it started with.
     remade = owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     new_ids = {q["id"] for q in mock_questions(owner, exam["id"])}
     assert len(new_ids) == 3
     assert not new_ids & {q["id"] for q in mq}
@@ -1322,7 +1366,7 @@ def test_c05_standalone_sessions_end_with_their_mock_exam_round_and_workspace(se
     remade_exam = create_mock_exam(owner, ws_id, [mcqs[1]["id"]])
     [(old_q, old_s)] = opened(remade_exam["id"])
     remade = owner.ok("POST", f"/mock-exams/{remade_exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     refused(mock_submit(owner, old_s["id"], old_q["correct_option_ids"]), old_s["id"], 0)
     [(new_q, new_s)] = opened(remade_exam["id"])
     assert new_q["id"] != old_q["id"]
@@ -1496,7 +1540,7 @@ def test_ux11_return_historical_mock_retry_is_separate_and_keeps_run(seed: Any) 
     owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
     before = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
     remade = owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     assert item(owner, run["id"], 1)["available"] is True
     path = f"/practice-runs/{run['id']}/items/1/retry-session"
     assert other.call("POST", path, {}).status_code == 404
@@ -1578,3 +1622,558 @@ def test_ux11_return_deleted_exam_rejects_self_grading_a_pending_retry(seed: Any
         ).status_code
         == 404
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-RESUME: GET /workspaces/{id}/practice-runs/unfinished, POST /practice-runs/{id}/dismiss
+# ---------------------------------------------------------------------------------------------
+
+
+def unfinished(client: Any, workspace_id: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = client.ok(
+        "GET", f"/workspaces/{workspace_id}/practice-runs/unfinished"
+    )["items"]
+    return items
+
+
+def answer_position(client: Any, question: dict[str, Any], run_id: str, position: int) -> None:
+    session = client.ok_response(
+        run_session(client, question["id"], run_id, position), "POST", "open", (201,)
+    )
+    client.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+
+
+def resume_workspace(seed: Any, label: str, n: int = 3) -> tuple[Any, str, list[dict[str, Any]]]:
+    owner = seed.client(f"resume-{label}")
+    ws_id = str(owner.create_workspace()["id"])
+    tag = f"{label}-{uuid.uuid4().hex[:6]}"
+    qs = [owner.create_question(ws_id, mcq(tag, 1, k, None)) for k in range(1, n + 1)]
+    return owner, ws_id, qs
+
+
+def test_ux12_resume_lists_progress_and_the_next_position_without_content(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "shape")
+    run = created(owner, ws_id, bank({"all": True}))
+    answer_position(owner, qs[0], run["id"], 1)
+    answer_position(owner, qs[2], run["id"], 3)
+    # An opened position is still unanswered.
+    owner.ok_response(run_session(owner, qs[1]["id"], run["id"], 2), "POST", "open 2", (201,))
+
+    [row] = unfinished(owner, ws_id)
+    assert row["id"] == run["id"]
+    assert (row["answered"], row["total"], row["next_position"]) == (2, 3, 2)
+    assert row["chapter_title"] is None
+    assert row["last_touched_at"] >= row["created_at"]
+    assert not _keys(row) & (ANSWER_KEYS | {"stem", "options", "item_ids", "seed", "range"})
+
+
+def test_ux12_resume_a_run_of_one_chapter_is_named_after_it(seed: Any) -> None:
+    owner = seed.client("resume-chapter")
+    ws_id = str(owner.create_workspace()["id"])
+    ch1, ch2 = seed_chapters(ws_id, ["1장 물", "2장 불"])
+    tag = uuid.uuid4().hex[:6]
+    first = [owner.create_question(ws_id, mcq(tag, 1, n, ch1)) for n in (1, 2)]
+    second = owner.create_question(ws_id, mcq(tag, 2, 1, ch2))
+    one = created(owner, ws_id, bank({"chapter_ids": [ch1]}))
+    both = created(owner, ws_id, bank({"all": True}))
+    picked = created(owner, ws_id, bank({"question_ids": [q["id"] for q in first]}))
+    titles = {row["id"]: row["chapter_title"] for row in unfinished(owner, ws_id)}
+    assert titles == {one["id"]: "1장 물", both["id"]: None, picked["id"]: "1장 물"}
+    # The name follows the questions still live.
+    owner.ok("DELETE", f"/questions/{second['id']}", None, (204,))
+    assert {r["id"]: r["chapter_title"] for r in unfinished(owner, ws_id)}[both["id"]] == "1장 물"
+
+
+def test_ux12_resume_finished_and_fully_answered_runs_leave_the_list(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "finished", 2)
+    done = created(owner, ws_id, bank({"all": True}))
+    owner.ok("POST", f"/practice-runs/{done['id']}/finish")
+    answered = created(owner, ws_id, bank({"all": True}))
+    answer_position(owner, qs[0], answered["id"], 1)
+    answer_position(owner, qs[1], answered["id"], 2)
+    assert unfinished(owner, ws_id) == []
+
+
+def test_ux12_resume_mock_runs_are_not_listed(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "mock", 1)
+    exam = create_mock_exam(owner, ws_id, [q["id"] for q in qs])
+    run = created(
+        owner,
+        ws_id,
+        {"source": "mock", "mock_exam_id": exam["id"], "range": {"all": True}},
+    )
+    assert run["source"] == "mock"
+    assert unfinished(owner, ws_id) == []
+
+
+def test_ux12_resume_lists_only_the_callers_runs_of_this_workspace(seed: Any) -> None:
+    owner, ws_id, _ = resume_workspace(seed, "owner")
+    viewer = seed.client("resume-viewer")
+    editor = seed.client("resume-editor")
+    outsider = seed.client("resume-outsider")
+    seed.membership(ws_id, viewer.user, "viewer")
+    seed.membership(ws_id, editor.user, "editor")
+    mine = created(owner, ws_id, bank({"all": True}))
+    theirs = created(viewer, ws_id, bank({"all": True}))
+
+    other_ws = str(owner.create_workspace()["id"])
+    owner.create_question(other_ws, mcq("other", 1, 1, None))
+    other = created(owner, other_ws, bank({"all": True}))
+
+    assert [r["id"] for r in unfinished(owner, ws_id)] == [mine["id"]]
+    assert [r["id"] for r in unfinished(viewer, ws_id)] == [theirs["id"]]
+    assert unfinished(editor, ws_id) == []
+    assert [r["id"] for r in unfinished(owner, other_ws)] == [other["id"]]
+
+    path = f"/workspaces/{ws_id}/practice-runs/unfinished"
+    unknown = owner.call("GET", f"/workspaces/{RANDOM_ID}/practice-runs/unfinished")
+    assert unknown.status_code == 404
+    res = outsider.call("GET", path)
+    assert res.status_code == 404
+    assert res.json()["detail"] == unknown.json()["detail"]
+
+    # Another member, an outsider and an unknown id cannot tell a run exists.
+    missing = owner.call("POST", f"/practice-runs/{RANDOM_ID}/dismiss")
+    assert missing.status_code == 404
+    for client in (viewer, outsider):
+        res = client.call("POST", f"/practice-runs/{mine['id']}/dismiss")
+        assert res.status_code == 404
+        assert res.json()["detail"] == missing.json()["detail"]
+    assert [r["id"] for r in unfinished(owner, ws_id)] == [mine["id"]]
+
+
+def test_ux12_resume_archived_shows_own_runs_and_guests_get_nothing(seed: Any) -> None:
+    owner, ws_id, _ = resume_workspace(seed, "archived")
+    run = created(owner, ws_id, bank({"all": True}))
+    owner.ok("POST", f"/workspaces/{ws_id}/archive")
+    assert [r["id"] for r in unfinished(owner, ws_id)] == [run["id"]]
+    owner.ok("POST", f"/workspaces/{ws_id}/restore")
+
+    path = f"/workspaces/{ws_id}/practice-runs/unfinished"
+    cookie = guest_cookie(seed, owner, ws_id)
+    for method, target in (("GET", path), ("POST", f"/practice-runs/{run['id']}/dismiss")):
+        bare = seed._http.request(method, f"/api/v1{target}")
+        seed._http.cookies.clear()
+        assert bare.status_code == 401
+        shared = seed._http.request(method, f"/api/v1{target}", headers={"Cookie": cookie})
+        seed._http.cookies.clear()
+        assert shared.status_code == 401
+
+    owner.ok("DELETE", f"/workspaces/{ws_id}", None, (200, 202, 204))
+    assert owner.call("GET", path).status_code == 404
+
+
+def test_ux12_resume_dismiss_is_idempotent_and_changes_nothing_else(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "dismiss")
+    run = created(owner, ws_id, bank({"all": True}))
+    answer_position(owner, qs[0], run["id"], 1)
+    attempts = "select count(*) from public.question_attempts where workspace_id = %s"
+    stamp = "select resume_dismissed_at from public.practice_runs where id = %s"
+    assert count(attempts, (ws_id,)) == 1
+
+    assert owner.call("POST", f"/practice-runs/{run['id']}/dismiss").status_code == 204
+    stamped = admin(stamp, (run["id"],))
+    assert stamped[0][0] is not None
+    assert owner.call("POST", f"/practice-runs/{run['id']}/dismiss").status_code == 204
+    assert admin(stamp, (run["id"],)) == stamped
+    assert unfinished(owner, ws_id) == []
+
+    # Still the same open run, reachable by its URL; going on does not bring it back.
+    read = owner.ok("GET", f"/practice-runs/{run['id']}")
+    assert (read["finished_at"], read["answered"]) == (None, 1)
+    assert count(attempts, (ws_id,)) == 1
+    answer_position(owner, qs[1], run["id"], 2)
+    assert unfinished(owner, ws_id) == []
+
+
+def test_ux12_resume_runs_without_a_live_position_show_nothing(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "gone")
+    created(owner, ws_id, bank({"question_ids": [qs[0]["id"]]}))
+    first_gone = created(owner, ws_id, bank({"question_ids": [qs[1]["id"], qs[2]["id"]]}))
+    owner.ok("DELETE", f"/questions/{qs[0]['id']}", None, (204,))
+    owner.ok("DELETE", f"/questions/{qs[1]['id']}", None, (204,))
+    [row] = unfinished(owner, ws_id)
+    assert row["id"] == first_gone["id"]
+    assert (row["answered"], row["total"], row["next_position"]) == (0, 2, 2)
+
+
+def test_ux12_resume_a_reset_position_is_not_offered(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "reset", 2)
+    run = created(owner, ws_id, bank({"all": True}))
+    answer_position(owner, qs[0], run["id"], 1)
+    admin(
+        "insert into public.practice_reset_epochs (user_id, question_id, epoch) "
+        "values (%s, %s, 1) on conflict (user_id, question_id) do update set epoch = 1",
+        (str(owner.user.id), qs[0]["id"]),
+    )
+    [row] = unfinished(owner, ws_id)
+    assert (row["answered"], row["next_position"]) == (0, 2)
+    assert owner.call("GET", f"/practice-runs/{run['id']}/items/2").status_code == 200
+
+
+def test_ux12_resume_order_is_last_touched_first_and_capped_at_twenty(seed: Any) -> None:
+    owner, ws_id, qs = resume_workspace(seed, "cap", 1)
+    runs = [created(owner, ws_id, bank({"all": True})) for _ in range(22)]
+    owner.ok_response(run_session(owner, qs[0]["id"], runs[0]["id"], 1), "POST", "open", (201,))
+    rows = unfinished(owner, ws_id)
+    assert len(rows) == 20
+    assert rows[0]["id"] == runs[0]["id"]
+    touched = [r["last_touched_at"] for r in rows]
+    assert touched == sorted(touched, reverse=True)
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-MOCKRESUME: MockExam.unfinished_run on the list, the detail and a rename
+# ---------------------------------------------------------------------------------------------
+
+
+def exam_row(client: Any, ws_id: str, exam_id: str) -> dict[str, Any]:
+    items = client.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"]
+    row: dict[str, Any] = next(e for e in items if e["id"] == exam_id)
+    return row
+
+
+def mock_answer(client: Any, question: dict[str, Any], run_id: str, position: int) -> None:
+    session = client.ok_response(
+        mock_session(client, question["id"], run_id, position), "POST", "open", (201,)
+    )
+    client.ok_response(
+        mock_submit(client, session["id"], question["correct_option_ids"]),
+        "POST",
+        "submit",
+        (200,),
+    )
+
+
+def mock_resume_world(
+    seed: Any, label: str, n: int = 3
+) -> tuple[Any, str, dict[str, Any], list[dict[str, Any]]]:
+    owner = seed.client(f"mock-resume-{label}")
+    ws_id = str(owner.create_workspace()["id"])
+    tag = f"{label}-{uuid.uuid4().hex[:6]}"
+    bank_qs = [owner.create_question(ws_id, mcq(tag, 1, k, None)) for k in range(1, n + 1)]
+    exam = create_mock_exam(owner, ws_id, [q["id"] for q in bank_qs])
+    return owner, ws_id, exam, mock_questions(owner, exam["id"])
+
+
+def test_ux12_mockresume_reports_progress_and_the_next_position(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "shape")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    mock_answer(owner, mq[2], run["id"], 3)
+    # An opened position is still unanswered.
+    owner.ok_response(mock_session(owner, mq[1]["id"], run["id"], 2), "POST", "open", (201,))
+
+    expected = {"id": run["id"], "total": 3, "answered": 2, "next_position": 2}
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected
+    assert owner.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"] == expected
+    renamed = owner.ok("PATCH", f"/mock-exams/{exam['id']}", {"title": "새 이름"})
+    assert renamed["unfinished_run"] == expected
+
+
+def test_ux12_mockresume_options_keep_their_order_within_the_run(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "order")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    before = [o["id"] for o in item(owner, run["id"], 2)["options"]]
+    owner.ok_response(mock_session(owner, mq[1]["id"], run["id"], 2), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["next_position"] == 2
+    assert [o["id"] for o in item(owner, run["id"], 2)["options"]] == before
+
+
+def test_ux12_mockresume_picks_the_last_touched_unfinished_run(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "pick", 2)
+    older = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    newer = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    owner.ok_response(mock_session(owner, mq[0]["id"], older["id"], 1), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == older["id"]
+
+    owner.ok("POST", f"/practice-runs/{older['id']}/finish")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == newer["id"]
+
+    mock_answer(owner, mq[0], newer["id"], 1)
+    mock_answer(owner, mq[1], newer["id"], 2)
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+
+def test_ux12_mockresume_removed_questions_are_skipped(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "removed")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    assert owner.call("DELETE", f"/mock-exam-questions/{mq[1]['id']}").status_code == 204
+    found = exam_row(owner, ws_id, exam["id"])["unfinished_run"]
+    assert (found["answered"], found["total"], found["next_position"]) == (1, 3, 3)
+    assert owner.call("DELETE", f"/mock-exam-questions/{mq[2]['id']}").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+
+def test_ux12_mockresume_a_new_round_leaves_the_old_run_behind(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "round")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+    # The old run keeps its questions and opens by its URL (decision n).
+    assert item(owner, run["id"], 2)["available"] is True
+
+
+def test_ux12_mockresume_a_deleted_exam_shows_nothing(seed: Any) -> None:
+    owner, ws_id, exam, _ = mock_resume_world(seed, "deleted", 1)
+    created(owner, ws_id, mock(exam["id"], {"all": True}))
+    assert owner.call("DELETE", f"/mock-exams/{exam['id']}").status_code == 204
+    assert owner.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"] == []
+    assert owner.call("GET", f"/mock-exams/{exam['id']}").status_code == 404
+
+
+def test_ux12_mockresume_dismiss_keeps_the_run_and_shows_the_older_one(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "dismiss")
+    older = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    newer = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], newer["id"], 1)
+    attempts = "select count(*) from public.mock_exam_attempts where workspace_id = %s"
+    assert count(attempts, (ws_id,)) == 1
+
+    assert owner.call("POST", f"/practice-runs/{newer['id']}/dismiss").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == older["id"]
+    assert owner.call("POST", f"/practice-runs/{older['id']}/dismiss").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+    read = owner.ok("GET", f"/practice-runs/{newer['id']}")
+    assert (read["finished_at"], read["answered"]) == (None, 1)
+    assert count(attempts, (ws_id,)) == 1
+
+
+def test_ux12_mockresume_only_the_callers_runs_show(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "users")
+    viewer = seed.client("mock-resume-viewer")
+    editor = seed.client("mock-resume-editor")
+    outsider = seed.client("mock-resume-outsider")
+    seed.membership(ws_id, viewer.user, "viewer")
+    seed.membership(ws_id, editor.user, "editor")
+    mine = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    theirs = created(viewer, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], mine["id"], 1)
+
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+    assert exam_row(viewer, ws_id, exam["id"])["unfinished_run"]["id"] == theirs["id"]
+    assert exam_row(editor, ws_id, exam["id"])["unfinished_run"] is None
+    assert viewer.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"]["id"] == theirs["id"]
+    assert editor.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"] is None
+
+    # Another workspace's mock exam of the same owner never mixes in.
+    other_ws = str(owner.create_workspace()["id"])
+    other_q = owner.create_question(other_ws, mcq("other", 1, 1, None))
+    other_exam = create_mock_exam(owner, other_ws, [other_q["id"]])
+    assert exam_row(owner, other_ws, other_exam["id"])["unfinished_run"] is None
+
+    assert outsider.call("GET", f"/workspaces/{ws_id}/mock-exams").status_code == 404
+    assert outsider.call("GET", f"/mock-exams/{exam['id']}").status_code == 404
+    res = editor.call("POST", f"/practice-runs/{mine['id']}/dismiss")
+    assert res.status_code == 404
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+
+    # An archived workspace shows it as 풀기 stays readable; attempts stay in the mock tables.
+    owner.ok("POST", f"/workspaces/{ws_id}/archive")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+    assert exam_row(viewer, ws_id, exam["id"])["unfinished_run"]["id"] == theirs["id"]
+    assert (
+        count("select count(*) from public.question_attempts where workspace_id = %s", (ws_id,))
+        == 0
+    )
+
+
+def test_ux12_mockresume_runs_of_one_exam_never_hide_another_exams_run(seed: Any) -> None:
+    owner, ws_id, quiet, _ = mock_resume_world(seed, "quiet", 1)
+    busy_q = owner.create_question(ws_id, mcq(f"busy-{uuid.uuid4().hex[:6]}", 1, 1, None))
+    busy = create_mock_exam(owner, ws_id, [busy_q["id"]])
+    waiting = created(owner, ws_id, mock(quiet["id"], {"all": True}))
+    assert exam_row(owner, ws_id, quiet["id"])["unfinished_run"]["id"] == waiting["id"]
+
+    # 150 newer runs of another mock exam, answerable, all newer than the quiet one's run.
+    template = created(owner, ws_id, mock(busy["id"], {"all": True}))
+    admin(
+        "insert into public.practice_runs (workspace_id, user_id, source, mock_exam_id, "
+        "mock_exam_generation_id, range, random_order, seed, item_ids) "
+        "select workspace_id, user_id, source, mock_exam_id, mock_exam_generation_id, range, "
+        "random_order, seed, item_ids from public.practice_runs, generate_series(1, 150) "
+        "where id = %s",
+        (template["id"],),
+    )
+    items = owner.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"]
+    found = {e["id"]: e["unfinished_run"] for e in items}
+    assert found[quiet["id"]]["id"] == waiting["id"]
+    assert found[busy["id"]] is not None
+
+
+def test_ux12_mockresume_fully_answered_runs_never_hide_an_older_one(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "answered", 1)
+    waiting = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    done = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], done["id"], 1)
+    admin(
+        "with extra as ("
+        "  insert into public.practice_runs (workspace_id, user_id, source, mock_exam_id, "
+        "  mock_exam_generation_id, range, random_order, seed, item_ids) "
+        "  select workspace_id, user_id, source, mock_exam_id, mock_exam_generation_id, range, "
+        "  random_order, seed, item_ids from public.practice_runs, generate_series(1, 150) "
+        "  where id = %s returning id) "
+        "insert into public.mock_exam_practice_sessions (workspace_id, mock_exam_question_id, "
+        "mock_exam_question_revision_id, user_id, practice_run_id, run_position, "
+        "displayed_option_ids, state, submitted_at, graded_at) "
+        "select s.workspace_id, s.mock_exam_question_id, s.mock_exam_question_revision_id, "
+        "s.user_id, extra.id, 1, s.displayed_option_ids, s.state, s.submitted_at, s.graded_at "
+        "from extra, public.mock_exam_practice_sessions s where s.practice_run_id = %s",
+        (done["id"], done["id"]),
+    )
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == waiting["id"]
+
+
+# --- UX12-RETRYINPLACE ---------------------------------------------------------------------------
+
+
+def reopen(client: Any, run_id: str, position: int) -> Any:
+    return client.call("POST", f"/practice-runs/{run_id}/items/{position}/reopen", {})
+
+
+def test_ux12_retryinplace_c01_reopen_clears_the_position_and_keeps_the_attempt(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-c01")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    first = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{first['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["answered"] == 1
+
+    assert reopen(owner, run["id"], 1).status_code == 204
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["answered"] == 0
+    item = owner.ok("GET", f"/practice-runs/{run['id']}/items/1")
+    assert item["attempt"] is None
+    assert not (_keys(item) & ANSWER_KEYS)
+    # Called again nothing changes: no graded session is left.
+    assert reopen(owner, run["id"], 1).status_code == 204
+
+    second = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    assert second["id"] != first["id"]
+    assert not (_keys(second) & ANSWER_KEYS)
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{second['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [row["result"] for row in results["items"]] == ["correct"]
+    done = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert done["summary"]["correct"] == 1
+    assert done["summary"]["incorrect"] == 0
+    assert (
+        count(
+            "select count(*) from public.question_attempts where question_id = %s",
+            (question["id"],),
+        )
+        == 2
+    )
+
+
+def test_ux12_retryinplace_c02_a_finished_run_is_not_reopened(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-c02")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    finished = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    assert owner.ok("GET", f"/practice-runs/{run['id']}") == finished
+    assert (
+        count(
+            "select count(*) from public.practice_sessions where id = %s and superseded_at is null",
+            (session["id"],),
+        )
+        == 1
+    )
+
+
+def test_ux12_retryinplace_refuses_a_pending_position_a_reset_and_another_user(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-refuse")
+    stranger = seed.client("ux12-inplace-stranger")
+    workspace = str(owner.create_workspace()["id"])
+    essay = owner.create_question(
+        workspace,
+        {
+            "question_type": "ESSAY",
+            "stem": "Explain the cycle.",
+            "rubric": "Evaporation",
+            "explanation": "Synthetic explanation",
+        },
+    )
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, essay["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok("POST", f"/practice-sessions/{session['id']}/submit", {"answer_text": "Evaporation"})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    assert reopen(stranger, run["id"], 1).status_code == 404
+    assert reopen(owner, run["id"], 2).status_code == 404
+
+    owner.ok("POST", f"/practice-sessions/{session['id']}/self-grade", {"result": "correct"})
+    owner.ok("POST", f"/questions/{essay['id']}/practice-reset", {})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    owner.ok("POST", f"/workspaces/{workspace}/archive")
+    assert reopen(owner, run["id"], 1).status_code == 403
+
+
+def test_ux12_retryinplace_c04_superseded_at_is_set_once_on_a_graded_run_session(
+    seed: Any,
+) -> None:
+    owner = seed.client("ux12-inplace-c04")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    supersede = "update public.practice_sessions set superseded_at = now() where id = %s"
+    with pytest.raises(psycopg.errors.CheckViolation):
+        admin(supersede, (session["id"],))
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    assert reopen(owner, run["id"], 1).status_code == 204
+    with pytest.raises(psycopg.errors.CheckViolation):
+        admin(supersede, (session["id"],))
+
+
+def test_ux12_retryinplace_a_reopened_mock_position_is_the_next_one_to_resume(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "reopen")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    mock_answer(owner, mq[1], run["id"], 2)
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["next_position"] == 3
+
+    assert reopen(owner, run["id"], 1).status_code == 204
+    expected = {"id": run["id"], "total": 3, "answered": 1, "next_position": 1}
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected
+    # Its new session is open: one row for the position, still unanswered.
+    owner.ok_response(mock_session(owner, mq[0]["id"], run["id"], 1), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected

@@ -32,10 +32,10 @@ it('UX10-PLAY-AC05 names O and X, preserves pending and opens the run position',
       onSelect={select}
     />,
   );
-  expect(screen.getByLabelText('정답')).toHaveTextContent('O');
-  expect(screen.getByLabelText('오답')).toHaveTextContent('X');
-  expect(screen.getByText('채점 대기')).toBeVisible();
-  expect(screen.getAllByText('더 이상 풀 수 없는 문제').length).toBeGreaterThan(0);
-  await userEvent.click(screen.getByLabelText('오답'));
+  expect(screen.getByRole('cell', { name: '맞음' })).toHaveTextContent('O');
+  expect(screen.getByRole('cell', { name: '틀림' })).toHaveTextContent('X');
+  expect(screen.getByRole('cell', { name: '채점 대기' })).toHaveTextContent('대기');
+  expect(screen.getByRole('cell', { name: '더 이상 풀 수 없는 문제' })).toHaveTextContent('불가');
+  await userEvent.click(screen.getByRole('button', { name: '2번 틀림, 문제로 이동' }));
   expect(select).toHaveBeenCalledWith(2);
 });

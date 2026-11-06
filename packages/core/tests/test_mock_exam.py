@@ -24,7 +24,6 @@ from book_core.mock_exam import (
     halves,
     make_plan,
     pack_batches,
-    shuffled_options,
 )
 
 REPO = Path(__file__).resolve().parents[3]
@@ -56,16 +55,6 @@ def test_a_count_over_the_range_takes_every_candidate_and_none_means_all() -> No
     assert len(make_plan(candidates(7), None, [VariationType.OPTION_SHUFFLE], seed=1)) == 7
     with pytest.raises(ValueError, match="variation type"):
         make_plan(candidates(3), 1, [], seed=1)
-
-
-def test_shuffled_options_are_deterministic_and_never_the_source_order() -> None:
-    opts = ["a", "b", "c", "d"]
-    assert shuffled_options(opts, 7, 0) == shuffled_options(opts, 7, 0)
-    for position in range(20):
-        out = shuffled_options(opts, 7, position)
-        assert sorted(out) == opts
-        assert out != opts
-    assert shuffled_options(["x"], 1, 0) == ["x"]
 
 
 # --- packing ------------------------------------------------------------------------------------

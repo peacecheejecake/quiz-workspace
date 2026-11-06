@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import random
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,17 +21,28 @@ from quiz_api.api.practice_runs import (
     PracticeRunCreate,
     RunItem,
     RunResults,
+    position_options,
     position_result,
     run_order,
+    run_range,
     run_summary,
     server_seed,
 )
 from quiz_api.errors import ProblemException, ProblemType
 from quiz_api.idempotency import request_hash
 from quiz_api.openapi_export import render_openapi
-from quiz_api.question_ranges import MAX_RANGE_IDS, QuestionRange, RangeRow, select_range
-from quiz_api.repositories.practice_runs import RunProgress, RunRecord
+from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
+from quiz_api.question_ranges import (
+    MAX_RANGE_IDS,
+    QuestionRange,
+    RangeFilters,
+    RangeRow,
+    select_range,
+)
+from quiz_api.repositories.practice_runs import _RUN_COLUMNS, RunProgress, RunRecord
 from quiz_api.settings import Environment, Settings
+from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 ANSWER_KEYS = {
     "correct_option_ids",
@@ -94,6 +106,26 @@ def test_filters_narrow_the_whole_selection() -> None:
     assert pick(all=True, filters={"retry": False, "type": "MCQ"}) == [*IDS[:3], IDS[5]]
     # An explicitly picked question that the filter hides is not in the result.
     assert pick(question_ids=[str(IDS[0])], filters={"status": ["incorrect"]}) == []
+
+
+def test_types_keep_every_chosen_type() -> None:
+    assert pick(all=True, filters={"types": ["MCQ"]}) == pick(all=True, filters={"type": "MCQ"})
+    every = pick(all=True)
+    others = [i for i in every if i not in pick(all=True, filters={"types": ["MCQ"]})]
+    assert others
+    assert pick(all=True, filters={"types": ["MCQ", "ESSAY", "SHORT_ANSWER"]}) == every
+
+
+def test_a_range_saved_with_one_type_reads_as_types() -> None:
+    assert RangeFilters.model_validate({"type": "ESSAY"}).types == ["ESSAY"]
+    assert RangeFilters.model_validate({"type": None}).types is None
+    assert RangeFilters.model_validate({"type": None, "types": ["MCQ"]}).types == ["MCQ"]
+    assert "type" not in RangeFilters.model_validate({"type": "MCQ"}).model_dump()
+
+
+def test_an_empty_type_list_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        RangeFilters.model_validate({"types": []})
 
 
 @pytest.mark.parametrize("field", ["question_ids", "excluded_question_ids"])
@@ -181,6 +213,48 @@ def test_order_is_heatmap_or_the_seeded_shuffle() -> None:
     assert run_order(IDS, True, 12345) == expected
     assert run_order(IDS, True, 12345) == run_order(IDS, True, 12345)
     assert sorted(run_order(IDS, True, 7)) == sorted(IDS)
+
+
+def test_qview_01_c11_shuffle_is_a_bank_only_setting_kept_in_the_range() -> None:
+    plain = PracticeRunCreate.model_validate({"source": "bank", "range": {"all": True}})
+    assert plain.shuffle_options is False
+    assert "shuffle_options" not in run_range(plain)  # older runs and new ones without it match
+    on = PracticeRunCreate.model_validate(
+        {"source": "bank", "range": {"chapter_ids": ["none"]}, "shuffle_options": True}
+    )
+    assert run_range(on)["shuffle_options"] is True
+    assert run_range(on)["chapter_ids"] == ["none"]
+    with pytest.raises(ValidationError):
+        PracticeRunCreate.model_validate(
+            {
+                "source": "mock",
+                "mock_exam_id": str(uuid.uuid4()),
+                "range": {"all": True},
+                "shuffle_options": True,
+            }
+        )
+
+
+def test_qview_01_c11_a_position_keeps_one_order_for_its_run() -> None:
+    options = [{"id": f"o{i}", "text": f"보기 {i}"} for i in range(4)]
+    plain = run(4, False)
+    on = replace(plain, seed=PRACTICE_RUN_TEST_SEED, shuffle_options=True)
+    assert [o.id for o in position_options(plain, 1, options)] == ["o0", "o1", "o2", "o3"]
+    ids = [o.id for o in position_options(on, 1, options)]
+    assert ids == [o.id for o in position_options(on, 1, options)]
+    assert ids == shuffled_option_ids(
+        ["o0", "o1", "o2", "o3"], run_option_seed(PRACTICE_RUN_TEST_SEED, 1)
+    )
+    assert sorted(ids) == ["o0", "o1", "o2", "o3"]
+    assert {o.text for o in position_options(on, 1, options)} == {o["text"] for o in options}
+    assert 0 <= run_option_seed(MAX_SEED, 5000) < 2**63  # practice_sessions.shuffle_seed: bigint
+
+
+def test_qview_01_c11_the_run_columns_read_the_flag_from_the_range() -> None:
+    dialect = postgresql.dialect()  # type: ignore[no-untyped-call]
+    sql = str(select(*_RUN_COLUMNS).compile(dialect=dialect))
+    assert "coalesce" in sql
+    assert "shuffle_options" in sql
 
 
 def test_test_env_seed_is_fixed_and_gives_the_fixture_order() -> None:
@@ -283,8 +357,8 @@ def test_an_item_carries_answers_only_inside_its_attempt() -> None:
 
 def test_run_models_are_an_allowlist() -> None:
     assert set(PracticeRun.model_fields) == {
-        "id", "workspace_id", "source", "mock_exam_id", "random_order", "seed", "total",
-        "answered", "reached", "created_at", "finished_at", "summary",
+        "id", "workspace_id", "source", "mock_exam_id", "random_order", "shuffle_options", "seed",
+        "total", "answered", "reached", "created_at", "finished_at", "summary",
     }  # fmt: skip
     assert set(RunResults.model_fields) == {"total", "offset", "limit", "items"}
     assert "attempt" in RunItem.model_fields
@@ -305,3 +379,30 @@ def test_ux11_retry_open_schema_never_exposes_answers_or_origin() -> None:
     props = _props(spec, schema, set(), set())
     assert {"id", "question_id", "stem", "options"} <= props
     assert not props & (ANSWER_KEYS | {"retry_origin_run_id", "retry_origin_position"})
+
+
+def test_ux12_resume_list_has_no_content_and_is_an_allowlist() -> None:
+    spec = json.loads(render_openapi())
+    schema = _response(spec, "/workspaces/{workspace_id}/practice-runs/unfinished", "get", "200")
+    props = _props(spec, schema, set(), set())
+    assert props == {
+        "items", "id", "total", "answered", "next_position", "chapter_title", "created_at",
+        "last_touched_at",
+    }  # fmt: skip
+    assert "/api/v1/practice-runs/{run_id}/dismiss" in spec["paths"]
+
+
+def test_ux12_mockresume_the_run_on_a_mock_exam_has_no_content() -> None:
+    spec = json.loads(render_openapi())
+    node = spec["components"]["schemas"]["MockExamUnfinishedRun"]
+    assert set(node["properties"]) == {"id", "total", "answered", "next_position"}
+    exam = spec["components"]["schemas"]["MockExam"]
+    assert "unfinished_run" in exam["properties"]
+    assert "unfinished_run" not in exam["required"]
+
+
+def test_ux12_retryinplace_reopen_answers_nothing() -> None:
+    spec = json.loads(render_openapi())
+    operation = spec["paths"]["/api/v1/practice-runs/{run_id}/items/{position}/reopen"]["post"]
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation

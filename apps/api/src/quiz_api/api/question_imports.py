@@ -135,6 +135,14 @@ from quiz_api.repositories.question_imports import (
     RunStatus,
 )
 from quiz_api.repositories.questions import QuestionRepository
+from quiz_api.stem_tables import (
+    STEM_TABLES_DESCRIPTION,
+    STEM_TABLES_EDIT_DESCRIPTION,
+    StemTable,
+    StemTablesInput,
+    edited_stem_tables,
+    parse_stem_tables,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +247,9 @@ class DraftPayload(BaseModel):
     origin: Literal["pdf_import", "generation"]
     question_type: QuestionType
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     options: list[QuestionOption]
     correct_option_ids: list[str] | None = Field(description="null = the source has no answer.")
     accepted_answers: list[str] | None = Field(description="null = the source has no answer.")
@@ -272,7 +283,7 @@ class DraftPublishError(BaseModel):
 class DraftChapterRef(BaseModel):
     id: uuid.UUID
     title: str
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: a Workspace chapter.")
     document_title: str
 
 
@@ -444,6 +455,10 @@ class QuestionDraftUpdate(BaseModel):
     base_version: str = Field(max_length=64, description="`version` of the draft being edited.")
     question_type: QuestionType | None = None
     stem: str | None = Field(default=None, max_length=MAX_STEM)
+    stem_tables: StemTablesInput | None = Field(
+        default=None,
+        description=STEM_TABLES_EDIT_DESCRIPTION,
+    )
     options: list[QuestionOption] | None = Field(default=None, max_length=MAX_OPTIONS)
     correct_option_ids: list[str] | None = Field(default=None, max_length=MAX_OPTIONS)
     is_multi_answer: bool | None = None
@@ -846,6 +861,7 @@ def draft_previous(
                     question.correct_option_ids,
                     question.accepted_answers,
                     question.rubric,
+                    parse_stem_tables(question.stem_tables),
                 ),
             )
         elif old_draft is not None:
@@ -862,6 +878,7 @@ def draft_previous(
                     old.correct_option_ids,
                     old.accepted_answers,
                     old.rubric,
+                    old.stem_tables,
                 ),
             )
     missing = sorted({_draft_number(d) for key, d in earlier.items() if key not in keys})
@@ -952,6 +969,7 @@ def _summary_out(
 
 
 def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[BookChapterOption]:
+    chapters = DraftChapterRepository(repo.session)
     return [
         BookChapterOption(
             id=c.id,
@@ -960,7 +978,10 @@ def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[Boo
             document_title=c.document_title,
             level=c.level,
         )
-        for c in DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+        for c in [
+            *chapters.book_chapters(run.workspace_id),
+            *chapters.workspace_chapters(run.workspace_id),
+        ]
     ]
 
 
@@ -1350,6 +1371,11 @@ def update_question_draft(
 
     Import drafts only: a generation draft of the retired 변형 출제 (QGEN-RM) answers 404."""
     _reject_unstorable(body)
+    # The chapter's owner before the draft (docs/questions.md §14.6): a chapter delete holds it
+    # while it moves drafts. So the draft is read, and its version compared, after any such move.
+    chapters_repo = DraftChapterRepository(repo.session)
+    if body.chapter_id is not None:
+        chapters_repo.lock_documents_of(access.workspace.workspace_id, [body.chapter_id])
     record = repo.get_draft(access.resource_id, lock=True)
     if record is None or record.source_type != "import":  # the binding hides other drafts too
         raise HTTPException(status_code=404, detail=NOT_FOUND)
@@ -1375,9 +1401,16 @@ def update_question_draft(
         if body.is_multi_answer is not None
         else (old.is_multi_answer and question_type == "MCQ")
     )
+    stem = body.stem if body.stem is not None else old.stem
     content = QuestionContent(
         question_type=question_type,
-        stem=body.stem if body.stem is not None else old.stem,
+        stem=stem,
+        stem_tables=edited_stem_tables(
+            stem,
+            sent="stem_tables" in sent,
+            tables=body.stem_tables,
+            stored=old.stem_tables,
+        ),
         options=tuple((o.id, o.text) for o in body.options)
         if body.options is not None
         else old.options,
@@ -1435,8 +1468,6 @@ def update_question_draft(
         values["question_number"] = body.question_number
     if "chapter_id" in sent:
         if body.chapter_id is not None:
-            chapters_repo = DraftChapterRepository(repo.session)
-            chapters_repo.lock_documents_of(record.workspace_id, [body.chapter_id])
             current = chapters_repo.current_book_chapters(record.workspace_id, [body.chapter_id])
             found = current.get(body.chapter_id)
             if found is None or found.id != body.chapter_id:
@@ -1444,7 +1475,7 @@ def update_question_draft(
                     [
                         {
                             "loc": ("body", "chapter_id"),
-                            "msg": "Unknown chapter: use a chapter of a book's current revision.",
+                            "msg": "Unknown chapter: use a Workspace or current book chapter.",
                             "type": "value_error",
                         }
                     ]
@@ -1510,6 +1541,11 @@ def publish_question_import_drafts(
     for item in body.drafts:
         versions.setdefault(item.draft_id, item.version)
     requested = list(versions)
+    # CHAPTER-MAP: the chapters on screen are known only under the drafts' locks and the chapters'
+    # owners come first (docs/questions.md §14.6), so all of them: what is read below stays the
+    # current chapter until this transaction ends.
+    chapter_repo = DraftChapterRepository(repo.session)
+    chapter_repo.lock_every_chapter_owner(run.workspace_id)
     drafts = {d.id: d for d in repo.lock_drafts(run.id, requested)}
     if len(drafts) != len(requested):
         raise HTTPException(status_code=404, detail="Draft not found.")
@@ -1551,14 +1587,8 @@ def publish_question_import_drafts(
         issues.raise_if_any()
 
     mapping = {d.id: d.published_question_id for d in drafts.values()}
-    # CHAPTER-MAP: the chapter on screen. The books are locked FOR SHARE first (question lock
-    # order), so the chapter read here is the current one until this transaction ends.
-    chapter_repo = DraftChapterRepository(repo.session)
     shown = _chapters_of(repo.session, run, [r for r, _, _ in plans])
     _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
-    chapter_repo.lock_documents_of(
-        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
-    )
     current = chapter_repo.current_book_chapters(
         run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
     )

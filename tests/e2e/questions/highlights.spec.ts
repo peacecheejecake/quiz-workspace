@@ -293,7 +293,8 @@ test(
     await expect(highlightUi.menu(page)).toBeHidden();
     await expect(noteUi.panel(page)).toBeVisible();
     expect(await selectionText(page)).toContain(PHRASE_B);
-    expect(await body.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    // Radix returns focus on a timer after the unmount: about 7ms on Chromium, with focus on <body>.
+    await expect.poll(() => body.evaluate((el) => el.contains(document.activeElement))).toBe(true);
 
     // A selection across two items: color items disabled with the reason as text.
     await dragSelect(body, PHRASE_A, PHRASE_B);
@@ -385,6 +386,7 @@ test(
     await page.goto(overviewPath(s.workspaceId, q(s, 1).id));
     const reopened = panelUi.numbered(page, 1);
     await expect(reopened).toBeVisible();
+    await panelUi.reveal(reopened).click();
     await expect(highlightUi.explanation(reopened)).toBeVisible();
     await choosePanelMenu(page, reopened, 'answers');
     const detail = detailUi.dialog(page);

@@ -383,7 +383,7 @@ def make_mock_exam(owner: Any, workspace_id: str, question_id: str) -> tuple[str
         (202,),
     )
     exam_id = str(made["id"])
-    owner.wait_for_job(str(made["latest_generation"]["job_id"]))
+    assert made["status"] == "ready"
     after = owner.ok("GET", f"/mock-exams/{exam_id}")
     assert after["status"] == "ready", after["latest_generation"]
     [item] = owner.ok("GET", f"/mock-exams/{exam_id}/questions")["items"]

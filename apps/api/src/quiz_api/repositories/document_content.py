@@ -299,6 +299,15 @@ class DocumentContentRepository:
         )
         self._copy_content(source.id, draft.id)
 
+    def carry_chapter_tree(self, document: DocumentRef, draft: RevisionRow) -> None:
+        """Give a restored draft the active revision's chapter tree (CHMAN-01), so publishing it
+        neither loses `user-*` chapters nor brings a deleted chapter back. Parser chapters keep
+        the restored titles. The caller holds the document FOR UPDATE."""
+        self._session.execute(
+            text("select public.chapter_edit_sync_draft(:w, :d, :r, null)"),
+            {"w": document.workspace_id, "d": document.id, "r": draft.id},
+        )
+
     def _copy_content(self, source_id: uuid.UUID, draft_id: uuid.UUID) -> None:
         params = {"src": source_id, "dst": draft_id}
         self._session.execute(_COPY_CHAPTERS, params)

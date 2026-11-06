@@ -1,8 +1,11 @@
 """Practice API (M5.2, QPLAY-01; docs/questions.md §2/§4, architecture.md §6).
 
     POST  /questions/{id}/practice-open          member (viewer included); the panel's one call:
-                                                 reuse a cached session, show the latest result or
-                                                 open a session; `Idempotency-Key` aware
+                                                 reuse a cached session or open one, with no result
+                                                 unless it waits for self-grading;
+                                                 `Idempotency-Key` aware
+    POST  /questions/{id}/practice-reveal        member (viewer included); `해설 보기`: the latest
+                                                 submission, retiring the caller's open sessions
     POST  /questions/{id}/practice-sessions      member (viewer included); CONFIRMED questions;
                                                  201 PracticeSession; `Idempotency-Key` aware
     GET   /practice-sessions/{id}                the session's owner; resume (answers only once
@@ -91,6 +94,7 @@ from quiz_api.practice_grading import (
     grade_mcq,
     grade_short_answer,
     new_shuffle_seed,
+    run_option_seed,
     shuffled_option_ids,
 )
 from quiz_api.question_rules import MAX_LONG_TEXT, MAX_OPTIONS, Issues, QuestionType, storable
@@ -104,12 +108,14 @@ from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.practice import (
     AttemptCursor,
     AttemptRecord,
+    LatestOutcome,
     PracticeRepository,
     SessionRecord,
     StateRecord,
 )
 from quiz_api.repositories.practice_runs import PracticeRunRepository
 from quiz_api.repositories.questions import QuestionRecord, QuestionRepository
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
 
@@ -144,6 +150,9 @@ class PracticeSession(BaseModel):
     chapter_id: uuid.UUID | None
     question_number: int | None
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool
     options: list[PracticeOption] = Field(description="MCQ options in displayed order.")
     displayed_option_ids: list[str] = Field(description="The displayed order (MCQ), as ids.")
@@ -177,19 +186,12 @@ class PracticeSessionCreate(BaseModel):
 
 class PracticeOpenBody(BaseModel):
     """What the panel knows of this question: an open session it keeps in memory and the latest
-    attempt when that session was opened, or `force_new` for another try after a result."""
+    attempt when that session was opened."""
 
     model_config = ConfigDict(extra="forbid")
 
     cached_session_id: uuid.UUID | None = None
     baseline_attempt_id: uuid.UUID | None = None
-    force_new: bool = False
-
-    @model_validator(mode="after")
-    def _one_intent(self) -> PracticeOpenBody:
-        if self.force_new and self.cached_session_id is not None:
-            raise ValueError("force_new and cached_session_id exclude each other.")
-        return self
 
 
 class SubmitBody(BaseModel):
@@ -393,6 +395,7 @@ def _session_out(s: SessionRecord) -> PracticeSession:
         chapter_id=s.chapter_id,
         question_number=s.question_number,
         stem=s.revision.stem,
+        stem_tables=stem_tables_out(s.revision.stem_tables),
         is_multi_answer=s.revision.is_multi_answer,
         options=[PracticeOption(id=oid, text=texts[oid]) for oid in s.displayed_option_ids],
         displayed_option_ids=s.displayed_option_ids,
@@ -523,10 +526,12 @@ def _open_session(
     epoch: int,
     *,
     shuffle: bool = False,
+    shuffle_seed: int | None = None,
     run_id: uuid.UUID | None = None,
     position: int | None = None,
 ) -> PracticeSession:
-    """A new session on the active revision; also records the caller's view."""
+    """A new session on the active revision; also records the caller's view. `shuffle_seed` (a
+    `shuffle_options` run's position) fixes the shuffle, `shuffle` draws a new one."""
     if question.publication_status != "CONFIRMED":
         raise ProblemException(
             409,
@@ -537,8 +542,8 @@ def _open_session(
     displayed: list[str] = []
     if question.question_type == "MCQ":
         displayed = [o["id"] for o in question.revision.options]
-        if shuffle:
-            seed = new_shuffle_seed()
+        if shuffle or shuffle_seed is not None:
+            seed = new_shuffle_seed() if shuffle_seed is None else shuffle_seed
             displayed = shuffled_option_ids(displayed, seed)
 
     opened = practice.open_session(
@@ -642,6 +647,8 @@ def start_practice_session(
                 )
             return replay(stored, body_hash)
     run_id, position = body.practice_run_id, body.run_position
+    run_seed: int | None = None
+    draw_new_order = body.shuffle_options
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
         if run is None:
@@ -675,6 +682,11 @@ def start_practice_session(
                 )
             practice.commit()
             return resumed
+        if run.shuffle_options:
+            if practice.run_position_reopened(run.id, position):
+                draw_new_order = True
+            else:
+                run_seed = run_option_seed(run.seed, position)
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -684,7 +696,8 @@ def start_practice_session(
         question,
         user.id,
         epoch,
-        shuffle=body.shuffle_options,
+        shuffle=draw_new_order,
+        shuffle_seed=run_seed,
         run_id=run_id,
         position=position,
     )
@@ -757,9 +770,9 @@ def latest_question_practice(
 
 
 class PracticeOpened(BaseModel):
-    """One opening of the panel. Answers exist only under `result`: `session` is the answer-free
-    open shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).
-    """
+    """One opening of the panel. Answers exist only under `result`, and only for a submission
+    still waiting for self-grading: `session` is the answer-free open shape, so an unsubmitted
+    payload cannot carry one (a new field here is a reviewed change)."""
 
     reset_epoch: int
     active_revision_id: uuid.UUID
@@ -770,9 +783,29 @@ class PracticeOpened(BaseModel):
     session: PracticeSession | None = Field(description="The open session to answer.")
     reused: bool = Field(description="`session` is the cached one; nothing was written.")
     result: PracticeSessionDetail | None = Field(
-        description="The latest submitted session of the active revision, with its outcome."
+        description="The latest submission of the active revision while it waits for self-grading."
     )
     submitted_answer: dict[str, Any] | None = None
+
+
+class PracticeRevealed(BaseModel):
+    """`해설 보기`: the latest submission of the active revision, with its outcome."""
+
+    reset_epoch: int
+    result: PracticeSessionDetail
+    submitted_answer: dict[str, Any] | None = None
+
+
+def _latest_detail(
+    found: LatestOutcome, attempt_id: uuid.UUID, result: AttemptResult
+) -> PracticeSessionDetail:
+    session = found.session
+    return PracticeSessionDetail(
+        **_session_out(session).model_dump(),
+        submitted_at=session.submitted_at,
+        graded_at=session.graded_at,
+        outcome=_result_out(session, attempt_id, result),
+    )
 
 
 def _reusable(
@@ -809,10 +842,11 @@ def open_question_practice(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the
-    latest result, then reuse the cached session, show that result or open a session. Only a new
-    session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
-    user and question, so no separate key lock is taken. A key seen again replays its session
-    while it is open: once submitted, the latest result answers instead, or 409 without one."""
+    latest submission, then reuse the cached session or open one. A solved question opens to be
+    answered, without its result (UX12-SOLVEDOPEN); only a submission waiting for self-grading is
+    returned, since nothing else can finish it. Only a new session is stored under
+    `Idempotency-Key`; the reset lock already serialises retries of this user and question, so no
+    separate key lock is taken. A key seen again replays its session while it is open."""
     body = body or PracticeOpenBody()
     epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
     if reset_since_start:
@@ -838,38 +872,27 @@ def open_question_practice(
             result=None,
         )
 
-    def latest_result() -> PracticeOpened | None:
-        if (
-            found is None
-            or found.latest_attempt_id is None
-            or found.latest_result is None
-            or previous_revision
-        ):
-            return None
-        session = found.session
+    if (
+        found is not None
+        and found.latest_result == "pending"
+        and found.latest_attempt_id is not None
+        and not previous_revision
+    ):
         return response(None).model_copy(
             update={
-                "result": PracticeSessionDetail(
-                    **_session_out(session).model_dump(),
-                    submitted_at=session.submitted_at,
-                    graded_at=session.graded_at,
-                    outcome=_result_out(session, found.latest_attempt_id, found.latest_result),
-                ),
+                "result": _latest_detail(found, found.latest_attempt_id, found.latest_result),
                 "submitted_answer": found.submitted_answer,
             }
         )
-
     if body.cached_session_id is not None:
         cached = practice.get_session(body.cached_session_id, user.id)
         if cached is not None and _reusable(
             cached, question.id, active, epoch, body.baseline_attempt_id, latest_id
         ):
             return response(_session_out(cached), reused=True)
-    if not body.force_new and (result := latest_result()) is not None:
-        return result
 
     # The hash leaves the cached ids out: a re-run of one opening may no longer have them.
-    body_hash = request_hash({"force_new": body.force_new})
+    body_hash = request_hash({})
     scope = f"POST /questions/{access.resource_id}/practice-open"
     if idempotency_key is not None:
         stored = idempotency.find(user.id, scope, idempotency_key)
@@ -884,10 +907,8 @@ def open_question_practice(
                 )
             if session.state == "open":
                 return replayed
-            if (result := latest_result()) is not None:
-                return result
-            # No result to show (the question has a new revision). The key's record cannot be
-            # replaced, so opening here would add a session on every retry; a new key opens one.
+            # The key's record cannot be replaced, so opening here would add a session on every
+            # retry, and an opening never carries a graded result; a new key opens one.
             raise ProblemException(
                 409,
                 ProblemType.PRACTICE_SESSION_SUBMITTED,
@@ -898,6 +919,48 @@ def open_question_practice(
         idempotency.save(
             user.id, scope, idempotency_key, body_hash, 200, out.model_dump(mode="json")
         )
+    practice.commit()
+    return out
+
+
+@router.post(
+    "/questions/{question_id}/practice-reveal",
+    operation_id="revealQuestionPractice",
+    response_model=PracticeRevealed,
+    responses=problem_responses(409),
+)
+def reveal_question_practice(
+    access: PracticeQuestion,
+    practice: PracticeRepo,
+    questions: QuestionRepo,
+    user: CurrentUser,
+) -> Any:
+    """`해설 보기` (UX12-SOLVEDOPEN): the caller's latest submission of the active revision with its
+    answers. This is a write, not a read: the caller's open sessions of the question are retired
+    in the same transaction, so an answer seen here cannot be graded in them. Repeating it
+    changes nothing more. 404 for a question the caller has not submitted on this revision."""
+    epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
+    if reset_since_start:
+        raise ProblemException(
+            409, ProblemType.PRACTICE_SESSION_RESET, detail="This practice session was reset."
+        )
+    question = questions.get(access.resource_id, with_sources=False)
+    if question is None:
+        raise _not_found()
+    found = practice.latest_outcome(access.resource_id, user.id)
+    if (
+        found is None
+        or found.latest_attempt_id is None
+        or found.latest_result is None
+        or found.session.revision.id != question.revision.id
+    ):
+        raise _not_found()
+    out = PracticeRevealed(
+        reset_epoch=epoch,
+        result=_latest_detail(found, found.latest_attempt_id, found.latest_result),
+        submitted_answer=found.submitted_answer,
+    )
+    practice.retire_open_sessions(access.resource_id, user.id)
     practice.commit()
     return out
 

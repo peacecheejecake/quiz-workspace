@@ -86,12 +86,14 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
     // + PALETTE-UNIFY 5 fill tokens (danger/success/warning/neutral/neutral-subtle)
     // + UX9-HL-UI 3 highlight backgrounds and the search match background/border
-    // + UX12 VIEW-2 2 option control borders + UX12 DESIGN-4 glass-gradient (themed, not a color).
-    expect(Object.keys(docLight)).toHaveLength(45);
-    expect(Object.keys(docDark)).toHaveLength(45);
+    // + UX12 VIEW-2 2 option control borders + UX12 DESIGN-4 glass-gradient (themed, not a color)
+    // + UX12 DESIGN-5 surface-raised, accent-on-glass and glass-brightness (themed, not a color).
+    expect(Object.keys(docLight)).toHaveLength(48);
+    expect(Object.keys(docDark)).toHaveLength(48);
     // 39 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
-    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX12 DESIGN-4 glass-gradient.
-    expect(Object.keys(docRoot)).toHaveLength(83);
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX12 DESIGN-4 glass-gradient
+    // + UX12 DESIGN-5 surface-raised, accent-on-glass and glass-brightness.
+    expect(Object.keys(docRoot)).toHaveLength(86);
   });
 });
 
@@ -166,6 +168,13 @@ describe('glass-surface base styles', () => {
     expect(decls.slice(0, decls.indexOf('}'))).toMatch(
       /background-color: var\(--color-glass\);\s+background-image: var\(--glass-gradient\);/,
     );
+  });
+
+  it('re-points only accent text inside glass; muted areas stay grey (UX12-GLASSBTN)', () => {
+    const decls = base.slice(base.indexOf('.glass-surface {'));
+    const block = decls.slice(0, decls.indexOf('}'));
+    expect(block).not.toContain('--color-surface-muted');
+    expect(block).toContain('--color-accent: var(--color-accent-on-glass);');
   });
 
   it.each(['@media (prefers-reduced-transparency: reduce)', '@supports not'])(
@@ -261,18 +270,16 @@ describe('density (design-system.md §4, v1.2.2)', () => {
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
     expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
-    expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
+    expect(staticTokens['heatmap-cell-touch']).toBe('28px'); // UX12 DESIGN-6: reverses UX9-STROKE's 24px
     expect(staticTokens['heatmap-dot']).toBe('16px');
-    expect(staticTokens['heatmap-gap']).toBe('0px');
-    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.3'); // UX12 D-12: was 1.18
+    expect(staticTokens['heatmap-gap']).toBe('7px'); // UX12 DESIGN-6: the marker fills the cell
+    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.5'); // UX12 DESIGN-6: was 1.3
   });
 
   it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {
-    // A heatmap marker's SVG box is the cell; the drawn square is 18/24 of the viewBox.
-    const drawn = (cell: number) => (cell * 18) / 24;
+    // UX12 DESIGN-6: the drawn square is the cell; the grid gap spaces the neighbours.
     for (const cell of [px('heatmap-cell'), px('heatmap-cell-touch')]) {
-      const pitch = cell + px('heatmap-gap');
-      expect(pitch - drawn(cell)).toBeLessThanOrEqual(drawn(cell) / 3);
+      expect(px('heatmap-gap')).toBeLessThanOrEqual(cell / 3);
       expect(cell).toBeGreaterThanOrEqual(24);
     }
   });

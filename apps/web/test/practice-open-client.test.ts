@@ -1,6 +1,11 @@
 // UX12-OPEN: the browser side of `practice-open`; the relay keeps FastAPI's answer and its timing.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { openQuestionPractice, practiceOpenPath } from '../src/lib/questions/practice-open-client';
+import {
+  openQuestionPractice,
+  practiceOpenPath,
+  practiceRevealPath,
+  revealQuestionPractice,
+} from '../src/lib/questions/practice-open-client';
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const OTHER_WS = '55555555-5555-4555-8555-000000000002';
@@ -42,7 +47,7 @@ describe('openQuestionPractice', () => {
     expect(sentBody(fetchImpl)).toEqual({});
   });
 
-  it('sends the cached session with its baseline, or force_new', async () => {
+  it('sends the cached session with its baseline, or nothing', async () => {
     const cached = respondWith(200, opened());
     await openQuestionPractice(
       WS,
@@ -52,9 +57,21 @@ describe('openQuestionPractice', () => {
       cached,
     );
     expect(sentBody(cached)).toEqual({ cached_session_id: 'session', baseline_attempt_id: null });
-    const forced = respondWith(200, opened());
-    await openQuestionPractice(WS, Q, KEY, { forceNew: true }, forced);
-    expect(sentBody(forced)).toEqual({ force_new: true });
+    const fresh = respondWith(200, opened());
+    await openQuestionPractice(WS, Q, KEY, {}, fresh);
+    expect(sentBody(fresh)).toEqual({});
+  });
+
+  it('UX12-SOLVEDOPEN-AC03 asks for the earlier result of this workspace only', async () => {
+    const mine = respondWith(200, { reset_epoch: 0, result: { workspace_id: WS } });
+    expect((await revealQuestionPractice(WS, Q, mine)).ok).toBe(true);
+    expect(mine.mock.calls[0]?.[0]).toBe(practiceRevealPath(Q));
+    expect(mine.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+    const other = respondWith(200, { reset_epoch: 0, result: { workspace_id: OTHER_WS } });
+    expect(await revealQuestionPractice(WS, Q, other)).toMatchObject({
+      ok: false,
+      kind: 'notFound',
+    });
   });
 
   it('never calls out with an id that is not a UUID', async () => {

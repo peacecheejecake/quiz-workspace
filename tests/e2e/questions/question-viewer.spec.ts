@@ -42,6 +42,7 @@ import {
   CH1,
   CH2,
   type RangeWorkspace,
+  confirmRunClose,
 } from '../fixtures/practice-runs.ts';
 import {
   createShareLink,
@@ -237,7 +238,7 @@ function essay(label: string, n: number): QuestionInput {
 }
 
 test(
-  'QVIEW-01-AC01 문제 › 문제 풀기 opens the modal range step at once with two chapter groups and no drafts',
+  'QVIEW-01-AC01 the bank range run opens the modal range step at once with two chapter groups and no drafts',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s: RangeWorkspace = await seedRangeWorkspace(workspaceFactory, 'qview01-ac01');
@@ -297,7 +298,7 @@ test(
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeVisible();
     expect(new URL(page.url()).searchParams.has('practice')).toBe(false);
   },
 );
@@ -326,11 +327,6 @@ test(
 
     // 틀린 문제 keeps 1장 2번 (own attempt) and 2장 2번 (only through the merged duplicate, C07);
     // the selection shrinks to the visible ones and 전체 선택 picks the visible ones only.
-    if (await runUi.filterToggle(panel).isVisible()) {
-      if ((await runUi.filterToggle(panel).getAttribute('aria-expanded')) !== 'true') {
-        await runUi.filterToggle(panel).click();
-      }
-    }
     // All status chips start selected; leave only incorrect selected.
     const filters = panel.getByRole('group', { name: '상태 필터' });
     for (const label of ['안 푼 문제', '본 문제', '맞힌 문제', '다시 풀기']) {
@@ -391,7 +387,7 @@ test(
     await expect(runUi.title(panel, 1)).toBeVisible();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
 
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await expect(page).toHaveURL(new RegExp(`[?&]practice=${ordered}(&|$)`));
     await expect(page).toHaveURL(/[?&]i=2(&|$)/);
     await expect(runUi.title(panel, 2)).toBeFocused();
@@ -419,18 +415,20 @@ test(
 
     // Close, then start again through the actual unified play entry.
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     await expect.poll(() => practiceParam(page)).toBeNull();
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: /^풀기$/ }).click();
-    const play = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    await page.getByRole('button', { name: /^모의고사$/ }).click();
+    const play = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+    await play.getByRole('button', { name: /^(추가|add)$/i }).click();
+    await runUi.selectAll(play).check();
+    await play.getByRole('button', { name: /다음|next/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
     await expect(random).not.toBeChecked();
     await random.check();
     await play.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-    await play.getByRole('button', { name: /다음|next/i }).click();
-    await runUi.selectAll(play).check();
     await play.getByRole('button', { name: /시작|start/i }).click();
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
     await expect(page).toHaveURL(/[?&]i=1(&|$)/);
@@ -514,7 +512,7 @@ test(
     await runUi.next(panel).click();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 3));
     await expect(runUi.answerText(panel)).toBeVisible();
-    await runUi.skip(panel).click(); // viewed, not answered
+    await runUi.next(panel).click(); // viewed, not answered
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(3, 3));
     await answerEssay(panel, `${label} 증발과 응결, 강수가 반복된다.`);
     await runUi.selfGradeCorrect(panel).click();
@@ -530,6 +528,7 @@ test(
     await expect(runUi.submit(panel)).toHaveCount(0);
 
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     const dot = overviewUi.dot(page, 1);
     await expect(dot).toHaveAccessibleName(/오답|incorrect/i);
@@ -664,7 +663,8 @@ test(
     await runUi.next(panel).click();
     await answerMcq(panel, wrongOption(q2).text, RESULT_TEXT.incorrect);
     await runUi.next(panel).click();
-    await runUi.skip(panel).click();
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(3, 5));
+    await runUi.next(panel).click();
     await answerEssay(panel, `${label} 답 4`);
     await runUi.next(panel).click();
     await answerEssay(panel, `${label} 답 5`);
@@ -675,11 +675,12 @@ test(
     ).toBeVisible();
     const rows = runUi.resultRows(panel);
     await expect(rows).toHaveCount(5);
-    await expect(nth(await rows.all(), 0).getByLabel(/정답|correct/i)).toHaveText('O');
-    await expect(nth(await rows.all(), 1).getByLabel(/오답|incorrect/i)).toHaveText('X');
-    await expect(nth(await rows.all(), 2)).toContainText(/건너뜀|skipped/i);
-    await expect(nth(await rows.all(), 3)).toContainText(RESULT_TEXT.pending);
-    await expect(nth(await rows.all(), 4)).toContainText(RESULT_TEXT.pending);
+    const mark = (i: number, name: RegExp) => rows.nth(i).getByRole('cell', { name });
+    await expect(mark(0, /맞음|correct/i)).toHaveText('O');
+    await expect(mark(1, /틀림|incorrect/i)).toHaveText('X');
+    await expect(mark(2, /건너뜀|skipped/i)).toHaveText('–');
+    await expect(mark(3, RESULT_TEXT.pending)).toHaveText('대기');
+    await expect(mark(4, RESULT_TEXT.pending)).toHaveText('대기');
 
     // A result row reopens that position read-only.
     await rows.nth(1).getByRole('button').first().click();
@@ -712,7 +713,7 @@ test(
 );
 
 test(
-  'QVIEW-01-AC07 archived workspaces cannot submit, another user’s run is not found and guests get no 문제 풀기',
+  'QVIEW-01-AC07 archived workspaces cannot submit, another user’s run is not found and guests get no range run',
   { tag: '@infra' },
   async ({ page, browser, workspaceFactory }) => {
     const label = unique('qview01-ac07');
@@ -749,16 +750,16 @@ test(
     await expect(runUi.notFound(page.locator('body'))).toBeVisible();
     expect((await getPracticeRun(s.owner, foreignRun.id)).status).toBe(404);
 
-    // A guest of a share link: no 문제 풀기, the preview is read-only (modal since UX9, HOMEDLG-01).
+    // A guest of a share link: no range run, the preview is read-only (modal since UX9, HOMEDLG-01).
     const link = await createShareLink(other.owner, other.workspaceId);
     const guest = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     try {
       const guestPage = await guest.newPage();
       await openShareWithSecret(guestPage, link.id, link.secret);
       await expect(sharedUi.readOnlyNotice(guestPage)).toBeVisible();
-      await expect(guestPage.getByText(/^(문제 풀기|practice questions?)$/i)).toHaveCount(0);
+      await expect(guestPage.getByText(/^(모의고사|practice questions?)$/i)).toHaveCount(0);
       await expect(
-        guestPage.getByRole('menuitem', { name: /문제 풀기|practice questions?/i }),
+        guestPage.getByRole('menuitem', { name: /모의고사|practice questions?/i }),
       ).toHaveCount(0);
       await sharedUi.question(guestPage, nth(other.questions, 0).revision.stem).click();
       const preview = sharedUi.questionPanel(guestPage);
@@ -806,15 +807,10 @@ test(
       'correct',
     ]);
 
-    // A new 문제 풀기 with 다시 풀기만 (no question is marked for retry).
+    // A new range run with 다시 풀기만 (no question is marked for retry).
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     panel = await openRangePicker(page);
-    if ((await runUi.filterToggle(panel).count()) > 0) {
-      if ((await runUi.filterToggle(panel).getAttribute('aria-expanded')) !== 'true') {
-        await runUi.filterToggle(panel).click();
-      }
-    }
     await runUi.retryFilter(panel).click();
     await expect(runUi.noMatch(panel)).toBeVisible();
     await expect(runUi.resetFilters(panel)).toBeVisible();
@@ -940,7 +936,7 @@ test(
     await runUi.start(panel).click();
     await expect(page).toHaveURL(/[?&]i=1(&|$)/);
     panel = runUi.panel(page);
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await runUi.showResults(panel).click();
     await expect(runUi.resultRows(panel)).toHaveCount(2);
     await runUi.resultRows(panel).nth(0).getByRole('button').first().click();

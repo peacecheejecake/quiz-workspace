@@ -191,10 +191,10 @@ export function homeRunClient(
       const kind = result.kind === 'notFound' ? 'notFound' : 'unavailable';
       return { ok: false, kind, message: RUN_FAILURE_MESSAGES[kind] };
     },
-    async create(range, randomOrder, key) {
+    async create(range, randomOrder, key, shuffleOptions) {
       const result = mockExamId
         ? await createMockRun(mockExamId, range, randomOrder, key)
-        : await bank.create(range, randomOrder, key);
+        : await bank.create(range, randomOrder, key, shuffleOptions);
       if (result.ok) rememberRun(result.data);
       return result;
     },
@@ -238,6 +238,12 @@ export function homeRunClient(
       sessionSources.get(sessionId) === 'mock'
         ? mock.selfGrade(sessionId, grade)
         : bank.selfGrade(sessionId, grade),
+    reopenPosition: (runId, position) => bank.reopenPosition(runId, position),
+    async openRetrySession(runId, position, key, epoch) {
+      const result = await bank.openRetrySession(runId, position, key, epoch);
+      if (result.ok) sessionSources.set(result.data.id, await sourceOf(runId));
+      return result;
+    },
   };
 }
 

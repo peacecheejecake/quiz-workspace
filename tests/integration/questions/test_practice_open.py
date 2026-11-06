@@ -141,16 +141,10 @@ def test_ux12_open_ac04_a_replayed_key_never_revives_a_submitted_session(seed: A
     key = uuid.uuid4().hex
     first = open_practice(owner, q["id"], key=key)["session"]
     assert choose(owner, first["id"], "opt-1") == "correct"
-    again = open_practice(owner, q["id"], key=key)
-    assert again["session"] is None
-    assert again["result"]["id"] == first["id"]
-
-    forced = uuid.uuid4().hex
-    second = open_practice(owner, q["id"], {"force_new": True}, key=forced)["session"]
-    assert choose(owner, second["id"], "opt-2") == "incorrect"
-    replayed = open_practice(owner, q["id"], {"force_new": True}, key=forced)
-    assert replayed["session"] is None
-    assert replayed["result"]["id"] == second["id"]
+    again = open_call(owner, q["id"], key=key)
+    assert again.status_code == 409, again.text
+    assert again.json()["type"].endswith("practice-session-submitted")
+    assert answer_keys(again.json()) == []
 
 
 def test_ux12_open_ac04_a_submitted_key_after_a_revision_change_opens_nothing(seed: Any) -> None:
@@ -171,15 +165,6 @@ def test_ux12_open_ac04_a_submitted_key_after_a_revision_change_opens_nothing(se
     assert fresh["previous_revision"] is True
 
 
-def test_ux12_open_ac04_another_body_with_one_key_is_rejected(seed: Any) -> None:
-    owner, _, q = _mcq(seed, "ux12-open-key-reused")
-    key = uuid.uuid4().hex
-    open_practice(owner, q["id"], key=key)
-    res = open_call(owner, q["id"], {"force_new": True}, key)
-    assert res.status_code == 409
-    assert res.json()["type"] == "urn:quiz-workspace:problem:idempotency-key-reused"
-
-
 def test_ux12_open_ac04_reuses_only_a_current_open_session(seed: Any) -> None:
     owner, _, q = _mcq(seed, "ux12-open-reuse")
     first = open_practice(owner, q["id"])["session"]
@@ -187,16 +172,16 @@ def test_ux12_open_ac04_reuses_only_a_current_open_session(seed: Any) -> None:
     assert reused["reused"] is True
     assert reused["session"]["id"] == first["id"]
 
-    # An attempt made elsewhere: the baseline no longer matches, its result wins.
+    # An attempt made elsewhere: the baseline no longer matches, so a new session opens.
     other = start(owner, q["id"])
     assert choose(owner, other["id"], "opt-1") == "correct"
     stale = open_practice(owner, q["id"], {"cached_session_id": first["id"]})
     assert stale["reused"] is False
-    assert stale["session"] is None
-    assert stale["result"]["id"] == other["id"]
+    assert stale["session"]["id"] != first["id"]
+    assert stale["result"] is None
 
     # The baseline the client recorded when it opened the session still matches.
-    fresh = open_practice(owner, q["id"], {"force_new": True})
+    fresh = open_practice(owner, q["id"])
     current = fresh["latest_attempt_id"]
     assert current is not None
     matched = open_practice(
@@ -207,22 +192,22 @@ def test_ux12_open_ac04_reuses_only_a_current_open_session(seed: Any) -> None:
     assert matched["reused"] is True
 
 
-def test_ux12_open_ac04_a_submitted_cached_session_shows_its_result(seed: Any) -> None:
+def test_ux12_open_ac04_a_submitted_cached_session_is_not_reused(seed: Any) -> None:
     owner, _, q = _mcq(seed, "ux12-open-cached-submitted")
     first = open_practice(owner, q["id"])["session"]
     assert choose(owner, first["id"], "opt-2") == "incorrect"
     out = open_practice(owner, q["id"], {"cached_session_id": first["id"]})
     assert out["reused"] is False
-    assert out["session"] is None
-    assert out["result"]["outcome"]["result"] == "incorrect"
-    assert out["submitted_answer"] == {"selected_option_ids": ["opt-2"]}
+    assert out["session"]["id"] != first["id"]
+    assert out["result"] is None
+    assert out["submitted_answer"] is None
 
 
 def test_ux12_open_ac04_a_new_revision_is_not_reused(seed: Any) -> None:
     owner, _, q = _mcq(seed, "ux12-open-revision")
     first = open_practice(owner, q["id"])["session"]
     assert choose(owner, first["id"], "opt-1") == "correct"
-    cached = open_practice(owner, q["id"], {"force_new": True})
+    cached = open_practice(owner, q["id"])
     body = seed.mcq(_stem("새 문제"), ["a", "b", "c"], 0)
     owner.ok("PATCH", f"/questions/{q['id']}", {**body, "base_revision_id": q["revision"]["id"]})
     out = open_practice(
@@ -268,12 +253,6 @@ def test_ux12_open_ac04_a_session_of_another_question_is_not_reused(seed: Any) -
     assert out["session"]["question_id"] == q["id"]
 
 
-def test_ux12_open_ac04_cached_id_and_force_new_exclude_each_other(seed: Any) -> None:
-    owner, _, q = _mcq(seed, "ux12-open-exclusive")
-    res = open_call(owner, q["id"], {"cached_session_id": str(uuid.uuid4()), "force_new": True})
-    assert res.status_code == 422
-
-
 def test_ux12_open_ac05_unsubmitted_payloads_hold_no_answers(seed: Any) -> None:
     owner, _, q = _mcq(seed, "ux12-open-answers")
     opened = open_practice(owner, q["id"])
@@ -281,20 +260,9 @@ def test_ux12_open_ac05_unsubmitted_payloads_hold_no_answers(seed: Any) -> None:
     reused = open_practice(owner, q["id"], {"cached_session_id": opened["session"]["id"]})
     assert answer_keys(reused) == []
     replay_key = uuid.uuid4().hex
-    forced = open_practice(owner, q["id"], {"force_new": True}, key=replay_key)
-    assert answer_keys(forced) == []
-    assert answer_keys(open_practice(owner, q["id"], {"force_new": True}, key=replay_key)) == []
-
-
-def test_ux12_open_ac05_force_new_hides_the_previous_result(seed: Any) -> None:
-    owner, _, q = _mcq(seed, "ux12-open-force")
-    first = open_practice(owner, q["id"])["session"]
-    assert choose(owner, first["id"], "opt-1") == "correct"
-    forced = open_practice(owner, q["id"], {"force_new": True})
-    assert forced["session"]["id"] != first["id"]
-    assert forced["result"] is None
-    assert forced["submitted_answer"] is None
-    assert answer_keys(forced) == []
+    keyed = open_practice(owner, q["id"], key=replay_key)
+    assert answer_keys(keyed) == []
+    assert answer_keys(open_practice(owner, q["id"], key=replay_key)) == []
 
 
 def test_ux12_open_ac05_the_schema_keeps_answers_out_of_the_session_field(
@@ -411,3 +379,176 @@ def test_ux12_open_ac06_an_open_queued_behind_a_reset_cannot_undo_it(seed: Any) 
     assert responses["open"].status_code == 409
     assert responses["open"].json()["type"] == RESET_PROBLEM
     assert _status(owner, ws["id"], q["id"]) == "unseen"
+
+
+def reveal_call(client: Any, question_id: str) -> httpx.Response:
+    res: httpx.Response = client.call("POST", f"/questions/{question_id}/practice-reveal", {})
+    return res
+
+
+def reveal(client: Any, question_id: str) -> dict[str, Any]:
+    res = reveal_call(client, question_id)
+    assert res.status_code == 200, res.text
+    out: dict[str, Any] = res.json()
+    return out
+
+
+def _solved(seed: Any, label: str, option: str = "opt-1") -> tuple[Any, Any, Any, str]:
+    owner, ws, q = _mcq(seed, label)
+    first = open_practice(owner, q["id"])["session"]
+    choose(owner, first["id"], option)
+    return owner, ws, q, str(first["id"])
+
+
+def _attempts(client: Any, question_id: str) -> list[Any]:
+    return list(client.ok("GET", f"/questions/{question_id}/attempts")["items"])
+
+
+def test_ux12_retryopen_ac09_the_mark_does_not_change_the_opening(seed: Any) -> None:
+    owner, _, q, first = _solved(seed, "ux12-retryopen-mark")
+    plain = open_practice(owner, q["id"])
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": True})
+    marked = open_practice(owner, q["id"])
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": False})
+    cleared = open_practice(owner, q["id"])
+    for opened in (plain, marked, cleared):
+        assert opened["result"] is None
+        assert opened["session"]["id"] != first
+        assert answer_keys(opened) == []
+
+
+@pytest.mark.parametrize("option", ["opt-1", "opt-2"])
+def test_ux12_solvedopen_ac08_a_solved_question_opens_without_answers(
+    seed: Any, option: str
+) -> None:
+    owner, ws, q, first = _solved(seed, f"ux12-solvedopen-open-{option}", option)
+    before = _attempts(owner, q["id"])
+    opened = open_practice(owner, q["id"], key=uuid.uuid4().hex)
+    assert opened["result"] is None
+    assert opened["submitted_answer"] is None
+    assert opened["session"]["id"] != first
+    assert opened["session"]["state"] == "open"
+    assert opened["latest_attempt_id"] == before[0]["id"]
+    assert answer_keys(opened) == []
+    assert _attempts(owner, q["id"]) == before
+    assert _status(owner, ws["id"], q["id"]) in {"correct", "incorrect"}
+
+
+def test_ux12_solvedopen_ac08_a_solved_question_reuses_its_cached_session(seed: Any) -> None:
+    owner, _, q, _ = _solved(seed, "ux12-solvedopen-cached")
+    opened = open_practice(owner, q["id"])
+    again = open_practice(
+        owner,
+        q["id"],
+        {
+            "cached_session_id": opened["session"]["id"],
+            "baseline_attempt_id": opened["latest_attempt_id"],
+        },
+    )
+    assert again["reused"] is True
+    assert again["session"]["id"] == opened["session"]["id"]
+    assert answer_keys(again) == []
+
+
+def test_ux12_solvedopen_ac08_a_pending_submission_keeps_its_result(seed: Any) -> None:
+    owner = seed.client("ux12-solvedopen-pending")
+    ws = owner.create_workspace()
+    q = owner.create_question(ws["id"], {"question_type": "ESSAY", "stem": _stem("서술")})
+    first = open_practice(owner, q["id"])["session"]
+    owner.ok("POST", f"/practice-sessions/{first['id']}/submit", {"answer_text": "답"})
+
+    opened = open_practice(owner, q["id"])
+    assert opened["result"]["id"] == first["id"]
+    assert opened["result"]["outcome"]["result"] == "pending"
+    owner.ok("POST", f"/practice-sessions/{first['id']}/self-grade", {"result": "correct"})
+    assert open_practice(owner, q["id"])["result"] is None
+
+
+def test_ux12_solvedopen_ac08_reveal_returns_the_latest_submission(seed: Any) -> None:
+    owner, _, q, first = _solved(seed, "ux12-solvedopen-reveal", "opt-2")
+    before = _attempts(owner, q["id"])
+    shown = reveal(owner, q["id"])
+    assert shown["result"]["id"] == first
+    assert shown["result"]["outcome"]["result"] == "incorrect"
+    assert shown["result"]["outcome"]["correct_option_ids"] == ["opt-1"]
+    assert shown["submitted_answer"] == {"selected_option_ids": ["opt-2"]}
+    assert reveal(owner, q["id"])["result"]["id"] == first  # asking again changes nothing
+    assert _attempts(owner, q["id"]) == before
+
+
+def test_ux12_solvedopen_ac08_a_revealed_session_cannot_be_graded(seed: Any) -> None:
+    owner, _, q, _ = _solved(seed, "ux12-solvedopen-retired", "opt-2")
+    older = open_practice(owner, q["id"])["session"]
+    newer = open_practice(owner, q["id"])
+    reveal(owner, q["id"])
+    for session in (older, newer["session"]):
+        refused = owner.call(
+            "POST",
+            f"/practice-sessions/{session['id']}/submit",
+            {"selected_option_ids": ["opt-1"]},
+        )
+        assert refused.status_code == 409
+        assert refused.json()["type"] == RESET_PROBLEM
+    assert len(_attempts(owner, q["id"])) == 1
+    again = open_practice(
+        owner,
+        q["id"],
+        {
+            "cached_session_id": newer["session"]["id"],
+            "baseline_attempt_id": newer["latest_attempt_id"],
+        },
+    )
+    assert again["reused"] is False
+    assert choose(owner, again["session"]["id"], "opt-1") == "correct"
+
+
+def test_ux12_solvedopen_ac08_reveal_leaves_a_runs_session_alone(seed: Any) -> None:
+    owner, ws, q, _ = _solved(seed, "ux12-solvedopen-run")
+    run = owner.ok(
+        "POST",
+        f"/workspaces/{ws['id']}/practice-runs",
+        {"source": "bank", "range": {"all": True}, "random_order": False},
+        (201,),
+    )
+    session = owner.ok(
+        "POST",
+        f"/questions/{q['id']}/practice-sessions",
+        {"practice_run_id": run["id"], "run_position": 1},
+        (201,),
+    )
+    reveal(owner, q["id"])
+    assert choose(owner, session["id"], "opt-2") == "incorrect"
+
+
+def test_ux12_solvedopen_ac08_reveal_is_authorized_and_personal(seed: Any) -> None:
+    owner, ws, q, _ = _solved(seed, "ux12-solvedopen-authz")
+    member = seed.client("ux12-solvedopen-member")
+    seed.membership(ws["id"], member.user, "viewer")
+    stranger = seed.client("ux12-solvedopen-stranger")
+
+    assert reveal_call(member, q["id"]).status_code == 404  # never submitted: nothing to show
+    mine = open_practice(member, q["id"])["session"]
+    assert open_call(member, q["id"]).status_code == 200
+    assert reveal_call(member, q["id"]).status_code == 404
+    assert choose(member, mine["id"], "opt-2") == "incorrect"
+    assert reveal(member, q["id"])["result"]["id"] == mine["id"]
+
+    denied = reveal_call(stranger, q["id"])
+    assert denied.status_code == 404
+    assert answer_keys(denied.json()) == []
+    owner.ok("POST", f"/workspaces/{ws['id']}/archive")
+    assert reveal_call(owner, q["id"]).status_code == 403
+
+
+def test_ux12_solvedopen_ac08_reveal_keeps_to_the_active_revision(seed: Any) -> None:
+    owner, _, q, _ = _solved(seed, "ux12-solvedopen-revision")
+    open_session = open_practice(owner, q["id"])["session"]
+    body = seed.mcq(_stem("새 문제"), ["a", "b", "c"], 0)
+    owner.ok("PATCH", f"/questions/{q['id']}", {**body, "base_revision_id": q["revision"]["id"]})
+    assert reveal_call(owner, q["id"]).status_code == 404
+    still = owner.call(
+        "POST",
+        f"/practice-sessions/{open_session['id']}/submit",
+        {"selected_option_ids": ["opt-1"]},
+    )
+    assert still.status_code == 200  # a refused reveal retires nothing

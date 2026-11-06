@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, insert, literal, select, true, tuple_, union_all, update
+from sqlalchemy import and_, exists, func, insert, literal, select, true, tuple_, union_all, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,11 @@ class OpenedSession:
     id: uuid.UUID
     state: SessionState
     opened_at: datetime
+
+
+# Below every real epoch: submit and reuse compare a session's epoch with the current one, so a
+# session given this value is refused like one from before a reset (UX12-SOLVEDOPEN).
+RETIRED_SESSION_EPOCH = -1
 
 
 @dataclass(frozen=True)
@@ -163,6 +168,7 @@ _SESSION_COLUMNS = (
     question_revisions.c.is_multi_answer.label("rev_is_multi_answer"),
     question_revisions.c.explanation.label("rev_explanation"),
     question_revisions.c.rubric.label("rev_rubric"),
+    question_revisions.c.stem_tables.label("rev_stem_tables"),
     question_revisions.c.created_at.label("rev_created_at"),
 )
 
@@ -211,6 +217,7 @@ def _session(row: Any) -> SessionRecord:
             explanation=row.rev_explanation,
             rubric=row.rev_rubric,
             created_at=row.rev_created_at,
+            stem_tables=row.rev_stem_tables,
         ),
         practice_run_id=row.practice_run_id,
         run_position=row.run_position,
@@ -390,9 +397,32 @@ class PracticeRepository:
                 practice_sessions.c.practice_run_id == run_id,
                 practice_sessions.c.run_position == position,
                 practice_sessions.c.user_id == user_id,
+                practice_sessions.c.superseded_at.is_(None),
             )
         ).one_or_none()
         return _session(row) if row is not None else None
+
+    def supersede_run_session(self, session_id: uuid.UUID) -> None:
+        """`다시 풀기`: the position has no live session any more (UX12-RETRYINPLACE)."""
+        self._session.execute(
+            update(practice_sessions)
+            .where(practice_sessions.c.id == session_id)
+            .values(superseded_at=func.now())
+        )
+
+    def run_position_reopened(self, run_id: uuid.UUID, position: int) -> bool:
+        """Whether the position was reopened: its next session draws a new option order."""
+        return bool(
+            self._session.execute(
+                select(
+                    exists().where(
+                        practice_sessions.c.practice_run_id == run_id,
+                        practice_sessions.c.run_position == position,
+                        practice_sessions.c.superseded_at.is_not(None),
+                    )
+                )
+            ).scalar_one()
+        )
 
     def initial_attempt(self, session_id: uuid.UUID, user_id: uuid.UUID) -> AttemptRecord | None:
         row = self._session.execute(
@@ -470,6 +500,20 @@ class PracticeRepository:
             latest_attempt_id=row.latest_attempt_id,
             latest_result=cast(AttemptResult | None, row.latest_result),
             submitted_answer=dict(row.initial_answer) if row.initial_answer is not None else None,
+        )
+
+    def retire_open_sessions(self, question_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """The caller's open sessions of the question can no longer be submitted: their answers
+        were just revealed (UX12-SOLVEDOPEN). Run positions are the run's own record and stay."""
+        self._session.execute(
+            update(practice_sessions)
+            .where(
+                practice_sessions.c.question_id == question_id,
+                practice_sessions.c.user_id == user_id,
+                practice_sessions.c.state == "open",
+                practice_sessions.c.practice_run_id.is_(None),
+            )
+            .values(reset_epoch=RETIRED_SESSION_EPOCH)
         )
 
     def record_view(

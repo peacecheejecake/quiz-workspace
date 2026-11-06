@@ -1,0 +1,183 @@
+/* CHMAN-01 챕터 관리 panel. */
+
+.body,
+.trees,
+.book,
+.questions,
+.loading,
+.failure,
+.confirm {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  align-content: start;
+}
+
+.notice:empty {
+  display: none;
+}
+
+.notice,
+.alertText,
+.muted,
+.warning {
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.alertText,
+.warning {
+  color: var(--color-danger);
+}
+
+.muted {
+  color: var(--color-text-secondary);
+}
+
+.columns {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.bookHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bookTitle,
+.confirmTitle {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.tree {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.rowItem {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-inline-start: calc(var(--space-4) * var(--chapter-depth, 0));
+  border-radius: var(--radius-sm);
+}
+
+.rowItem[data-drop-target] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.row,
+.questionRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  min-height: 2.75rem;
+}
+
+.row[data-dragging] {
+  opacity: 0.5;
+}
+
+.questionRow {
+  flex-wrap: wrap;
+}
+
+.grip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  color: var(--color-text-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.rowTitle {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  flex: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/* CHMAN-01-AC08: the touch path of every row, as tall as the row and its grip. */
+@media (width < 768px), (pointer: coarse) {
+  .row .rowMenu {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
+.questionPicker {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.titleForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: end;
+  min-width: 0;
+}
+
+.titleField {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.confirm {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.confirm:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dragPreview {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  max-width: 20rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  overflow-wrap: anywhere;
+}

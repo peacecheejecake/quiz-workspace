@@ -16,9 +16,17 @@ import { useCallback } from 'react';
  * so the guard listens on the surface itself rather than on the document.
  *
  * On every touchmove/wheel inside `root` it walks from the event target up to `root`: when some
- * element on the way can still scroll in the gesture's direction the event is left alone (the
- * surface scrolls natively, with momentum), otherwise it is cancelled. Pinch-zoom (two touches),
- * ctrl+wheel zoom, range sliders and events the browser already made uncancelable are untouched.
+ * element on the way can still scroll in the gesture's direction the event is left to the browser
+ * (the surface scrolls natively, with momentum), otherwise it is cancelled. Pinch-zoom (two
+ * touches), ctrl+wheel zoom, range sliders and events the browser already made uncancelable are
+ * untouched.
+ *
+ * The surface owns its gestures (UX12-CHAPTERSCROLL): an event it leaves to the browser also stops
+ * here, before react-remove-scroll's document listeners. Those cancel for the top lock anything
+ * that is not inside that lock, which is every popover portalled out of a modal panel, and they
+ * cancel a touchmove whose distance from the touch start is 0 or points past the end, which is the
+ * finger's first jitter on a list at its top. iOS decides on the first touchmove: one cancelled
+ * move ends the scroll of the whole gesture. So moves within `TOUCH_SLOP` decide nothing.
  */
 export function containOverscroll(root: HTMLElement): () => void {
   let last: { x: number; y: number } | null = null;
@@ -29,11 +37,11 @@ export function containOverscroll(root: HTMLElement): () => void {
   };
 
   const guard = (event: Event, dx: number, dy: number) => {
-    if (dx === 0 && dy === 0) return;
-    const target = event.target instanceof Element ? event.target : null;
+    const target = elementOf(event.target);
     if (target?.closest('input[type="range"]')) return;
     const axis = Math.abs(dy) >= Math.abs(dx) ? 'y' : 'x';
-    if (!scrollsWithin(target, root, axis, axis === 'y' ? dy : dx)) event.preventDefault();
+    if (scrollsWithin(target, root, axis, axis === 'y' ? dy : dx)) event.stopPropagation();
+    else event.preventDefault();
   };
 
   const onTouchMove = (event: TouchEvent) => {
@@ -43,14 +51,25 @@ export function containOverscroll(root: HTMLElement): () => void {
       return;
     }
     const from = last;
-    last = { x: touch.clientX, y: touch.clientY };
-    if (!from || !event.cancelable) return;
+    const at = { x: touch.clientX, y: touch.clientY };
+    if (!from || !event.cancelable) {
+      last = at;
+      return;
+    }
     // Content moves opposite to the finger: a finger moving up (negative) scrolls down.
-    guard(event, from.x - touch.clientX, from.y - touch.clientY);
+    const dx = from.x - at.x;
+    const dy = from.y - at.y;
+    if (Math.hypot(dx, dy) < TOUCH_SLOP) {
+      event.stopPropagation();
+      return;
+    }
+    last = at;
+    guard(event, dx, dy);
   };
 
   const onWheel = (event: WheelEvent) => {
     if (event.ctrlKey || !event.cancelable) return;
+    if (event.deltaX === 0 && event.deltaY === 0) return;
     guard(event, event.deltaX, event.deltaY);
   };
 
@@ -74,7 +93,16 @@ export function useOverscrollGuard<T extends HTMLElement>() {
   return useCallback((el: T | null) => (el ? containOverscroll(el) : undefined), []);
 }
 
+/** Finger travel (px) that says nothing yet about a swipe's direction. Below any browser's pan. */
+const TOUCH_SLOP = 4;
+
 const SCROLLS = /^(auto|scroll|overlay)$/;
+
+/** The element under the gesture: an engine may report the text node itself. */
+function elementOf(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target;
+  return target instanceof Node ? target.parentElement : null;
+}
 
 /** Whether `target` or an ancestor up to and including `root` can scroll by `delta` on `axis`. */
 function scrollsWithin(

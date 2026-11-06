@@ -20,6 +20,7 @@ from book_core.contracts.common import (
     SourceLocation,
     ensure_unique,
 )
+from book_core.contracts.document import TableContent
 
 
 class QuestionType(StrEnum):
@@ -108,6 +109,9 @@ class QuestionDraft(CoreModel):
     origin: DraftOrigin
     question_type: QuestionType
     stem: NonEmptyText
+    # UX12-STEMTABLE: the cells of the stem's pipe blocks, in order; `None` entry = that block's
+    # GFM. Older payloads have no such key.
+    stem_tables: tuple[TableContent | None, ...] | None = None
     options: tuple[QuestionOption, ...] = ()
     correct_option_ids: tuple[Identifier, ...] | None = None
     accepted_answers: tuple[NonEmptyText, ...] | None = None

@@ -34,7 +34,14 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
-from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
+from book_core.contracts import (
+    BBox,
+    Block,
+    BlockType,
+    QuestionType,
+    SourceLocation,
+    TableContent,
+)
 from book_core.export import md_table
 from book_core.question.labels import (
     CIRCLED_DIGITS,
@@ -122,11 +129,17 @@ class RawFigure:
     caption: SourceLine | None
 
 
+# A source line that prints a list item (questions.md §4 12).
+_ITEM_LINE = re.compile(r"-\s|[∙•·ㆍ]")
+
+
 @dataclass(slots=True)
 class RawQuestion:
     number: int
     stem_lines: list[SourceLine]
     stem_parts: list[str]
+    stem_tables: list[TableContent] = field(default_factory=list)
+    """The cells of the tables in ``stem_parts``, in order (UX12-STEMTABLE)."""
     options: list[RawOption] = field(default_factory=list)
     figures: list[RawFigure] = field(default_factory=list)
     trailing: list[SourceLine] = field(default_factory=list)
@@ -144,14 +157,16 @@ class RawQuestion:
     def stem(self) -> str:
         """The stem lines joined by spaces (a wrapped line goes on), except that each printed
         stem item (``(가) ...``, ``ㄱ. ...``) starts its own line, after a blank line below the
-        question sentence, and a table stands apart by blank lines (questions.md §4 11)."""
+        question sentence, a line printed with an item marker (``- ...``, ``∙ ...``) keeps its
+        line break, and a table stands apart by blank lines (questions.md §4 11, 12)."""
         text = ""
         after_table = False
         for part in self.stem_parts:
             if not part:
                 continue
             table = split_pipe_blocks(part) == [(True, part)]
-            text += ("\n\n" if table or after_table else " ") + part if text else part
+            gap = "\n\n" if table or after_table else "\n" if _ITEM_LINE.match(part) else " "
+            text += gap + part if text else part
             after_table = table
         return break_stem_items(text.strip())
 
@@ -649,6 +664,7 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 elif block.table is not None:
                     table = md_table(block)
                     current.stem_parts.append(table)
+                    current.stem_tables.append(block.table)
                     current.stem_lines.append(
                         SourceLine(text=table, block=block, block_index=index)
                     )

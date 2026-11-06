@@ -365,7 +365,7 @@ export function parseSummaryMarkdown(markdown: string): MarkdownBlock[] {
   return blocks;
 }
 
-const EMPHASIS = /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*|_)(?=\S)([\s\S]*?\S)\3/;
+export const EMPHASIS = /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*|_)(?=\S)([\s\S]*?\S)\3/;
 
 export function parseInline(text: string): InlineNode[] {
   const out: InlineNode[] = [];
