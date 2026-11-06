@@ -28,16 +28,28 @@ UX10의 "서버 metadata를 먼저 확인한다"는 보장은 그대로이며, �
 
 ## 측정
 
-Playwright Chromium, `next start`, 문제 8개의 median, 같은 Mac. DB RTT는 실제 hosted DB가 없는 환경이라 TCP 지연 proxy로 넣었다. API access log 기준 왕복 수는 `tests/integration/questions/test_round_trips.py`가 고정한다.
+**DB 왕복(결정적, `tests/integration/questions/test_round_trips.py`가 고정):**
 
-| 경우 | 개선 전 DB RTT 0 | 개선 전 DB RTT 10 ms | 개선 후 DB RTT 0 | 개선 후 DB RTT 10 ms |
+| 경우 | 개선 전 | 개선 후 |
+|---|---:|---:|
+| 처음 여는 문제 | 19 (`practice-recent` 9 + `practice-sessions` 10) | 10 |
+| 안 풀고 다시 여는 문제(캐시) | 9 | 8 |
+| 풀었던 문제 | 9 | 7 |
+| 열기당 POST | 2 | 1 |
+
+**체감 시간(client `practice-open` measure, ms):** Playwright Chromium, `next start`, 문제 8개의 median, 같은 Mac. RTT 10 ms는 TCP 지연 proxy로 넣었다.
+
+| 경우 | 전 RTT 0 | 전 RTT 10 ms | 후 RTT 0 | 후 RTT 10 ms |
 |---|---:|---:|---:|---:|
-| 처음 여는 문제 | 49 ms | 258 ms | MEASURE | MEASURE |
-| 안 풀고 다시 여는 문제(캐시) | 33 ms | 109 ms | MEASURE | MEASURE |
-| 풀었던 문제 | 30 ms | 132 ms | MEASURE | MEASURE |
-| 열기당 POST 수 | 2 | 2 | MEASURE | MEASURE |
+| 처음 여는 문제 | 49 | 258 | 63 | 235 |
+| 캐시 재사용 | 33 | 109 | 45 | 173 |
+| 풀었던 문제 | 30 | 132 | 52 | 156 |
 
-병목은 DB 왕복 수다. RTT 10 ms에서 처음 여는 문제의 시간 대부분이 두 요청의 왕복 합이다.
+**이 표로 전후를 비교하면 안 된다.** "후"는 다른 Task가 병렬로 돌아 load average 37 이상일 때 쟀다. 코드가 바뀌지 않은 `submit`의 API median도 같은 시점에 RTT 0에서 11 → 37 ms, RTT 10 ms에서 86 → 102 ms로 늘었다. "후"는 결과 조회를 한 statement로 합치기 전 측정이기도 하다. 조용한 환경에서 두 build를 번갈아 다시 재야 하며, 아직 하지 못했다(UX12-OPEN 후속).
+
+"전" 측정에서 RTT 0과 10 ms의 차이가 왕복 수에 비례하므로 병목은 DB 왕복 수다. 개선 효과의 근거는 현재 위 왕복 수이며, 체감 시간 단축은 아직 확인되지 않았다.
+
+**알려진 동작 변화:** 예전에는 `practice-recent`가 도는 동안 panel을 닫거나 다음 문제로 넘어가면 session이 열리지 않았다. 이제 요청이 나간 뒤에는 서버가 열람을 기록한다. 응답은 client가 버린다. reset이 panel을 닫는 경우만 예외로, client가 다시 열기를 보내지 않는다(UX10-QVIEW-AC04).
 
 ## 수용 기준
 
