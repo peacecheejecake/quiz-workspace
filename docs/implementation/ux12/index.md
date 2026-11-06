@@ -19,7 +19,7 @@
 - **Task 수명주기:** AGENTS.md §3을 따른다. 명세 수정 → 해당 Task 직전에 RED → GREEN → 커밋 → Codex 리뷰(`HERDR_ENV=0`, 불가 시 Opus 리뷰 subagent) → main thread 재검증·merge.
 - **브랜치:** Epic 묶음마다 `feature/ux12-<topic>`, Task마다 `task/UX12-<ID>-<slug>`. 파일 범위가 겹치지 않는 Task만 병렬로, 각자 worktree에서 실행한다.
 - **점검(사용자 지시 2026-11-06, 개정):** Task가 끝나면 구현 subagent가 로컬에서 `make lint`, `make typecheck`, unit test만 돌린다. E2E와 visual은 자기 Task의 새 test만 RED → GREEN으로 확인하고, 전체 실행은 PR CI가 맡는다. PR에서 실패하면 해당 Task의 구현 subagent가 고친다.
-- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. 현재 통합 브랜치는 `feature/ux12-integration`이다.
+- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. `feature/ux12-integration`은 PR #81로 올렸고, 이후 Task는 `feature/ux12-next`에 모은다.
 - **AC 등록:** 새 AC는 `docs/screens/ux12-*.md`와 새 phase(`UX12-<EPIC>.0`)에 둔다. 이미 GREEN인 phase에 새 AC를 넣지 않는다(§7 UX9-SPEC 해석).
 - **Visual baseline:** Task마다 재생성하지 않는다. 묶음의 마지막 QA Task에서 고정 Linux Playwright 이미지로 한 번만 재생성한다. 테두리·glass 변경은 baseline 170장 대부분을 바꾼다.
 - **Migration:** timestamp는 production 적용분(`20261106110000`) 뒤여야 한다. 공유 DB 적용은 main thread만 한다.
@@ -290,25 +290,25 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | EXTRACT-4 | 4 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, pytest 175 GREEN |
 | EXTRACT-5 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
-| EXTRACT-6 | 4 | 대기 | |
-| EXTRACT-7 | 4 | 대기 | |
+| EXTRACT-6 | 4 | 진행 | |
+| EXTRACT-7 | 4 | 진행 | |
 | DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
 | DESIGN-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
 | SHELL-2 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
 | VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
 | EXPL-3 | 5 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, migration 20261106120000 공유 DB 적용, E2E 18·계약 26 GREEN |
 | VIEW-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 더보기의 원문 보기, E2E 10·lint·typecheck·unit GREEN |
-| VIEW-5 | 5 | 대기 | |
+| VIEW-5 | 5 | 진행 | |
 | VIEW-6 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 링크 대기 표시, 첫 반응 약 450→14ms, 페이지 완료 시간은 변화 없음 |
 | DOCS-2 | 5 | 진행 | |
-| SHELL-3 | 6 | 대기 | |
-| SHELL-4 | 6 | 대기 | |
+| SHELL-3 | 6 | 진행 | |
+| SHELL-4 | 6 | 진행 | |
 | SHELL-5 | 6 | 대기 | |
-| SHELL-6 | 6 | 대기 | |
-| CHAPTER-1 | 7 | 대기 | |
+| SHELL-6 | 6 | 진행 | |
+| CHAPTER-1 | 7 | 진행 | |
 | CHAPTER-3 | 7 | 대기 | |
 | CHAPTER-4 | 7 | 대기 | |
 | CHAPTER-5 | 7 | 대기 | |
 | CHAPTER-6 | 7 | 대기 | |
-| SHARE-1 | 8 | 대기 | |
-| SHARE-2 | 8 | 대기 | |
+| SHARE-1 | 8 | 진행 | |
+| SHARE-2 | 8 | 진행 | |
