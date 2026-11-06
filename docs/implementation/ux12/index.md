@@ -405,7 +405,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-13 | 10 | 진행 | |
 | MOCKUX-14 | 10 | 완료 | 번호·O/X 표, 열 전체가 버튼, Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-15 | 10 | 진행 | |
-| DESIGN-7 | 10 | 진행 | |
+| DESIGN-7 | 10 | 완료 | 흰 버튼 유지(raised), 해설 회색 유지, 돌아가기 ghost, Codex 지적 없음, 토큰 대비 AA, E2E는 PR CI에서 확인 |
 | DESIGN-6 | 10 | 완료 | 마커 실제 21px·18px였던 것을 28px로, hover 1.5배, 간격 0→7px, Codex P2(기존 테스트 값) 수정, Chromium Storybook 측정, E2E는 PR CI에서 확인 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
