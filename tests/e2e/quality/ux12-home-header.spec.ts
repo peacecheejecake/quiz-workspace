@@ -20,6 +20,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 const MENU_NAME = /^(문서|documents)\s*\d+$/i;
 const trigger = (page: Page) => main(page).getByRole('button', { name: MENU_NAME });
 const play = (page: Page) => main(page).getByRole('button', { name: /^풀기$/ });
+const askButton = (page: Page) => main(page).getByRole('button', { name: /^(AI 질문|ask ai)$/i });
 const menu = (page: Page) => page.getByRole('menu', { name: MENU_NAME });
 const item = (page: Page, name: RegExp) => menu(page).getByRole('menuitem', { name });
 const DOCUMENTS = /^(문서 관리|documents)$/i;
@@ -58,6 +59,30 @@ const scrollTo = async (page: Page, y: number) => {
   await page.evaluate((top) => window.scrollTo({ top, behavior: 'instant' }), y);
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(y);
 };
+
+/** Seeding 100 books is slow and only the label's width matters here. */
+const showThreeDigitCount = (page: Page) =>
+  trigger(page)
+    .locator('span')
+    .evaluate((el) => {
+      el.textContent = '100';
+    });
+
+/** Puts dot 1 behind the stuck line, then moves to dot 2: it has to clear the line. */
+async function expectArrowKeyClearsLine(page: Page): Promise<void> {
+  const first = overviewUi.dot(page, 1);
+  const line = stickyLine(page);
+  const start = await box(first);
+  await scrollTo(page, Math.round(start.y - (await box(line)).y));
+  const stuck = await box(line);
+  await first.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+  await page.keyboard.press('ArrowRight');
+  const second = overviewUi.dot(page, 2);
+  await expect(second).toBeFocused();
+  await expect
+    .poll(async () => (await box(second)).y)
+    .toBeGreaterThanOrEqual(stuck.y + stuck.height);
+}
 
 async function openMenu(page: Page): Promise<void> {
   await expect(async () => {
@@ -211,21 +236,27 @@ test(
   async ({ page, workspaceFactory }) => {
     await ownerHome(page, workspaceFactory, 'ux12-hdr-04', 3);
     await stretchHome(page);
-    const first = overviewUi.dot(page, 1);
-    const line = stickyLine(page);
-    const start = await box(first);
-    // The marker sits behind the stuck line, focused without scrolling.
-    await scrollTo(page, Math.round(start.y - (await box(line)).y));
-    const stuck = await box(line);
-    await first.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
-    await page.keyboard.press('ArrowRight');
-    const second = overviewUi.dot(page, 2);
-    await expect(second).toBeFocused();
-    await expect
-      .poll(async () => (await box(second)).y)
-      .toBeGreaterThanOrEqual(stuck.y + stuck.height);
+    await expectArrowKeyClearsLine(page);
   },
 );
+
+test.describe('300px', () => {
+  test.use({ viewport: { width: 300, height: 640 } });
+
+  test(
+    'UX12-HEADER-AC04 the margin follows the line when it wraps on a very narrow screen',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      await ownerHome(page, workspaceFactory, 'ux12-hdr-04n', 3);
+      await stretchHome(page);
+      await expect(askButton(page)).toBeVisible(); // it appears once availability has loaded
+      await showThreeDigitCount(page);
+      const parts = await Promise.all([box(trigger(page)), box(homeUi.shareButton(page))]);
+      expect(parts[1]?.y, 'the line wraps').toBeGreaterThan(parts[0]?.y ?? 0);
+      await expectArrowKeyClearsLine(page);
+    },
+  );
+});
 
 test.describe('375px', () => {
   test.use({ viewport: { width: 375, height: 667 } });
@@ -235,8 +266,14 @@ test.describe('375px', () => {
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       await ownerHome(page, workspaceFactory, 'ux12-hdr-05');
+      const ask = askButton(page);
+      await expect(ask).toBeVisible();
+      await expect(ask).toHaveText(/^\s*AI 질문\s*$/); // visually hidden, still its name
+      await showThreeDigitCount(page);
       const parts = await Promise.all(
-        [trigger(page), play(page), homeUi.historyButton(page), homeUi.shareButton(page)].map(box),
+        [trigger(page), play(page), ask, homeUi.historyButton(page), homeUi.shareButton(page)].map(
+          box,
+        ),
       );
       const centers = parts.map((part) => part.y + part.height / 2);
       for (const center of centers) expect(Math.abs(center - (centers[0] ?? 0))).toBeLessThan(1);

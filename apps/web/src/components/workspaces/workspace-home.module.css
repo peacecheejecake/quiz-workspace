@@ -1,7 +1,8 @@
 /* Workspace home (QOV-01, UX3c): the sticky line of actions (UX12-HEADER), the 문제 search, then
    the 문제 영역. Semantic tokens only. */
 
-/* A flex column, not a grid: a grid item's sticky range ends with its row (UX12-HEADER). */
+/* A flex column, not a grid: a grid item's sticky range ends with its row (UX12-HEADER).
+   --home-toolbar-height is the one-row height until the page measures the line. */
 .home {
   --home-toolbar-padding: var(--space-2);
   --home-toolbar-height: calc(var(--control-height-md) + 2 * var(--home-toolbar-padding));
@@ -62,4 +63,22 @@
 
 .count {
   font-variant-numeric: tabular-nums;
+}
+
+/* Narrow screens: AI 질문 keeps its name but shows only its icon, so the line fits one row at 375px
+   with a three-digit count (UX12-HEADER-AC05). */
+@media (max-width: 479px) {
+  .toolbar .askButton {
+    width: var(--control-height-md);
+    padding-inline: 0;
+  }
+
+  .askLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }

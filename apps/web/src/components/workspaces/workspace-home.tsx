@@ -205,6 +205,17 @@ export interface WorkspaceHomeProps {
   };
 }
 
+/** Keeps the dots' scroll margin true when the sticky line wraps (UX12-HEADER-AC04). */
+function trackToolbarHeight(toolbar: HTMLDivElement) {
+  const home = toolbar.parentElement;
+  if (!home || typeof ResizeObserver === 'undefined') return undefined;
+  const observer = new ResizeObserver(() => {
+    home.style.setProperty('--home-toolbar-height', `${toolbar.offsetHeight}px`);
+  });
+  observer.observe(toolbar);
+  return () => observer.disconnect();
+}
+
 export function WorkspaceHome(props: WorkspaceHomeProps) {
   return (
     <PracticeViewerScope viewerId={props.viewerId}>
@@ -844,8 +855,8 @@ function WorkspaceHomeContent({
     <div className={styles.home}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
-      {/* UX12-HEADER: sticks under the app header, so it stays one line tall down to 375px. */}
-      <div className={styles.toolbar} data-home-toolbar="">
+      {/* UX12-HEADER: sticks under the app header; one line tall down to 375px, may wrap below. */}
+      <div ref={trackToolbarHeight} className={styles.toolbar} data-home-toolbar="">
         <div className={styles.actionGroup}>
           <QuestionMenu
             readOnly={readOnly}
@@ -872,9 +883,9 @@ function WorkspaceHomeContent({
         </div>
         <div className={styles.actionGroup} data-align="end">
           {askAvailable ? (
-            <Button onClick={openAsk}>
+            <Button className={styles.askButton} onClick={openAsk}>
               <AskIcon width={16} height={16} />
-              AI 질문
+              <span className={styles.askLabel}>AI 질문</span>
             </Button>
           ) : null}
           <IconButton

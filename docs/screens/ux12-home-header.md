@@ -27,11 +27,11 @@ page를 내려도 상단 줄은 app header 바로 아래(`top: var(--app-header-
 
 ### UX12-HEADER-AC04
 
-Heatmap dot이 상단 줄 뒤에 있을 때 화살표 키로 dot에 focus가 옮겨 가면, 그 dot은 상단 줄 아래로 scroll되어 가려지지 않는다.
+Heatmap dot이 상단 줄 뒤에 있을 때 화살표 키로 dot에 focus가 옮겨 가면, 그 dot은 상단 줄 아래로 scroll되어 가려지지 않는다. 약 340px 미만에서 상단 줄이 두 줄로 접혀도 같다: scroll 여백은 상단 줄의 실제 높이를 따른다.
 
 ### UX12-HEADER-AC05
 
-375px 폭에서 상단 줄의 모든 버튼은 한 줄에 있고 page에 가로 scroll이 없다.
+480px 미만에서 `AI 질문`은 아이콘만 보이고 접근성 이름 "AI 질문"은 유지한다. 375px 폭에서 Owner에게 `AI 질문`이 있고 문서 수가 세 자리여도 상단 줄의 모든 버튼은 한 줄에 있고 page에 가로 scroll이 없다.
 
 ### UX12-HEADER-AC06
 
