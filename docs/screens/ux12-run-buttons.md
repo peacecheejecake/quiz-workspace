@@ -28,4 +28,4 @@ linked_tests: [UX12-RUNBAR-AC01 … UX12-RUNBAR-AC04]
 
 ### UX12-RUNBAR-AC04
 
-`sequence` footer의 `다시 풀기`는 [UX12-VIEW-AC04](ux12-viewer.md)를 따른다. 결과가 확정되기 전(제출 전, 직접 채점 대기, 제출 중)에는 `aria-disabled`이고 눌러도 아무 일이 없으며, 같은 이유를 접근성 설명, tooltip, toast로 알린다. 결과가 확정되면 별도 연습([UX11-RETURN-AC01](ux11-return.md))을 연다. 끝난 묶음에서 건너뛴 위치는 제출할 길이 없으므로 처음부터 활성이다. 보관된 Workspace와 풀 수 없는 위치에는 그리지 않는다.
+`sequence` footer의 `다시 풀기`는 [UX12-VIEW-AC04](ux12-viewer.md)를 따른다. 결과가 확정되기 전(제출 전, 직접 채점 대기, 제출 중)에는 `aria-disabled`이고 눌러도 아무 일이 없으며, 같은 이유를 접근성 설명, tooltip, toast로 알린다. 결과가 확정되면 같은 패널에서 그 위치를 다시 푼다([UX12-RETRYINPLACE](ux12-retry-in-place.md)). 끝난 묶음에서 건너뛴 위치는 제출할 길이 없으므로 처음부터 활성이다. 보관된 Workspace와 풀 수 없는 위치에는 그리지 않는다.

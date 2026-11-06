@@ -13,6 +13,7 @@
 | UX12-CHAPTERRUN | 챕터별 풀기 | Workspace 홈 Heatmap | [ux12-chapter-run.md](ux12-chapter-run.md) |
 | UX12-RESUME | 모의고사 목록의 이어 풀기 | 모의고사 dialog | [ux12-run-resume.md](ux12-run-resume.md) |
 | UX12-RUNCLOSE | 풀이 패널 닫기 확인 | 범위 풀이 | [ux12-run-close.md](ux12-run-close.md) |
+| UX12-RETRYINPLACE | 풀이 패널의 제자리 `다시 풀기` | 범위 풀이 | [ux12-retry-in-place.md](ux12-retry-in-place.md) |
 | UX12-MOCKFORM | 모의고사 만들기·설정 바꾸기 화면 | 모의고사 dialog | [ux12-mock-form.md](ux12-mock-form.md) |
 | UX12-MOCKFORM2 | 모의고사 만들기 단계 순서와 문구 | 모의고사 dialog | [ux12-mock-form-order.md](ux12-mock-form-order.md) |
 | UX12-MOCKSHUFFLE | 모의고사 보기 섞기 실행 시점 | 모의고사 dialog, 풀이 패널 | [ux12-mock-shuffle.md](ux12-mock-shuffle.md) |
