@@ -250,7 +250,7 @@
   --heatmap-cell-touch: 24px;  /* UX9-STROKE (2026-11-02, 사용자 요청): 32px → 24px */
   --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
   --heatmap-dot: 16px;         /* 장식용 marker(legend·요약·preview). heatmap 점은 셀 크기로 그린다 */
-  --heatmap-marker-hover-scale: 1.18;
+  --heatmap-marker-hover-scale: 1.3;  /* UX12 D-12: 1.18 → 1.3. 확대한 사각형도 셀 안에 들어간다 */
 }
 
 .glass-surface {

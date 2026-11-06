@@ -234,6 +234,7 @@ describe('density (design-system.md §4, v1.2.2)', () => {
     expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
     expect(staticTokens['heatmap-dot']).toBe('16px');
     expect(staticTokens['heatmap-gap']).toBe('0px');
+    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.3'); // UX12 D-12: was 1.18
   });
 
   it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {
