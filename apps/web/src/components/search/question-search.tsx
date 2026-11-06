@@ -137,13 +137,13 @@ export function QuestionSearch({
       {/* Beside the form, to take a row of its own in the line. Always mounted so a change is
           announced; out of the flow while there is nothing to say. */}
       <p
-        id={messageId}
         role="status"
         aria-label="문제 검색 안내"
         className={styles.lineMessage}
         data-blocked={!searchable || undefined}
       >
-        {message}
+        {/* The description target: a description reads an element's aria-label before its text. */}
+        <span id={messageId}>{message}</span>
       </p>
     </>
   );
