@@ -11,6 +11,7 @@ import pytest
 from book_core.ask import (
     ASK_FIELDS_FORBIDDEN_IN_HINT,
     NO_ANSWER_MARK,
+    PROMPT_VERSION,
     AskCallMeta,
     AskSource,
     FakeAskAnswerer,
@@ -46,6 +47,18 @@ def test_ux12_askmd_citation_cleanup_keeps_markdown_whitespace() -> None:
     assert validate_citations(raw, ["S1"]).text == (
         "- 가 [1]\n    - 나 다.\n줄 끝  \n다음 줄\n\n```py\nif a:\n    b  =  1 [1]\n```\n끝."
     )
+
+
+def test_ux12_askmd_the_prompt_allows_tables_and_bans_links() -> None:
+    request = build_request(
+        question="질문", sources=[_source(1)], attachment=None, max_output_tokens=100
+    )
+    assert PROMPT_VERSION == "ask.answer/v3"
+    assert request.prompt_version == PROMPT_VERSION
+    assert "문단·목록·강조·코드·제목·인용·표를 쓸 수 있다" in request.system
+    assert "HTML·링크·이미지는 쓰지 않는다" in request.system
+    assert "표 칸에서도" in request.system
+    assert "[S1]" in request.system
 
 
 def test_ux12_askmd_fake_streams_the_markdown_answer() -> None:
