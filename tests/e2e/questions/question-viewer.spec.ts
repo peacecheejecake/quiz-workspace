@@ -237,7 +237,7 @@ function essay(label: string, n: number): QuestionInput {
 }
 
 test(
-  'QVIEW-01-AC01 문제 › 문제 풀기 opens the modal range step at once with two chapter groups and no drafts',
+  'QVIEW-01-AC01 the bank range run opens the modal range step at once with two chapter groups and no drafts',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s: RangeWorkspace = await seedRangeWorkspace(workspaceFactory, 'qview01-ac01');
@@ -424,7 +424,8 @@ test(
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
     await page.waitForLoadState('networkidle');
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    const play = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const play = page.getByRole('dialog', { name: /모의고사|practice/i });
+    await play.getByRole('button', { name: /^(추가|add)$/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
     await expect(random).not.toBeChecked();
     await random.check();
@@ -712,7 +713,7 @@ test(
 );
 
 test(
-  'QVIEW-01-AC07 archived workspaces cannot submit, another user’s run is not found and guests get no 문제 풀기',
+  'QVIEW-01-AC07 archived workspaces cannot submit, another user’s run is not found and guests get no range run',
   { tag: '@infra' },
   async ({ page, browser, workspaceFactory }) => {
     const label = unique('qview01-ac07');
@@ -749,16 +750,16 @@ test(
     await expect(runUi.notFound(page.locator('body'))).toBeVisible();
     expect((await getPracticeRun(s.owner, foreignRun.id)).status).toBe(404);
 
-    // A guest of a share link: no 문제 풀기, the preview is read-only (modal since UX9, HOMEDLG-01).
+    // A guest of a share link: no range run, the preview is read-only (modal since UX9, HOMEDLG-01).
     const link = await createShareLink(other.owner, other.workspaceId);
     const guest = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     try {
       const guestPage = await guest.newPage();
       await openShareWithSecret(guestPage, link.id, link.secret);
       await expect(sharedUi.readOnlyNotice(guestPage)).toBeVisible();
-      await expect(guestPage.getByText(/^(문제 풀기|practice questions?)$/i)).toHaveCount(0);
+      await expect(guestPage.getByText(/^(모의고사|practice questions?)$/i)).toHaveCount(0);
       await expect(
-        guestPage.getByRole('menuitem', { name: /문제 풀기|practice questions?/i }),
+        guestPage.getByRole('menuitem', { name: /모의고사|practice questions?/i }),
       ).toHaveCount(0);
       await sharedUi.question(guestPage, nth(other.questions, 0).revision.stem).click();
       const preview = sharedUi.questionPanel(guestPage);
@@ -806,7 +807,7 @@ test(
       'correct',
     ]);
 
-    // A new 문제 풀기 with 다시 풀기만 (no question is marked for retry).
+    // A new range run with 다시 풀기만 (no question is marked for retry).
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     panel = await openRangePicker(page);

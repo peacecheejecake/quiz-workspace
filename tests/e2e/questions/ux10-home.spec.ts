@@ -22,12 +22,13 @@ test(
     const menu = page.getByRole('main').getByRole('button', { name: /^(문서|documents)\s*\d+$/i });
     await expect(menu).toBeVisible();
     await menu.click();
-    await expect(page.getByRole('menuitem', { name: /문제 풀기|모의고사|AI 질문/i })).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole('menuitem', { name: /모의고사|AI 질문/i })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    await expect(page).toHaveURL(/panel=mock-exams.*mock=new/);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.getAll('panel').includes('mock-exams') && !url.searchParams.has('mock'),
+    );
   },
 );
 
@@ -123,7 +124,8 @@ test(
     await page.goto(overviewPath(workspace.id));
     await expect(overviewUi.markers(page)).toHaveCount(1);
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+    await dialog.getByRole('button', { name: /^(추가|add)$/i }).click();
     await dialog.getByRole('button', { name: /^(다음|next)$/i }).click();
     await dialog.getByRole('button', { name: /^(상태 필터|status filter)$/i }).click();
     const group = dialog.getByRole('group', { name: /^(상태 필터|status filter)$/i });

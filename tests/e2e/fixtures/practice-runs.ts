@@ -64,8 +64,8 @@
 //      /mock-exams/{id}/questions → {items: [{id, ...}]}. `보기 섞기` needs no LLM.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   `문제` menu item "문제 풀기" (every member, archived workspaces too) opens a modal
-//   FloatingSidePanel (aria-modal="true") named "문제 풀기" (mock: "<모의고사 이름> 풀기") at
+//   A 모의고사 만들기 without variations (every member, archived workspaces too) opens a modal
+//   FloatingSidePanel (aria-modal="true") named "모의고사" (mock: "<모의고사 이름> 풀기") at
 //   `?practice=new&source=bank`, busy skeleton "불러오는 중" first. Range step: checkbox "전체 선택"
 //   (aria-checked="mixed" when partly selected), one checkbox per chapter named by the chapter
 //   title (+ count) with its own expand button "<장 제목> 펼치기" (aria-expanded), question
@@ -100,7 +100,6 @@ import {
   type QuestionInput,
   type QuestionType,
 } from './questions.ts';
-import { homeUi } from './workspace-ui.ts';
 import type { Member, WorkspaceFactory } from './workspaces.ts';
 
 export const CH1 = '1장 물의 순환';
@@ -492,17 +491,13 @@ export function progressText(k: number, n: number): RegExp {
 }
 
 export const runUi = {
-  menuItem: (page: Page) =>
-    homeUi
-      .questionMenu(page)
-      .getByRole('menuitem', { name: /^(문제 풀기|practice questions?|start practice)$/i }),
   /** The modal QuestionViewer panel of a run, whatever its step's title. */
   // Portalled to <body>; since UX9 the home dialogs (portalled into <main>) are modal too.
   panel: (page: Page) =>
     page.getByRole('dialog').and(page.locator('body > [role="dialog"][aria-modal="true"]')),
   /** The range step's panel title. */
   pickerTitle: (panel: Locator) =>
-    panel.getByRole('heading', { name: /^(문제 풀기|practice questions?)$/i }),
+    panel.getByRole('heading', { name: /^(모의고사|practice questions?)$/i }),
   busy: (panel: Locator) =>
     panel.locator('[aria-busy="true"]').or(panel.getByText(/불러오는 중|loading/i)),
   // QuestionRangePicker (shared with MOCK-01, fixtures/range-picker.ts)
@@ -577,8 +572,8 @@ export const runUi = {
 };
 
 /**
- * Opens the header's `문제` menu and checks it lists `문제 풀기` (the menu itself must open with
- * its existing items first, so a missing item is told apart from a menu that did not open).
+ * Opens the range step of a bank run by its URL (the home's 풀기 opens the 모의고사 list, and its
+ * 만들기 without variations starts a run with a chosen range instead of this step).
  */
 export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
   const url = new URL(page.url());
@@ -590,7 +585,7 @@ export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
 }
 
 /**
- * Opens `문제` › `문제 풀기` and waits for the range step's panel and its list (the panel opens
+ * Opens a bank run's range step and waits for the step's panel and its list (the panel opens
  * busy before the data arrives, QVIEW-01-AC01: callers then expand or count the groups).
  */
 export async function openRangePicker(page: Page): Promise<Locator> {

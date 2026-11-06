@@ -304,7 +304,7 @@ export function SequenceViewer({
   state,
   archived,
   source = 'bank',
-  pickerTitle = '문제 풀기',
+  pickerTitle = '모의고사',
   onNavigate,
   onClose,
   onViewed,
@@ -570,7 +570,7 @@ function usePickerStep({
   async function start() {
     if (!request || tooLarge || starting || busy) return;
     const token = opening;
-    // A new opening is a new 문제 풀기 (a new run, QVIEW-01 "도중에 닫기"): its own key.
+    // A new opening is a new range run (a new run, QVIEW-01 "도중에 닫기"): its own key.
     const key = startKey.keyFor(JSON.stringify([token, request, random]));
     setStarting(true);
     setStartError(null);

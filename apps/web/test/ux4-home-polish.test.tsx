@@ -5,7 +5,7 @@
 // (DOC-01-AC09). UX7-DOCS-2 keeps the button for viewers and archived workspaces, with both items
 // disabled and the reason in text. UX7-BANK-2 adds 보관·초안 문제, enabled for every member.
 // UX7-DEDUP adds 중복 문제 정리, editor-only like 직접 추가 (QOV-01-AC16). QVIEW-W adds
-// 문제 풀기 (the range run, QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
+// the range run (QVIEW-01), enabled for every member like 보관·초안 문제. MOCK-W adds
 // 모의고사 (MOCK-01) between them, enabled for every member too. UX9-REDIST-W adds 챕터 재분배
 // (CHREDIST-01) after 중복 문제 정리, editor-only too.
 import './dom-setup';

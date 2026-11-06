@@ -1481,7 +1481,7 @@ test(
     await expect(gone).toContainText('attachment: none');
     await askUi.close(panel).click();
 
-    // The bank's range run (문제 풀기) has no 질문하기.
+    // The bank's range run has no 질문하기.
     await page.goto(homePath(s.workspaceId));
     const picker = await openRangePicker(page);
     await runUi.selectAll(picker).check();

@@ -842,7 +842,10 @@ test(
     await expect(button).toBeFocused();
 
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    await expect(page).toHaveURL(/[?&]mock=new/);
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.getAll('panel').includes('mock-exams') && !url.searchParams.has('mock'),
+    );
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
     await page.keyboard.press('Escape');
 

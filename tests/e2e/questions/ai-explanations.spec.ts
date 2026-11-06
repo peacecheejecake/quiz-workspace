@@ -831,7 +831,7 @@ test(
     ]);
     const q1Calls = explainCalls(q1.id);
 
-    // A: 문제 › 문제 풀기 over both, submit position 1, make its explanation, 다음, 이전.
+    // A: a bank range run over both, submit position 1, make its explanation, 다음, 이전.
     await openHome(page, a, s.workspaceId);
     let run = await openRangePicker(page);
     await runUi.selectAll(run).check();
