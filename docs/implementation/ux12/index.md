@@ -170,7 +170,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
 |---|---|---|---|---|
 | CHAPTER-1 Picker | dropdown → popover 트리 | 새 `ChapterPicker`(Popover, 접기/펼치기, 입력 필터, 키보드 tree). 호출처 6곳: 홈 필터, 문제 편집, 초안, 재분배, Ask 범위, 검색. **열린 동안에만 렌더**(초안 752 × 챕터 300 탭 크래시 재발 방지). Ask·검색은 하위 챕터까지 선택 가능해진다 | design-system §7, CHREDIST-01 외. 규모 test | L·없음 |
-| CHAPTER-2 | 1 | 진행 | |
+| CHAPTER-2 | 1 | 완료 | 507d6e50 · Codex P2(CI phase)는 merge에서 반영, 번호 라벨 전 화면 통일, E2E 66·Vitest GREEN |
 | CHAPTER-3 명세·RED | 챕터 관리 | `chapter-management.md`(CHMAN-01), DOC-02-AC02 개정, questions §14, architecture §5, workspace-sharing §11 | D-9 | M·D-9 |
 | CHAPTER-4 API | 추가·수정·삭제·이동 | migration: guard에 `chapter_edit` 경로, `documents.chapter_tree_version`, 변경 이력 source 추가. API: tree 조회, 생성, 수정, 일괄 이동(`expected_version`), 삭제(`move_questions_to`). 잠금 순서 Workspace → 문서 → 문제. 사용자 챕터 key는 `user-<uuid>`, 이전 revision 복원 시 이어받기 | pgTAP, 계약, 권한 매트릭스, fork 경합 | L·CHAPTER-3 |
 | CHAPTER-5 관리 화면 | dnd 계층 관리, drop | `문제` 메뉴 `챕터 관리`, modal panel, `@dnd-kit` + 키보드 동등 메뉴. 문제를 챕터로 끌어 놓기는 기존 `chapter-assignments` 재사용 | Chromium·WebKit touch | L·CHAPTER-1, 4 |
