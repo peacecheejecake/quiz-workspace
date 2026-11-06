@@ -28,6 +28,8 @@
   max-width: calc(100vw - 2 * var(--space-4));
   padding: var(--space-1);
   background: var(--color-surface);
+  /* The bar swipes down from anywhere, its buttons included. */
+  touch-action: none;
 }
 .control > button {
   min-height: 44px;
