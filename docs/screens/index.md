@@ -4,6 +4,9 @@
 
 | ID | Screen | Route | Requirements |
 |---|---|---|---|
+| UX12-NUMBER | 교재 문제 번호 우선 | Workspace 홈 | [ux12-number.md](ux12-number.md) |
+| UX12-POPPERS | tooltip 안전 여백·trigger 재누름 닫기 | 공통 UI | [ux12-poppers.md](ux12-poppers.md) |
+| UX12-HILITE | 하이라이트 메뉴 선택 유지·재클릭 닫기 | 공통 하이라이트 도구 | [ux12-highlight.md](ux12-highlight.md) |
 | UX12-PLAY | 풀기 옵션의 이름 | Workspace 홈 풀기 | [ux12-play.md](ux12-play.md) |
 | UX10-AI | AI 가용성·저장 해설 | 공통 AI 화면 | [ux10-ai.md](ux10-ai.md) |
 | UX12-HOME | Heatmap 미리보기·셀 크기 | Workspace 홈 | [ux12-home.md](ux12-home.md) |
