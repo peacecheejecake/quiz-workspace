@@ -15,6 +15,7 @@ const nav = vi.hoisted(() => ({
   search: '',
   push: vi.fn(),
   replace: vi.fn(),
+  prefetch: vi.fn(),
 }));
 const lookup = vi.hoisted(() => vi.fn());
 const identityNavigate = vi.hoisted(() => vi.fn());
@@ -26,7 +27,12 @@ const auth = vi.hoisted(() => ({ callback: (() => undefined) as AuthCallback }))
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.path,
   useSearchParams: () => new URLSearchParams(nav.search),
-  useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: vi.fn() }),
+  useRouter: () => ({
+    push: nav.push,
+    replace: nav.replace,
+    prefetch: nav.prefetch,
+    refresh: vi.fn(),
+  }),
 }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
@@ -70,6 +76,7 @@ afterEach(() => {
   nav.search = '';
   nav.push.mockReset();
   nav.replace.mockReset();
+  nav.prefetch.mockReset();
   lookup.mockReset();
   runApi.getRun.mockReset();
   runApi.getItem.mockReset();
@@ -742,4 +749,94 @@ it('UX11-RETURN-AC04 an auth-event outage keeps the page hidden and explains why
   expect(screen.queryByRole('status')).toBeNull();
   expect(await screen.findByRole('status')).toHaveTextContent('연결');
   expect(document.body).toHaveAttribute('data-identity-pending');
+});
+
+function deferredIdentityFetch() {
+  let reply!: (id: string | null) => void;
+  const pending = new Promise<string | null>((done) => {
+    reply = done;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ id: await pending }), { status: 200 })),
+  );
+  return reply;
+}
+const settle = () => act(async () => void (await Promise.resolve()));
+
+it('UX11-RETURN-AC02 starts the validity lookup with the identity check but navigates only after it', async () => {
+  lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const reply = deferredIdentityFetch();
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  await waitFor(() => expect(lookup).toHaveBeenCalledTimes(1));
+  await settle();
+  expect(nav.push).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toHaveAttribute(
+    'aria-busy',
+    'true',
+  );
+  await act(async () => reply(ownerId));
+  await waitFor(() =>
+    expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
+  );
+});
+
+it('UX11-RETURN-AC04 a late identity failure blocks navigation even when the lookup finished first', async () => {
+  lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const reply = deferredIdentityFetch();
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  await waitFor(() => expect(lookup).toHaveBeenCalledTimes(1));
+  await settle();
+  await act(async () => reply('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'));
+  await waitFor(() => expect(identityNavigate).toHaveBeenCalled());
+  expect(nav.push).not.toHaveBeenCalled();
+});
+
+it('UX11-RETURN-AC02 reads the run and its item in parallel and keeps the failure outcomes', async () => {
+  const runId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  function RunActivity() {
+    const { recordActivity } = usePracticeReturn();
+    return (
+      <button onClick={() => recordActivity({ kind: 'run', workspaceId, runId, position: 2 })}>
+        run activity
+      </button>
+    );
+  }
+  let resolveRun!: (value: unknown) => void;
+  runApi.getRun.mockReturnValue(new Promise((done) => (resolveRun = done)));
+  runApi.getItem.mockResolvedValue({ ok: true, data: { available: true } });
+  render(
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <RunActivity />
+    </PracticeReturnProvider>,
+  );
+  fireEvent.click(screen.getByText('run activity'));
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  await waitFor(() => expect(runApi.getItem).toHaveBeenCalledWith(runId, 2));
+  expect(runApi.getRun).toHaveBeenCalledWith(runId);
+  expect(nav.push).not.toHaveBeenCalled();
+  await act(async () => resolveRun({ ok: false, kind: 'unavailable' }));
+  expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
+  expect(nav.push).not.toHaveBeenCalled();
+});
+
+it('UX11-RETURN-AC02 prefetches the return route once per shown target, not per render', async () => {
+  const { rerender } = setup();
+  expect(nav.prefetch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('activity'));
+  await waitFor(() =>
+    expect(nav.prefetch).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
+  );
+  rerender(
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <Activity />
+    </PracticeReturnProvider>,
+  );
+  expect(nav.prefetch).toHaveBeenCalledTimes(1);
 });

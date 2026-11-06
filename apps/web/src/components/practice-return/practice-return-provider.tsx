@@ -54,6 +54,28 @@ export function usePracticeReturn(): ReturnContextValue {
   return value;
 }
 
+/** Server validity check of a return target; a transport error rejects. Read-only. */
+async function checkTarget(target: ReturnTarget): Promise<{ valid: boolean; temporary: boolean }> {
+  if (target.kind === 'question') {
+    const result = await lookupOverviewQuestionAction(target.workspaceId, target.questionId);
+    return {
+      valid: result.ok && result.data !== null,
+      temporary: !result.ok && result.kind === 'unavailable',
+    };
+  }
+  const api = createPracticeRunApi(target.workspaceId);
+  // Both reads are GETs; the item's outcome only counts when the run itself is readable.
+  const [run, item] = await Promise.all([
+    api.getRun(target.runId),
+    api.getItem(target.runId, target.position),
+  ]);
+  if (!run.ok) return { valid: false, temporary: run.kind === 'unavailable' };
+  return {
+    valid: item.ok && item.data.available,
+    temporary: !item.ok && item.kind === 'unavailable',
+  };
+}
+
 export function PracticeReturnProvider({
   children,
   userId,
@@ -275,27 +297,19 @@ export function PracticeReturnProvider({
     setBusy(true);
     setMessage('');
     try {
-      const verified = await verifyIdentity({ silent: true });
+      // The validity lookup only needs the session cookie, so it starts together with the identity
+      // check. Its outcome is read only after the server verified the identity: nothing navigates,
+      // clears or shows a message before that, and a late identity failure discards it.
+      const verifying = verifyIdentity({ silent: true });
+      const checking = checkTarget(target);
+      checking.catch(() => undefined);
+      const verified = await verifying;
       if (requestGeneration !== generation.current) return;
       if (!verified) {
         if (verificationPending.current) setMessage(TEMPORARY_FAILURE);
         return;
       }
-      let valid: boolean;
-      let temporary = false;
-      if (target.kind === 'question') {
-        const result = await lookupOverviewQuestionAction(target.workspaceId, target.questionId);
-        valid = result.ok && result.data !== null;
-        temporary = !result.ok && result.kind === 'unavailable';
-      } else {
-        const api = createPracticeRunApi(target.workspaceId);
-        const run = await api.getRun(target.runId);
-        const item = run.ok ? await api.getItem(target.runId, target.position) : null;
-        valid = !!item && item.ok && item.data.available;
-        temporary =
-          (!run.ok && run.kind === 'unavailable') ||
-          (!!item && !item.ok && item.kind === 'unavailable');
-      }
+      const { valid, temporary } = await checking;
       if (requestGeneration !== generation.current) return;
       if (valid) router.push(returnHref(target));
       else if (temporary) setMessage(TEMPORARY_FAILURE);
@@ -333,6 +347,14 @@ export function PracticeReturnProvider({
     !modalOpen &&
     !!state.target &&
     !state.dismissed;
+  // Warm the route shell (the destination's loading boundary) once per shown target. The
+  // destination page is a read-only server render, so a prefetch records nothing.
+  const prefetchHref = visible && state.target ? returnHref(state.target) : null;
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  useEffect(() => {
+    if (prefetchHref) routerRef.current.prefetch(prefetchHref);
+  }, [prefetchHref]);
   return (
     <ReturnContext.Provider value={{ recordActivity, clearTarget, setVerifiedUser }}>
       {children}
@@ -364,6 +386,8 @@ export function PracticeReturnProvider({
                         className={styles.target}
                         onClick={returnToTarget}
                         disabled={busy}
+                        aria-busy={busy}
+                        data-busy={busy ? 'true' : undefined}
                       />
                       <IconButton
                         label="복귀 버튼 닫기"

@@ -41,3 +41,18 @@
   min-width: 44px;
   min-height: 44px;
 }
+/* Immediate click feedback: the icon pulses in place, so the target size never changes. */
+.control .target[data-busy='true'] > :global(.icon) {
+  animation: busy-pulse 0.9s ease-in-out infinite;
+}
+@keyframes busy-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .control .target[data-busy='true'] > :global(.icon) {
+    animation: none;
+    opacity: 0.5;
+  }
+}
