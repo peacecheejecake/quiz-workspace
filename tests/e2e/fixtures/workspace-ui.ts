@@ -165,6 +165,7 @@ type QuestionMenuItem =
   | 'documents'
   | 'contentSearch'
   | 'redistribution'
+  | 'chapters'
   | 'inactive'
   | 'mockExams'
   | 'practice'
@@ -182,6 +183,8 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   duplicates: /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
   /** CHREDIST-01 (UX9-REDIST-W): the 챕터 재분배 dialog, editors only. */
   redistribution: /^(챕터 재분배|redistribute chapters)$/i,
+  /** CHMAN-01: the 챕터 관리 panel, editors only. */
+  chapters: /^(챕터 관리|manage chapters)$/i,
   /** UX7-BANK-2: the 보관·초안 문제 dialog, usable by every member. */
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
   /** MOCK-01: the 모의고사 dialog, usable by every member. */
@@ -196,7 +199,7 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
  * The `문제` menu's editor-only items (UX7-DOCS-2, UX7-DEDUP, CHREDIST-01; 변형 출제 retired by
  * QGEN-RM).
  */
-const EDITOR_ITEMS = ['create', 'duplicates', 'redistribution'] as const;
+const EDITOR_ITEMS = ['create', 'duplicates', 'redistribution', 'chapters'] as const;
 
 /** Every `문서 N` menu item in order (UX12-HEADER). */
 export const QUESTION_MENU_ORDER = [
@@ -205,6 +208,7 @@ export const QUESTION_MENU_ORDER = [
   QUESTION_MENU_ITEMS.create,
   QUESTION_MENU_ITEMS.duplicates,
   QUESTION_MENU_ITEMS.redistribution,
+  QUESTION_MENU_ITEMS.chapters,
   QUESTION_MENU_ITEMS.inactive,
 ] as const;
 

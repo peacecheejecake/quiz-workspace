@@ -44,6 +44,7 @@
 - **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
 - **When:** 관련 조작/네트워크 요청을 수행
 - **Then:** canonical 텍스트 블록을 수정·저장하면 draft revision을 새로 생성하지만 PDF 원본 파일은 변경하지 않는다.
+- **개정 (UX12 CHAPTER-3, D-9):** 본문 블록은 이 규칙 그대로다. 예외는 [CHMAN-01](chapter-management.md)의 챕터 편집 하나로, 활성 revision의 장 제목·계층·순서와 블록의 장 연결을 draft 없이 바로 바꾼다. 다른 열과 블록 내용은 계속 불변이다.
 
 ### DOC-02-AC03
 

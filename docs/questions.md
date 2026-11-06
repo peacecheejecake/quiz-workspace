@@ -357,7 +357,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 ### 14.3 옮기기 계약
 
 - `POST /workspaces/{id}/questions/chapter-assignments` — 편집 권한·활성 Workspace, 1~5,000문제를 **한 트랜잭션**으로(전부 아니면 전무), `Idempotency-Key`. 잠금 순서는 문제 쓰기의 규칙 그대로 **문서 → 문제**다: Workspace FOR SHARE → 대상 장의 책 문서와 보낸 문제들의 지금 장 문서를 문서 id 순 FOR SHARE(`QuestionRepository.lock_documents`) → 문제 id 순 FOR UPDATE. 교정 발행은 문서 FOR UPDATE 뒤 `documents_remap_question_chapters`로 그 장의 문제를 고치므로 반대 순서(문제 → 문서)는 deadlock이 된다. 문서를 잠근 동안 `종류 변경`도 기다리므로 대상 문서가 `question_paper`로 바뀌었으면 잠근 뒤의 검사에서 422 `chapter-invalid`. 멱등은 `Idempotency-Key`로만 하고, 키 없는 재실행은 `expected_chapter_id`가 지금 장과 달라 409 `chapter-changed`다(CHREDIST-01-C03). 대상 장은 이 Workspace의 살아 있는 `book` 문서의 현재 발행 revision 장이거나 null. 세부 오류 코드는 CHREDIST-01-C02.
-- 이력: `question_chapter_changes(id, workspace_id, question_id, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import, changed_by, changed_at)` append-only(UX9부터; 이전 변경은 없음). 활동 `questions.chapters_reassigned`(요청마다, 개수·source만).
+- 이력: `question_chapter_changes(id, workspace_id, question_id, from_chapter_id, to_chapter_id, source manual|recommendation|edit|import|chapter_edit, changed_by, changed_at)` append-only(UX9부터; 이전 변경은 없음). 활동 `questions.chapters_reassigned`(요청마다, 개수·source만).
 - **정리 노트:** 옮긴 문제가 있던 장과 새 장의 노트는 stale(§9 "장 이동", CHNOTE-01-C03 fingerprint). 노트 본문·각주는 그대로이고, 옮긴 문제의 옛 장 노트 각주는 구성원에게 "삭제되었거나 옮긴 문제"로 보인다. 공유 게스트·Fork의 출처 일치 판정은 바뀌지 않는다(인용 문제의 상태·revision이 그대로이므로 계속 보임 — 내용은 이미 공개 범위).
 - **이미 만든 것:** 범위 풀이 묶음(`practice_runs.item_ids`)·모의고사 문제·그 풀이는 바뀌지 않는다. 모의고사 범위 고르기의 출처 장 묶음은 원본의 지금 장(MOCK-01-C10)이라 새 장으로 보인다. 문제의 해설 하이라이트(§15)는 문제를 따라 새 장의 `내 하이라이트`로 간다.
 - **문제 번호:** 번호는 바꾸지 않는다. 다른 장에서 옮겨 와 같은 장에 같은 번호가 둘이면 Heatmap 순서(`sort_order`, 번호, 등록 순)대로 둘 다 보인다(사용자 결정 2026-11-02).
@@ -367,6 +367,16 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **폴백:** 등록된 문제의 추천(§14.2 4)이 `no_match`이거나 장 번호·level로도 `ambiguous`이면 문제지(또는 `mixed`의 문제 구간) 자신의 장 — 시작 블록 장의 **최상위(level 1) 조상**을, 그 문서의 현재 revision의 같은 `section_key` 장으로 옮겨 추천한다(`reason = paper_chapter`). 가장 깊은 노드는 쓰지 않는다(워크북 outline의 `01 …?`·`정답: ②` 같은 가짜 level-2 heading). `no_source_chapter`(시작 블록에 장 없음)·`no_source`에는 폴백이 없다. 폴백 장은 Heatmap 장 목록에 교재 장처럼 나온다. 가져오기 초안의 추천은 교재 장만 쓴다(등록이 비교재 장을 거절하므로); 초안이 `챕터 없음`으로 등록되면 아래 재매칭이 폴백을 붙인다.
 - **자동 재매칭(사용자 결정 2026-11-04: worker, 교재가 준비된 직후 한 번):** `document.parse`가 교재(`question_paper`가 아닌 문서)의 새 revision을 활성화한 뒤(publish 트랜잭션 밖, 실패해도 job은 성공) `quiz_worker.chapter_rematch`가 그 Workspace의 대상 문제를 같은 matcher(`book_core.chapter_matching`)로 다시 매칭한다. 대상은 CONFIRMED 살아 있는 문제 중 `chapter_source = auto`이고 챕터가 없거나 문제지 폴백 장인 것뿐이다 — **`manual`(사람이 정하거나 바꾼 챕터)은 절대 건드리지 않는다**. 쓰기는 SECURITY DEFINER `public.worker_rematch_chapters(workspace, moves jsonb)` 하나뿐이다(quiz_worker만 실행; 테이블 권한 추가 없음): 활성 Workspace 확인 → 문서 FOR SHARE(id 순) → 문제 FOR UPDATE(id 순) 뒤 항목마다 다시 확인(CONFIRMED·`auto`·`expected_chapter_id`와 같은 지금 장·옛 장은 없음 또는 비교재 장·새 장은 이 Workspace의 살아 있는 문서의 활성 revision 장이며 교재 장이거나 챕터 없는 문제에만 문제지 level-1 장). 하나라도 어긋난 항목은 건너뛰므로 멱등이고 재전달이 두 번 옮기지 않는다. 옮긴 문제는 `chapter_source = auto`·`chapter_set_by = null`·이력 `recommendation`(`changed_by` null)으로 쓴다. API 쪽 endpoint는 없다.
 - **문제 편집 챕터 선택:** 교재 장 전부와 문제지의 level-1 장.
+
+
+### 14.5 챕터 편집 (UX12 CHAPTER-3, 사용자 결정 D-9)
+
+화면·계약은 [CHMAN-01](screens/chapter-management.md). 교재 챕터의 추가·이름 변경·이동·삭제는 draft 없이 활성 revision에 바로 적용한다.
+
+- **불변 예외:** `revision_content_guard`는 `chapter_edit` SECURITY DEFINER 함수 안에서만 발행 revision을 풀어 준다: 장의 `title`·`parent_id`·`level`·`sort_order` 변경, `user-<uuid>` key 장 추가, 장 삭제, 블록의 `chapter_id` 변경뿐이다. 같은 경로가 `document_revisions.content_hash`를 다시 쓴다(해시는 장 구조를 포함하고 worker가 읽을 때 검사한다). `quiz_api`는 이 함수의 EXECUTE만 새로 받고 테이블 권한은 늘지 않는다.
+- **잠금:** §14.3과 같이 Workspace FOR SHARE → 문서 → 문제 id 순. 쓰기는 문서를 FOR UPDATE로 잡고 `documents.chapter_tree_version`을 올린다. 교정 발행 job이 대기·실행 중이면 409 `publish-in-progress`다. 활성 revision이 바뀌어도 version이 올라가므로 낡은 화면의 일괄 이동은 409 `chapter-tree-changed`다.
+- **교정 draft:** 편집은 같은 요청에서 교정 draft에 구조로 반영된다(key 기준으로 없는 장 추가, 상위·level·순서 맞춤, 활성에 없는 장 제거와 블록을 살아남은 상위로 이동). 그래서 발행의 `section_key` 재연결이 `user-*` 장의 문제를 null로 만들지 않는다. 이전 revision 복원(DOC-02)도 같은 동기화를 거친다.
+- **삭제:** 문제는 §14.1의 `manual` 옮기기와 같다: `chapter_id`·`chapter_source = manual`·`chapter_set_by/at`이 바뀌고 `question_chapter_changes` 행(source `chapter_edit`)이 남으며 새 revision은 없다. 자동 재매칭(§14.4)은 `manual`을 건드리지 않는다. 이력 행의 `from_chapter_id`는 장이 지워지며 FK로 null이 된다. 활동은 `document.chapter_deleted`(id·개수만) 하나다. 범위 JSON(`mock_exams.range.chapter_ids`, `ask_conversations.scope`)의 지운 장 id는 없는 것으로 읽는다.
 
 ## 15. 하이라이트와 `내 하이라이트` (UX9-SPEC 2026-11-02)
 

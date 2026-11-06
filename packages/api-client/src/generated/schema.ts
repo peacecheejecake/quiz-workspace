@@ -204,6 +204,36 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/chapters/{chapter_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Delete Chapter
+     * @description Delete a chapter. Its questions go where the person chose (no new question revision;
+     *     attempts and runs stay), its blocks and sub-chapters go to its parent.
+     *
+     *     A retry finds the chapter gone, so the saved response comes first: the key is the caller's
+     *     own, and the workspace the saved response names is authorized like the delete was (a member
+     *     removed since gets the same 404, a viewer or an archived workspace the same 403). The advisory
+     *     lock comes first too, so a retry racing the first request waits and finds the response.
+     */
+    delete: operations['deleteChapter'];
+    options?: never;
+    head?: never;
+    /**
+     * Update Chapter
+     * @description Rename a chapter. Its key stays, so notes, summaries and publishes keep following it.
+     */
+    patch: operations['updateChapter'];
+    trace?: never;
+  };
   '/api/v1/chapters/{chapter_id}/my-highlights': {
     parameters: {
       query?: never;
@@ -326,6 +356,27 @@ export type paths = {
      * @description Correct one block's canonical text in the document's draft revision (DOC-02-AC02).
      */
     patch: operations['correctDocumentBlock'];
+    trace?: never;
+  };
+  '/api/v1/documents/{document_id}/chapters/tree': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Move Chapters
+     * @description Apply moves in order and recompute `level` and `sort_order` for the whole revision. Only
+     *     from the version the client read: all moves or none.
+     */
+    post: operations['moveChapters'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/v1/documents/{document_id}/outline': {
@@ -2253,6 +2304,48 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspace_id}/chapter-tree': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Chapter Tree
+     * @description The chapter tree of every live book, with question counts and whether a note exists. No
+     *     book text, answers or explanations.
+     */
+    get: operations['getChapterTree'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/chapters': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Chapter
+     * @description Add a chapter as the last child of `parent_id`, in the active revision. The book's text
+     *     does not change: the chapter starts empty.
+     */
+    post: operations['createChapter'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspace_id}/documents': {
     parameters: {
       query?: never;
@@ -3069,6 +3162,49 @@ export type components = {
        */
       unchanged: number;
     };
+    /** ChapterCreateRequest */
+    ChapterCreateRequest: {
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /**
+       * Parent Id
+       * @description null = a top-level chapter.
+       */
+      parent_id?: string | null;
+      /** Title */
+      title: string;
+    };
+    /** ChapterDeleteResult */
+    ChapterDeleteResult: {
+      /** Moved Questions */
+      moved_questions: number;
+      /** Version */
+      version: number;
+      /**
+       * Workspace Id
+       * Format: uuid
+       * @description Where the chapter was: a retry is authorized here, the chapter being gone.
+       */
+      workspace_id: string;
+    };
+    /** ChapterMove */
+    ChapterMove: {
+      /**
+       * Chapter Id
+       * Format: uuid
+       */
+      chapter_id: string;
+      /** Parent Id */
+      parent_id: string | null;
+      /**
+       * Position
+       * @description 0-based among the new siblings.
+       */
+      position: number;
+    };
     /** ChapterNote */
     ChapterNote: {
       /**
@@ -3182,6 +3318,39 @@ export type components = {
       summary_md: string;
       /** Title */
       title: string;
+    };
+    /** ChapterTree */
+    ChapterTree: {
+      /** Documents */
+      documents: components['schemas']['TreeDocument'][];
+    };
+    /** ChapterTreeResult */
+    ChapterTreeResult: {
+      /**
+       * Chapters
+       * @description Outline order.
+       */
+      chapters: components['schemas']['TreeChapter'][];
+      /** Version */
+      version: number;
+    };
+    /** ChapterTreeUpdate */
+    ChapterTreeUpdate: {
+      /** Expected Version */
+      expected_version: number;
+      /** Moves */
+      moves: components['schemas']['ChapterMove'][];
+    };
+    /** ChapterUpdateRequest */
+    ChapterUpdateRequest: {
+      /** Title */
+      title: string;
+    };
+    /** ChapterWrite */
+    ChapterWrite: {
+      chapter: components['schemas']['TreeChapter'];
+      /** Version */
+      version: number;
     };
     /**
      * CheckStatus
@@ -5820,6 +5989,11 @@ export type components = {
     };
     /** OverviewChapter */
     OverviewChapter: {
+      /**
+       * Ancestors
+       * @description From the top-level chapter down to the parent. Most have no group here.
+       */
+      ancestors?: components['schemas']['OverviewChapterAncestor'][];
       /** Document Id */
       document_id: string | null;
       /**
@@ -5827,6 +6001,12 @@ export type components = {
        * @description null = the questions without a chapter.
        */
       id: string | null;
+      /**
+       * Level
+       * @description Depth in the outline; 1 = top level (CHMAN-01).
+       * @default 1
+       */
+      level?: number;
       /**
        * Number
        * @description Chapter number for `3장 12번` labels, if known.
@@ -5837,6 +6017,16 @@ export type components = {
        * @description Items of this group in `items`.
        */
       question_count: number;
+      /** Title */
+      title: string;
+    };
+    /** OverviewChapterAncestor */
+    OverviewChapterAncestor: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
       /** Title */
       title: string;
     };
@@ -8459,6 +8649,77 @@ export type components = {
       /** Start */
       start: number;
     };
+    /** TreeChapter */
+    TreeChapter: {
+      /**
+       * Attached Question Count
+       * @description Every question on the chapter, also drafts, archived and deleted ones: more than zero means a delete needs `move_questions_to`.
+       */
+      attached_question_count: number;
+      /**
+       * Has Note
+       * @description A chapter note exists (deleting hides it).
+       */
+      has_note: boolean;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Level
+       * @description 1 = top level; parent + 1.
+       */
+      level: number;
+      /** Page */
+      page: number | null;
+      /** Parent Id */
+      parent_id: string | null;
+      /**
+       * Question Count
+       * @description Live CONFIRMED questions, sub-chapters excluded.
+       */
+      question_count: number;
+      /**
+       * Section Key
+       * @description Stable across revisions; `user-<uuid>` when added here.
+       */
+      section_key: string;
+      /**
+       * Sort Order
+       * @description Pre-order position in the revision.
+       */
+      sort_order: number;
+      /** Title */
+      title: string;
+      /** User Created */
+      user_created: boolean;
+    };
+    /** TreeDocument */
+    TreeDocument: {
+      /**
+       * Chapters
+       * @description Outline order.
+       */
+      chapters: components['schemas']['TreeChapter'][];
+      /**
+       * Document Id
+       * Format: uuid
+       */
+      document_id: string;
+      /**
+       * Revision Id
+       * Format: uuid
+       */
+      revision_id: string;
+      /** Title */
+      title: string;
+      /**
+       * Version
+       * @description `expected_version` of the next batch move.
+       */
+      version: number;
+    };
     /** UploadCompleted */
     UploadCompleted: {
       /**
@@ -9518,6 +9779,171 @@ export interface operations {
       };
     };
   };
+  deleteChapter: {
+    parameters: {
+      query?: {
+        /** @description Chapter id or `none` ("챕터 없음"); required when questions are here. */
+        move_questions_to?: string | 'none' | null;
+      };
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        chapter_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterDeleteResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  updateChapter: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        chapter_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterUpdateRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterWrite'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listChapterHighlights: {
     parameters: {
       query?: never;
@@ -10132,6 +10558,89 @@ export interface operations {
       };
       /** @description Unprocessable Content */
       422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  moveChapters: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterTreeUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterTreeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };
@@ -17450,6 +17959,156 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  getChapterTree: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterTree'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  createChapter: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterCreateRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterWrite'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
