@@ -189,6 +189,8 @@ test(
       (url) => url.pathname === `/workspaces/${ws.id}/documents/${relsrc.documentId}`,
     );
     await expect(editorUi.currentPage(page)).toHaveValue(String(ANSWER_PAGE));
+    // The page is drawn: DOC-02's viewer opens while the dialog's closes.
+    await expect(editorUi.pdfPage(page, ANSWER_PAGE)).toBeVisible();
   },
 );
 
