@@ -370,3 +370,53 @@ it('UX12-GESTURE-AC02 the AppShell drawer swipes left from its title', () => {
   pointer(window, 'pointerup', { clientX: -100 });
   expect(onChange).toHaveBeenCalledWith(false);
 });
+
+describe('reduced motion keeps the release decision', () => {
+  function timed(target: Window | Element, type: string, time: number, clientY: number) {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, {
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 0,
+      clientY,
+    });
+    Object.defineProperty(event, 'timeStamp', { value: time });
+    fireEvent(target, event);
+  }
+  function withReducedMotion(run: () => void) {
+    const original = window.matchMedia;
+    window.matchMedia = (query) => ({
+      ...original(query),
+      matches: query.includes('prefers-reduced-motion'),
+    });
+    try {
+      render(<Example />);
+      run();
+    } finally {
+      window.matchMedia = original;
+    }
+  }
+
+  it('UX12-GESTURE-AC06 a reversal before release leaves it open, untracked', () => {
+    withReducedMotion(() => {
+      const dialog = screen.getByRole('dialog');
+      timed(screen.getByRole('heading', { name: '대화' }), 'pointerdown', 1, 0);
+      timed(window, 'pointermove', 1000, 120);
+      timed(window, 'pointermove', 1040, 70);
+      expect(dialog.style.translate).toBe('');
+      timed(window, 'pointerup', 1060, 70);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+  });
+
+  it('UX12-GESTURE-AC06 the velocity projection still dismisses', () => {
+    withReducedMotion(() => {
+      timed(screen.getByRole('heading', { name: '대화' }), 'pointerdown', 1, 0);
+      timed(window, 'pointermove', 1000, 30);
+      timed(window, 'pointermove', 1020, 40);
+      timed(window, 'pointerup', 1040, 50);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+});

@@ -269,9 +269,11 @@ export function useDragDismiss({
       if (current.edge && !current.reduced) current.surface.setAttribute('data-dragging', '');
     };
     const track = (current: Gesture, event: PointerEvent, dx: number, dy: number) => {
-      if (!current.edge || current.reduced) return;
+      if (!current.edge) return;
       const primary = along(current.edge, dx, dy);
+      // Reduced motion only drops the visual tracking: the release still needs the velocity.
       current.samples.push({ time: event.timeStamp, primary });
+      if (current.reduced) return;
       current.offset = dragOffset(primary);
       current.surface.style.translate = translateFor(current.edge, current.offset);
     };
