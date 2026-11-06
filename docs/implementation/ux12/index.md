@@ -194,13 +194,13 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 
 **확인된 버그:**
 - **읽기 순서 역전:** Docling 순서가 페이지 순서와 다르다. 2025 Q12/13은 보기 8개가 한쪽에 붙고 **앞 문제의 정답을 가져간다.** 2023 Q38/39는 경고 없이 잘린다. page + y 정렬 시뮬레이션에서 2025 문제는 모두 해소됐다.
-- **스크린샷 문제(3권 37쪽 72번):** 이 페이지만 파싱하면 `segment`는 발문부터 보기까지 블록 전체를 한 문제로 정확히 묶는다. 표 안 소제목 두 개가 heading으로 잡히고, 스크린샷의 두 조각은 이 heading 경계와 정확히 일치한다. 발문은 어느 조각에도 없다. **따라서 원인은 경계 판정이 아니라 그 뒤 region 표시 또는 전체 문서 문맥일 가능성이 크다. 아직 미확정이다.** EXTRACT-1에서 3권 전체로 재현한다.
-- **장식 이미지 혼입:** 같은 페이지 여백의 장식 이미지 2개가 다음 문제(73번) 블록에 붙는다.
+- **스크린샷 문제(3권 37쪽 72번):** 확정. 추출 오류가 아니다. 추출기는 72번을 발문부터 보기까지 정확히 한 문제로 묶는다. 표 안 소제목 두 개가 heading이 되어 목차 구역을 만들고, 문서 뷰어(DOC-02)가 **확정 전 문제**의 목차 행을 누르면 그 구역 상자를 그린다. 스크린샷 두 조각은 이 구역과 일치한다. 3권 750문항 중 34문항이 같은 형태다. EXTRACT-2에서 초안 문제도 문제 전체를 표시하도록 고친다.
+- **장식 이미지 혼입:** 여백 장식이 문제 범위에 붙어 73번 영역이 72번까지 덮는다. 3권의 겹침 67쌍과 다쪽 초안 33건이 모두 이 때문이다. 3권 이미지 469개 중 414개가 장식이다.
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
 |---|---|---|---|---|
 | EXTRACT-1 진단 | pdf 파싱 오류, 문제 범위 | `eval/question_pdfs.py`(수치만 출력): 역전, 보기 수 분포, 공백, 버려진 표, 역순·겹침 region. 3권 72번의 끊긴 범위 원인 확정, 표시 경로 추적 | 사용자 보고 사례를 synthetic fixture로 | S·없음 |
-| EXTRACT-2 순서 | 문제 범위 | 공용 `reading_order(blocks)`: 페이지 → 단일 단 y. 2단 페이지는 유지. `extract`와 `classify.py` 둘 다 적용(questions.md §6). 여백 장식 이미지 제외. `reading_order_repaired` 안내, 보기 수 이상치 경고 | synthetic Block pytest. **3권 750문항 결과 확인 후 merge** | S–M·EXTRACT-1 |
+| EXTRACT-2 순서·장식 | 문제 범위 | 공용 `reading_order(blocks)`: 페이지 → y 3pt 행 묶음 → x. 엄격한 2단 판정(양쪽 넓은 블록 4개 이상, 가운데 걸침 3개 이하)일 때만 유지. 본문 영역 밖 이미지 제거를 **같은 변경**에 넣는다(정렬만 하면 악화). `extract`, `llm_requests`, `classify` 모두 적용. 문서 뷰어 `selectionHighlights`가 초안 블록도 사용 | synthetic Block pytest, 3권 기대 결과 대조, 2023–25 복구 확인 | M·EXTRACT-1 |
 | EXTRACT-3 명세 | 표·그림 | `QTABLE-01` 화면, questions §4·§6, QSRC-01 | D-11 | S·D-11 |
 | EXTRACT-4 표 추출 | 이미지·테이블 가져오기, 표 인식 | 비보기 표를 GFM 블록으로 `stem`에 포함, `_source_lines`에 포함, 프롬프트 `questions.extract/v4`(없으면 모든 표 문제가 `llm_text_rejected`). 붙은 라벨(`①xxx`) 인식, `table_in_stem` 안내 | Python/TS parity | M·EXTRACT-2, 3 |
 | EXTRACT-5 표 표시 | 표로 보이기 | `StemText`에 pipe 파싱(소비처 5곳 자동 적용), 375px 가로 스크롤. `optionGrid`: 보기가 같은 칸 수로 나뉘면 열 정렬, 섞기 안전, 등록된 문제도 재추출 없이 개선 | Vitest, synthetic E2E, VISUAL(정답 mask) | M·EXTRACT-3 |
@@ -257,7 +257,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 - **접근성 충돌:** 결과 문구 삭제는 색만으로 상태를 전달하게 되고, 연한 radio는 대비 기준에 못 미친다. D-8 권장안이 이를 막는다.
 - **테스트 영향:** HOME-4·ASK-2의 fixture 변경이 넓고, DESIGN-1·4는 baseline 대부분을 바꾼다.
 - **실기기 필요:** SHELL-5, DESIGN-3 체감, iOS 자동 복사는 사용자 기기 확인이 필요하다.
-- **미확인:** VIEW-5·VIEW-6은 측정 전이고, DESIGN-2의 dropdown은 재현 전이며, 72번 범위 원인은 EXTRACT-1에서 확정한다.
+- **미확인:** VIEW-5·VIEW-6은 측정 전이고, DESIGN-2의 dropdown은 재현 전이며, 
 
 ## 8. 진행 현황
 
@@ -266,7 +266,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | Task | Wave | 상태 | 커밋·리뷰 |
 |---|---|---|---|
 | EXTRACT-1 | 1 | 진행 | |
-| EXTRACT-2 | 1 | 대기 | EXTRACT-1 뒤 |
+| EXTRACT-2 | 1 | 진행 | |
 | SHELL-1 | 1 | 완료 | 12cb1e79 · Codex P2 1건 수정(9e71118c), 재리뷰 지적 없음, E2E 22·Vitest 38 GREEN |
 | DESIGN-2 | 1 | 진행 | |
 | HOME-1 | 1 | 완료 | ddd8b596 · Codex 지적 없음, Vitest ui 448, E2E Chromium·WebKit GREEN. QOV-01-AC14 WebKit flake는 기존 문제, CI에서 확인 |
