@@ -930,7 +930,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       />,
     );
     const panel = screen.getByRole('dialog');
-    expect(await within(panel).findByRole('status')).toHaveTextContent('오답');
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('오답'));
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeDisabled();
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
