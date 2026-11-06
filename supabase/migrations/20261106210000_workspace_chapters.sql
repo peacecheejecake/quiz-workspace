@@ -8,8 +8,9 @@
 --
 -- workspace_chapter_trees is its lock and version, as the document row is for a book's tree. Not the
 -- workspace row: every write holds that FOR SHARE, so taking it stronger would wait on all of them.
--- Lock order: workspace FOR SHARE -> tree row -> documents -> questions. A missing row means there
--- are no Workspace chapters.
+-- Lock order: workspace FOR SHARE -> tree row -> documents -> questions -> drafts (a chapter delete
+-- moves drafts last, so registration now takes the owners first). A missing row means there are no
+-- Workspace chapters.
 --
 -- Additive: two columns lose NOT NULL, one nullable column, new constraints hold for every existing
 -- row (`not valid`, then validated), one table, one trigger, two function bodies from 20261106160000.
@@ -177,11 +178,18 @@ begin
     ) x;
 
   if ids is not null then
+    -- The chapters' owners before the drafts: a chapter delete holds them while it moves drafts.
     perform 1
-       from public.question_drafts qd
-      where qd.id = any (ids)
-      order by qd.position, qd.id
-        for update of qd;
+       from public.workspace_chapter_trees t
+      where t.workspace_id = job.workspace_id
+        and exists (
+          select 1
+            from public.question_import_registration_items i
+            join public.chapters c on c.id = i.chapter_id and c.workspace_id = i.workspace_id
+           where i.job_id = p_job_id and i.draft_id = any (ids)
+             and c.document_revision_id is null
+        )
+        for share of t;
     perform 1
        from public.documents doc
       where doc.workspace_id = job.workspace_id
@@ -193,6 +201,11 @@ begin
         )
       order by doc.id
         for share of doc;
+    perform 1
+       from public.question_drafts qd
+      where qd.id = any (ids)
+      order by qd.position, qd.id
+        for update of qd;
 
     for item in
       select i.draft_id, i.version, i.chapter_id, i.state
@@ -284,8 +297,7 @@ begin
               into v_chapter
               from public.chapters c
              where c.id = item.chapter_id and c.workspace_id = job.workspace_id
-               and c.document_revision_id is null
-               for key share;
+               and c.document_revision_id is null;
           end if;
         end if;
 

@@ -414,15 +414,8 @@ class ChapterEditRepository:
         self, workspace_id: uuid.UUID, chapter_id: uuid.UUID, target_id: uuid.UUID | None
     ) -> None:
         """Import drafts and runs that chose this chapter follow the deleted chapter's questions.
-        `chapter_manual` stays: a person chose a chapter, and the target is the person's choice."""
-        self._session.execute(
-            update(question_drafts)
-            .where(
-                question_drafts.c.workspace_id == workspace_id,
-                question_drafts.c.chapter_id == chapter_id,
-            )
-            .values(chapter_id=target_id)
-        )
+        `chapter_manual` stays: a person chose a chapter, and the target is the person's choice.
+        Runs before drafts, the order of a registration request."""
         self._session.execute(
             update(question_import_runs)
             .where(
@@ -432,4 +425,12 @@ class ChapterEditRepository:
                 )
             )
             .values(target_chapter_id=target_id)
+        )
+        self._session.execute(
+            update(question_drafts)
+            .where(
+                question_drafts.c.workspace_id == workspace_id,
+                question_drafts.c.chapter_id == chapter_id,
+            )
+            .values(chapter_id=target_id)
         )

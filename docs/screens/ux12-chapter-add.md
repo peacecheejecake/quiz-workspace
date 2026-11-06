@@ -17,7 +17,7 @@
 | **(a) `document_id` null 행 (채택)** | 문제의 장을 읽는 곳은 거의 `questions.chapter_id` left join으로 제목만 읽어 그대로 동작한다. revision이나 교재를 묻는 곳은 inner join이라 Workspace 챕터가 저절로 빠진다(본문 없음과 같은 뜻). 고칠 곳은 "살아 있는 장인가"를 묻는 몇 곳뿐이다(아래 표). 발행 revision의 불변 규칙도 건드리지 않는다: revision이 없으므로 `revision_content_guard`가 관여하지 않는다 |
 | (b) Workspace마다 숨은 container 문서 | `documents`는 PDF 원본이 전제다(`sha256`, `size_bytes ≥ 1`, `source_object_key`가 NOT NULL·형식 검사). 가짜 값을 넣어야 하고, 문서를 읽는 28개 파일(문서 목록·`문서 N`·업로드·검색·교정·요약·재색인)에서 숨겨야 하며, Fork는 원본 PDF 복사·`chunk_revision`·`document.index_sync`를 건너뛰어야 한다. 빠뜨리면 없는 PDF가 사용자에게 보이는 실패다 |
 
-**트리 잠금·version:** 새 표 `workspace_chapter_trees(workspace_id, version)`가 Workspace 챕터에서 `documents` 행의 역할을 한다. 쓰기는 이 행을 FOR UPDATE로 잡고 `version`을 올린다(일괄 이동의 `expected_version`). `workspaces` 행을 쓰지 않는 이유는 모든 쓰기가 그 행을 FOR SHARE로 잡고 있어, 올려 잡으면 서로를 기다리기 때문이다. 잠금 순서는 Workspace FOR SHARE → **트리 행** → 문서(id 순) → 문제(id 순)다. 문제 저장·재분배·import는 Workspace 챕터를 고르면 트리 행을 FOR SHARE로 잡고, Fork 커밋도 문서보다 먼저 FOR SHARE로 잡는다. 행이 없으면 Workspace 챕터도 없다.
+**트리 잠금·version:** 새 표 `workspace_chapter_trees(workspace_id, version)`가 Workspace 챕터에서 `documents` 행의 역할을 한다. 쓰기는 이 행을 FOR UPDATE로 잡고 `version`을 올린다(일괄 이동의 `expected_version`). `workspaces` 행을 쓰지 않는 이유는 모든 쓰기가 그 행을 FOR SHARE로 잡고 있어, 올려 잡으면 서로를 기다리기 때문이다. 잠금 순서는 Workspace FOR SHARE → **트리 행** → 문서(id 순) → 문제(id 순) → 초안이다(questions.md §14.6). 문제 저장·재분배·import는 Workspace 챕터를 고르면 트리 행을 FOR SHARE로 잡고, Fork 커밋도 문서보다 먼저 FOR SHARE로 잡는다. 행이 없으면 Workspace 챕터도 없다.
 
 **DB 불변:** 두 null은 함께다, null 행은 `user-<uuid>` key이고 쪽·제목 블록이 없다, 상위는 같은 Workspace의 Workspace 챕터다(trigger; `chapters_parent_fk`는 revision이 null이면 검사하지 않는다), Workspace를 지우면 함께 지워진다(`workspace_level_of` FK: `workspace_id` FK는 교재 장도 revision보다 먼저 지워 `revision_content_guard`에 걸린다).
 

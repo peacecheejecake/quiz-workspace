@@ -286,6 +286,18 @@ class DraftChapterRepository:
         )
         return out
 
+    def lock_every_chapter_owner(self, workspace_id: uuid.UUID) -> None:
+        """FOR SHARE on the chapter tree row and every live document, in id order: for a write
+        that learns which chapters it needs only once it holds its drafts. Taken before them
+        (docs/questions.md §14.6): a chapter delete moves drafts while holding these."""
+        lock_workspace_tree_shared(self._session, workspace_id)
+        self._session.execute(
+            select(documents.c.id)
+            .where(documents.c.workspace_id == workspace_id, documents.c.deleted_at.is_(None))
+            .order_by(documents.c.id)
+            .with_for_update(read=True)
+        ).all()
+
     def lock_documents_of(self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID]) -> None:
         """FOR SHARE on the books of these chapters, in id order (the question lock order: a
         revision publish either commits first or waits for this transaction). The workspace's

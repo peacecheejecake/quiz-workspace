@@ -4,7 +4,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(26);
+select plan(28);
 
 -- Privileges -----------------------------------------------------------------------------------
 select ok(has_table_privilege('quiz_api', 'public.workspace_chapter_trees', 'update'),
@@ -14,6 +14,14 @@ select ok(not has_table_privilege(r, 'public.workspace_chapter_trees', 'select')
   from unnest(array['quiz_worker', 'authenticated', 'anon']) r;
 select ok((select relrowsecurity from pg_class
             where oid = 'public.workspace_chapter_trees'::regclass), 'the tree row has RLS');
+
+-- Lock order: the chapters' owners before the drafts.
+select ok(strpos(prosrc, 'for share of t') < strpos(prosrc, 'for share of doc'),
+  'registration takes the tree row before the documents')
+  from pg_proc where oid = 'public.worker_register_import_drafts(uuid, integer)'::regprocedure;
+select ok(strpos(prosrc, 'for share of doc') < strpos(prosrc, 'for update of qd'),
+  'registration takes the documents before the drafts')
+  from pg_proc where oid = 'public.worker_register_import_drafts(uuid, integer)'::regprocedure;
 
 -- Fixtures: a source workspace with one published book chapter, a target for the fork.
 insert into auth.users (id, email) values

@@ -386,7 +386,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **모델:** `chapters`의 `document_id`·`document_revision_id`가 함께 null인 행이다. key는 `user-<uuid>`, 쪽·제목 블록 없음. 발행 revision의 내용이 아니므로 `revision_content_guard`와 `chapter_edit` 경로를 거치지 않고, 교정 draft·`content_hash`·`chapter_tree_version`과도 무관하다. `quiz_api`의 기존 `chapters` 권한으로 쓴다.
 - **문제와의 관계:** `questions.chapter_id`는 다른 장과 같다. Heatmap 묶음은 교재 장 뒤, `챕터 없음` 앞이다. 고른 것은 `chapter_source = manual`이고 자동 재매칭은 건드리지 않는다. 자동 추천(`ChapterMatcher`)의 후보가 아니다: 본문이 없다.
 - **본문 기능:** 정리 노트·요약·본문 검색·AI 질문 범위의 대상이 아니다. `section_key`에 묶인 노트는 문서가 있어야 하고 입력이 본문이다.
-- **잠금:** §14.3 앞에 트리 행이 온다: Workspace FOR SHARE → `workspace_chapter_trees` → 문서 → 문제. Workspace 챕터 쓰기는 FOR UPDATE, 그 장을 고르는 문제 저장·재분배·import와 Fork 커밋은 FOR SHARE다.
+- **잠금:** §14.3 앞에 트리 행이 오고 맨 끝에 초안이 온다: Workspace FOR SHARE → `workspace_chapter_trees` → 문서 → 문제 → 초안(`question_drafts`). 장 삭제가 이 순서로 초안을 옮기므로, 초안을 잠그는 쓰기도 장의 주인을 먼저 잠근다. 초안 수정은 고른 장의 주인, 등록은 트리 행과 살아 있는 문서 전부(어떤 장인지는 초안을 잠근 뒤에야 안다), 등록 job은 항목의 장의 주인을 잠근 뒤 초안을 잠그고 읽는다. Workspace 챕터 쓰기는 트리 행 FOR UPDATE, 그 장을 고르는 문제 저장·재분배·import와 Fork 커밋은 FOR SHARE다. 등록 요청은 장의 주인을 잠그지 않으므로 run → 초안만 잡고, 장 삭제도 run을 초안보다 먼저 옮긴다.
 - **Dropdown의 자리:** 지금 고른 장이 살아 있는 교재의 장이면 그 교재, 아니면 Workspace 챕터다.
 - **삭제:** §14.5와 같다. 하위 장은 상위로 올라가고 문제는 고른 곳으로 옮겨지며 `question_chapter_changes`(source `chapter_edit`)가 남는다.
 
