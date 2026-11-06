@@ -47,13 +47,17 @@ async function openSettledHome(page: Page, workspaceId: string): Promise<void> {
   await expect(askUi.headerButton(page)).toBeVisible();
 }
 
-/** Makes the page taller than the viewport and scrolls it to `y`. */
+/**
+ * Makes the page taller than the viewport and scrolls it to `y`. The spacer goes inside the home:
+ * below it the sticky line would scroll away, and a click on it would scroll the page back.
+ */
 async function makePageScrollable(page: Page, y = 400): Promise<void> {
   await page.evaluate((top) => {
     const spacer = document.createElement('div');
     spacer.setAttribute('aria-hidden', 'true');
     spacer.style.height = '4000px';
-    document.body.append(spacer);
+    const home = document.querySelector('[data-home-toolbar]')?.parentElement;
+    (home ?? document.body).append(spacer);
     window.scrollTo(0, top);
   }, y);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
