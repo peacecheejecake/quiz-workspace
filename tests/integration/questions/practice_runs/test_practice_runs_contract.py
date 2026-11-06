@@ -466,7 +466,7 @@ def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed:
     assert set(run["summary"]) >= {"correct", "incorrect", "pending", "skipped"}
 
 
-def test_ux12_chapterrun_c03_a_shuffled_run_fixes_each_positions_options(seed: Any) -> None:
+def test_qview_01_c11_a_shuffled_run_fixes_each_positions_options(seed: Any) -> None:
     r = Range(seed, "shuffle")
     owner = r.owner
     plain = created(owner, r.ws_id, bank({"chapter_ids": [r.ch1]}))

@@ -102,7 +102,7 @@ describe('mock run session routing', () => {
     );
   });
 
-  it('UX12-CHAPTERRUN-AC07 the home client passes 보기 섞기 on to a bank run', async () => {
+  it('QVIEW-01-C11 the home client passes 보기 섞기 on to a bank run', async () => {
     const bodies: unknown[] = [];
     vi.stubGlobal(
       'fetch',

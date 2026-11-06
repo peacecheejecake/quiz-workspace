@@ -76,7 +76,6 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 ## 레이아웃 및 컴포넌트
 
 - **진입 (bank):** 홈 `모의고사`가 연 모의고사 목록의 `추가`에서 변형 유형을 고르지 않은 원본 풀이(UX10-PLAY, UX12-MOCKNAV). 범위 고르기 단계의 주소 `?practice=new&source=bank`로 열면 QuestionViewer가 그 단계로 바로 열리고 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
-- **진입 (챕터):** 홈 Heatmap 챕터의 `풀기`. 범위 고르기 없이 옵션 dialog에서 바로 시작한다([UX12-CHAPTERRUN](ux12-chapter-run.md)).
 - **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다. 출처 장별 묶음 (사용자 결정 2026-11-02, MOCK-W-3): 등록 문제와 같은 장 그룹 `QuestionRangePicker`(tri-state `전체 선택`, 장 checkbox·펼치기, 긴 장 virtualize)이고, 장은 원본 문제의 지금 장(API `source.chapter`, MOCK-01-C10 — 출처 글자 "3장 12번"의 장과 같음)이며 생성 계획의 장 순서(`chapter_rank`, 만들 때의 Heatmap 순서)로 놓인다. 원본에 장이 없거나 원본이 삭제된 문제는 맨 뒤 "챕터 없음" 묶음이다. 문제 행은 모의고사 안 번호 "문제 k · 발문 앞 40자 · 유형"이고 상태 필터는 없다(모의고사 문제는 개인 상태가 없음). `시작`은 장 전체를 고른 것도 그 문제들의 id(`question_ids`)로 보낸다 — 모의고사 묶음 범위는 `chapter_ids`를 받지 않으므로(422 `range-invalid`, MOCK-P) 범위 API는 그대로다. 전부 고르면 `all`.
 - **범위 고르기 단계:** 제목 "모의고사"(mock이면 "<모의고사 이름> 풀기").
   - 필터 줄(언제나 보임, 홈 상태 필터와 같은 칩과 색 견본, 유형 체크박스 묶음 — [UX12-MOCKFORM](ux12-mock-form.md)) → `QuestionRangePicker`. 목록은 Heatmap에 보이는 문제와 같다: 보관된 문제(중복 정리로 보관된 중복 포함)·초안은 없고, 풀이 상태·즐겨찾기·다시 풀기 필터는 합쳐진 중복의 기록까지 합친 상태로 판정한다(Heatmap marker와 같은 상태, C07).
@@ -182,6 +181,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 | QVIEW-01-C08 | **`다시 풀기` 아이콘 (UX9-SPEC, 사용자 결정 C10; Vitest + VISUAL-10):** `RetryToggle`(`packages/ui/src/questions/StudyToggles.tsx`)은 `RetryIcon` = 원 안의 물음표(꺼짐 윤곽선, 켜짐 채운 원 — `data-state` 별 SVG가 다름)를 그리고, 접근성 이름은 기존대로 "다시 풀기 표시"/"다시 풀기 해제"(둘 다 "다시 풀기"를 포함), `data-state="off|on"`, tooltip은 이름과 같다. **UX12 VIEW-2 개정 2026-11-06:** 켜진 toggle에는 selected 배경이 없고 아이콘의 fill·stroke 반전과 이름 변화가 상태를 전달한다([UX12-OPTIONS](ux12-options.md)). 이 toggle을 그리는 모든 방식(`practice`·`sequence(bank)`)이 같은 컴포넌트를 쓴다(이전 화살표 아이콘을 쓰는 곳이 없음 — import 검사). |
 | QVIEW-01-C09 | **하이라이트 비노출 (UX9-SPEC):** `practice-sessions`·`submit`·`self-grade`·`practice-runs/{id}/items/{position}`·모의고사 practice 응답 schema에 하이라이트 필드가 없다(HILITE-01-C07과 같은 test). |
 | QVIEW-01-C10 | **`다시 풀기`는 정답 뒤에만 (RETRY-CORRECT 2026-11-04):** `practice`·`sequence(bank)`의 `다시 풀기` toggle은 마지막 채점 결과가 정답인 문제에만 렌더링한다(비활성 아님). 규칙·AC·계약은 [RETRY-01](retry-correct.md)(C04가 Vitest). C06·C08의 "toggle을 그린다"는 이 조건 아래에서다. |
+| QVIEW-01-C11 | **`shuffle_options` (MOCKUX-4에서 옮김, MOCKUX-11 2026-11-06):** 이 필드를 켜던 홈 챕터 `풀기`는 지웠다. 이미 켜진 묶음은 그대로 풀리고, 결과 화면의 `처음부터 다시`가 같은 설정을 이어받으며, 화면에서 켜는 길은 이것뿐이다. `POST /practice-runs`의 선택 필드(기본 false, `source=bank`만, `source=mock`은 422)이고 `PracticeRun`이 돌려준다. 스키마를 바꾸지 않고 `practice_runs.range` jsonb의 `shuffle_options` 키로 저장한다(키 없음 = 꺼짐, run은 생성 뒤 바뀌지 않음). 위치 k의 보기 순서는 `shuffled_option_ids(옵션 id, run_option_seed(seed, k))`로 정해지므로 세션을 열기 전(`GET /items/{k}`)과 연 뒤가 같고, 세션을 열 수 없는 보관된 Workspace에서도 같다. 세션은 그 순서를 `displayed_option_ids`와 `shuffle_seed`에 저장한다. 제출된 위치의 `다시 풀기`(별도 연습)는 새로 섞는다. |
 
 ## Test-first 규칙
 

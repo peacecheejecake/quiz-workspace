@@ -10,7 +10,6 @@
 | UX12-HILITE | 하이라이트 메뉴 선택 유지·재클릭 닫기 | 공통 하이라이트 도구 | [ux12-highlight.md](ux12-highlight.md) |
 | UX12-PLAY | 풀기 옵션의 이름 | Workspace 홈 모의고사 | [ux12-play.md](ux12-play.md) |
 | UX12-MOCKNAV | 모의고사 진입·상세 메뉴·용어 | Workspace 홈 모의고사 · 모의고사 상세 | [ux12-mock-nav.md](ux12-mock-nav.md) |
-| UX12-CHAPTERRUN | 챕터별 풀기 | Workspace 홈 Heatmap | [ux12-chapter-run.md](ux12-chapter-run.md) |
 | UX12-RESUME | 모의고사 목록의 이어 풀기 | 모의고사 dialog | [ux12-run-resume.md](ux12-run-resume.md) |
 | UX12-MOCKFORM | 모의고사 만들기·설정 바꾸기 화면 | 모의고사 dialog | [ux12-mock-form.md](ux12-mock-form.md) |
 | UX12-MOCKFORM2 | 모의고사 만들기 단계 순서와 문구 | 모의고사 dialog | [ux12-mock-form-order.md](ux12-mock-form-order.md) |

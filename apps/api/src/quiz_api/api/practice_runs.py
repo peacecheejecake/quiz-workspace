@@ -26,7 +26,7 @@ QVIEW-01-AC03 "fake seed 고정") and stored; a run's ids and seed never change.
 than the documented ones (e.g. a client `workspace_id`/`user_id`) are ignored: the workspace is
 the path's, the user the verified JWT's.
 
-Option shuffle (UX12-CHAPTERRUN-C03): `shuffle_options` is a bank run's setting, kept in the
+Option shuffle (QVIEW-01-C11): `shuffle_options` is a bank run's setting, kept in the
 `practice_runs.range` jsonb (`run_range`; no key means off, as on every older run). A position of
 such a run shows `shuffled_option_ids` under `run_option_seed(seed, position)` whether or not its
 session is open yet, the session stores that order and grading stays on option ids. A retry of a

@@ -111,9 +111,8 @@ export interface QuestionsOverviewProps {
   /** Controls at the end of each chapter group header (CHNOTE-01 정리 노트). */
   readonly chapterActions?: (chapter: HeatmapChapter) => ReactNode;
   /**
-   * Where focus goes when the practice or run panel closes, when set by whoever opened it (a 정리
-   * 노트 footnote: the note's disclosure; a chapter's 풀기). Cleared on close; otherwise focus
-   * returns to the dot.
+   * Where focus goes when the practice panel closes, when set by whoever opened it (a 정리 노트
+   * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
   /**
@@ -923,15 +922,6 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          onCloseAutoFocus={(event) => {
-            // A chapter's 풀기 asks focus back on its button (UX12-CHAPTERRUN-AC04).
-            const requestedFocus = practiceReturnFocusRef?.current ?? null;
-            if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
-            if (requestedFocus?.isConnected) {
-              requestedFocus.focus();
-              event.preventDefault();
-            }
-          }}
           headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}

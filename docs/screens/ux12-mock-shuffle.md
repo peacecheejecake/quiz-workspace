@@ -10,7 +10,7 @@ id: UX12-MOCKSHUFFLE
 linked_tests: [UX12-MOCKSHUFFLE-AC01, UX12-MOCKSHUFFLE-AC02, UX12-MOCKSHUFFLE-AC03, UX12-MOCKSHUFFLE-AC04]
 ```
 
-**명세:** [UX12 MOCKUX-9](../implementation/ux12/index.md), [MOCK-01](mock-exams.md), [UX12-CHAPTERRUN](ux12-chapter-run.md), [questions.md §11](../questions.md)
+**명세:** [UX12 MOCKUX-9](../implementation/ux12/index.md), [MOCK-01](mock-exams.md), [QVIEW-01](question-viewer.md) C11, [questions.md §11](../questions.md)
 
 사용자 요청(2026-11-06): `보기 섞기`는 모의고사를 실행할 때마다 문제를 보는 시점에 새로 섞고, 한 번의 실행 안에서는 유지한다. `보기 섞기`만 고르면 문제를 미리 만들지 않는다.
 
