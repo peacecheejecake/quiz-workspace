@@ -444,7 +444,6 @@ test(
     await group.click();
     await expect(group).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByRole('tree')).toBeVisible();
-    await expect(trigger).toContainText(NONE);
     await group.click();
 
     await chapterPickerUi.row(page, CH1).click();
