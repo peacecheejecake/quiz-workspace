@@ -7837,7 +7837,7 @@
       },
       "PracticeOpenBody": {
         "additionalProperties": false,
-        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.\n`cached_another_try`: the cached session came from `force_new`, so it stays in front of a\nresult the question would otherwise open with.",
+        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened.",
         "properties": {
           "baseline_attempt_id": {
             "anyOf": [
@@ -7851,11 +7851,6 @@
             ],
             "title": "Baseline Attempt Id"
           },
-          "cached_another_try": {
-            "default": false,
-            "title": "Cached Another Try",
-            "type": "boolean"
-          },
           "cached_session_id": {
             "anyOf": [
               {
@@ -7867,18 +7862,13 @@
               }
             ],
             "title": "Cached Session Id"
-          },
-          "force_new": {
-            "default": false,
-            "title": "Force New",
-            "type": "boolean"
           }
         },
         "title": "PracticeOpenBody",
         "type": "object"
       },
       "PracticeOpened": {
-        "description": "One opening of the panel. Answers exist only under `result`: `session` is the answer-free\nopen shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).",
+        "description": "One opening of the panel. Answers exist only under `result`, and only for a submission\nstill waiting for self-grading: `session` is the answer-free open shape, so an unsubmitted\npayload cannot carry one (a new field here is a reviewed change).",
         "properties": {
           "active_revision_id": {
             "format": "uuid",
@@ -7915,7 +7905,7 @@
                 "type": "null"
               }
             ],
-            "description": "The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading."
+            "description": "The latest submission of the active revision while it waits for self-grading."
           },
           "reused": {
             "description": "`session` is the cached one; nothing was written.",
@@ -7996,6 +7986,36 @@
           "epochs"
         ],
         "title": "PracticeResetResult",
+        "type": "object"
+      },
+      "PracticeRevealed": {
+        "description": "`해설 보기`: the latest submission of the active revision, with its outcome.",
+        "properties": {
+          "reset_epoch": {
+            "title": "Reset Epoch",
+            "type": "integer"
+          },
+          "result": {
+            "$ref": "#/components/schemas/PracticeSessionDetail"
+          },
+          "submitted_answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted Answer"
+          }
+        },
+        "required": [
+          "reset_epoch",
+          "result"
+        ],
+        "title": "PracticeRevealed",
         "type": "object"
       },
       "PracticeRun": {
@@ -24224,7 +24244,7 @@
     },
     "/api/v1/questions/{question_id}/practice-open": {
       "post": {
-        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.\nA question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless\nits latest submission still waits for grading: nothing else can finish that one.",
+        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest submission, then reuse the cached session or open one. A solved question opens to be\nanswered, without its result (UX12-SOLVEDOPEN); only a submission waiting for self-grading is\nreturned, since nothing else can finish it. Only a new session is stored under\n`Idempotency-Key`; the reset lock already serialises retries of this user and question, so no\nseparate key lock is taken. A key seen again replays its session while it is open.",
         "operationId": "openQuestionPractice",
         "parameters": [
           {
@@ -24548,6 +24568,105 @@
           }
         ],
         "summary": "Reset Question Practice",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/practice-reveal": {
+      "post": {
+        "description": "`해설 보기` (UX12-SOLVEDOPEN): the caller's latest submission of the active revision with its\nanswers. This is a write, not a read: the caller's open sessions of the question are retired\nin the same transaction, so an answer seen here cannot be graded in them. Repeating it\nchanges nothing more. 404 for a question the caller has not submitted on this revision.",
+        "operationId": "revealQuestionPractice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeRevealed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Reveal Question Practice",
         "tags": [
           "practice"
         ]

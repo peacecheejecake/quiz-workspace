@@ -9,6 +9,7 @@
 // A changed question leaves the list; the server actions revalidate the home, so the heatmap
 // follows. Everyone else reads only; FastAPI re-checks every write.
 import { Badge, Button, ConfirmDialog, EmptyState, Select, useToast } from '@quiz/ui';
+import { QuestionListSkeleton } from '@/components/questions/question-skeleton';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   deleteQuestionAction,
@@ -313,9 +314,7 @@ export function InactiveQuestions({
 
       <div ref={listRef} aria-busy={busy || undefined}>
         {list.status === 'loading' ? (
-          <p className={styles.status} role="status">
-            문제를 불러오는 중입니다.
-          </p>
+          <QuestionListSkeleton />
         ) : list.status === 'error' ? (
           <div role="alert" className={styles.alert}>
             <p>문제 목록을 불러오지 못했습니다. {list.message}</p>

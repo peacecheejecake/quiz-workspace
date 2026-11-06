@@ -128,6 +128,7 @@ test(
     await signInAs(page, s.owner.user);
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     const again = panel.getByRole('button', { name: AGAIN });
     await expect(again).toBeEnabled();
     await expect(again).toHaveAttribute('data-variant', 'secondary');
@@ -202,7 +203,7 @@ test(
 );
 
 test(
-  'UX12-VIEW-AC05 reopening a submitted question starts at the top, a live submit focuses the result',
+  'UX12-VIEW-AC05 coming back to a result starts at the top, a live submit focuses the result',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await page.setViewportSize({ width: 1280, height: 600 });
@@ -216,6 +217,11 @@ test(
     await page.goto(overviewPath(s.workspaceId));
 
     let panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
+    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
+    await panelUi.next(panel).click();
+    await panelUi.previous(panelUi.numbered(page, 2)).click();
+    panel = panelUi.numbered(page, 1);
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     expect(await overflows(panel)).toBe(true);
     await expect(gradedOptions(panel)).not.toBeFocused();

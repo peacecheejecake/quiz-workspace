@@ -110,6 +110,7 @@ RULES: dict[str, Rule | str] = {
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
     "openQuestionPractice": PRACTICE,  # UX12-OPEN
+    "revealQuestionPractice": PRACTICE,  # UX12-SOLVEDOPEN
     "listMyWorkspaceAttempts": READ,
     # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
     "createPracticeRun": RUN_CREATE,

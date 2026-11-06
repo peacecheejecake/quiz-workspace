@@ -23,7 +23,6 @@ import {
   expect,
   homePath,
   main,
-  overviewPath,
   signInAs,
   test,
   type Member,
@@ -188,12 +187,13 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedRangeWorkspace(workspaceFactory, 'ux12-resume-04', { studyState: false });
+    const run = await createPracticeRun(s.owner, s.workspaceId, {
+      source: 'bank',
+      range: { chapter_ids: [s.ch1] },
+      random_order: false,
+    });
     await signInAs(page, s.owner.user);
-    await page.goto(overviewPath(s.workspaceId));
-    await main(page)
-      .getByRole('button', { name: new RegExp(`^${CH1} (풀기|practi[sc]e)$`, 'i') })
-      .click();
-    await page.getByRole('button', { name: /^(시작|start)$/i }).click();
+    await page.goto(practiceRunPath(s.workspaceId, run.id, 1));
     const panel = runUi.panel(page);
     await answer(panel, nth(s.confirmed, 0));
     await closeRun(panel);

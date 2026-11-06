@@ -44,11 +44,12 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
 }));
 vi.mock('../src/lib/questions/practice-open-client', async () => {
-  const { fakePracticeOpen } = await import('./practice-open-fake');
+  const { fakePracticeOpen, fakePracticeReveal } = await import('./practice-open-fake');
   return {
     openQuestionPractice: fakePracticeOpen({
       open: (...a: unknown[]) => openPracticeSession(...a),
     }),
+    revealQuestionPractice: fakePracticeReveal({}),
   };
 });
 

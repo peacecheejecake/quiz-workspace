@@ -10,6 +10,7 @@
 // `full` — the dialog shows its answers already; only where the home's AI 질문 is available). The
 // opener reads the question (QuestionDetailDialog): its answers are never cached here.
 import { Badge, Button, ModalDialog } from '@quiz/ui';
+import { QuestionSkeleton } from '@/components/questions/question-skeleton';
 import { useRef, useState, type ReactNode } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
@@ -169,9 +170,7 @@ export function ManageViewer({
             ) : null}
           </>
         ) : (
-          <p className={styles.text} role="status">
-            문제를 불러오는 중입니다.
-          </p>
+          <QuestionSkeleton />
         )}
 
         <section className={styles.section} aria-labelledby="question-detail-sources">

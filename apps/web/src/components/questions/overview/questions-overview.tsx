@@ -30,6 +30,7 @@ import {
   useToast,
   type HeatmapChapter,
 } from '@quiz/ui';
+import { QuestionLineSkeleton } from '@/components/questions/question-skeleton';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
@@ -115,9 +116,8 @@ export interface QuestionsOverviewProps {
     context: { readonly hasNote: boolean },
   ) => ReactNode;
   /**
-   * Where focus goes when the practice or run panel closes, when set by whoever opened it (a 정리
-   * 노트 footnote: the note's disclosure; a chapter's 풀기). Cleared on close; otherwise focus
-   * returns to the dot.
+   * Where focus goes when the practice panel closes, when set by whoever opened it (a 정리 노트
+   * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
   /**
@@ -779,7 +779,7 @@ export function QuestionsOverview({
         문제
       </h2>
       <p className={styles.inFilter} role="status">
-        {busy ? '문제를 불러오는 중입니다.' : ''}
+        {busy ? <QuestionLineSkeleton /> : ''}
       </p>
 
       {failure ? (
@@ -863,7 +863,6 @@ export function QuestionsOverview({
           });
         }}
         onFlagsChange={changeFlags}
-        flagsSettled={(questionId) => flagSync.settled(questionId)}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={({ onShowSource }) =>
@@ -935,15 +934,6 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          onCloseAutoFocus={(event) => {
-            // A chapter's 풀기 asks focus back on its button (UX12-CHAPTERRUN-AC04).
-            const requestedFocus = practiceReturnFocusRef?.current ?? null;
-            if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
-            if (requestedFocus?.isConnected) {
-              requestedFocus.focus();
-              event.preventDefault();
-            }
-          }}
           headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}

@@ -186,28 +186,11 @@
 
   > .chapter > .header > .actions {
     display: flex;
-    flex: none;
     align-items: center;
     gap: var(--control-gap);
     margin-inline-start: auto;
     color: var(--color-text-secondary);
     font-size: var(--font-size-label);
-  }
-
-  /* A long title wraps inside itself: the actions keep their place on the title's line. */
-  @media (width < 768px) {
-    > .chapter > .header {
-      flex-wrap: nowrap;
-    }
-
-    > .chapter > .header > .title {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    > .chapter > .header > .count {
-      flex: none;
-    }
   }
 
   > .chapter > .header > .title {

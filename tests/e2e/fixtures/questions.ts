@@ -873,6 +873,9 @@ export const panelUi = {
   options: (panel: Locator) => panel.getByRole('radio').or(panel.getByRole('checkbox')),
   answerText: (panel: Locator) => panel.getByRole('textbox', { name: /답안|answer/i }),
   submit: (panel: Locator) => panel.getByRole('button', { name: /^(답안 )?제출|^submit/i }),
+  // UX12-SOLVEDOPEN: a solved question opens to be answered; this asks for the earlier result.
+  reveal: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(해설 보기|show explanation)$/i }),
   // The result line is the first status of the panel; 관련 본문 (RELSRC-01) adds its own below it.
   result: (panel: Locator) => panel.getByRole('status').first(),
   selfGradeCorrect: (panel: Locator) =>

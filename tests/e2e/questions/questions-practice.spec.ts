@@ -316,7 +316,6 @@ test(
 
     // A new session: a subset of the correct answers is wrong.
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a ?? '').check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -356,7 +355,6 @@ test(
     await page.keyboard.press('Escape');
 
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.answerText(panel).fill('응결');
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -597,12 +595,13 @@ test(
     expect(attempts.map((a) => a.result)).toEqual(['correct']);
     expect(attempts[0]?.practice_session_id).toBe(firstSessions[0]);
 
-    // A submitted session is not served from the open-session cache: the server restores
-    // the caller's result for the current revision (UX10-QVIEW-AC03).
+    // A submitted session is not served from the open-session cache: the panel opens a new one
+    // and the caller's result for the current revision comes through 해설 보기 (UX12-SOLVEDOPEN).
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     const after = countContentLoads(page);
     panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await expect(panelUi.option(panel, correctText)).toBeChecked();
     expect(after.count()).toBeGreaterThan(0);
@@ -637,9 +636,10 @@ test(
     const attemptId = seedGradedAttempt(s.workspaceId, created.id, v1.id, s.owner.user.id);
 
     await signInAs(page, s.owner.user);
-    // The existing result is restored; a new retry remains answer-free until submitted.
+    // The existing result is one press away; a new retry remains answer-free until submitted.
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await expect(panelUi.submit(panel)).toBeVisible();
@@ -1089,7 +1089,6 @@ test(
 
     // Wrong: the chosen option grey with "내 선택", the correct option red with "정답".
     panel = await openPanel(page, 1);
-    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
@@ -1402,7 +1401,7 @@ test(
 );
 
 test(
-  'UX10-QVIEW-AC03 reopening a submitted question restores its own result',
+  'UX10-QVIEW-AC03 해설 보기 on a reopened question restores its own result',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedOne(
@@ -1418,6 +1417,7 @@ test(
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await panelUi.close(panel).click();
     const reopened = await openPanel(page, 1);
+    await panelUi.reveal(reopened).click();
     await expect(panelUi.result(reopened)).toContainText(RESULT_TEXT.correct);
     await expect(panelUi.option(reopened, question.revision.options[2]?.text ?? '')).toBeChecked();
   },
@@ -1449,6 +1449,7 @@ test(
       selected_option_ids: [question.revision.options[2]?.id ?? ''],
     });
     const reopened = await openPanel(page, 1);
+    await panelUi.reveal(reopened).click();
     await expect(panelUi.result(reopened)).toContainText(RESULT_TEXT.correct);
     await expect(panelUi.option(reopened, question.revision.options[2]?.text ?? '')).toBeChecked();
     await panelUi.close(reopened).click();
@@ -1474,6 +1475,7 @@ test(
     const otherTab = await page.context().newPage();
     await otherTab.goto(overviewPath(s.workspaceId));
     const otherPanel = await openPanel(otherTab, 1);
+    await panelUi.reveal(otherPanel).click();
     await expect(panelUi.result(otherPanel)).toContainText(RESULT_TEXT.correct);
     await panel.getByRole('button', { name: /^초기화$/ }).click();
     const confirmation = page.getByRole('alertdialog', { name: /풀이 기록 초기화/ });

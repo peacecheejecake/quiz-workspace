@@ -393,7 +393,7 @@ describe('sequence viewer async edges (QVIEW-W review)', () => {
     expect(create.mock.calls[2]?.[2]).not.toBe(create.mock.calls[0]?.[2]);
   });
 
-  it("UX12-CHAPTERRUN-AC07 처음부터 다시 keeps the run's order and option settings", async () => {
+  it("QVIEW-01-C11 처음부터 다시 keeps the run's order and option settings", async () => {
     const user = userEvent.setup();
     const create = vi.fn<RunClient['create']>(async () => ({
       ok: true,

@@ -1,5 +1,5 @@
-// UX12-OPEN relay: the practice panel's one opening call. FastAPI confirms the latest result and
-// reuses or opens a session in one transaction; answers appear only in a submitted `result`.
+// UX12-OPEN relay: the practice panel's one opening call. FastAPI reuses or opens a session in one
+// transaction; answers appear only in the `result` of a submission waiting for self-grading.
 import { isUuid, notFound, relayToApi } from '@/lib/documents/bff';
 
 export const dynamic = 'force-dynamic';

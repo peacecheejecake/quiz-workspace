@@ -10,9 +10,9 @@ id: UX12-RESUME
 linked_tests: [UX12-RESUME-AC01 … UX12-RESUME-AC09]
 ```
 
-**명세:** [UX12 MOCKUX-7](../implementation/ux12/index.md) (사용자 결정 2026-11-06), [MOCK-01](mock-exams.md), [QVIEW-01](question-viewer.md), [UX12-CHAPTERRUN](ux12-chapter-run.md), [UX12-MOCKNAV](ux12-mock-nav.md)
+**명세:** [UX12 MOCKUX-7](../implementation/ux12/index.md) (사용자 결정 2026-11-06), [MOCK-01](mock-exams.md), [QVIEW-01](question-viewer.md), [UX12-MOCKNAV](ux12-mock-nav.md)
 
-모의고사 목록에서 변형 없이 `추가`로 시작한 풀이는 저장된 모의고사가 아니라 범위 풀이(`practice_run`, `source=bank`)다. 도중에 닫으면 목록에 아무것도 남지 않았다. 이제 목록이 내가 끝내지 않은 원본 풀이를 `이어 풀기` 묶음으로 보인다. 챕터별 `풀기`로 시작한 풀이도 같다.
+모의고사 목록에서 변형 없이 `추가`로 시작한 풀이는 저장된 모의고사가 아니라 범위 풀이(`practice_run`, `source=bank`)다. 도중에 닫으면 목록에 아무것도 남지 않았다. 이제 목록이 내가 끝내지 않은 원본 풀이를 `이어 풀기` 묶음으로 보인다. 홈의 챕터별 `풀기`는 MOCKUX-11에서 지웠지만, 그 버튼으로 시작한 풀이는 원본 풀이이므로 여기서 그대로 이어 풀 수 있다.
 
 ## 결정
 
@@ -59,7 +59,7 @@ linked_tests: [UX12-RESUME-AC01 … UX12-RESUME-AC09]
 
 ### UX12-RESUME-AC04
 
-- **Given:** Heatmap 챕터의 `풀기`로 시작한 풀이를 도중에 닫았다
+- **Given:** 한 챕터의 문제로만 시작한 풀이를 도중에 닫았다
 - **When:** 모의고사 목록을 연다
 - **Then:** 행의 이름이 그 챕터 제목이고 `이어 풀기`로 다음 미제출 위치가 열린다.
 

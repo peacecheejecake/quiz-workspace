@@ -1608,12 +1608,11 @@ export type paths = {
     /**
      * Open Question Practice
      * @description Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the
-     *     latest result, then reuse the cached session, show that result or open a session. Only a new
-     *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
-     *     user and question, so no separate key lock is taken. A key seen again replays its session
-     *     while it is open: once submitted, the latest result answers instead, or 409 without one.
-     *     A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
-     *     its latest submission still waits for grading: nothing else can finish that one.
+     *     latest submission, then reuse the cached session or open one. A solved question opens to be
+     *     answered, without its result (UX12-SOLVEDOPEN); only a submission waiting for self-grading is
+     *     returned, since nothing else can finish it. Only a new session is stored under
+     *     `Idempotency-Key`; the reset lock already serialises retries of this user and question, so no
+     *     separate key lock is taken. A key seen again replays its session while it is open.
      */
     post: operations['openQuestionPractice'];
     delete?: never;
@@ -1653,6 +1652,29 @@ export type paths = {
      * @description Reset personal study state; immutable attempts remain for audit.
      */
     post: operations['resetQuestionPractice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/practice-reveal': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reveal Question Practice
+     * @description `해설 보기` (UX12-SOLVEDOPEN): the caller's latest submission of the active revision with its
+     *     answers. This is a write, not a read: the caller's open sessions of the question are retired
+     *     in the same transaction, so an answer seen here cannot be graded in them. Repeating it
+     *     changes nothing more. 404 for a question the caller has not submitted on this revision.
+     */
+    post: operations['revealQuestionPractice'];
     delete?: never;
     options?: never;
     head?: never;
@@ -6236,30 +6258,19 @@ export type components = {
     /**
      * PracticeOpenBody
      * @description What the panel knows of this question: an open session it keeps in memory and the latest
-     *     attempt when that session was opened, or `force_new` for another try after a result.
-     *     `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
-     *     result the question would otherwise open with.
+     *     attempt when that session was opened.
      */
     PracticeOpenBody: {
       /** Baseline Attempt Id */
       baseline_attempt_id?: string | null;
-      /**
-       * Cached Another Try
-       * @default false
-       */
-      cached_another_try?: boolean;
       /** Cached Session Id */
       cached_session_id?: string | null;
-      /**
-       * Force New
-       * @default false
-       */
-      force_new?: boolean;
     };
     /**
      * PracticeOpened
-     * @description One opening of the panel. Answers exist only under `result`: `session` is the answer-free
-     *     open shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).
+     * @description One opening of the panel. Answers exist only under `result`, and only for a submission
+     *     still waiting for self-grading: `session` is the answer-free open shape, so an unsubmitted
+     *     payload cannot carry one (a new field here is a reviewed change).
      */
     PracticeOpened: {
       /**
@@ -6276,7 +6287,7 @@ export type components = {
       previous_revision: boolean;
       /** Reset Epoch */
       reset_epoch: number;
-      /** @description The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading. */
+      /** @description The latest submission of the active revision while it waits for self-grading. */
       result: components['schemas']['PracticeSessionDetail'] | null;
       /**
        * Reused
@@ -6308,6 +6319,19 @@ export type components = {
       };
       /** Reset */
       reset: boolean;
+    };
+    /**
+     * PracticeRevealed
+     * @description `해설 보기`: the latest submission of the active revision, with its outcome.
+     */
+    PracticeRevealed: {
+      /** Reset Epoch */
+      reset_epoch: number;
+      result: components['schemas']['PracticeSessionDetail'];
+      /** Submitted Answer */
+      submitted_answer?: {
+        [key: string]: unknown;
+      } | null;
     };
     /**
      * PracticeRun
@@ -15851,6 +15875,82 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  revealQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRevealed'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

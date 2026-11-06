@@ -16,21 +16,18 @@ linked_tests: [UX12-RETRYOPEN-AC01 … UX12-RETRYOPEN-AC09]
 
 ## 결정
 
-- **서버가 정한다.** `POST /questions/{id}/practice-open`은 플래그가 켜진 문제에 `result`와 `submitted_answer`를 싣지 않고 새 session(또는 재사용 조건에 맞는 캐시 session)을 `session`에 담는다. client가 결과를 숨기지 않는다. 응답 모양은 그대로다.
-- **채점 대기는 예외.** 가장 최근 제출이 채점 대기(`pending`)이면 그 제출의 결과와 `맞음`/`틀림`을 그대로 보인다. 지난 결과가 아니라 아직 끝나지 않은 풀이이고, 달리 끝낼 곳이 없다(AC08).
-- **같은 열기의 재시도.** 같은 `Idempotency-Key`의 session이 이미 제출됐으면 플래그와 상관없이 그 결과를 준다(UX12-OPEN-AC04). 그 열기에서 사용자가 직접 제출한 결과이기 때문이다.
-- **제출 뒤는 그대로.** 제출하면 결과·해설이 평소처럼 보인다. 플래그 규칙은 questions.md §17 그대로다: 정답은 플래그를 두고, 오답은 끈다. 그래서 정답 뒤에 다시 열면 또 풀이 화면이고, 오답 뒤에 다시 열면 결과가 보인다.
-- **toggle과 footer.** 깨끗하게 열린 panel의 header toggle은 Heatmap 상태를 읽으므로(`lastGradedResult`) 켜진 채 보이고 바로 끌 수 있다. footer의 `다시 풀기`(`AnotherTryButton`)는 답하는 동안과 같이 사유와 함께 비활성이다. `초기화`는 기록이 있으므로 그대로 보인다. 패널이 열린 채 toggle을 바꿔도 화면은 바뀌지 않고, 다음 열기부터 적용된다.
-- **다음 열기에서 바로 적용.** 열기는 그 문제의 toggle 저장이 끝난 뒤에 나간다(`FlagSync.settled`). 저장은 server action 대기열을 지나고 `practice-open`은 지나지 않아, 기다리지 않으면 순서가 뒤바뀔 수 있다. 서버는 캐시 재사용보다 이 열기가 보일 것을 먼저 정한다: 결과를 보일 문제면 캐시 session을 쓰지 않는다. 예외는 `다시 풀기`(`force_new`)로 연 session이다. client가 `cached_another_try`로 알리면 결과보다 앞선다. 그래서 켜진 채 연 깨끗한 session은 플래그를 끄면 버려지고, 한 번 더 풀기는 닫았다 열어도 이어진다.
-- **이전 결과를 보는 길.** 풀이 panel은 이전 결과로 가는 링크를 새로 두지 않는다. 지난 결과는 `이력`의 `풀이` 항목(결과 badge)에 남아 있고, attempt는 바뀌지 않는다. `이력` 항목의 문제 링크도 같은 panel을 열기 때문에 풀이 화면이다. toggle을 끄고 다시 열면 최신 결과가 보인다. `문제 정보`/`문제 관리` 메뉴의 `정답·해설 보기`는 사용자가 직접 고르는 별도 dialog로 그대로 둔다.
+- **MOCKUX-11 개정.** 이 동작은 모든 푼 문제로 넓어졌고([UX12-SOLVEDOPEN](ux12-solved-open.md)), 표시는 더 이상 열기를 정하지 않는다. 아래는 표시가 켜진 문제에서 지금도 맞는 내용이다.
+- **채점 대기는 예외.** 가장 최근 제출이 채점 대기(`pending`)이면 그 제출의 결과와 `맞음`/`틀림`을 그대로 보인다(AC08).
+- **제출 뒤는 그대로.** 제출하면 결과·해설이 평소처럼 보인다. 플래그 규칙은 questions.md §17 그대로다: 정답은 플래그를 두고, 오답은 끈다. 어느 쪽이든 다시 열면 풀이 화면이다.
+- **toggle과 footer.** 깨끗하게 열린 panel의 header toggle은 Heatmap 상태를 읽으므로(`lastGradedResult`) 켜진 채 보이고 바로 끌 수 있다. footer의 `다시 풀기`(`AnotherTryButton`)는 답하는 동안과 같이 사유와 함께 비활성이다. `초기화`는 기록이 있으므로 그대로 보인다.
 - **범위 풀이의 기록.** 범위 풀이·모의고사의 위치는 그 run의 기록이다. 제출하지 않은 위치는 원래 풀이 화면이고, 제출한 위치와 끝난 run의 결과 화면은 플래그와 상관없이 제출 결과를 읽기 전용으로 보인다. 모의고사 문제에는 플래그가 없다.
-- **`practice-recent`.** web이 쓰지 않는 호환용 조회라 바꾸지 않는다(UX12-OPEN). `GET /practice-sessions/{id}`도 본인이 제출한 session을 읽는 것이라 그대로다.
 
 ## 여는 경로
 
 | 경로 | 이전 | 이후 |
 |---|---|---|
-| Heatmap 셀, `?question=` 링크, 이전/다음 | 최신 결과·해설 | 풀이 화면 |
+| Heatmap 셀, `?question=` 링크 | 최신 결과·해설 | 풀이 화면 |
+| 이전/다음 | 최신 결과·해설 | 풀이 화면(이번 열기에서 풀거나 본 문제는 결과, UX12-SOLVEDOPEN-AC07) |
 | `이력`의 풀이 항목 링크 | 최신 결과·해설 | 풀이 화면(목록의 결과 badge는 그대로) |
 | 정리 노트 각주 | 최신 결과·해설 | 풀이 화면 |
 | 돌아가기 막대 | 최신 결과·해설 | 풀이 화면 |
@@ -57,13 +54,13 @@ linked_tests: [UX12-RETRYOPEN-AC01 … UX12-RETRYOPEN-AC09]
 
 - **Given:** AC01처럼 열린 panel
 - **When:** 오답을 제출하고 닫았다가 다시 연다
-- **Then:** 플래그가 꺼지고(§17) 다시 열면 오답 결과와 해설이 보인다.
+- **Then:** 플래그가 꺼지고(§17) 다시 열면 풀이 화면이며, 오답 결과와 해설은 `해설 보기`로 보인다.
 
 ### UX12-RETRYOPEN-AC04
 
-- **Given:** AC01처럼 열린 panel, 그리고 `다시 풀기`가 꺼진 푼 문제
-- **When:** toggle을 끄고 곧바로 닫았다가 새로 고침 없이 다시 열고, 꺼진 문제를 연다
-- **Then:** 두 문제 모두 지금까지처럼 최신 결과와 해설이 보인다.
+- **Given:** AC01처럼 열린 panel
+- **When:** toggle을 끄고 닫았다가 다시 연다
+- **Then:** 표시를 꺼도 풀이 화면이고, 결과와 해설은 `해설 보기`로 보인다.
 
 ### UX12-RETRYOPEN-AC05
 
@@ -91,4 +88,4 @@ linked_tests: [UX12-RETRYOPEN-AC01 … UX12-RETRYOPEN-AC09]
 
 ### UX12-RETRYOPEN-AC09
 
-**API 계약(pytest):** 플래그가 켜진 문제의 `practice-open` 응답은 `result`·`submitted_answer`가 없고 정답·해설 필드도 없으며 새 session을 연다(열람 기록 포함). 플래그가 켜져 있고 재사용 조건이 맞으면 그 session을 재사용한다. 플래그를 끈 뒤에는 캐시 session을 보내도 결과를 준다. `force_new`로 연 session은 `cached_another_try`와 함께 보낼 때만 결과보다 앞선다. 다른 사용자의 플래그는 영향을 주지 않는다. 합쳐진 중복에 켜진 플래그는 남길 문제에도 적용된다. 이미 제출한 열기의 key를 다시 보내면 그 결과를 준다. 채점 대기는 결과를 준다. attempt 행은 바뀌지 않는다. DB 왕복은 UX12-OPEN의 예산을 넘지 않는다.
+**API 계약(pytest):** `practice-open`의 응답은 표시가 켜져 있든 꺼져 있든 같다: `result`·정답·해설 없이 session을 준다. 표시를 바꿔도 달라지지 않는다.
