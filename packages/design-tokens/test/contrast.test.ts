@@ -185,9 +185,10 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     it('runs from a blue stop to a lavender stop at a capped alpha', () => {
       const stops = gradientStops(theme);
       expect(stops).toHaveLength(2);
-      const [blue, lavender] = stops as [number[], number[]];
-      expect(blue[0], 'blue stop: green over red').toBeLessThan(blue[1] ?? 0);
-      expect(lavender[0], 'lavender stop: red over green').toBeGreaterThan(lavender[1] ?? 0);
+      const [blue, lavender] = stops;
+      if (!blue || !lavender) throw new Error('glass-gradient needs two stops');
+      expect(blue[0], 'blue stop: green over red').toBeLessThan(blue[1]);
+      expect(lavender[0], 'lavender stop: red over green').toBeGreaterThan(lavender[1]);
       for (const stop of stops) {
         expect(stop[2], 'cool: blue is the strongest channel').toBeGreaterThan(stop[1]);
         expect(stop[3]).toBeLessThanOrEqual(0.35);
