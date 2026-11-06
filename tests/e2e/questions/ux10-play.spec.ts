@@ -235,8 +235,9 @@ test('UX10-PLAY-AC06 only the edited mock is disabled and cancel restores it', a
     .filter({ has: page.getByRole('button', { name: /둘째 시험 메뉴/ }) });
   await firstRow.getByRole('button', { name: /첫 시험 메뉴/ }).click();
   await page.getByRole('menuitem', { name: /이름 바꾸기/ }).click();
-  await expect(firstRow.getByRole('button', { name: '풀기' })).toBeDisabled();
-  await expect(secondRow.getByRole('button', { name: '풀기' })).toBeEnabled();
+  // The renamed row's title is its input (nothing to start); the other row's title still starts.
+  await expect(firstRow.getByRole('button', { name: '첫 시험', exact: true })).toHaveCount(0);
+  await expect(secondRow.getByRole('button', { name: '둘째 시험', exact: true })).toBeEnabled();
   const input = firstRow.getByRole('textbox', { name: /모의고사 이름/ });
   const save = firstRow.getByRole('button', { name: '저장' });
   const cancel = firstRow.getByRole('button', { name: '취소' });
@@ -247,7 +248,7 @@ test('UX10-PLAY-AC06 only the edited mock is disabled and cancel restores it', a
   expect(saveBox.y).toBeGreaterThan(inputBox.y);
   expect(saveBox.y).toBe(cancelBox.y);
   await cancel.click();
-  await expect(firstRow.getByRole('button', { name: '풀기' })).toBeEnabled();
+  await expect(firstRow.getByRole('button', { name: '첫 시험', exact: true })).toBeEnabled();
 });
 
 test('UX10-PLAY-AC06 the detail header rename keeps its input and 풀기 off until saved', async ({
@@ -291,7 +292,7 @@ test('UX10-PLAY-AC06 the detail header rename keeps its input and 풀기 off unt
   expect((await getMockExam(owner, exam.id)).title).toBe('바뀐 상세 시험');
 });
 
-test('UX10-PLAY-AC06 a failed row rename keeps the input and that row 풀기 off', async ({
+test('UX10-PLAY-AC06 a failed row rename keeps the input and that row title off', async ({
   page,
   workspaceFactory,
 }) => {
@@ -312,19 +313,19 @@ test('UX10-PLAY-AC06 a failed row rename keeps the input and that row 풀기 off
   await menu.click();
   await page.getByRole('menuitem', { name: /이름 바꾸기/ }).click();
   const input = row.getByRole('textbox', { name: /모의고사 이름/ });
-  const practise = row.getByRole('button', { name: /^풀기$/ });
+  const title = row.getByRole('button', { name: '실패 시험', exact: true });
 
   const restore = await failRename(page);
   await input.fill('바뀐 시험');
   await row.getByRole('button', { name: '저장' }).click();
   await expect(row.getByRole('alert')).toBeVisible();
   await expect(input).toHaveValue('바뀐 시험');
-  await expect(practise).toBeDisabled();
+  await expect(title).toHaveCount(0);
 
   await restore();
   await row.getByRole('button', { name: '취소' }).click();
   await expect(input).toHaveCount(0);
-  await expect(practise).toBeEnabled();
+  await expect(title).toBeEnabled();
   expect((await getMockExam(owner, exam.id)).title).toBe('실패 시험');
 });
 
