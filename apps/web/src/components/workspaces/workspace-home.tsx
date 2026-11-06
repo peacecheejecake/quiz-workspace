@@ -5,7 +5,7 @@
 //
 //   Workspace header  a line that sticks under the app header (UX12-HEADER, D-7): the `문서 N` menu
 //                     (문서 관리 · 본문 검색 | 직접 추가 · 중복 문제 정리 · 챕터 재분배 | 보관·초안 문제),
-//                     the primary `풀기` and, aligned right, `AI 질문` (icon + text, every member) ·
+//                     the primary `모의고사` and, aligned right, `AI 질문` (icon + text, every member) ·
 //                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 검색
 //                     and 필터 buttons (UX12-FILTER): the first opens the 문제 search (SEARCH-01-AC12:
 //                     filters the heatmap as you type), the second a popover with the chapter/type
@@ -35,7 +35,7 @@
 //   원본 범위 풀이      `?practice=new&source=bank` → `?practice=<run>&i=<n>` (a 모의고사 만들기 without
 //                     variations, QVIEW-01): the modal range run (QuestionViewer sequence, rendered
 //                     by QuestionsOverview). Its steps replace the entry; positions push one.
-//   모의고사           `?panel=mock-exams[&mock=new|<id>]` (the primary `풀기`, MOCK-01, every member): a
+//   모의고사           `?panel=mock-exams[&mock=new|<id>]` (the primary `모의고사`, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
 //   AI 질문            `?panel=ask[&conversation=<id>]` (header `AI 질문`, 문제 › AI 질문, a question's
@@ -895,7 +895,7 @@ function WorkspaceHomeContent({
               }
             }}
           >
-            풀기
+            모의고사
           </Button>
         </div>
         <div className={styles.actionGroup} data-align="end">

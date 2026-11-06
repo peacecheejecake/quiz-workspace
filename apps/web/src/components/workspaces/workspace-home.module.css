@@ -32,7 +32,7 @@
   min-width: 0;
 }
 
-/* Two button groups (UX4): 문서 N · 풀기, then AI 질문 · 이력 · 공유하기 aligned right. Under the
+/* Two button groups (UX4): 문서 N · 모의고사, then AI 질문 · 이력 · 공유하기 aligned right. Under the
    app header and over the heatmap's raised markers and hover layers; opaque, since the page
    passes behind it. The negative margins cancel its padding while it is not stuck. */
 .toolbar {

@@ -50,7 +50,7 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await createNumberedQuestions(owner, workspace.id, 'ux10-play', 3);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id));
-  await page.getByRole('button', { name: /^풀기$/ }).click();
+  await page.getByRole('button', { name: /^모의고사$/ }).click();
   const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await expect(dialog).toBeVisible();
   await mockUi.add(dialog).click();
@@ -69,7 +69,7 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await expect(page.getByText(/ux10-play-1 문제/)).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('heading', { name: /1번/ })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeFocused();
   const mocks = await owner.api.ok<{ items: unknown[] }>(
     'GET',
     `/workspaces/${workspace.id}/mock-exams`,

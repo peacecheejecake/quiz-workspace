@@ -1,4 +1,4 @@
-// UX12-MOCKNAV (docs/screens/ux12-mock-nav.md): the home's 풀기 opens the 모의고사 list, the detail
+// UX12-MOCKNAV (docs/screens/ux12-mock-nav.md): the home's 모의고사 opens the 모의고사 list, the detail
 // keeps only 풀기 as a button with the rest under 더보기, and 문제 풀기 is called 모의고사.
 import type { Locator, Page } from '@playwright/test';
 import {
@@ -18,7 +18,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 type Factory = E2EFixtures['workspaceFactory'];
 
-const homePlay = (page: Page) => main(page).getByRole('button', { name: /^풀기$/ });
+const homePlay = (page: Page) => main(page).getByRole('button', { name: /^모의고사$/ });
 
 async function seedExam(workspaceFactory: Factory, label: string) {
   const owner = await workspaceFactory.member(label);
@@ -39,7 +39,7 @@ const movedButtons = (dialog: Locator) =>
   });
 
 test(
-  'UX12-MOCKNAV-AC01 the home 풀기 opens the list, 추가 opens 만들기 and closing returns focus',
+  'UX12-MOCKNAV-AC01 the home 모의고사 opens the list, 추가 opens 만들기 and closing returns focus',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { owner, workspace } = await seedExam(workspaceFactory, 'ux12-mocknav-ac01');
