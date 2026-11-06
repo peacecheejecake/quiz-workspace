@@ -14,7 +14,9 @@ select columns_are('public', 'documents',
         -- UX6-UPLOAD-B (20261028120000)
         'type_source', 'content_kind', 'detection',
         -- DOCSUM-B (20261029120000)
-        'summary_enabled_at', 'summary_enabled_by', 'summary_disabled_at', 'summary_disabled_by']);
+        'summary_enabled_at', 'summary_enabled_by', 'summary_disabled_at', 'summary_disabled_by',
+        -- UX12 CHAPTER-4 (20261106150000)
+        'chapter_tree_version']);
 select columns_are('public', 'document_revisions',
   array['id', 'workspace_id', 'document_id', 'revision_number', 'parent_revision_id', 'status',
         'content_hash', 'parser_version', 'source_object_key', 'parsed_object_key',
