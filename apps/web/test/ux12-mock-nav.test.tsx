@@ -128,7 +128,10 @@ it('UX12-MOCKNAV-AC03 shows a viewer no 더보기', async () => {
 
 function renderPanel(canEdit: boolean, view: { view: 'list' } | { view: 'create' }) {
   const onViewChange = vi.fn();
-  const api = { list: async () => ({ ok: true, data: { items: [], llm_available: false } }) };
+  const api = {
+    list: async () => ({ ok: true, data: { items: [], llm_available: false } }),
+    unfinishedRuns: async () => ({ ok: true, data: [] }),
+  };
   render(
     <MockExamsPanel
       open
@@ -140,6 +143,7 @@ function renderPanel(canEdit: boolean, view: { view: 'list' } | { view: 'create'
       onViewChange={onViewChange}
       onPractise={() => undefined}
       onBankStarted={() => undefined}
+      onResume={() => undefined}
       api={api as never}
     />,
   );

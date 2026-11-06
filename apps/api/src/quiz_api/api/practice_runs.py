@@ -8,6 +8,9 @@ docs/questions.md §12, architecture.md §6).
     GET  /practice-runs/{id}/items/{position}       the run's creator; one position (1-based)
     GET  /practice-runs/{id}/results?offset&limit   the run's creator; one page (limit <= 200)
     POST /practice-runs/{id}/finish                 the run's creator; fix the summary
+    GET  /workspaces/{id}/practice-runs/unfinished  member; the caller's own unfinished bank runs
+                                                    (UX12-RESUME); no content, at most 20
+    POST /practice-runs/{id}/dismiss                the run's creator (bank); out of that list only
 
 A position is practised through the practice API (quiz_api.api.practice): POST
 /questions/{id}/practice-sessions with `{practice_run_id, run_position}`, then the usual submit /
@@ -127,6 +130,7 @@ MAX_SEED = 2**53 - 1  # a JSON-safe integer
 PRACTICE_RUN_TEST_SEED = 20261101
 DEFAULT_RESULTS_PAGE = 200
 MAX_RESULTS_PAGE = 200
+MAX_UNFINISHED = 20
 
 RunSource = Literal["bank", "mock"]
 PositionResult = Literal["correct", "incorrect", "pending", "skipped", "reset"]
@@ -285,6 +289,22 @@ class RunResults(BaseModel):
     items: list[RunResultItem]
 
 
+class UnfinishedRun(BaseModel):
+    """A row of the `이어 풀기` list: progress and where to resume, never question content."""
+
+    id: uuid.UUID
+    total: int = Field(description="Positions 1..total.")
+    answered: int = Field(description="Positions submitted.")
+    next_position: int = Field(description="The first position still answerable.")
+    chapter_title: str | None = Field(description="Set when the live questions share a chapter.")
+    created_at: datetime
+    last_touched_at: datetime
+
+
+class UnfinishedRunList(BaseModel):
+    items: list[UnfinishedRun]
+
+
 # --- dependencies -------------------------------------------------------------------------------
 
 
@@ -347,6 +367,15 @@ def _create_workspace(
     # A run is the caller's own data: allowed for every role and in an archived workspace.
     return authorize_workspace(
         repo, user.id, workspace_id, Action.READ, LockMode.SHARE, not_found_detail=NOT_FOUND
+    )
+
+
+def _read_workspace(
+    workspace_id: Annotated[uuid.UUID, Path()], user: CurrentUser, repo: AccessRepo
+) -> WorkspaceAccess:
+    # The caller's own runs: every role, archived workspace included.
+    return authorize_workspace(
+        repo, user.id, workspace_id, Action.READ, LockMode.NONE, not_found_detail=NOT_FOUND
     )
 
 
@@ -888,6 +917,46 @@ def finish_practice_run(run: WriteRun, runs: RunRepo, mocks: MockRepo) -> Practi
     out = _run_out(finished, _progress(finished, runs, mocks))
     runs.commit()
     return out
+
+
+@router.get(
+    "/workspaces/{workspace_id}/practice-runs/unfinished",
+    operation_id="listUnfinishedPracticeRuns",
+)
+def list_unfinished_practice_runs(
+    access: Annotated[WorkspaceAccess, Depends(_read_workspace)], runs: RunRepo
+) -> UnfinishedRunList:
+    """The caller's own unfinished bank runs in this workspace, most recently touched first:
+    runs not finished, not dismissed and with a position left to answer (UX12-RESUME)."""
+    rows = runs.unfinished(access.workspace_id, access.user_id, MAX_UNFINISHED)
+    return UnfinishedRunList(
+        items=[
+            UnfinishedRun(
+                id=r.id,
+                total=r.total,
+                answered=r.answered,
+                next_position=r.next_position,
+                chapter_title=r.chapter_title,
+                created_at=r.created_at,
+                last_touched_at=r.last_touched_at,
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.post(
+    "/practice-runs/{run_id}/dismiss",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="dismissPracticeRun",
+)
+def dismiss_practice_run(run: WriteRun, runs: RunRepo) -> None:
+    """Take the run out of the `이어 풀기` list. The run, its sessions and attempts stay as they
+    are, and it still opens by its URL. A mock run is not in that list (404)."""
+    if run.source != "bank":
+        raise _not_found()
+    runs.dismiss(run.id)
+    runs.commit()
 
 
 # --- the practice API's run link (quiz_api.api.practice) ----------------------------------------

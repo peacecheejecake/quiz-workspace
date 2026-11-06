@@ -1056,6 +1056,27 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/practice-runs/{run_id}/dismiss': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Dismiss Practice Run
+     * @description Take the run out of the `이어 풀기` list. The run, its sessions and attempts stay as they
+     *     are, and it still opens by its URL. A mock run is not in that list (404).
+     */
+    post: operations['dismissPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-runs/{run_id}/finish': {
     parameters: {
       query?: never;
@@ -2473,6 +2494,27 @@ export type paths = {
      *     The response carries counts only (read positions through /items/{position}).
      */
     post: operations['createPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/practice-runs/unfinished': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Unfinished Practice Runs
+     * @description The caller's own unfinished bank runs in this workspace, most recently touched first:
+     *     runs not finished, not dismissed and with a position left to answer (UX12-RESUME).
+     */
+    get: operations['listUnfinishedPracticeRuns'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -8849,6 +8891,52 @@ export type components = {
        */
       version: number;
     };
+    /**
+     * UnfinishedRun
+     * @description A row of the `이어 풀기` list: progress and where to resume, never question content.
+     */
+    UnfinishedRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Chapter Title
+       * @description Set when the live questions share a chapter.
+       */
+      chapter_title: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Touched At
+       * Format: date-time
+       */
+      last_touched_at: string;
+      /**
+       * Next Position
+       * @description The first position still answerable.
+       */
+      next_position: number;
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
+    };
+    /** UnfinishedRunList */
+    UnfinishedRunList: {
+      /** Items */
+      items: components['schemas']['UnfinishedRun'][];
+    };
     /** UploadCompleted */
     UploadCompleted: {
       /**
@@ -13447,6 +13535,71 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PracticeRun'];
         };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  dismissPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Unauthorized */
       401: {
@@ -18761,6 +18914,73 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listUnfinishedPracticeRuns: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnfinishedRunList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

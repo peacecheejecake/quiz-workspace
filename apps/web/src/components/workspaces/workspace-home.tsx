@@ -165,7 +165,7 @@ import {
   withAskConversation,
   withoutAsk,
 } from '@/lib/workspaces/home';
-import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
+import { parseRunState, withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { useManualScrollWhile, usePanelHistory } from './use-panel-history';
 import { useStagedDialogs } from './use-staged-dialogs';
 import styles from './workspace-home.module.css';
@@ -430,6 +430,11 @@ function WorkspaceHomeContent({
   /** A mock exam's 풀기: the run panel's range step on it (QVIEW-01 `sequence(mock)`). */
   function openMockRun(mockExamId: string) {
     openPanelAt(`${pathname}${withMockRun(window.location.search, mockExamId)}`);
+  }
+  /** `이어 풀기` (UX12-RESUME): the run over the dialog, so closing it returns to the list. */
+  function resumeRun(runId: string, position: number) {
+    const state: RunUrlState = { step: 'solve', runId, position };
+    openPanelAt(`${pathname}${keepMockView(withRunState(window.location.search, state))}`);
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {
@@ -1163,6 +1168,8 @@ function WorkspaceHomeContent({
                 `${pathname}${withRunState(withoutMockExams(window.location.search), { step: 'solve', runId, position: 1 })}`,
               )
             }
+            onResume={resumeRun}
+            runOpen={parseRunState(new URLSearchParams(searchParams.toString())) !== null}
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel

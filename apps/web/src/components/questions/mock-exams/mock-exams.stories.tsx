@@ -100,6 +100,8 @@ function api(exams: readonly MockExam[], llmAvailable = true): MockExamApi {
     questions: () => ok(QUESTIONS),
     editQuestion: never,
     removeQuestion: () => ok(null),
+    unfinishedRuns: () => ok([]),
+    dismissRun: () => ok(null),
   };
 }
 
@@ -113,6 +115,7 @@ const base: Props = {
   onViewChange: noop,
   onPractise: noop,
   onBankStarted: noop,
+  onResume: noop,
   api: api([]),
 };
 

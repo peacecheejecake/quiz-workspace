@@ -63,11 +63,11 @@ it('UX12-RESUME-AC01 names a run after its chapter, else 원본 풀이', () => {
 
 it('UX12-RESUME-AC01 shows a row for every viewer without counting it as a mock exam', async () => {
   render(panel(fakeApi([RUN])));
-  const [row] = await rows();
+  const row = (await rows())[0] as HTMLElement;
   expect(row).toHaveTextContent('원본 풀이');
   expect(row).toHaveTextContent('3/10');
   expect(screen.getByText('모의고사 0개')).toBeInTheDocument();
-  expect(within(row!).getByRole('button', { name: '원본 풀이 이어 풀기' })).toBeEnabled();
+  expect(within(row).getByRole('button', { name: '원본 풀이 이어 풀기' })).toBeEnabled();
 });
 
 it('UX12-RESUME-AC02 이어 풀기 hands over the run and its next position', async () => {
@@ -162,7 +162,7 @@ it('UX12-RESUME-AC03 polling a generating mock exam does not read the runs again
       status: 'generating',
       question_count_current: 0,
       current_generation: null,
-      latest_generation: null,
+      latest_generation: { status: 'running', generated_count: 0, target_count: 1 },
       config: { variation_types: ['OPTION_SHUFFLE'], question_count: 1 },
       created_at: '2026-01-01T00:00:00Z',
     };

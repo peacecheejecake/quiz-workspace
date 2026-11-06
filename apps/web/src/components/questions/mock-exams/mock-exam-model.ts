@@ -10,6 +10,7 @@ import { displayStem } from '@/lib/questions/display-stem';
 
 export type MockExam = Schemas['MockExam'];
 export type MockExamList = Schemas['MockExamList'];
+export type UnfinishedRun = Schemas['UnfinishedRun'];
 export type MockExamConfig = Schemas['MockExamConfig'];
 export type MockExamGeneration = Schemas['MockExamGeneration'];
 export type MockExamQuestion = Schemas['MockExamQuestion'];
@@ -111,6 +112,16 @@ export function roundText(exam: Pick<MockExam, 'current_generation'>): string | 
 
 /** How often a list or detail with a mock exam being made reads it again (ms). */
 export const MOCK_POLL_MS = 1500;
+
+/** An unfinished run's row name (UX12-RESUME): its chapter, or the plain word for a bank run. */
+export function unfinishedRunName(run: Pick<UnfinishedRun, 'chapter_title'>): string {
+  return run.chapter_title ?? '원본 풀이';
+}
+
+/** "3/10": positions submitted of the run's positions. */
+export function unfinishedRunProgress(run: Pick<UnfinishedRun, 'answered' | 'total'>): string {
+  return `${run.answered}/${run.total}`;
+}
 
 /** Whether a mock exam has questions to practise now (a remake keeps the previous ones). */
 export function canPractise(

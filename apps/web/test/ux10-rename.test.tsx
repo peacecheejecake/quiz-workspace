@@ -108,6 +108,7 @@ it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled afte
   const api = {
     list: async () => ({ ok: true, data: { items: exams, llm_available: false } }),
     rename: async () => ({ ok: false, message: '저장 실패' }),
+    unfinishedRuns: async () => ({ ok: true, data: [] }),
   };
   const user = userEvent.setup();
   render(
@@ -121,6 +122,7 @@ it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled afte
       onViewChange={() => undefined}
       onPractise={() => undefined}
       onBankStarted={() => undefined}
+      onResume={() => undefined}
       api={api as never}
     />,
   );

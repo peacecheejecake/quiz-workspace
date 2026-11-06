@@ -45,6 +45,26 @@
   background: var(--color-surface-muted);
 }
 
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runName {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
 .itemMain {
   display: grid;
   gap: var(--space-1);
