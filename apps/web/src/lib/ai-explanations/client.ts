@@ -19,6 +19,8 @@ export interface ExplanationState {
   readonly can_create: boolean;
   readonly can_regenerate: boolean;
   readonly can_cancel: boolean;
+  /** The newest attempt, when it was cancelled (a failed one leaves this null). */
+  readonly cancelled_id: string | null;
   readonly explanation: Explanation | null;
 }
 

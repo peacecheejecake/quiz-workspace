@@ -91,6 +91,7 @@ function stateOf(overrides: Partial<ExplanationState> = {}): ExplanationState {
     can_create: true,
     can_regenerate: false,
     can_cancel: false,
+    cancelled_id: null,
     explanation: null,
     ...overrides,
   };
@@ -498,7 +499,7 @@ describe('UX12-EXPLCANCEL 취소', () => {
 
   it('a new one: 취소 beside 작성중..., then only the toolbar button, no alert', async () => {
     const user = userEvent.setup();
-    const api = fakeClient(liveState, stateOf());
+    const api = fakeClient(liveState, stateOf({ cancelled_id: live.id }));
     mount(api);
     const button = await within(area()).findByRole('button', { name: '취소' });
     expect(button.closest('div')).toHaveTextContent('작성중...');
@@ -516,7 +517,12 @@ describe('UX12-EXPLCANCEL 취소', () => {
     const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
     const api = fakeClient(
       liveState,
-      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+      stateOf({
+        can_create: false,
+        can_regenerate: true,
+        cancelled_id: live.id,
+        explanation: current,
+      }),
     );
     mount(api);
     await user.click(await within(area()).findByRole('button', { name: '취소' }));
@@ -540,6 +546,41 @@ describe('UX12-EXPLCANCEL 취소', () => {
     await user.click(await within(area()).findByRole('button', { name: '취소' }));
     expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
     expect(within(area()).getByRole('status')).toHaveTextContent('AI 해설이 준비되었습니다');
+  });
+
+  it('a stream that ends early and a failed regeneration: never announced as cancelled', async () => {
+    stream('id: 1\nevent: delta\ndata: {"seq":0,"text":"일부"}\n\n');
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+    );
+    api.state.mockResolvedValueOnce(liveState);
+    mount(api);
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).not.toHaveTextContent('취소했습니다');
+  });
+
+  it('a stream that ends early after a cancel elsewhere: announced from the state', async () => {
+    stream('id: 1\nevent: delta\ndata: {"seq":0,"text":"일부"}\n\n');
+    const api = fakeClient(stateOf({ cancelled_id: live.id }));
+    api.state.mockResolvedValueOnce({ ...liveState, can_cancel: false });
+    mount(api);
+    await waitFor(() =>
+      expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다'),
+    );
+  });
+
+  it('a regeneration that failed before the click is not announced as cancelled', async () => {
+    const user = userEvent.setup();
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      liveState,
+      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+    );
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).not.toHaveTextContent('취소했습니다');
   });
 
   it('a refused cancel says so and keeps the state', async () => {

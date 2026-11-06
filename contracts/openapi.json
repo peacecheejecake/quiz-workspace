@@ -2940,6 +2940,19 @@
             "title": "Can Regenerate",
             "type": "boolean"
           },
+          "cancelled_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.",
+            "title": "Cancelled Id"
+          },
           "explanation": {
             "anyOf": [
               {
@@ -2957,6 +2970,7 @@
           "can_create",
           "can_regenerate",
           "can_cancel",
+          "cancelled_id",
           "explanation"
         ],
         "title": "ExplanationState",
@@ -6061,6 +6075,19 @@
             "title": "Can Regenerate",
             "type": "boolean"
           },
+          "cancelled_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.",
+            "title": "Cancelled Id"
+          },
           "explanation": {
             "anyOf": [
               {
@@ -6077,6 +6104,7 @@
           "can_create",
           "can_regenerate",
           "can_cancel",
+          "cancelled_id",
           "explanation"
         ],
         "title": "MockExplanationState",

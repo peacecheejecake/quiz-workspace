@@ -275,6 +275,7 @@ export interface ExplanationState {
   readonly can_create: boolean;
   readonly can_regenerate: boolean;
   readonly can_cancel: boolean;
+  readonly cancelled_id: string | null;
   readonly explanation: Explanation | null;
 }
 

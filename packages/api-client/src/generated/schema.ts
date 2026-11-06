@@ -3906,6 +3906,11 @@ export type components = {
        * @description An owner/editor of an active workspace, a success.
        */
       can_regenerate: boolean;
+      /**
+       * Cancelled Id
+       * @description The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.
+       */
+      cancelled_id: string | null;
       /** @description The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null. */
       explanation: components['schemas']['Explanation'] | null;
     };
@@ -5224,6 +5229,11 @@ export type components = {
        * @description An owner/editor of an active workspace, a success.
        */
       can_regenerate: boolean;
+      /**
+       * Cancelled Id
+       * @description The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.
+       */
+      cancelled_id: string | null;
       explanation: components['schemas']['MockExplanation'] | null;
     };
     /**

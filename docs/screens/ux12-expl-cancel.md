@@ -18,6 +18,7 @@
 
 - `POST /questions/{id}/ai-explanation/cancel`, `POST /mock-exam-questions/{id}/ai-explanation/cancel`. Body는 만들기와 같은 gate에 `explanation_id`를 더한다. 그래서 늦게 누른 취소가 더 새로운 실행을 멈추지 않는다. 응답은 200과 취소 후 state다.
 - State에 `can_cancel`이 있다. 만드는 중이고 활성 Workspace이며 호출자가 요청자이거나 owner/editor일 때 true다.
+- State의 `cancelled_id`는 가장 최근 시도가 취소됐을 때 그 id다. 진행 중이던 id가 사라진 이유가 취소인지 실패인지는 이 값으로 구분하고, 실패한 다시 만들기를 "취소했습니다"로 알리지 않는다.
 - 다른 사용자(viewer)는 403 `insufficient-role`, 보관된 Workspace는 403 `workspace-archived`, 다른 문제의 id·모르는 id·비회원은 404다.
 - 끝난 해설에 보내면 아무것도 바꾸지 않고 현재 state를 200으로 답한다. 두 번 보내도 같다.
 - 저장값은 `status='failed'`, `error_code='cancelled'`다. `quiz_api`에는 이 전이만 허용하는 update 권한과 policy가 필요해 migration `20261106120000_ai_explanation_cancel.sql`을 추가했다 (계획 초안의 "migration 불필요"는 check 제약만 본 판단이었고, `quiz_api`에는 update 권한이 없었다).

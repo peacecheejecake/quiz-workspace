@@ -1110,6 +1110,8 @@ def test_ux12_explcancel_a_new_one_goes_away_twice_over_and_the_worker_calls_not
     after = state(cancel(owner, q["id"], live["id"], view="detail"), (200,))
     assert after["explanation"] is None
     assert (after["can_create"], after["can_cancel"]) == (True, False)
+    assert after["cancelled_id"] == live["id"]
+    assert started["cancelled_id"] is None
     assert _cancelled(db, live["id"]) == ("failed", "cancelled", True, True)
     assert state(get(owner, q["id"], view="detail"), (200,)) == after
 
@@ -1137,6 +1139,7 @@ def test_ux12_explcancel_a_regeneration_falls_back_to_the_current_success(
     after = state(cancel(owner, q["id"], again["id"], view="detail"), (200,))
     assert after["explanation"]["id"] == good["id"]
     assert after["explanation"]["body"] == good["body"]
+    assert after["cancelled_id"] == again["id"]
     assert (after["can_regenerate"], after["can_create"], after["can_cancel"]) == (
         True,
         False,
@@ -1191,6 +1194,24 @@ def test_ux12_explcancel_an_archived_workspace_refuses_and_keeps_the_row(
     assert state(get(owner, q["id"], view="detail"), (200,))["can_cancel"] is False
     problem(cancel(owner, q["id"], live["id"], view="detail"), 403, ARCHIVED)
     assert _cancelled(db, live["id"])[:2] == ("queued", None)
+
+
+def test_ux12_explcancel_a_failed_regeneration_is_not_reported_as_cancelled(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-cancel-h-owner")
+    book = Book(owner)
+    q = book.mcq()
+    good = make(owner, q["id"], view="detail")
+    again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    db(
+        "update public.question_ai_explanations set status = 'failed', "
+        "error_code = 'llm_unavailable', started_at = now(), finished_at = now() where id = %s",
+        (again["id"],),
+    )
+    read = state(get(owner, q["id"], view="detail"), (200,))
+    assert read["explanation"]["id"] == good["id"]
+    assert read["cancelled_id"] is None
 
 
 def test_ux12_explcancel_after_the_finish_changes_nothing(seed: Any, db: Any) -> None:

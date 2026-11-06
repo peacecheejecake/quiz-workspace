@@ -176,6 +176,10 @@ class _StateBase(BaseModel):
         description="One is being made, in an active workspace, and the caller requested it or is "
         "an owner/editor."
     )
+    cancelled_id: uuid.UUID | None = Field(
+        description="The newest attempt, when it was cancelled: why a live id is gone, as opposed "
+        "to a failure that leaves the current success shown."
+    )
 
 
 class ExplanationState(_StateBase):
@@ -431,14 +435,15 @@ def _state(
     newest = repo.newest(kind.name, revision_id, PROMPT_VERSION, model)
     live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
     current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+    cancelled = (
+        newest.id
+        if newest is not None and newest.status == "failed" and newest.error_code == CANCELLED
+        else None
+    )
     # A failed attempt after a success (a regeneration that failed) never hides that success:
     # the current success is shown; a failed row is shown only when nothing succeeded. A cancelled
     # row is never shown: it was asked to go away.
-    if (
-        newest is not None
-        and newest.status == "failed"
-        and (current is not None or newest.error_code == CANCELLED)
-    ):
+    if newest is not None and newest.status == "failed" and (current or cancelled):
         newest = current
     available = settings.ai_explanations_available and model is not None
     active = access.status == "active"
@@ -451,6 +456,7 @@ def _state(
         and live is None
         and current is not None,
         "can_cancel": live is not None and active and _may_cancel(access, live),
+        "cancelled_id": cancelled,
         "explanation": _explanation_out(repo, newest),
     }
     model_type = ExplanationState if kind is BANK else MockExplanationState

@@ -87,6 +87,13 @@ interface LiveText {
   readonly text: string;
 }
 
+/** What a generation that ended without its stream's last event announces (from the server). */
+function endAnnouncement(state: ExplanationState, explanationId: string): string {
+  if (state.cancelled_id === explanationId) return EXPL_TEXT.cancelled;
+  const done = state.explanation?.id === explanationId && state.explanation.status === 'succeeded';
+  return done ? EXPL_TEXT.ready : '';
+}
+
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms);
@@ -258,8 +265,7 @@ function AiExplanationArea({
           if (signal.aborted) return;
           if (next && !(next.explanation?.id === liveId && isLive(next.explanation))) {
             setLoad({ status: 'ready', state: next });
-            if (next.explanation?.id !== liveId) setAnnouncement(EXPL_TEXT.cancelled);
-            else if (next.explanation.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
+            setAnnouncement(endAnnouncement(next, liveId));
             return;
           }
           await sleep(1000, signal);
@@ -315,10 +321,8 @@ function AiExplanationArea({
     try {
       const next = await client.cancel(target, gate, explanationId);
       if (!mounted.current) return;
-      const after = next.explanation;
-      // It may have finished first: then the result is shown and nothing was cancelled.
-      if (after?.id !== explanationId) setAnnouncement(EXPL_TEXT.cancelled);
-      else if (after.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
+      // It may have ended first: then nothing was cancelled, whatever is shown now.
+      setAnnouncement(endAnnouncement(next, explanationId));
       focusAfterCancel.current = true;
       setLive(null);
       setLoad({ status: 'ready', state: next });
