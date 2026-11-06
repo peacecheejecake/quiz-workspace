@@ -19,7 +19,7 @@
 - **유리 안 토큰:** `.glass-surface` 안에서 `--color-accent`는 `--color-accent-on-glass`로 바뀐다. primary hover는 `--color-accent-pressed`로 한 단계 내려간다.
 - **유리 위 버튼:** 배경을 지우는 것은 사용자가 지목한 `보던 문제로 돌아가기`와 목록 항목(AI 질문 출처·각주, 모의고사 목록·문제 행)뿐이다. 복귀 버튼은 `보던 문제로 돌아가기`를 이름으로 가진 테두리 없는 아이콘 버튼이다(사용자 피드백 2026-11-07). secondary 버튼은 채움을 유지한다(사용자 정정 2026-11-06: 지운 것은 footer 영역의 배경이지 버튼의 배경이 아니다). 유리 안에서 그 채움은 `--color-surface-raised`이고(light 흰색, dark `#27313E`), dark의 raised와 `--color-state-hover`가 거의 같아 hover는 `--color-state-pressed`다. 입력·primary·toggle은 그대로다.
 - **하단·상단 고정 영역:** panel `.footer`와 `.pinned`, 풀이 footer에는 채움이 없다. body는 footer 뒤로 지나가지 않고 위에서 잘리므로(같은 flex column) hairline 구분선만 남긴다. AI 질문 composer는 `glass-surface`다. 뒤로 메시지가 지나가므로 blur가 글자를 지운다.
-- **아이콘 전용 버튼:** 모든 variant가 테두리를 투명하게 한다(toggle 제외). 크기는 그대로다.
+- **아이콘 전용 버튼:** 모든 variant가 테두리를 투명하게 한다. 즐겨찾기·다시 풀기 표시(`.qz-study-toggle`)와 풀이 footer의 `다시 풀기`도 테두리가 없다(사용자 피드백 2026-11-07, 켜짐은 아이콘 fill 반전으로 전달). 그 밖의 toggle(heatmap 필터 등 `aria-pressed`)은 테두리를 유지한다. 크기는 그대로다.
 - **Hover:** `cursor: pointer`인 모든 버튼·버튼처럼 쓰는 링크는 `@media (hover: hover)`에서 색이 바뀐다. 터치에서 hover가 남지 않는다. 텍스트 링크는 `--color-accent-hover`, 나머지는 `--color-state-hover`다. `packages/ui/test/button-hover.test.ts`가 검사한다.
 - **Header:** global header는 `glass-surface`이고 gradient 층만 없다.
 - **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 page 폭 전체를 차지하며(사용자 피드백 2026-11-07), 맨 위에서는 완전 투명·blur 없음이다. 고정되면(`data-stuck`) canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 고정됐을 때만 불투명 canvas다.
@@ -79,7 +79,7 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 **회색 영역:** panel의 해설 영역은 light와 dark에서 불투명한 `--color-surface-muted` 배경이다.
 
 ### UX12-GLASSBTN-AC05
-**아이콘 전용 버튼:** 홈의 secondary 아이콘 버튼(`이력`)은 테두리가 투명한 1px이고 크기는 36px을 유지한다. 즐겨찾기 같은 toggle은 테두리가 보인다.
+**아이콘 전용 버튼:** 홈의 secondary 아이콘 버튼(`이력`)은 테두리가 투명한 1px이고 크기는 36px을 유지한다. 즐겨찾기 같은 study toggle도 테두리가 투명한 1px이다(2026-11-07).
 
 ### UX12-GLASSBTN-AC06
 **Heatmap 확대:** cell에 pointer를 올리면 marker가 1.3배가 되고 cell 위치는 변하지 않는다. 부모가 marker를 자르지 않는다.

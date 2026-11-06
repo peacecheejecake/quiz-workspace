@@ -203,14 +203,16 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC05 icon-only buttons of every variant drop the border, toggles keep it',
+  'UX12-GLASSBTN-AC05 icon-only buttons of every variant drop the border, and so do the study toggles',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-05');
     const panel = await openPanel(page);
     const favorite = panelUi.favoriteOn(panel);
     await expect(favorite).toBeVisible();
-    expect((await surfaceOf(favorite)).border).not.toBe(TRANSPARENT);
+    const favoriteStyle = await surfaceOf(favorite);
+    expect(favoriteStyle.border).toBe(TRANSPARENT); // HOME-TOGGLE: the study toggles are borderless
+    expect(favoriteStyle.borderWidth).toBe('1px');
     await panelUi.close(panel).click();
 
     await page.goto(homePath(ws.id));

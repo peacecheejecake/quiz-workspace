@@ -14,8 +14,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Disables the button, sets `aria-busy` and shows a spinner next to the label. */
   loading?: boolean;
   /**
-   * Ghost only: hides the border for back, header trigger, expand/collapse, 더 보기 and list title
-   * buttons (UX12-CONTROLS). Other ghost text buttons keep their boundary.
+   * Hides the border for back, header trigger, expand/collapse, 더 보기, list title and the viewer's
+   * `다시 풀기` buttons (UX12-CONTROLS, HOME-TOGGLE). Other text buttons keep their boundary.
    */
   borderless?: boolean;
   /** Render the single child (e.g. a link) with button styles instead of a `<button>`. */

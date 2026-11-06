@@ -8,9 +8,9 @@
 
 ## 규칙
 
-- **경계 없는 버튼은 두 종류뿐이다.** 아이콘 전용 버튼(`IconButton` 모든 variant, toggle 제외, [UX12-GLASSBTN](ux12-glass-buttons.md))과 `borderless` prop을 준 ghost 텍스트 버튼이다. 기능 CSS의 버튼은 제목·접기/펼치기·아이콘 전용 손잡이만 경계를 없앤다.
+- **경계 없는 버튼은 두 종류뿐이다.** 아이콘 전용 버튼(`IconButton` 모든 variant, [UX12-GLASSBTN](ux12-glass-buttons.md)), `borderless` prop을 준 텍스트 버튼, 즐겨찾기·다시 풀기 표시 study toggle(`.qz-study-toggle`, HOME-TOGGLE 2026-11-07 사용자 피드백)이다. 그 밖의 toggle은 경계를 유지한다. 기능 CSS의 버튼은 제목·접기/펼치기·아이콘 전용 손잡이만 경계를 없앤다.
 - **`borderless`는** 뒤로가기, 프로필·Workspace 전환 등 header trigger, 접기/펼치기, `더 보기`, 목록 항목 제목 버튼에만 쓴다. 그 밖의 ghost 텍스트 버튼(AI 질문의 `복사`, `도움이 안 됨` 등)은 경계를 유지한다.
-- **나머지 컨트롤은 경계를 유지한다.** primary, secondary, toggle(`aria-pressed`, `data-state="on|off"`), tab, 입력 등 form 컨트롤이다.
+- **나머지 컨트롤은 경계를 유지한다.** primary, secondary, toggle(`aria-pressed`, `data-state="on|off"`, study toggle 제외), tab, 입력 등 form 컨트롤이다.
 - **크기는 바뀌지 않는다.** 경계를 없앤 버튼도 1px 투명 테두리를 유지한다(`button.qz-back-link`는 링크와 같은 테두리 없음).
 - **hover 배경이 경계를 대신한다.** 경계 없는 버튼과 제목 버튼·링크는 `@media (hover: hover)`에서 `--color-state-hover` 배경을 얻는다.
 - **forced-colors에서는 경계가 돌아온다.** 경계 없는 kit 버튼도 `ButtonText` 테두리를 그린다.

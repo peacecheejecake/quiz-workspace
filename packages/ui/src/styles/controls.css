@@ -86,15 +86,14 @@
 
 /*
  * The only buttons without a visible boundary (UX12-CONTROLS, UX12-GLASSBTN): icon-only buttons of
- * every variant and ghost text buttons marked `borderless`; toggles keep theirs. The transparent
- * border keeps their size; hover fills the background.
+ * every variant, text buttons marked `borderless`, and the favorite / retry study toggles
+ * (HOME-TOGGLE, user feedback 2026-11-07); other toggles keep theirs. The transparent border keeps
+ * their size; hover fills the background. A study toggle's "on" state is the inverted icon, never
+ * the border.
  */
 .qz-icon-button:not([aria-pressed], [data-state='on'], [data-state='off']),
-.qz-button[data-variant='ghost'][data-borderless]:not(
-    [aria-pressed],
-    [data-state='on'],
-    [data-state='off']
-  ) {
+.qz-button[data-borderless]:not([aria-pressed], [data-state='on'], [data-state='off']),
+.qz-icon-button.qz-study-toggle[data-state] {
   border-color: transparent;
 }
 
@@ -181,11 +180,8 @@
 
   /* Same selector as the transparent rule above, so the boundary returns here. */
   .qz-icon-button:not([aria-pressed], [data-state='on'], [data-state='off']),
-  .qz-button[data-variant='ghost'][data-borderless]:not(
-      [aria-pressed],
-      [data-state='on'],
-      [data-state='off']
-    ) {
+  .qz-button[data-borderless]:not([aria-pressed], [data-state='on'], [data-state='off']),
+  .qz-icon-button.qz-study-toggle[data-state] {
     border-color: ButtonText;
   }
 
