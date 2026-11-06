@@ -279,7 +279,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | VIEW-1 | 2 | 진행 | |
 | VIEW-2 | 2 | 진행 | |
 | EXPL-1 | 2 | 진행 | |
-| EXPL-2 | 2 | 진행 | |
+| EXPL-2 | 2 | 완료 | a52aae6c · Codex P2(옛 ID stream 차단) 수정 후 재리뷰 통과, 통합 18·pytest 18 GREEN |
 | HOME-2 | 2 | 진행 | |
 | HOME-3 | 2 | 대기 | |
 | HOME-4 | 3 | 진행 | |
