@@ -167,12 +167,7 @@ export function HighlightMenu({
         ? null
         : createPortal(
             <RadixDropdownMenu.Trigger asChild>
-              <span
-                aria-hidden="true"
-                tabIndex={-1}
-                style={anchorStyle}
-                data-highlight-anchor=""
-              />
+              <span aria-hidden="true" tabIndex={-1} style={anchorStyle} data-highlight-anchor="" />
             </RadixDropdownMenu.Trigger>,
             document.body,
           )}

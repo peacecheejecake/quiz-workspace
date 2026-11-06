@@ -65,9 +65,7 @@ test(
     await dragSelect(body, PHRASE_A);
     const menu = highlightUi.menu(page);
     await expect(menu).toBeVisible();
-    await expect
-      .poll(() => menu.evaluate((el) => el.contains(document.activeElement)))
-      .toBe(true);
+    await expect.poll(() => menu.evaluate((el) => el.contains(document.activeElement))).toBe(true);
     await expect.poll(() => selectionText(page)).toBe(PHRASE_A);
 
     // Hovering an item moves focus to it.

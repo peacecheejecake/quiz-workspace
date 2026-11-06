@@ -108,7 +108,7 @@ export interface HighlightToolOptions {
   readonly target: HighlightTargetInput;
   /** The `HighlightableText` (its `ref`); the menu returns focus there. */
   readonly areaRef: RefObject<HTMLDivElement | null>;
-  /** A highlight was made (the explanation's "모았습니다" notice). */
+  /** A new highlight was made, not a recolor (the explanation's "모았습니다" toast). */
   readonly onCreated?: (created: MyHighlight) => void;
 }
 
