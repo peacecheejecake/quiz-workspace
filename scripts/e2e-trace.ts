@@ -136,6 +136,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
   // UX12 ASK: the conversation list's FAB, the floating composer and the answer labels (D-10).
   'UX12-ASK.0': ['UX12-ASK'],
+  // UX12 EXTRACT-8 (2026-11-06): merged table cells in the document view.
+  'UX12-SPANS.0': ['UX12-SPANS'],
 };
 
 const LEADING_ID = new RegExp(

@@ -12564,6 +12564,34 @@
         "title": "SummaryUsage",
         "type": "object"
       },
+      "TableCellSpan": {
+        "properties": {
+          "col": {
+            "title": "Col",
+            "type": "integer"
+          },
+          "col_span": {
+            "title": "Col Span",
+            "type": "integer"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "row_span": {
+            "title": "Row Span",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "col",
+          "row_span",
+          "col_span"
+        ],
+        "title": "TableCellSpan",
+        "type": "object"
+      },
       "TableCells": {
         "properties": {
           "header_rows": {
@@ -12571,6 +12599,7 @@
             "type": "integer"
           },
           "rows": {
+            "description": "Rectangular grid: merged cells repeat their text.",
             "items": {
               "items": {
                 "type": "string"
@@ -12579,6 +12608,21 @@
             },
             "title": "Rows",
             "type": "array"
+          },
+          "spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TableCellSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Merged cells; null when none are known.",
+            "title": "Spans"
           }
         },
         "required": [

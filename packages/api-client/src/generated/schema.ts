@@ -7956,8 +7956,27 @@ export type components = {
     TableCells: {
       /** Header Rows */
       header_rows: number;
-      /** Rows */
+      /**
+       * Rows
+       * @description Rectangular grid: merged cells repeat their text.
+       */
       rows: string[][];
+      /**
+       * Spans
+       * @description Merged cells; null when none are known.
+       */
+      spans?: components['schemas']['TableCellSpan'][] | null;
+    };
+    /** TableCellSpan */
+    TableCellSpan: {
+      /** Col */
+      col: number;
+      /** Col Span */
+      col_span: number;
+      /** Row */
+      row: number;
+      /** Row Span */
+      row_span: number;
     };
     /** TextRange */
     TextRange: {

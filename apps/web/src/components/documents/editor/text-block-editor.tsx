@@ -20,6 +20,7 @@ import {
 import { IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import { blockPage } from '@/lib/documents/outline';
+import { tableGrid } from '@/lib/documents/table-grid';
 import { answerLines, optionLabel, QUESTION_TYPE_LABELS } from '@/lib/documents/document-questions';
 import { blockPageSpan, type PageGroup, type QuestionItem } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
@@ -52,21 +53,23 @@ const TYPE_LABELS: Readonly<Record<ContentBlock['type'], string>> = {
 
 function BlockContent({ block }: { readonly block: ContentBlock }) {
   if (block.type === 'table' && block.table) {
-    const { rows, header_rows: headerRows } = block.table;
+    const headerRows = block.table.header_rows;
     return (
       <div className={styles.tableScroll}>
         <table className={styles.table}>
           <tbody>
-            {rows.map((row, r) => (
+            {tableGrid(block.table).map((row, r) => (
               // Table rows and cells have no ids; their position is their identity.
               <tr key={r}>
-                {row.map((cell, c) =>
+                {row.map(({ col, text, rowSpan, colSpan }) =>
                   r < headerRows ? (
-                    <th key={c} scope="col">
-                      {cell}
+                    <th key={col} scope="col" rowSpan={rowSpan} colSpan={colSpan}>
+                      {text}
                     </th>
                   ) : (
-                    <td key={c}>{cell}</td>
+                    <td key={col} rowSpan={rowSpan} colSpan={colSpan}>
+                      {text}
+                    </td>
                   ),
                 )}
               </tr>
