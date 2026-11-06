@@ -14,6 +14,7 @@ from book_core.llm import (
     TextMessage,
     TextStreamEnd,
     TextStreamRequest,
+    TextStreamUsage,
 )
 from book_core.llm.anthropic_stream import AnthropicTextStreamClient
 
@@ -64,6 +65,9 @@ def test_streams_text_deltas_then_usage_and_stop_reason() -> None:
 
     events = list(_client(httpx.MockTransport(handle)).stream_text(REQUEST))
     assert [e.text for e in events if isinstance(e, TextDelta)] == ["가나", "다"]
+    first = events[0]
+    assert isinstance(first, TextStreamUsage)  # known before the text: a stream closed early has it
+    assert first.usage.input_tokens == 12
     end = events[-1]
     assert isinstance(end, TextStreamEnd)
     assert end.truncated
@@ -138,6 +142,7 @@ def test_a_stream_cut_before_message_stop_is_an_error_without_its_text() -> None
     )
     client = _client(httpx.MockTransport(lambda _r: httpx.Response(200, content=body)))
     events = client.stream_text(REQUEST)
+    assert isinstance(next(events), TextStreamUsage)
     assert isinstance(next(events), TextDelta)
     with pytest.raises(LLMProviderError) as caught:
         list(events)

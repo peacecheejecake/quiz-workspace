@@ -1,7 +1,9 @@
 """Plain-text streaming over an LLM provider (ASK-B: AI questions, AI explanations).
 
 ``TextStreamClient.stream_text`` yields the answer as it is produced: ``TextDelta`` events, then
-exactly one ``TextStreamEnd`` with the stop reason and token usage. Closing the generator early
+exactly one ``TextStreamEnd`` with the stop reason and token usage. A client that knows part of the
+usage early says so in a ``TextStreamUsage`` (a caller that closes the stream gets no end event);
+callers that read the stream to its end ignore it. Closing the generator early
 (``close()``) aborts the provider stream. Errors are :class:`LLMProviderError` whose message is
 built from metadata only (status, error type, stop reason), never prompt or output text.
 
@@ -72,7 +74,14 @@ class TextStreamEnd:
         return self.stop_reason == "max_tokens"
 
 
-TextStreamEvent = TextDelta | TextStreamEnd
+@dataclass(frozen=True, slots=True)
+class TextStreamUsage:
+    """The usage known so far: the input side as the provider reports it when the call starts."""
+
+    usage: LLMUsage
+
+
+TextStreamEvent = TextDelta | TextStreamUsage | TextStreamEnd
 
 
 @runtime_checkable

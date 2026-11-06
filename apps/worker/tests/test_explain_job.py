@@ -19,7 +19,14 @@ from book_core.explain import (
     FakeExplainer,
     explain_question,
 )
-from book_core.llm import LLMProviderError, TextDelta, TextStreamEvent
+from book_core.llm import (
+    LLMProviderError,
+    LLMUsage,
+    TextDelta,
+    TextStreamEnd,
+    TextStreamEvent,
+    TextStreamUsage,
+)
 from quiz_worker.ask_store import LiveDocument, Usage
 from quiz_worker.explain_job import ExplainJobDeps, ExplainPayloadV1, run_explain
 from quiz_worker.explain_store import ExplanationRow, FinishOutcome, PinnedPassage
@@ -285,8 +292,69 @@ def test_ux12_explcancel_a_cancel_closes_the_provider_stream_and_records_usage()
     assert llm.read == 2
     assert not store.finished
     assert not store.failed
-    assert [u.llm_calls for u in store.stopped if u] == [1]
+    usage = store.stopped[0]
+    assert usage is not None
+    assert usage.llm_calls == 1
+    # No TextStreamEnd arrived: the estimate keeps the paid call under the monthly cap.
+    assert usage.input_tokens >= 10
+    assert usage.output_tokens >= len("정답: 1번\n요약\n") // 2
     assert {event for event, _, _ in stream.events} <= {"delta"}
+
+
+class ReportsItsInput:
+    """The provider's start event, then a delta, cancelled before the end."""
+
+    model_name = "fake-ai-explanation"
+
+    def __init__(self, store: FakeStore) -> None:
+        self.store = store
+
+    def stream(self, _request: ExplainRequest, _meta: ExplainCallMeta) -> Iterator[TextStreamEvent]:
+        yield TextStreamUsage(LLMUsage(input_tokens=321, cache_read_input_tokens=9))
+        self.store.status_value = "failed"
+        yield TextDelta(text="가" * 40)
+
+
+def test_ux12_explcancel_a_cancel_counts_the_input_the_provider_reported() -> None:
+    store = FakeStore()
+    _run(store, ReportsItsInput(store))
+    usage = store.stopped[0]
+    assert usage is not None
+    assert (usage.input_tokens, usage.cache_read_tokens) == (321, 9)
+    assert usage.output_tokens == 20
+
+
+class SecondCallCancelled:
+    """A complete first call that leaves an option out, then a second one cancelled mid-way."""
+
+    model_name = "fake-ai-explanation"
+
+    def __init__(self, store: FakeStore) -> None:
+        self.store = store
+        self.calls = 0
+
+    def stream(self, _request: ExplainRequest, _meta: ExplainCallMeta) -> Iterator[TextStreamEvent]:
+        self.calls += 1
+        if self.calls == 1:
+            yield TextDelta(text="정답: opt-1\n")
+            yield TextStreamEnd(
+                model="m",
+                stop_reason="end_turn",
+                usage=LLMUsage(input_tokens=100, output_tokens=50),
+            )
+            return
+        yield TextStreamUsage(LLMUsage(input_tokens=200))
+        self.store.status_value = "failed"
+        yield TextDelta(text="가" * 10)
+
+
+def test_ux12_explcancel_the_interrupted_call_adds_to_the_finished_one() -> None:
+    store = FakeStore()
+    _run(store, SecondCallCancelled(store))
+    usage = store.stopped[0]
+    assert usage is not None
+    assert usage.llm_calls == 2
+    assert (usage.input_tokens, usage.output_tokens) == (300, 55)
 
 
 def test_ux12_explcancel_the_stop_check_is_throttled(fake: FakeExplainer) -> None:

@@ -26,7 +26,10 @@ Payload (written by apps/api `POST …/ai-explanation`, `…/regenerate`, bank a
 Cancelling (UX12-EXPLCANCEL): the API finishes the row. The loop reads its status at most every
 `stop_check_seconds` and before every provider call, closes the provider stream, records what the
 run spent (`stopped`) and stops; a cancel that wins the race with the finish write ends the same
-way. Nothing more is written to the Redis Stream: the stream routes see the row's status.
+way. A closed stream has no `TextStreamEnd`, so the interrupted call counts the input the provider
+reported at its start and an estimate of the rest (`_Tokens.interrupted`): the monthly cap has to
+see a paid call. Nothing more is written to the Redis Stream: the stream routes see the row's
+status.
 
 The job result holds counts, usage and codes only (C06); logs carry ids and counts only.
 
@@ -43,6 +46,7 @@ import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import Any, Literal
 
@@ -59,7 +63,14 @@ from book_core.explain import (
     finish_explanation,
 )
 from book_core.explain.output import ANSWER_MISMATCH
-from book_core.llm import LLMProviderError, TextDelta, TextStreamEnd, TextStreamEvent
+from book_core.llm import (
+    LLMProviderError,
+    LLMUsage,
+    TextDelta,
+    TextStreamEnd,
+    TextStreamEvent,
+    TextStreamUsage,
+)
 from book_core.llm.config import Effort
 from pydantic import BaseModel, ConfigDict
 
@@ -84,6 +95,8 @@ PASSAGE_CHARS = 2000
 EFFORT: Effort = "low"
 # One re-request when an option is missing (C04); the provider call itself is not retried.
 MAX_CALLS = 2
+# Estimating an interrupted call: Korean text runs near two characters per token, so this errs high.
+CHARS_PER_TOKEN = 2
 
 
 class ExplainPayloadV1(BaseModel):
@@ -214,6 +227,31 @@ class _Tokens:
         self.calls = 0
         self.input = self.output = self.cache_read = self.cache_creation = 0
         self.cost: float | None = None
+        self._prompt_chars = 0
+        self._reported: LLMUsage | None = None
+        self._received_chars = 0
+
+    def begin(self, prompt_chars: int) -> None:
+        self.calls += 1
+        self._prompt_chars = prompt_chars
+        self._reported = None
+        self._received_chars = 0
+
+    def reported(self, usage: LLMUsage) -> None:
+        self._reported = usage
+
+    def received(self, text: str) -> None:
+        self._received_chars += len(text)
+
+    def interrupted(self) -> None:
+        """The call being read was closed before its `TextStreamEnd`: what the provider reported,
+        an estimate from the characters for the rest. Text the model made but nobody read is not
+        in it, nor is the cost, which only the provider's final count gives."""
+        known = self._reported or LLMUsage()
+        self.input += known.input_tokens or ceil(self._prompt_chars / CHARS_PER_TOKEN)
+        self.cache_read += known.cache_read_input_tokens
+        self.cache_creation += known.cache_creation_input_tokens
+        self.output += max(known.output_tokens, ceil(self._received_chars / CHARS_PER_TOKEN))
 
     def add(self, end: TextStreamEnd) -> None:
         self.input += end.usage.input_tokens
@@ -310,20 +348,24 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             stream.reset()
         shown = ExplanationStream(question)
         end: TextStreamEnd | None = None
-        tokens.calls += 1
+        tokens.begin(len(request.system) + len(request.prompt))
         events: Iterator[TextStreamEvent] | None = None
         try:
             events = llm.stream(request, meta)
             for event in events:
                 if isinstance(event, TextDelta):
+                    tokens.received(event.text)
                     if cancelled():
                         raise _CancelledError
                     stream.delta(shown.feed(event.text))
+                elif isinstance(event, TextStreamUsage):
+                    tokens.reported(event.usage)
                 elif isinstance(event, TextStreamEnd):
                     end = event
             stream.delta(shown.finish())
         except _CancelledError:
             _close(events)
+            tokens.interrupted()
             return stop()
         except AnswerMismatchError:
             _close(events)

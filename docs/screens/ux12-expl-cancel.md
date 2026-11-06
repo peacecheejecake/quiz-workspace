@@ -23,6 +23,7 @@
 - 저장값은 `status='failed'`, `error_code='cancelled'`다. `quiz_api`에는 이 전이만 허용하는 update 권한과 policy가 필요해 migration `20261106120000_ai_explanation_cancel.sql`을 추가했다 (계획 초안의 "migration 불필요"는 check 제약만 본 판단이었고, `quiz_api`에는 update 권한이 없었다).
 - 취소된 행은 state에서 없는 것으로 읽는다. 진행 중이던 SSE는 `error {code: "cancelled"}`로 끝나고, 화면은 이를 실패로 보이지 않는다.
 - Worker는 streaming 중 상태를 throttle해서 확인하고 provider call마다 먼저 확인한다. 취소를 보면 provider stream을 닫고 사용량을 기록한 뒤 멈춘다.
+- **취소한 호출의 사용량은 추정값이 섞여 있다.** 닫은 stream에는 `TextStreamEnd`가 없다. 입력 토큰은 provider가 시작할 때 보고한 값을 쓰고(`TextStreamUsage`), 그 값이 없으면 프롬프트 글자 수 ÷ 2로 추정한다. 출력 토큰은 받은 글자 수 ÷ 2로 추정한다. 한국어 기준으로 크게 잡은 값이며, 월간 토큰 한도가 비용이 든 호출을 놓치지 않게 하려는 것이다. 받지 못한 출력과 thinking 토큰은 포함되지 않고 `cost_usd`는 계산하지 않는다.
 
 ## 수용 기준
 
