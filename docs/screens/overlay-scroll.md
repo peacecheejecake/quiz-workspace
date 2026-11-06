@@ -14,13 +14,14 @@ route: (모든 Workspace 홈 overlay)
 actor: any signed-in member
 permission: read
 status: confirmed
-components: [ModalDialog, ConfirmDialog, FloatingSidePanel, Popover, DropdownMenu]
+components: [ModalDialog, ConfirmDialog, FloatingSidePanel, Popover, DropdownMenu, Select]
 linked_tests: [UX9-SCROLL-AC01 … UX9-SCROLL-AC04]
 ```
 
 ## 규칙
 
-- overlay 안에서 시작한 scroll은 아래 페이지로 이어지지 않는다(design-system §5.3). 공통 overscroll guard가 모든 floating 표면 — `FloatingSidePanel`(docked 제외), `ModalDialog`, `ConfirmDialog`, 모바일 drawer, `Popover`, `DropdownMenu` — 에 적용된다. pinch-zoom과 ctrl+wheel 확대는 건드리지 않는다. docked panel(DOCVIEW-01 목차)은 페이지 배치의 일부라 guard 대상이 아니다.
+- overlay 안에서 시작한 scroll은 아래 페이지로 이어지지 않는다(design-system §5.3). 공통 overscroll guard가 모든 floating 표면 — `FloatingSidePanel`(docked 제외), `ModalDialog`, `ConfirmDialog`, 모바일 drawer, `Popover`, `DropdownMenu`, `Select` — 에 적용된다. pinch-zoom과 ctrl+wheel 확대는 건드리지 않는다. docked panel(DOCVIEW-01 목차)은 페이지 배치의 일부라 guard 대상이 아니다.
+- modal panel 밖으로 portal된 floating 목록(`Popover`, `DropdownMenu`, `Select`, picker)도 터치와 휠로 스크롤된다. 표면의 guard가 판단하고 스크롤 잠금은 그 판단을 뒤집지 않는다([UX12-CHAPTERSCROLL](ux12-doc-count-chapter-scroll.md)).
 - overlay 밖에서 시작한 scroll은 non-modal overlay가 열려 있어도 페이지를 움직인다.
 - 모바일 가상키보드가 열리면 panel과 dialog는 키보드에 가리지 않는 영역 안으로 줄어든다([UX12-KEYBOARD](ux12-keyboard.md), UX12 SHELL-5 개정). 이 보정은 위치와 높이만 바꾸며 위의 scroll 격리와 pinch-zoom 규칙은 그대로다. 사용자가 확대한 동안에는 보정하지 않는다.
 

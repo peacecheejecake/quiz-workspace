@@ -294,8 +294,8 @@ export function ChapterPicker({
       error={error}
       className={fieldClassName}
     >
-      {/* Modal like the `Select` it replaces: inside a modal panel only the top scroll lock lets
-          the wheel through, and a tap outside closes the sheet without pressing what is under it. */}
+      {/* Modal like the `Select` it replaces: a tap outside closes the sheet without pressing what
+          is under it. */}
       <Popover modal open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           id={ids.id}

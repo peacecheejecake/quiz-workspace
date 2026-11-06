@@ -70,7 +70,6 @@ import { DocumentLibraryFeedback } from '@/components/documents/document-library
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
 import { useSummaryActivity } from '@/components/documents/summary/use-summary-activity';
-import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { QuestionDuplicates } from '@/components/questions/duplicates/question-duplicates';
@@ -547,7 +546,6 @@ function WorkspaceHomeContent({
     summaryAvailable,
   });
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
-  const bookCount = bodyDocumentCount(library.documents);
   const summaryActivity = useSummaryActivity(workspace.id, isOpen('documents'));
   // Only this workspace's documents: another workspace's id (even one the user can read) is
   // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
@@ -915,7 +913,7 @@ function WorkspaceHomeContent({
         <div className={styles.actionGroup}>
           <QuestionMenu
             readOnly={readOnly}
-            documentCount={bookCount}
+            documentCount={library.rows.length}
             searchHref={searchPagePath(workspace.id)}
             onDocuments={() => setPanel('documents', true)}
             onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}

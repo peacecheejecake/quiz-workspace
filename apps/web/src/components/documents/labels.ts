@@ -1,7 +1,7 @@
 // DOC-01 display labels (Korean first). Status text always accompanies color (Badge dot is
 // secondary), so state is never conveyed by color alone.
-import type { DocumentKind, DocumentSummary } from '@/lib/documents/client-api';
-import { documentKind, type DocumentRow, type UploadPhase } from '@/lib/documents/upload-machine';
+import type { DocumentKind } from '@/lib/documents/client-api';
+import type { DocumentRow, UploadPhase } from '@/lib/documents/upload-machine';
 
 /** The kind badge text (UX6-UPLOAD): what the PDF is, never conveyed by colour. */
 export const DOCUMENT_KIND_LABELS: Readonly<Record<DocumentKind, string>> = {
@@ -23,15 +23,6 @@ export const KIND_PENDING_LABEL = '분석 중';
 export function kindBadgeLabel(row: Pick<DocumentRow, 'kind' | 'status'>): string | null {
   if (row.kind) return DOCUMENT_KIND_LABELS[row.kind];
   return row.status === 'uploading' || row.status === 'processing' ? KIND_PENDING_LABEL : null;
-}
-
-/** PDFs with body text (교재, 교재+문제): what `문서 n` counts (UX6-UPLOAD). */
-export function hasBodyText(kind: DocumentKind | null): boolean {
-  return kind === 'book' || kind === 'mixed';
-}
-
-export function bodyDocumentCount(documents: readonly DocumentSummary[]): number {
-  return documents.filter((d) => hasBodyText(documentKind(d))).length;
 }
 
 const UPLOAD_PHASE_LABELS: Partial<Record<UploadPhase, string>> = {
