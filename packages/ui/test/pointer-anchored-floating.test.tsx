@@ -80,6 +80,46 @@ describe('PointerAnchoredFloating', () => {
     }
   });
 
+  it('a slow crossing of the gap keeps it open; moving past the gap closes it', () => {
+    vi.useFakeTimers();
+    try {
+      render(<Footnote />);
+      const link = screen.getByRole('link', { name: '[1]' });
+      fireEvent.pointerEnter(link, { pointerType: 'mouse', clientX: 40, clientY: 50 });
+      act(() => {
+        vi.advanceTimersByTime(TOOLTIP_DELAY_MS + 10);
+      });
+      const tip = screen.getByRole('tooltip');
+      vi.spyOn(tip, 'getBoundingClientRect').mockReturnValue(new DOMRect(48, 58, 360, 200));
+
+      fireEvent.pointerLeave(link, { pointerType: 'mouse' });
+      fireEvent.pointerMove(document.body, { pointerType: 'mouse', clientX: 41, clientY: 52 });
+      act(() => {
+        vi.advanceTimersByTime(POINTER_FLOATING_CLOSE_MS * 3);
+      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+      // Back on the trigger, outside the gap: still open.
+      fireEvent.pointerMove(link, { pointerType: 'mouse', clientX: 20, clientY: 20 });
+      act(() => {
+        vi.advanceTimersByTime(POINTER_FLOATING_CLOSE_MS * 3);
+      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+      fireEvent.pointerMove(document.body, { pointerType: 'mouse', clientX: 10, clientY: 10 });
+      act(() => {
+        vi.advanceTimersByTime(POINTER_FLOATING_CLOSE_MS - 10);
+      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(20);
+      });
+      expect(screen.queryByRole('tooltip')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('opens at once for keyboard focus and closes on Escape, blur and scroll', async () => {
     const user = userEvent.setup();
     render(

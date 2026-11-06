@@ -88,6 +88,15 @@ function focusVisible(el: Element): boolean {
   return keyboardModality;
 }
 
+function withinGap(box: DOMRect, x: number, y: number): boolean {
+  return (
+    x >= box.left - POINTER_OFFSET &&
+    x <= box.right + POINTER_OFFSET &&
+    y >= box.top - POINTER_OFFSET &&
+    y <= box.bottom + POINTER_OFFSET
+  );
+}
+
 function FloatingBody({
   content,
   mode,
@@ -104,7 +113,8 @@ function FloatingBody({
  * Hover preview hung from the point where the pointer entered (design-system §5.4): opens after
  * `delay` at the last pointer position and then stays put; keyboard focus-visible opens it at once
  * on the trigger itself; a touch tap opens it (as a dialog) when `openOnTap`. It closes 120 ms
- * after the pointer left trigger and floating, on Escape (only the floating), on blur and when a
+ * after the pointer left trigger and floating (the gap around the floating counts as the floating,
+ * however slowly the pointer crosses it), on Escape (only the floating), on blur and when a
  * container scrolls. Non-interactive content is a `role="tooltip"` describing the trigger.
  */
 export function PointerAnchoredFloating({
@@ -142,35 +152,43 @@ export function PointerAnchoredFloating({
     },
   });
 
-  const show = useCallback((next: OpenState) => {
-    window.clearTimeout(openTimer.current);
+  const cancelClose = useCallback(() => {
     window.clearTimeout(closeTimer.current);
-    stateRef.current = next;
-    setState(next);
-    changed.current?.(true);
+    closeTimer.current = undefined;
   }, []);
+
+  const show = useCallback(
+    (next: OpenState) => {
+      window.clearTimeout(openTimer.current);
+      cancelClose();
+      stateRef.current = next;
+      setState(next);
+      changed.current?.(true);
+    },
+    [cancelClose],
+  );
 
   const hide = useCallback(() => {
     window.clearTimeout(openTimer.current);
-    window.clearTimeout(closeTimer.current);
+    cancelClose();
     if (stateRef.current === null) return;
     stateRef.current = null;
     setState(null);
     changed.current?.(false);
-  }, []);
+  }, [cancelClose]);
 
   const hideSoon = useCallback(() => {
-    window.clearTimeout(closeTimer.current);
+    cancelClose();
     closeTimer.current = window.setTimeout(hide, POINTER_FLOATING_CLOSE_MS);
-  }, [hide]);
+  }, [cancelClose, hide]);
 
   useEffect(() => {
     trackModality(document);
     return () => {
       window.clearTimeout(openTimer.current);
-      window.clearTimeout(closeTimer.current);
+      cancelClose();
     };
-  }, []);
+  }, [cancelClose]);
 
   // Scrolling the page or a container closes it (not scrolling inside the floating).
   useEffect(() => {
@@ -183,6 +201,24 @@ export function PointerAnchoredFloating({
     window.addEventListener('scroll', onScroll, true);
     return () => window.removeEventListener('scroll', onScroll, true);
   }, [state, hide]);
+
+  // The floating hangs `POINTER_OFFSET` from the pointer, so reaching it means crossing a gap that
+  // is neither trigger nor floating: that gap counts as the floating, at any pointer speed.
+  const hovering = state?.mode === 'hover';
+  useEffect(() => {
+    if (!hovering) return undefined;
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      const box = floatingRef.current?.getBoundingClientRect();
+      if (box && withinGap(box, event.clientX, event.clientY)) {
+        cancelClose();
+        return;
+      }
+      const onTrigger = event.target instanceof Node && triggerRef.current?.contains(event.target);
+      if (!onTrigger && closeTimer.current === undefined) hideSoon();
+    };
+    document.addEventListener('pointermove', onPointerMove, true);
+    return () => document.removeEventListener('pointermove', onPointerMove, true);
+  }, [hovering, cancelClose, hideSoon]);
 
   useEffect(() => {
     if (disabled) hide();
@@ -214,7 +250,7 @@ export function PointerAnchoredFloating({
         onPointerEnter={(event: PointerEvent<HTMLElement>) => {
           lastPointer.current = event.pointerType;
           if (disabled || event.pointerType === 'touch') return;
-          window.clearTimeout(closeTimer.current);
+          cancelClose();
           point.current = { x: event.clientX, y: event.clientY };
           if (stateRef.current) return;
           window.clearTimeout(openTimer.current);
@@ -285,7 +321,7 @@ export function PointerAnchoredFloating({
               event.preventDefault();
             }
           }}
-          onPointerEnter={() => window.clearTimeout(closeTimer.current)}
+          onPointerEnter={cancelClose}
           onPointerLeave={() => {
             if (stateRef.current?.mode === 'hover') hideSoon();
           }}

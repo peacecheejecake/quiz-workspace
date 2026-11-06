@@ -40,6 +40,8 @@ async function openStem(
   await overviewUi.dot(page, 1).click();
   const panel = panelUi.numbered(page, 1);
   await expect(panel).toBeVisible();
+  // The stem first shows as the loading preview, and the loaded body replaces those elements.
+  await expect(panelUi.options(panel).first()).toBeVisible();
   return { owner, question, panel };
 }
 
@@ -130,10 +132,10 @@ for (const [label, viewport] of [
         `ux12-passage-4-${viewport.width}`,
         STEM.replace('가람시 나무동 12', `가람시 ${'나무동'.repeat(30)} 12`),
       );
-      const first = box(panel, '<물건 현황>');
-      await expect(first).toBeVisible();
+      const parts = [box(panel, '<물건 현황>'), box(panel, '<보유 자산>'), items(panel)];
+      for (const part of parts) await expect(part).toBeVisible();
       const panelBox = await panel.boundingBox();
-      for (const part of [first, box(panel, '<보유 자산>'), items(panel)]) {
+      for (const part of parts) {
         const area = await part.boundingBox();
         if (!panelBox || !area) throw new Error('boxes must be laid out');
         expect(area.x).toBeGreaterThanOrEqual(panelBox.x);
