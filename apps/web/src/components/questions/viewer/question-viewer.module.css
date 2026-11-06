@@ -109,8 +109,9 @@
 /*
  * One MCQ option row (UX7-QDISPLAY, QPLAY-01-AC12, design-system §4.1 "채점 결과 테두리"): the
  * 2px border is always there and transparent until the answer is graded, and the end padding
- * always keeps the room of the 16px result icon, so a result never moves or rewraps anything. The
- * icon and the hidden description carry the meaning; color only reinforces it (UX12-OPTIONS).
+ * always keeps the room it had for the result icon, so a result never moves or rewraps anything.
+ * The hidden description carries the meaning; the border only reinforces it (UX12-OPTIONS,
+ * RESULT-MARKS: no check/X icons, no border on a wrong pick).
  */
 .option {
   position: relative;
@@ -120,14 +121,11 @@
   border-radius: var(--radius-md);
 }
 
-/* Result borders and marks use the heatmap's green and red (VIEW-RESULT 2026-11-07); the check and
-   X icons carry the state, so the fill's lower contrast is not the only signal. */
+/* Result borders use the heatmap's green and red (VIEW-RESULT 2026-11-07). Only correct answers get
+   one; the border's presence versus absence, the result line and the hidden option wording carry the
+   state, so the fill's lower contrast is not the only signal. */
 .toneCorrect {
   border-color: var(--color-success-fill);
-}
-
-.toneChosen {
-  border-color: var(--color-border-strong);
 }
 
 .toneAnswer {
@@ -142,22 +140,6 @@
   margin: 0;
 }
 
-.mark {
-  display: flex;
-}
-
-.toneCorrect .mark {
-  color: var(--color-success-fill);
-}
-
-.toneChosen .mark {
-  color: var(--color-border-strong);
-}
-
-.toneAnswer .mark {
-  color: var(--color-danger-fill);
-}
-
 @media (forced-colors: active) {
   .option {
     border-color: Canvas;
@@ -166,10 +148,6 @@
   .toneCorrect,
   .toneAnswer {
     border-color: Highlight;
-  }
-
-  .toneChosen {
-    border-color: GrayText;
   }
 }
 

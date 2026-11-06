@@ -145,7 +145,7 @@ test(
 );
 
 test(
-  'UX12-OPTIONS-AC03 an MCQ result shows check and X icons and keeps its wording for assistive tech only',
+  'UX12-OPTIONS-AC03 an MCQ result shows no check or X icons and keeps its wording for assistive tech only',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = `ux12-opt3-${randomUUID().slice(0, 8)}`;
@@ -153,32 +153,30 @@ test(
     const [a, b] = [`${label}-1 보기 가`, `${label}-1 보기 나`];
     await openOverview(page, s);
     const panel = await openPanel(page, 1);
-    const icon = (text: string, mark: 'correct' | 'wrong') =>
-      rowOf(panelUi.option(panel, text)).locator(`[data-option-mark="${mark}"] svg`);
 
-    // Wrong answer first: both icons, on the rows they belong to.
+    // Wrong answer first: no icon on either row.
     await panelUi.option(panel, b).check();
     const before = await rowBoxes(panel);
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toHaveText('오답입니다.');
     await expectHidden(panelUi.result(panel));
-    await expect(icon(b, 'wrong')).toBeVisible();
-    await expect(icon(a, 'correct')).toBeVisible();
-    await expect(panel.locator('[data-option-mark]')).toHaveCount(2);
+    await expect(panel.locator('[data-option-mark]')).toHaveCount(0);
+    await expect(rowOf(panelUi.option(panel, a)).locator('svg')).toHaveCount(0);
+    await expect(rowOf(panelUi.option(panel, b)).locator('svg')).toHaveCount(0);
     await expect(panelUi.option(panel, b)).toHaveAccessibleDescription('내 선택');
     await expect(panelUi.option(panel, a)).toHaveAccessibleDescription('정답');
     await expectHidden(panel.getByText('내 선택', { exact: true }));
     await expectHidden(panel.getByText('정답', { exact: true }));
     expect(await rowBoxes(panel)).toEqual(before);
 
-    // A correct answer: one check, on the chosen row.
+    // A correct answer: still no icon.
     await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await panelUi.option(panel, a).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toHaveText('정답입니다.');
     await expectHidden(panelUi.result(panel));
-    await expect(icon(a, 'correct')).toBeVisible();
-    await expect(panel.locator('[data-option-mark]')).toHaveCount(1);
+    await expect(panel.locator('[data-option-mark]')).toHaveCount(0);
+    await expect(rowOf(panelUi.option(panel, a)).locator('svg')).toHaveCount(0);
     await expect(panelUi.option(panel, a)).toHaveAccessibleDescription('정답 · 내 선택');
     await expectHidden(panel.getByText('정답 · 내 선택', { exact: true }));
   },
