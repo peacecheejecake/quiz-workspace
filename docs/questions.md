@@ -118,7 +118,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 
 ## 4. 문제 풀이 및 채점 정책
 
-1. Heatmap dot click → `POST /questions/{id}/practice-open` → 서버는 최신 결과를 확인하고, 없으면 정답/해설이 없는 문제 데이터를 반환(UX12-OPEN). `다시 풀기` 상태인 문제는 결과가 있어도 정답/해설이 없는 문제 데이터를 반환한다. 가장 최근 제출이 채점 대기이면 그 결과를 준다([UX12-RETRYOPEN](screens/ux12-retry-open.md)).
+1. Heatmap dot click → `POST /questions/{id}/practice-open` → 서버는 정답/해설이 없는 문제 데이터를 반환한다(UX12-OPEN). 이미 푼 문제도 같고, 이전 결과는 `해설 보기`(`POST /questions/{id}/practice-reveal`)로 받으며 그때 열린 session은 닫힌다. 가장 최근 제출이 채점 대기이면 그 결과를 준다([UX12-SOLVEDOPEN](screens/ux12-solved-open.md)).
 2. 객관식 보기는 기본적으로 원본 revision 순서다. 명시적으로 섞기만 선택하면 `shuffle_seed`로 섞고, 표시 순서 목록을 `practice_session`/`attempt`에 저장한다(UX10-QVIEW-AC01). 모의고사의 `보기 섞기` 문제는 항상 섞는다(UX12-MOCKSHUFFLE-C03, C04).
 3. 답 제출 시 server-side correct option IDs 기준 채점. 선택지 위치(A/B/C)가 아니라 변하지 않는 option ID로 비교한다.
 4. 객관식 단일·복수 선택 지원. 단답식은 등록된 허용 답안과 정규화 규칙으로 자동 채점 가능한 경우에만 채점.
@@ -413,5 +413,5 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 5. **기존 데이터는 그대로 (사용자 결정 2026-11-04 변경).** 이미 켜져 있는 플래그는 migration이 끄지 않는다(데이터를 바꾸는 단계 없음). 마지막 채점 결과가 정답이 아닌 문제에 켜진 기존 플래그는 Heatmap `retry` 표시와 `다시 풀기` 필터에 그대로 나오지만, toggle은 보이지 않는다(1~2항) — 그 문제를 정답으로 맞힌 뒤에야 toggle로 끌 수 있다. 새 오답 채점이 오면 4항대로 꺼진다.
 6. **이력 불변.** attempt와 `last_graded_result`는 바뀌지 않는다. 플래그만 꺼진다.
 6a. **오래된 화면의 409 (D2).** 켜기가 409 `retry-requires-correct`로 거절되면 화면은 전용 문구 "정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다."를 알리고, 문제 상태를 다시 읽어 toggle을 숨긴다.
-6b. **열기 (MOCKUX-5 2026-11-06).** `다시 풀기`가 켜진 문제는 이미 풀었어도 이전 결과·해설 없이 풀이 화면부터 열린다([UX12-RETRYOPEN](screens/ux12-retry-open.md)). 플래그 규칙은 바뀌지 않으므로 끄거나 오답으로 꺼지면 다시 최신 결과가 보인다.
+6b. **열기 (MOCKUX-5, MOCKUX-11 2026-11-06).** 푼 문제는 이 플래그와 상관없이 풀이 화면부터 열린다([UX12-SOLVEDOPEN](screens/ux12-solved-open.md)). 플래그는 필터와 Heatmap 표시에만 쓴다.
 7. **알려진 가장자리.** 중복 정리(merge)·되돌리기로 합친 상태의 판정이 바뀌어 플래그가 정답이 아닌 문제에 남을 수 있다 — 그 문제는 toggle이 없고 Heatmap은 `retry`로 보이며, 다음 오답 채점 또는 끄기 PATCH가 정리한다(follow-up).

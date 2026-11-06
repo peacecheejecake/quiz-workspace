@@ -48,6 +48,8 @@ export const openQuestionPractice = () =>
     active_revision_id: STORY_SESSION.question_revision_id,
     latest_attempt_id: null,
   });
+export const revealQuestionPractice = () =>
+  ok({ reset_epoch: 0, result: { ...STORY_SESSION, outcome: STORY_RESULT } });
 export const resetPracticeAction = () => ok({ reset: true, epochs: {} });
 export const submitPracticeAction = () => ok(STORY_RESULT);
 export const selfGradePracticeAction = () =>

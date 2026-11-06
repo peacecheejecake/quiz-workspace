@@ -385,6 +385,7 @@ test(
     await page.goto(overviewPath(s.workspaceId, q(s, 1).id));
     const reopened = panelUi.numbered(page, 1);
     await expect(reopened).toBeVisible();
+    await panelUi.reveal(reopened).click();
     await expect(highlightUi.explanation(reopened)).toBeVisible();
     await choosePanelMenu(page, reopened, 'answers');
     const detail = detailUi.dialog(page);

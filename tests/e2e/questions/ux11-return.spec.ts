@@ -71,8 +71,6 @@ test(
     await page.goto(overviewPath(ws.id));
     await overviewUi.dot(page, 1).click();
     const panel = panelUi.numbered(page, 1);
-    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await expect(panelUi.submit(panel)).toBeVisible();
     const correct = question.revision.options.find((option) =>
       question.revision.correct_option_ids?.includes(option.id),

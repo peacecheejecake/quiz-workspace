@@ -113,7 +113,6 @@ function sameFlags(a: StudyFlags, b: StudyFlags): boolean {
 export class FlagSync<R extends StudyFlags> {
   private readonly entries = new Map<string, FlagEntry & { readonly saved: R | null }>();
   private readonly generations = new Map<string, number>();
-  private readonly waiting = new Map<string, (() => void)[]>();
 
   constructor(
     private readonly send: (questionId: string, patch: FlagPatch) => Promise<FlagResult<R>>,
@@ -128,29 +127,17 @@ export class FlagSync<R extends StudyFlags> {
     return this.entries.size > 0;
   }
 
-  /** Resolves once nothing of `questionId` is left to save (saved, failed or invalidated). */
-  settled(questionId: string): Promise<void> {
-    if (!this.entries.has(questionId)) return Promise.resolve();
-    return new Promise((resolve) => {
-      this.waiting.set(questionId, [...(this.waiting.get(questionId) ?? []), resolve]);
-    });
-  }
-
-  private update(questionId: string, apply: () => void): void {
+  private update(apply: () => void): void {
     const before = this.busy();
     apply();
     const after = this.busy();
     if (before !== after) this.onBusyChange?.(after);
-    if (this.entries.has(questionId)) return;
-    const waiting = this.waiting.get(questionId) ?? [];
-    this.waiting.delete(questionId);
-    for (const resolve of waiting) resolve();
   }
 
   /** Drop queued changes and ignore any response already in flight after a reset. */
   invalidate(questionId: string): void {
     this.generations.set(questionId, (this.generations.get(questionId) ?? 0) + 1);
-    this.update(questionId, () => this.entries.delete(questionId));
+    this.update(() => this.entries.delete(questionId));
   }
 
   /** The flags to show while a change of `questionId` is being saved (null: none). */
@@ -162,7 +149,7 @@ export class FlagSync<R extends StudyFlags> {
   toggle(questionId: string, base: StudyFlags, patch: FlagPatch): void {
     const prev = this.entries.get(questionId);
     const { entry, send } = intendFlags(prev, base, patch);
-    this.update(questionId, () => {
+    this.update(() => {
       // Nothing in flight and nothing to send: no entry (the press restored the saved state).
       if (entry.sending) this.entries.set(questionId, { ...entry, saved: prev?.saved ?? null });
       else this.entries.delete(questionId);
@@ -191,7 +178,7 @@ export class FlagSync<R extends StudyFlags> {
         : { ok: false },
     );
     const saved = result.ok ? result.data : entry.saved;
-    this.update(questionId, () => {
+    this.update(() => {
       if (settled.done) this.entries.delete(questionId);
       else this.entries.set(questionId, { ...settled.entry, saved });
     });

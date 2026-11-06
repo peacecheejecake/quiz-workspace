@@ -6,7 +6,8 @@
 // answer-free `PracticeSession` fields (copied field by field, so an unexpected field never gets
 // in) of sessions that are still open; a session whose submission started is never handed out
 // again (not even when a late duplicate open response for it arrives), and submit results
-// (answers, explanations) are never stored.
+// (answers, explanations) are never stored. `해설 보기` retires the session on the server, so it
+// is dropped here too.
 import type { PracticeSession } from './practice-actions';
 
 /** How long an open session is reused (an edit made elsewhere shows up at most this late). */
@@ -18,7 +19,6 @@ interface Entry {
   readonly storedAt: number;
   readonly epoch: number;
   readonly baselineAttemptId: string | null;
-  readonly anotherTry: boolean;
 }
 
 export interface PracticeCacheOptions {
@@ -88,18 +88,8 @@ export class PracticeSessionCache {
       : undefined;
   }
 
-  /** The session came from `다시 풀기`: the server keeps it in front of the latest result. */
-  anotherTry(questionId: string): boolean {
-    return this.get(questionId) ? !!this.entries.get(questionId.toLowerCase())?.anotherTry : false;
-  }
-
   /** Keeps an open session of this workspace; anything else (submitted, foreign) is ignored. */
-  put(
-    session: PracticeSession,
-    epoch = 0,
-    baselineAttemptId: string | null = null,
-    anotherTry = false,
-  ): void {
+  put(session: PracticeSession, epoch = 0, baselineAttemptId: string | null = null): void {
     if (session.workspace_id.toLowerCase() !== this.workspaceId) return;
     if (this.wasDropped(session.id)) return;
     const key = session.question_id.toLowerCase();
@@ -113,7 +103,6 @@ export class PracticeSessionCache {
       storedAt: this.now(),
       epoch,
       baselineAttemptId,
-      anotherTry,
     });
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;

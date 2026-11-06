@@ -159,7 +159,7 @@ test(
 );
 
 test(
-  'UX12-RETRYOPEN-AC03 a wrong answer clears the mark and the next opening shows the result',
+  'UX12-RETRYOPEN-AC03 a wrong answer clears the mark and the question still opens clean',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-retryopen-3', 1);
@@ -178,35 +178,35 @@ test(
     });
 
     panel = await openDot(page, 1);
+    await expectClean(panel);
+    await panelUi.reveal(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
     await expect(panel).toContainText(EXPLANATION);
   },
 );
 
 test(
-  'UX12-RETRYOPEN-AC04 without the mark a solved question keeps showing its result',
+  'UX12-RETRYOPEN-AC04 clearing the mark does not bring the result back on opening',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
-    const s = await seed(workspaceFactory, 'ux12-retryopen-4', 2);
-    const [marked, plain] = s.questions as [Question, Question];
+    const s = await seed(workspaceFactory, 'ux12-retryopen-4', 1);
+    const marked = only(s);
     await markSolved(s.owner, marked);
-    await answerCorrectly(s.owner, plain);
     await openHome(page, s);
 
     let panel = await openDot(page, 1);
     await expectClean(panel);
     await panelUi.retryOff(panel).click();
     await expect(panelUi.retryOn(panel)).toBeVisible();
+    await expect
+      .poll(async () => (await overviewItem(s.owner, s.workspaceId, marked.id)).needs_retry)
+      .toBe(false);
     await closePanel(panel);
 
     panel = await openDot(page, 1);
+    await expectClean(panel);
+    await panelUi.reveal(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await expect(panel).toContainText(EXPLANATION);
-    await closePanel(panel);
-
-    panel = await openDot(page, 2);
-    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await expect(panel).toContainText(EXPLANATION);
   },
 );
 

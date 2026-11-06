@@ -711,6 +711,7 @@ test(
       await expect(explUi.create(panel)).toHaveCount(0);
       await panelUi.close(panel).click();
       panel = await openPanel(page, 6);
+      await panelUi.reveal(panel).click();
       await expect(result(panel)).toContainText(RESULT_TEXT.correct);
       await expectDone(explUi.area(panel));
       const session = await submittedSession(s.owner, withoutExpl);
@@ -861,6 +862,7 @@ test(
     await expect(run).toBeHidden();
     // The same cache from the Heatmap's practice panel.
     const panel = await openPanel(page, 1);
+    await panelUi.reveal(panel).click();
     await expect(result(panel)).toContainText(RESULT_TEXT.correct);
     await expectDone(explUi.area(panel));
     const viaPanel = await getExplanation(a, bank(q1.id), {

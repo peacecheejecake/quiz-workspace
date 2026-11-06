@@ -4,7 +4,7 @@
 // question after recent metadata verification without a new session, never reuses a submitted session, and starts over
 // in another workspace.
 import './dom-setup';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -109,18 +109,6 @@ describe('PracticeSessionCache', () => {
     expect(cache.get(Q1)?.id).toBe(s1.id);
   });
 
-  it('UX12-RETRYOPEN remembers which session is another try', () => {
-    const cache = new PracticeSessionCache(WS);
-    const tried = session(Q1);
-    const plain = session(Q2);
-    cache.put(tried, 0, null, true);
-    cache.put(plain);
-    expect(cache.anotherTry(Q1)).toBe(true);
-    expect(cache.anotherTry(Q2)).toBe(false);
-    cache.dropSession(tried.id);
-    expect(cache.anotherTry(Q1)).toBe(false);
-  });
-
   it('expires entries after the TTL', () => {
     let now = 1_000;
     const cache = new PracticeSessionCache(WS, { now: () => now });
@@ -157,12 +145,13 @@ vi.mock('../src/components/practice-return/practice-return-provider', () => ({
   useOptionalPracticeReturn: () => ({ recordActivity: recordReturn }),
 }));
 vi.mock('../src/lib/questions/practice-open-client', async () => {
-  const { fakePracticeOpen } = await import('./practice-open-fake');
+  const { fakePracticeOpen, fakePracticeReveal } = await import('./practice-open-fake');
   return {
     openQuestionPractice: fakePracticeOpen({
       latest: () => latest(),
       open: (ws: string, q: string, key: string) => open(ws, q, key),
     }),
+    revealQuestionPractice: fakePracticeReveal({ latest: () => latest() }),
   };
 });
 vi.mock('../src/lib/questions/practice-actions', () => ({
@@ -260,7 +249,7 @@ describe('QuestionViewer practice session cache', () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
-  it('revalidates cached sessions and restores a newer server result before allowing input', async () => {
+  it('UX12-SOLVEDOPEN-AC01 a result made elsewhere opens a new session, not the result', async () => {
     const view = render(<Harness questionId={Q1} />);
     await screen.findByRole('radio', { name: '보기 가' });
     view.rerender(<Harness questionId={null} />);
@@ -296,8 +285,9 @@ describe('QuestionViewer practice session cache', () => {
         },
       }),
     );
-    expect(await screen.findByText('정답입니다.')).toBeInTheDocument();
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: '해설 보기' })).toBeInTheDocument();
+    expect(screen.queryByText('정답입니다.')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(2);
   });
 
   it('UX11-RETURN-AC01 opens a fresh session without resetting history and reuses that retry', async () => {
@@ -324,16 +314,25 @@ describe('QuestionViewer practice session cache', () => {
         session: { ...previous, state: 'graded', outcome: result },
       },
     });
+    open.mockImplementationOnce(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: 'first-session', workspace_id: ws }),
+    }));
+    open.mockImplementationOnce(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: 'second-session', workspace_id: ws }),
+    }));
     const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
     await screen.findByText('정답입니다.');
     await user.click(screen.getByRole('button', { name: /^다시 풀기$/ }));
     await screen.findByRole('button', { name: '제출' });
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(reset).not.toHaveBeenCalled();
     view.rerender(<Harness questionId={null} />);
     view.rerender(<Harness questionId={Q1} />);
     await screen.findByRole('button', { name: '제출' });
-    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
     expect(reset).not.toHaveBeenCalled();
   });
 
@@ -526,5 +525,157 @@ describe('QuestionViewer practice session cache', () => {
     view.rerender(<Harness questionId={Q1} />);
     expect(await screen.findByRole('radio', { name: '보기 가' })).not.toBeChecked();
     expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('UX12-SOLVEDOPEN the question first, 해설 보기 on request', () => {
+  const previous = session(Q1);
+  const outcome = {
+    attempt_id: 'old-attempt',
+    practice_session_id: previous.id,
+    question_revision_id: previous.question_revision_id,
+    result: 'correct',
+    correct_option_ids: ['o1'],
+    accepted_answers: null,
+    explanation: '이전 해설',
+    rubric: null,
+  };
+  const solved = {
+    ok: true,
+    data: {
+      reset_epoch: 0,
+      previous_revision: false,
+      active_revision_id: previous.question_revision_id,
+      latest_attempt_id: 'old-attempt',
+      submitted_answer: { selected_option_ids: ['o1'] },
+      session: { ...previous, state: 'graded', outcome },
+    },
+  };
+  let sessions = 0;
+  beforeEach(() => {
+    sessions = 0;
+    open.mockImplementation(async (ws, q) => ({
+      ok: true,
+      data: session(q, { id: `opened-${(sessions += 1)}`, workspace_id: ws }),
+    }));
+  });
+
+  it('AC01 a solved question opens to be answered, with 해설 보기', async () => {
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    expect(await screen.findByRole('button', { name: '해설 보기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '제출' })).toBeInTheDocument();
+    expect(screen.queryByText('정답입니다.')).toBeNull();
+    expect(screen.queryByText('이전 해설')).toBeNull();
+  });
+
+  it('AC02 a question never solved has no 해설 보기', async () => {
+    render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+  });
+
+  it('AC02 a question solved only on an older revision has no 해설 보기', async () => {
+    latest.mockResolvedValue({
+      ok: true,
+      data: { ...solved.data, previous_revision: true, session: null },
+    });
+    render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+  });
+
+  it('AC03 해설 보기 shows the earlier result in place of the form', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(screen.getByText('정답입니다.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '해설 보기' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^다시 풀기$/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('AC04 an answer being written waits for a confirm and is never submitted', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: '취소' }));
+    expect(screen.getByRole('radio', { name: '보기 가' })).toBeChecked();
+    expect(screen.queryByText('이전 해설')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    const again = await screen.findByRole('alertdialog');
+    await user.click(within(again).getByRole('button', { name: '해설 보기' }));
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('AC07 a revealed question comes back with its result until the panel closes', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(open).toHaveBeenCalledTimes(2);
+    view.rerender(<Harness questionId={Q1} />);
+    expect(await screen.findByText('이전 해설')).toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+
+    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(3);
+  });
+
+  it('AC07 a question submitted here comes back with its result; 다시 풀기 ends that', async () => {
+    const user = userEvent.setup();
+    submit.mockResolvedValue({ ok: true, data: outcome });
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await screen.findByText('이전 해설');
+    latest.mockResolvedValue(solved);
+
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(/보기 가/);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByText('이전 해설');
+
+    await user.click(screen.getByRole('button', { name: /^다시 풀기$/ }));
+    await screen.findByRole('button', { name: '제출' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+  });
+
+  it('AC07 a result that can no longer be read falls back to an ordinary opening', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('button', { name: '해설 보기' }));
+    await screen.findByText('이전 해설');
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByRole('button', { name: '제출' });
+    latest.mockResolvedValue({
+      ok: true,
+      data: { ...solved.data, previous_revision: true, session: null },
+    });
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
   });
 });

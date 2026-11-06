@@ -28,11 +28,12 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   lookupOverviewQuestionAction: vi.fn(),
 }));
 vi.mock('../src/lib/questions/practice-open-client', async () => {
-  const { fakePracticeOpen } = await import('./practice-open-fake');
+  const { fakePracticeOpen, fakePracticeReveal } = await import('./practice-open-fake');
   return {
     openQuestionPractice: fakePracticeOpen({
       open: (ws: string, q: string, key: string) => openSession(ws, q, key),
     }),
+    revealQuestionPractice: fakePracticeReveal({}),
   };
 });
 vi.mock('../src/components/questions/viewer/separate-retry', () => ({
@@ -230,37 +231,6 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       within(panel).getByRole('button', { name: /다시 풀기 (표시|해제)/ }),
     ).toBeInTheDocument();
     expect(openSession).toHaveBeenCalledTimes(1);
-  });
-
-  it('UX12-RETRYOPEN-AC04 practice: the opening waits for the toggle saved just before it', async () => {
-    let saved!: () => void;
-    const flagsSettled = vi.fn(() => new Promise<void>((resolve) => (saved = resolve)));
-    render(
-      <QuestionViewer
-        mode="practice"
-        workspaceId={WS}
-        question={{
-          id: QID,
-          title: '3장 12번 문제',
-          chapterTitle: '3장 물의 순환',
-          questionType: 'MCQ',
-          preview: STEM,
-          isFavorite: false,
-          needsRetry: false,
-          lastGradedResult: 'correct',
-          isPendingGrading: false,
-        }}
-        readOnly={false}
-        flagsSettled={flagsSettled}
-        onClose={noop}
-        onFlagsChange={noop}
-        onViewed={noop}
-      />,
-    );
-    await waitFor(() => expect(flagsSettled).toHaveBeenCalledWith(QID));
-    expect(openSession).not.toHaveBeenCalled();
-    await act(async () => saved());
-    await waitFor(() => expect(openSession).toHaveBeenCalledTimes(1));
   });
 
   it('UX12-RETRYOPEN-AC01 practice: a clean opening of a marked question keeps the toggle and an inert 다시 풀기', async () => {

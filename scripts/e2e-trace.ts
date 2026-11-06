@@ -150,6 +150,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-VIEW.0': ['UX12-VIEW'],
   // UX12 MOCKUX-3: the run's footer matches the Heatmap path; `건너뛰기` is gone.
   'UX12-RUNBAR.0': ['UX12-RUNBAR'],
+  // UX12 MOCKUX-11: every solved question opens to be answered; 해설 보기 asks for the result.
+  'UX12-SOLVEDOPEN.0': ['UX12-SOLVEDOPEN'],
   // UX12 MOCKUX-5: a question marked 다시 풀기 opens to be answered, without its last result.
   'UX12-RETRYOPEN.0': ['UX12-RETRYOPEN'],
   // UX12 MOCKUX-6: a mock exam run's 질문하기 appears once the position is graded.
