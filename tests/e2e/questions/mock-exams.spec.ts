@@ -149,12 +149,12 @@ async function fillOptions(
   types: readonly VariationType[],
   count: number,
 ): Promise<void> {
-  await mockUi.title(dialog).fill(title);
   for (const type of ['OPTION_SHUFFLE', 'PARAPHRASE', 'INVERT_POLARITY'] as const) {
     const box = mockUi.variation(dialog, type);
     if (types.includes(type)) await box.check();
     else if ((await box.count()) > 0 && (await box.isChecked())) await box.uncheck();
   }
+  await mockUi.title(dialog).fill(title);
   await mockUi.questionCount(dialog).fill(String(count));
   await mockUi.next(dialog).click();
 }

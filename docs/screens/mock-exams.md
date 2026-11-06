@@ -15,7 +15,7 @@ actor: workspace_member (목록·풀기) · editor/owner (만들기·편집·다
 permission: read · edit
 status: confirmed
 api: [GET /api/v1/workspaces/:id/mock-exams, POST /api/v1/workspaces/:id/mock-exams, GET /api/v1/mock-exams/:id, PATCH /api/v1/mock-exams/:id, DELETE /api/v1/mock-exams/:id, POST /api/v1/mock-exams/:id/generations, GET /api/v1/mock-exams/:id/questions, PATCH /api/v1/mock-exam-questions/:id, DELETE /api/v1/mock-exam-questions/:id]
-components: [FloatingSidePanel, Button, QuestionRangePicker, Checkbox, Select, StepProgress, ProgressBar, ConfirmDialog, DropdownMenu, QuestionViewer, Badge, EmptyState]
+components: [FloatingSidePanel, Button, QuestionRangePicker, Checkbox, Select, ProgressBar, ConfirmDialog, DropdownMenu, QuestionViewer, Badge, EmptyState]
 linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 ```
 
@@ -68,8 +68,8 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
   - 목록 위 동작 줄: 왼쪽 "모의고사 n개", 오른쪽 primary 버튼 `추가`(편집 권한·보관되지 않은 Workspace에서만).
   - 행: 이름(누르면 상세) · 상태 badge(`만드는 중`·`준비됨`·`일부만 만듦`·`실패`) · 메타 줄 `문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28` · `풀기`(준비됨·일부만 만듦, 모든 구성원) · 행 메뉴(편집 권한: `이름 바꾸기`·`설정 바꾸기`·`삭제`). 만드는 중이면 메타 줄 아래 공통 `ProgressBar`("문제 생성 진행률", 값 글자 "20개 중 7개").
   - 빈 상태: "아직 모의고사가 없습니다." 편집 권한자에게는 안내 "`추가`로 변형 유형과 범위를 골라 모의고사를 만드세요." (CTA는 위 `추가` 하나 — UX1 "CTA 하나" 규칙).
-- **만들기 화면(`추가`):** 두 단계 `StepProgress` `옵션 → 범위`.
-  1. 옵션: `이름`(필수, 기본 "모의고사 <n>"), `변형 유형` checkbox 4개(각 설명은 Tooltip, design-system §4.1), `문항 수`, `난이도`. LLM 유형이 쓸 수 없는 환경이면 그 checkbox는 숨긴다. 저장된 AI 유형 설정은 보기 섞기로 정규화한다. `다음`.
+- **만들기 화면(`추가`):** 두 단계 목록 `옵션 → 범위`(접근성 이름 "풀기 단계", 지금 단계는 `aria-current="step"`).
+  1. 옵션: `이름`(필수, 기본 "모의고사 <n>"; 변형 유형을 고르지 않은 원본 풀이에는 없음 — UX12-PLAY-AC01), `변형 유형` checkbox 4개(각 설명은 Tooltip, design-system §4.1), `문항 수`, `난이도`. LLM 유형이 쓸 수 없는 환경이면 그 checkbox는 숨긴다. 저장된 AI 유형 설정은 보기 섞기로 정규화한다. `다음`.
   2. 범위: `QuestionRangePicker`(QVIEW-01과 같음; `전체 선택`, 장·문제 checkbox, 필터) + "선택 n문제 중 m문항을 만듭니다" 글자 + 안내 "고른 문제의 발문·보기·정답·해설과 관련 본문이 AI 서비스로 전송됩니다."(LLM 유형을 골랐을 때) + `이전`·`만들기`(선택 0이면 비활성 + "출제 범위를 고르세요").
   - `만들기` → 저장하고 상세 화면으로 가서 생성 진행을 보인다.
 - **`풀기`:** QuestionViewer `sequence(mock)`(QVIEW-01 "진입 (mock)"). 범위 고르기는 그 모의고사의 문제를 출처 장별로 묶어(원본의 장, 생성 때의 장 순서, 장 없음·원본 삭제는 맨 뒤 "챕터 없음") 모두 선택된 채 보인다(사용자 결정 2026-11-02, MOCK-01-C10).

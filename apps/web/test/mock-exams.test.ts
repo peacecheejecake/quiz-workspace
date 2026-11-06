@@ -166,6 +166,8 @@ describe('만들기 options', () => {
     expect(checkOptions(options({}), true)).toBeNull();
     expect(checkOptions(options({ title: '  ' }), true)?.field).toBe('title');
     expect(checkOptions(options({ types: [] }), true)).toBeNull();
+    expect(checkOptions(options({ types: [], title: '  ' }), true)).toBeNull();
+    expect(checkOptions(options({ types: [], title: 'x'.repeat(101) }), true)).toBeNull();
     expect(checkOptions(options({}), false)?.message).toBe(
       '이 환경에서는 AI 변형을 쓸 수 없습니다.',
     );

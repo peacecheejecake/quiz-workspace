@@ -226,8 +226,8 @@ test(
       await expect(mockUi.variations(dialog)).toHaveCount(4);
       await settle(page);
       await expectAccessible(page, 'mock exam create, options step');
-      await mockUi.title(dialog).fill('접근성 점검');
       await mockUi.variation(dialog, 'PARAPHRASE').check();
+      await mockUi.title(dialog).fill('접근성 점검');
       await mockUi.next(dialog).click();
       await expect(picker.selectAll(dialog)).toBeVisible();
       await expect(mockUi.make(dialog)).toBeDisabled();
