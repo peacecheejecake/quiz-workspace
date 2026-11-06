@@ -159,7 +159,8 @@ export function DocumentEditor({
     return () => controller.abort();
   }, [client, documentId, hasQuestions, ready, workspaceId]);
   // UX12-EXTRACT-AC01: draft questions keep their raw blocks but are highlighted whole. Ids only;
-  // without them (no import, or the list failed) selection works as before.
+  // without them (no import, or the list failed) selection works as before. An import still
+  // running is followed by the client, so this arrives when its drafts exist.
   const [draftBlocks, setDraftBlocks] = useState<readonly (readonly string[])[]>([]);
   useEffect(() => {
     if (!ready) return;

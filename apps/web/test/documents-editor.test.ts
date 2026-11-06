@@ -602,6 +602,51 @@ describe('editor API client', () => {
     expect(urls[1]).toContain('run-1/draft-summaries?include_blocks=true');
   });
 
+  it('listDraftBlocks waits for a running import before reading its drafts (UX12-EXTRACT)', async () => {
+    const order: string[] = [];
+    let finished = false;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      order.push(url.includes('draft-summaries') ? 'drafts' : 'run');
+      const body = url.includes('draft-summaries')
+        ? { items: finished ? [{ published_question_id: null, block_ids: ['a'] }] : [] }
+        : { items: [{ id: 'run-1', status: 'queued', job_id: 'job-1' }] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    const watch = vi.fn(async (jobId: string) => {
+      order.push(`watch:${jobId}`);
+      finished = true;
+      return { status: 'succeeded' } as never;
+    });
+    const client = createEditorClient(fetchImpl as typeof fetch);
+    await expect(client.listDraftBlocks('ws-1', 'doc-1', undefined, watch)).resolves.toEqual([
+      ['a'],
+    ]);
+    expect(order).toEqual(['run', 'watch:job-1', 'drafts']);
+  });
+
+  it('listDraftBlocks does not watch a finished import, and survives a lost job', async () => {
+    const respond = (status: string) =>
+      vi.fn(async (input: RequestInfo | URL) => {
+        const body = String(input).includes('draft-summaries')
+          ? { items: [{ published_question_id: null, block_ids: ['a'] }] }
+          : { items: [{ id: 'run-1', status, job_id: 'job-1' }] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      });
+    const idle = vi.fn(async () => ({ status: 'succeeded' }) as never);
+    const done = createEditorClient(respond('succeeded') as typeof fetch);
+    await expect(done.listDraftBlocks('ws-1', 'doc-1', undefined, idle)).resolves.toEqual([['a']]);
+    expect(idle).not.toHaveBeenCalled();
+
+    const gone = vi.fn(async () => {
+      throw new Error('job gone');
+    });
+    const running = createEditorClient(respond('running') as typeof fetch);
+    await expect(running.listDraftBlocks('ws-1', 'doc-1', undefined, gone)).resolves.toEqual([
+      ['a'],
+    ]);
+  });
+
   it('listDraftBlocks is empty without an import', async () => {
     const fetchImpl = vi.fn(
       async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),

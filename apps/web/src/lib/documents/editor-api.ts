@@ -3,6 +3,7 @@
 // session's access token server-side; FastAPI decides authorization, revision consistency and
 // publish. Only the short-lived signed read URL of the original PDF reaches the browser.
 import type { Problem, Schemas } from '@quiz/api-client';
+import { watchJob } from './job-events';
 
 export type DocumentDetail = Schemas['DocumentDetail'];
 export type OutlineItem = Schemas['OutlineItem'];
@@ -177,12 +178,15 @@ export interface EditorClient {
   ): Promise<Question[]>;
   /**
    * UX12-EXTRACT-AC01: the source blocks of each unregistered draft of the document's newest
-   * import, in source order. Ids only: a draft's content never reaches this screen.
+   * import, in source order. Ids only: a draft's content never reaches this screen. A queued or
+   * running import is followed to its end first (drafts are saved when the job finishes), so
+   * this resolves late on a document opened right after upload.
    */
   listDraftBlocks(
     workspaceId: string,
     documentId: string,
     signal?: AbortSignal,
+    watch?: typeof watchJob,
   ): Promise<string[][]>;
 }
 
@@ -280,13 +284,26 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
       }
       return items;
     },
-    async listDraftBlocks(workspaceId, documentId, signal) {
-      const runs = await call<{ items: { id: string }[] }>(
+    async listDraftBlocks(workspaceId, documentId, signal, watch = watchJob) {
+      const runs = await call<{
+        items: { id: string; status: string; job_id: string | null }[];
+      }>(
         EDITOR_PATHS.latestImport(workspaceId, documentId),
         { signal },
       );
       const run = runs.items[0];
       if (!run) return [];
+      if (run.job_id && (run.status === 'queued' || run.status === 'running')) {
+        try {
+          await watch(run.job_id, {
+            signal: signal ?? new AbortController().signal,
+            onJob: () => undefined,
+          });
+        } catch (error) {
+          // A lost job still leaves whatever drafts it saved; only leaving the screen stops here.
+          if (signal?.aborted) throw error;
+        }
+      }
       const { items } = await call<{
         items: { published_question_id: string | null; block_ids?: string[] }[];
       }>(EDITOR_PATHS.draftBlocks(run.id), { signal });
