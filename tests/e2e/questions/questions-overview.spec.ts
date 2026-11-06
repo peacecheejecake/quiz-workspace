@@ -69,7 +69,7 @@ import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const HOVER_SCALE = 1.18;
+const HOVER_SCALE = 1.3;
 const BOOK = book('book-ko');
 const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
@@ -253,7 +253,7 @@ test(
 );
 
 test(
-  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.18x with a preview and no grid shift',
+  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.3x with a preview and no grid shift',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac04', 3);
