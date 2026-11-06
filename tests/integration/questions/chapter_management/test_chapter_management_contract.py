@@ -76,6 +76,11 @@ def delete(client: Any, chapter: str, target: str | None = None) -> Any:
     return client.call("DELETE", f"/chapters/{chapter}{query}")
 
 
+def not_found_body(res: Any) -> dict[str, Any]:
+    assert res.status_code == 404, res.text
+    return {k: v for k, v in res.json().items() if k not in {"instance", "request_id"}}
+
+
 def stored_hash(db: Any, revision: str) -> str:
     [(value,)] = db("select content_hash from public.document_revisions where id = %s", (revision,))
     return str(value)
@@ -113,10 +118,23 @@ def test_chman_01_c01_only_editors_of_an_active_workspace_reach_the_routes(seed:
         res = call(viewer)
         assert res.status_code == 403, res.text
         assert res.json()["type"] == INSUFFICIENT_ROLE
+    # A stranger cannot tell a real id from a missing one: the same body, kind of id by kind of id.
+    # `instance` and `request_id` name the request, not the resource.
     stranger = seed.client("chman-c01-stranger")
-    bodies = [call(stranger) for call in calls]
-    assert {b.status_code for b in bodies} == {404}
-    assert len({b.text for b in bodies}) <= 2, "one not-found body per kind of id"
+    real = [call(stranger) for call in calls]
+    missing = [
+        lambda c: c.call("GET", tree_path(RANDOM_ID)),
+        lambda c: c.call(
+            "POST",
+            f"/workspaces/{RANDOM_ID}/chapters",
+            {"document_id": RANDOM_ID, "parent_id": None, "title": "x"},
+        ),
+        lambda c: c.call("PATCH", f"/chapters/{RANDOM_ID}", {"title": "x"}),
+        lambda c: move(c, RANDOM_ID, version, (RANDOM_ID, None, 0)),
+        lambda c: delete(c, RANDOM_ID, "none"),
+    ]
+    assert {b.status_code for b in real} == {404}
+    assert [not_found_body(b) for b in real] == [not_found_body(call(stranger)) for call in missing]
 
     s.owner.ok("POST", f"/workspaces/{s.ws}/archive")
     for call in calls:
