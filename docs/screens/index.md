@@ -4,6 +4,7 @@
 
 | ID | Screen | Route | Requirements |
 |---|---|---|---|
+| UX12-POPPERS | tooltip 안전 여백·trigger 재누름 닫기 | 공통 UI | [ux12-poppers.md](ux12-poppers.md) |
 | UX10-AI | AI 가용성·저장 해설 | 공통 AI 화면 | [ux10-ai.md](ux10-ai.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
