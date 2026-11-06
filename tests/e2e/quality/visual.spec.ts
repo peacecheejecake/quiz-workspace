@@ -527,12 +527,12 @@ test(
     await runUi.chapter(panel, '2장 정수 처리').check();
     await runUi.start(panel).click();
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 2, 1)).toBeVisible();
+    await expect(runUi.title(panel, 1)).toBeVisible();
     await runUi.option(panel, '응집').check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await runUi.next(panel).click();
-    await expect(runUi.title(panel, 2, 2)).toBeVisible();
+    await expect(runUi.title(panel, 2)).toBeVisible();
     await goToResults(panel);
     await expect(
       runUi.summary(panel, { correct: 1, incorrect: 0, pending: 0, skipped: 1 }),

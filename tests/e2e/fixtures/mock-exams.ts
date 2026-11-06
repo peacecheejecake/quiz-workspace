@@ -104,7 +104,7 @@
 //   "이 환경에서는 AI 변형을 쓸 수 없습니다."), spinbutton "문항 수", combobox "난이도", button "다음";
 //   step 2 QuestionRangePicker (shared with QVIEW-01; labels in fixtures/range-picker.ts: "전체
 //   선택", chapter checkboxes by title — "챕터 없음" for questions without one — with "<장 제목>
-//   펼치기", question checkboxes "<n>장 <m>번 · …", "선택 n문제", the "상태 필터" chips incl.
+//   펼치기", question checkboxes "<m>번 · …", "선택 n문제", the "상태 필터" chips incl.
 //   "즐겨찾기만"), text "선택 n문제 중 m문항을 만듭니다", the AI
 //   notice "…AI 서비스로 전송됩니다.", buttons "이전" and "만들기" (설정 바꾸기: "다시 만들기"), disabled
 //   and described by "출제 범위를 고르세요" when nothing is selected; "아직 확정된 문제가 없습니다."

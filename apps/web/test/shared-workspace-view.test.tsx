@@ -191,6 +191,19 @@ describe('SharedWorkspaceView', () => {
     );
   });
 
+  it('UX12-NUMBER labels an unnumbered question 번호 없음, never its list position', async () => {
+    routes({
+      '': () => json(WORKSPACE),
+      '/questions': () =>
+        json({ items: [{ ...QUESTION, question_number: null }], next_cursor: null }),
+    });
+    renderView();
+    const list = await screen.findByRole('list', { name: /문제/ });
+    const row = within(list).getByRole('button', { name: /비는 무엇인가/ });
+    expect(row).toHaveTextContent('번호 없음');
+    expect(row).not.toHaveTextContent(/^1/);
+  });
+
   it('offers Fork only when allowed: sign-in for guests, the panel for signed-in users', async () => {
     routes({
       '': () => json(WORKSPACE),
@@ -259,7 +272,7 @@ describe('SharedWorkspaceView', () => {
           question_count: 1,
           stale: false,
           sections: [{ heading: '비', items: [{ text: 'NOTE-S', footnotes: [1] }] }],
-          footnotes: [{ number: 1, question_id: Q1, label: '1장 1번', stem_preview: '비는' }],
+          footnotes: [{ number: 1, question_id: Q1, label: '1번', stem_preview: '비는' }],
         }),
       [`/questions/${Q1}`]: () => json(QUESTION),
     });

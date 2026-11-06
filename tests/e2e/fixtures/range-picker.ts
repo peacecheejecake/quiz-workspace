@@ -4,9 +4,9 @@
 //
 //   checkbox "전체 선택" (aria-checked="mixed" when partly selected); one checkbox per chapter
 //   named by the chapter title (+ count; "챕터 없음" for questions without a chapter) with its own
-//   expand button "<장 제목> 펼치기" (aria-expanded); question checkboxes "1장 1번 · <발문
-//   앞부분> · <유형>"; the text "선택 n문제"; a collapsible "상태 필터" group with the home chips
-//   (틀린 문제/오답, 다시 풀기, 즐겨찾기만, …) and "필터 초기화".
+//   expand button "<장 제목> 펼치기" (aria-expanded); question checkboxes "1번 · <발문 앞부분> ·
+//   <유형>"; the text "선택 n문제"; a collapsible "상태 필터" group
+//   with the home chips (틀린 문제/오답, 다시 풀기, 즐겨찾기만, …) and "필터 초기화".
 import { expect, type Locator } from '@playwright/test';
 
 function escape(text: string): string {
@@ -21,15 +21,23 @@ export const rangePickerUi = {
   /** The chapter checkbox by title ("1장 물의 순환", "챕터 없음"), never by id. */
   chapter: (scope: Locator, title: string) =>
     scope.getByRole('checkbox', { name: new RegExp(`^${escape(title)}`) }),
-  /** Chapter checkboxes ("1장 물의 순환 …"), not the question ones ("1장 1번 · …"). */
-  chapters: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+장 (?!\d+번 · )/i }),
+  /** Chapter checkboxes ("1장 물의 순환 …"), not the question ones ("1번 · …"). */
+  chapters: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+장 /i }),
   expand: (scope: Locator, title: string) =>
     scope.getByRole('button', {
       name: new RegExp(`${escape(title)}.*(펼치기|접기|expand|collapse)`, 'i'),
     }),
+  /** A chapter's group: its chapter checkbox and, when expanded, its question rows. */
+  group: (scope: Locator, title: string) =>
+    scope.getByRole('listitem').filter({
+      has: scope.page().getByRole('checkbox', { name: new RegExp(`^${escape(title)}`) }),
+    }),
+  /** Row "n번 · …" inside chapter `chapter`: printed numbers restart per chapter. */
   question: (scope: Locator, chapter: number, n: number) =>
-    scope.getByRole('checkbox', { name: new RegExp(`^${chapter}장 ${n}번 · `) }),
-  questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+장 \d+번 · / }),
+    rangePickerUi
+      .group(scope, `${chapter}장 `)
+      .getByRole('checkbox', { name: new RegExp(`^${n}번 · `) }),
+  questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+번 · / }),
   selected: (scope: Locator, n: number) =>
     scope.getByText(new RegExp(`선택 ${n}문제(?!\\d)|(?<!\\d)${n} selected`, 'i')),
   filterToggle: (scope: Locator) =>

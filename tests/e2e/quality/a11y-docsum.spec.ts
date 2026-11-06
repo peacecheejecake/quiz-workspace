@@ -252,7 +252,7 @@ test(
       await ref.focus();
       await page.keyboard.press('Shift+Tab');
       await page.keyboard.press('Tab');
-      await expect(page.getByRole('tooltip').filter({ hasText: /\d+장\s*\d+번/ })).toBeVisible();
+      await expect(page.getByRole('tooltip').filter({ hasText: /\d+번\s*·/ })).toBeVisible();
       await expectAccessible(page, 'chapter note footnote preview');
       await page.keyboard.press('Escape');
 

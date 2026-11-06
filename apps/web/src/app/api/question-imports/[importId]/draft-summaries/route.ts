@@ -5,10 +5,12 @@ import { isUuid, notFound, relayToApi } from '@/lib/documents/bff';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: RouteContext<'/api/question-imports/[importId]/draft-summaries'>,
 ) {
   const { importId } = await ctx.params;
   if (!isUuid(importId)) return notFound();
-  return relayToApi(`/question-imports/${importId}/draft-summaries`, { method: 'GET' });
+  const blocks = new URL(request.url).searchParams.get('include_blocks') === 'true';
+  const query = blocks ? '?include_blocks=true' : '';
+  return relayToApi(`/question-imports/${importId}/draft-summaries${query}`, { method: 'GET' });
 }

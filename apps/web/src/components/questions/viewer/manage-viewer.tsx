@@ -37,7 +37,7 @@ export interface ManageViewerProps {
   readonly workspaceId: string;
   readonly open: boolean;
   readonly onClose: () => void;
-  /** The dialog description, e.g. "3장 1번 문제 · 객관식 · 1장". */
+  /** The dialog description, e.g. "1번 문제 · 객관식 · 1장". */
   readonly description?: string;
   readonly focus: DetailFocus;
   /** Where focus goes back on close (the opener's button), when it is still on the page. */

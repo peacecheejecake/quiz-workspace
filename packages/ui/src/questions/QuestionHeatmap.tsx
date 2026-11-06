@@ -14,7 +14,8 @@ import type { LastGradedResult, QuestionDotStatus, QuestionType } from './status
 
 export interface HeatmapQuestion {
   id: string;
-  number: string;
+  /** The textbook's printed number; null for a question without one. */
+  number: string | null;
   type: QuestionType;
   status: QuestionDotStatus;
   isFavorite: boolean;
@@ -28,7 +29,7 @@ export interface HeatmapQuestion {
 export interface HeatmapChapter {
   id: string;
   title: string;
-  /** Used in dot labels (`3장 12번 문제`). */
+  /** Used in dot names (`3장 12번 문제, …`). */
   number?: number | string;
   /** CONFIRMED questions only, in display order (chapter sort order, then number). */
   questions: HeatmapQuestion[];

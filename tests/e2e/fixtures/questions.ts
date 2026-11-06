@@ -153,7 +153,7 @@
 //             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
 //             (toggle button "상태 필터", collapsed by default); no status summary or legend since
 //             UX3c and no question count line since UX4.
-//   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
+//   QPLAY-01  modal dialog named by the question title (`12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
 //             option text in displayed order; textbox "답안" (short/essay); button "제출"; the

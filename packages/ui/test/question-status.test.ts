@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveDotStatus,
   questionDotLabel,
+  questionNumberLabel,
+  questionTitle,
   summarizeStatuses,
   type LastGradedResult,
   type QuestionDotStatus,
@@ -145,5 +147,18 @@ describe('questionDotLabel (docs/questions.md §3.2)', () => {
     expect(questionDotLabel({ ...base, questionType: 'SHORT_ANSWER', status: 'unseen' })).toMatch(
       /단답형/,
     );
+  });
+
+  it('names an unnumbered question 번호 없음 with its chapter, never a position', () => {
+    expect(questionDotLabel({ ...base, questionNumber: null, status: 'unseen' })).toBe(
+      '3장 번호 없음, 객관식, 아직 보지 않음',
+    );
+    expect(questionNumberLabel(null)).toBe('번호 없음');
+    expect(questionTitle(null)).toBe('번호 없음');
+  });
+
+  it('titles a question by its printed number alone', () => {
+    expect(questionNumberLabel(12)).toBe('12번');
+    expect(questionTitle('12')).toBe('12번 문제');
   });
 });

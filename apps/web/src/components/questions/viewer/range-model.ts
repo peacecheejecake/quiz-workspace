@@ -5,16 +5,16 @@
 // questions come grouped by source chapter too (mock-run.ts `mockRangeOverview`), numbered
 // "문제 k", and a whole chapter is sent as its question ids (a mock run refuses `chapter_ids`).
 // Unit-tested.
-import { QUESTION_DOT_STATUSES, type QuestionDotStatus } from '@quiz/ui';
+import { QUESTION_DOT_STATUSES, questionNumberLabel, type QuestionDotStatus } from '@quiz/ui';
 import { displayStem } from '@/lib/questions/display-stem';
 import type { QuestionOverview } from '@/lib/questions/overview-data';
-import { NO_CHAPTER_KEY, placeQuestions } from '@/lib/questions/overview-placement';
+import { placeQuestions } from '@/lib/questions/overview-placement';
 import type { RunRange, RunRangeFilters, RunSource } from '@/lib/questions/practice-runs';
 import type { QuestionType } from './question-body';
 
 export interface RangeQuestion {
   readonly id: string;
-  /** "1장 1번" (as the Heatmap numbers it); a mock exam's "문제 k". */
+  /** "1번" or "번호 없음" (the printed number); a mock exam's "문제 k". */
   readonly number: string;
   readonly preview: string;
   readonly type: QuestionType;
@@ -47,15 +47,9 @@ export function rangeGroups(
       group = { key: placed.chapterKey, title: placed.chapterTitle, questions: [] };
       groups.push(group);
     }
-    const chapter =
-      placed.chapterNumber !== undefined
-        ? `${placed.chapterNumber}장 `
-        : placed.chapterKey === NO_CHAPTER_KEY
-          ? ''
-          : `${placed.chapterTitle} `;
     group.questions.push({
       id: placed.item.question_id,
-      number: source === 'mock' ? `문제 ${placed.number}` : `${chapter}${placed.number}번`,
+      number: source === 'mock' ? `문제 ${placed.number}` : questionNumberLabel(placed.number),
       preview: displayStem(placed.item.preview).replace(/\s+/g, ' ').trim(),
       type: placed.item.question_type,
     });

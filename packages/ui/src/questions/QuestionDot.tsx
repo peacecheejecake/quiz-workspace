@@ -20,7 +20,8 @@ export interface QuestionDotProps extends Omit<
   questionId: string;
   status: QuestionDotStatus;
   isFavorite: boolean;
-  questionNumber: string;
+  /** The textbook's printed number; null for a question without one. */
+  questionNumber: string | null;
   questionType: QuestionType;
   chapterTitle: string;
   /** Stem shown in the hover/focus preview. Never the answer. */
@@ -29,7 +30,7 @@ export interface QuestionDotProps extends Omit<
   isSelected?: boolean;
   /** Click, Enter or Space (also the first touch tap): open the practice panel. */
   onOpen: (questionId: string) => void;
-  /** Chapter number for the label (`3장 12번 문제`); falls back to `chapterTitle`. */
+  /** Chapter number for the dot's name (`3장 12번 문제, …`); falls back to `chapterTitle`. */
   chapterNumber?: number | string;
   lastGradedResult?: LastGradedResult;
   needsRetry?: boolean;

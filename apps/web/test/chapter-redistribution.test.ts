@@ -24,7 +24,7 @@ function question(n: number, chapter: string | null, source: 'manual' | 'auto' =
     chapter_id: chapter,
     question_number: n,
     question_type: 'MCQ' as const,
-    label: chapter === CH1 ? `1장 ${n}번` : chapter === CH2 ? `2장 ${n}번` : `${n}번`,
+    label: `${n}번`,
     stem_preview: `문제 ${n}\n  발문`,
     chapter_source: source,
   };
@@ -58,10 +58,10 @@ describe('CHREDIST-01 model', () => {
       ['none', '챕터 없음', 1],
     ]);
     expect(groups[0]?.questions.map((q) => [q.number, q.badge])).toEqual([
-      ['1장 1번', undefined],
-      ['1장 2번', '직접 정함'],
+      ['1번', undefined],
+      ['2번', '직접 정함'],
     ]);
-    expect(groups[2]?.questions[0]?.number).toBe('챕터 없음 4번');
+    expect(groups[2]?.questions[0]?.number).toBe('4번');
     expect(groups[0]?.questions[0]?.preview).toBe('문제 1 발문');
   });
 
@@ -99,7 +99,7 @@ describe('CHREDIST-01 model', () => {
     items: [
       {
         question_id: Q(1),
-        number_label: '1장 1번',
+        number_label: '1번',
         stem_preview: '문제 1',
         current_chapter: { id: CH1, title: '1장 물의 순환', document_id: 'd1' },
         recommended_chapter: { id: CH2, title: '2장 정수 처리', document_id: 'd1' },

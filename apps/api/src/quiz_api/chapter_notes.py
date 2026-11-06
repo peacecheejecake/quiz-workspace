@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 STEM_PREVIEW_CHARS = 40
@@ -30,13 +30,10 @@ def input_fingerprint(
     return hashlib.sha256(("\n".join(lines) + "\n" + body_hash).encode("utf-8")).hexdigest()
 
 
-def question_label(
-    chapter_number: int | None, chapter_title: str, question_number: int | None, position: int
-) -> str:
-    """ "<n>장 <번호>번" like the Heatmap preview; the chapter title stands in for a chapter
-    without a number and the position in the chapter for an unnumbered question."""
-    chapter = f"{chapter_number}장" if chapter_number is not None else chapter_title.strip()
-    return f"{chapter} {question_number if question_number is not None else position}번"
+def question_label(question_number: int | None) -> str:
+    """The textbook's printed number, `12번`, or `번호 없음` (UX12-NUMBER). These labels sit inside
+    a chapter's note, so the chapter is implied."""
+    return f"{question_number}번" if question_number is not None else "번호 없음"
 
 
 def stem_preview(stem: str) -> str:
@@ -67,6 +64,17 @@ def parse_refs(raw: Any) -> list[Ref]:
         except (KeyError, TypeError, ValueError):
             continue
     return refs
+
+
+def relabel(refs: list[Ref], numbers: Mapping[uuid.UUID, int | None]) -> list[Ref]:
+    """`refs` labelled by the questions' current numbers: a stored label may predate UX12-NUMBER
+    (`3장 12번`, or a position). A question missing from `numbers` keeps its stored label."""
+    return [
+        replace(r, label=question_label(numbers[r.question_id]))
+        if r.question_id in numbers
+        else r
+        for r in refs
+    ]
 
 
 @dataclass(frozen=True)

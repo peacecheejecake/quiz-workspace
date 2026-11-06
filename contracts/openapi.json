@@ -3317,7 +3317,7 @@
       "HighlightQuestion": {
         "properties": {
           "number_label": {
-            "description": "`<n>장 <번호>번` (the Heatmap's numbering).",
+            "description": "`<번호>번` or `번호 없음` (the printed number).",
             "title": "Number Label",
             "type": "string"
           },
@@ -3754,6 +3754,14 @@
           "answer_missing": {
             "title": "Answer Missing",
             "type": "boolean"
+          },
+          "block_ids": {
+            "description": "The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids only, for the document viewer to mark the whole printed question.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
           },
           "chapter_id": {
             "anyOf": [
@@ -8538,7 +8546,7 @@
             "title": "Chapter Title"
           },
           "number_label": {
-            "description": "\"<n>장 <번호>번\" like the Heatmap, or \"<번호>번\".",
+            "description": "\"<번호>번\" or \"번호 없음\".",
             "title": "Number Label",
             "type": "string"
           },
@@ -20053,6 +20061,18 @@
               "format": "uuid",
               "title": "Import Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Fill `block_ids` (the document viewer, UX12-EXTRACT).",
+            "in": "query",
+            "name": "include_blocks",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Fill `block_ids` (the document viewer, UX12-EXTRACT).",
+              "title": "Include Blocks",
+              "type": "boolean"
             }
           }
         ],

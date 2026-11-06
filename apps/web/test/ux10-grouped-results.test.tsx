@@ -21,7 +21,7 @@ it('UX10-PLAY-AC05 names O and X, preserves pending and opens the run position',
   };
   const select = vi.fn();
   render(
-    <GroupedResults
+    <GroupedResults source="bank"
       items={[
         base,
         { ...base, position: 2, result: 'incorrect' },

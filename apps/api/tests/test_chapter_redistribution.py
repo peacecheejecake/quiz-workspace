@@ -147,10 +147,8 @@ def _import_draft(draft_id: uuid.UUID) -> DraftRecord:
 
 
 def test_labels_and_stem_preview() -> None:
-    assert redist.number_label(3, "3장 정수", 12) == "3장 12번"
-    assert redist.number_label(None, "부록", 2) == "부록 2번"
-    assert redist.number_label(None, None, 5) == "5번"
-    assert redist.number_label(None, None, None) == "번호 없음"
+    assert redist.question_label(12) == "12번"
+    assert redist.question_label(None) == "번호 없음"
     assert redist.stem_preview("  가\n나   " + "다" * 60) == ("가 나 " + "다" * 60)[:40]
     assert len(redist.stem_preview("x" * 100)) == 40
 
