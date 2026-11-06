@@ -100,6 +100,7 @@
 | Task | 항목 | 구현 | 크기·의존 |
 |---|---|---|---|
 | DESIGN-5 유리·버튼 | 투명도, 유리 위 버튼, 아이콘 버튼 테두리, hover, Heatmap 확대, header gradation | 유리 floating layer를 더 투명하게 한다. 유리 위 버튼은 `보던 문제로 돌아가기`와 목록 항목의 배경을 지우고, 해설처럼 영역이 구분돼야 하는 곳은 회색에서 흰색으로 바꾼다. 아이콘만 있는 버튼의 테두리를 지운다. 모든 버튼에 hover 색을 넣는다. Heatmap cell hover 확대를 키운다. global header의 gradation을 뺀다. 유리 레이어 하단 고정 영역에 흰색 배경을 두지 않는다. 홈 상단 고정 header 영역에 glassmorphism을 적용한다. confirm dialog 하단 선을 지운다 | M·DESIGN-1, 3 |
+| DESIGN-7 흰 버튼·회색 영역 | 사용자 정정 | 흰색 버튼은 배경을 유지한다. 배경 삭제는 `보던 문제로 돌아가기`와 목록 항목에만 적용한다. 해설 같은 영역은 회색을 유지한다 | S·DESIGN-5 |
 
 ### 4.2 SHELL — 앱 셸·세션·설정
 
@@ -293,7 +294,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 ∥ MOCKUX-12 ∥ MOCKUX-13 ∥ MOCKUX-14 ∥ MOCKUX-15 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 ∥ MOCKUX-12 ∥ MOCKUX-13 ∥ MOCKUX-14 ∥ MOCKUX-15 ∥ DESIGN-7 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -404,6 +405,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-13 | 10 | 진행 | |
 | MOCKUX-14 | 10 | 완료 | 번호·O/X 표, 열 전체가 버튼, Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-15 | 10 | 진행 | |
+| DESIGN-7 | 10 | 진행 | |
 | DESIGN-6 | 10 | 완료 | 마커 실제 21px·18px였던 것을 28px로, hover 1.5배, 간격 0→7px, Codex P2(기존 테스트 값) 수정, Chromium Storybook 측정, E2E는 PR CI에서 확인 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
