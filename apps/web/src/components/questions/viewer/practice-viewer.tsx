@@ -68,7 +68,12 @@ import {
 } from './practice-model';
 import { NavButton } from './nav-button';
 import { QuestionBody, QuestionStem } from './question-body';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+  type QuestionSourceControls,
+} from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
@@ -116,7 +121,7 @@ export interface PracticeViewerProps {
    * Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu; UX7-BANK-2:
    * everyone else's 문제 정보 menu, shown in archived workspaces too).
    */
-  readonly headerExtra?: ReactNode;
+  readonly headerExtra?: (source: QuestionSourceControls) => ReactNode;
   /**
    * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
    * a new `seq` invalidates `questionId` once.
@@ -199,6 +204,8 @@ export function PracticeViewer({
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
+  const source = useQuestionSource(questionId ? { kind: 'question', id: questionId } : null);
+  const extra = headerExtra?.({ onShowSource: source.onShowSource });
 
   // One cache per workspace: another workspace starts empty (the old one is dropped).
   const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
@@ -514,11 +521,11 @@ export function PracticeViewer({
               disabled={!ready}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
-            {headerExtra}
+            {extra}
           </>
         ) : view ? (
           // Archived: no study toggles, but the read-only 문제 정보 menu stays (UX7-BANK-2).
-          headerExtra
+          extra
         ) : undefined
       }
     >
@@ -560,7 +567,8 @@ export function PracticeViewer({
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
           {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
-          <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
+          <QuestionSourceButton source={source} />
+          <QuestionSourceDialog source={source} />
           {readOnly ? (
             <>
               <p className={styles.notice}>
