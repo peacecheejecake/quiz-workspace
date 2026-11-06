@@ -93,7 +93,7 @@
 //   button "모의고사 닫기"; while loading `[aria-busy="true"]` + status "불러오는 중"; each view's
 //   title is a heading that gets focus (list: "모의고사", create: "모의고사 만들기", detail: the
 //   mock exam's name); BackLink "모의고사 목록" on create/detail.
-//   List: text "모의고사 n개", button "추가" (editors of active workspaces only), list "모의고사
+//   List: text "모의고사 n개", button "추가" (every member; UX12-MOCKNAV-AC05), list "모의고사
 //   목록" with one listitem per mock exam: button named by the title (opens the detail), status
 //   badge text, meta "문제 n개 · <유형, …> · <시각>", button "풀기" (ready/partial), menu button
 //   "<이름> 메뉴" (editors) with menuitems 이름 바꾸기 / 설정 바꾸기 / 삭제; progressbar "문제 생성

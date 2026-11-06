@@ -7,7 +7,14 @@
 
 ```yaml
 id: UX12-MOCKNAV
-linked_tests: [UX12-MOCKNAV-AC01, UX12-MOCKNAV-AC02, UX12-MOCKNAV-AC03, UX12-MOCKNAV-AC04]
+linked_tests:
+  [
+    UX12-MOCKNAV-AC01,
+    UX12-MOCKNAV-AC02,
+    UX12-MOCKNAV-AC03,
+    UX12-MOCKNAV-AC04,
+    UX12-MOCKNAV-AC05,
+  ]
 ```
 
 **명세:** [UX12 MOCKUX-2](../implementation/ux12/index.md), [MOCK-01](mock-exams.md), [UX10-PLAY](ux10-play.md), [QVIEW-01](question-viewer.md)
@@ -33,5 +40,9 @@ linked_tests: [UX12-MOCKNAV-AC01, UX12-MOCKNAV-AC02, UX12-MOCKNAV-AC03, UX12-MOC
 ### UX12-MOCKNAV-AC04
 
 도움말의 풀이 절 제목과 원본 풀이의 범위 고르기 제목은 `모의고사`이고, 화면에 `문제 풀기`라는 글자가 없다.
+
+### UX12-MOCKNAV-AC05
+
+사용자 결정(2026-11-06): 목록의 `추가`는 보기 권한과 보관된 Workspace를 포함한 모든 구성원에게 보이고, 모의고사가 없는 빈 상태에서도 그렇다. 편집 권한이 없으면 `추가`가 같은 만들기 화면을 열고 변형 유형이 비활성이며 "변형 출제에는 편집 권한이 필요합니다."를 보인다. 여기서는 변형 없는 원본 풀이만 시작할 수 있고 모의고사는 저장되지 않는다. 빈 상태의 만들기 안내는 편집 권한자에게만 보인다. 서버 권한은 그대로다(`POST /workspaces/:id/mock-exams`는 보기 권한에 403, 보관된 Workspace에 403 `workspace-archived`, MOCK-01-C05).
 
 **E2E:** `tests/e2e/quality/ux12-mock-nav.spec.ts`

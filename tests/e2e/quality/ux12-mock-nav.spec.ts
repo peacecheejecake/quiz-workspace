@@ -151,3 +151,49 @@ test(
     await expect(panel.getByText(/문제 ?풀기/)).toHaveCount(0);
   },
 );
+
+test(
+  'UX12-MOCKNAV-AC05 without edit rights 추가 starts only a variation-free run',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const { owner, workspace } = await seedExam(workspaceFactory, 'ux12-mocknav-ac05');
+    const viewer = await workspaceFactory.member('ux12-mocknav-ac05-viewer');
+    seedMembership(workspace.id, viewer.user.id, 'viewer');
+
+    const startRun = async (dialog: Locator) => {
+      await mockUi.add(dialog).click();
+      await expect(page).toHaveURL(/[?&]mock=new/);
+      await expect(mockUi.variations(dialog)).not.toHaveCount(0);
+      for (const box of await mockUi.variations(dialog).all()) await expect(box).toBeDisabled();
+      await expect(dialog.getByText(/변형 출제에는 편집 권한이 필요합니다/)).toBeVisible();
+      await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
+      await mockUi.next(dialog).click();
+      await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+      const request = page.waitForRequest(
+        (r) => r.method() === 'POST' && /\/practice-runs$/.test(new URL(r.url()).pathname),
+      );
+      await dialog.getByRole('button', { name: /^(시작|start)$/i }).click();
+      expect((await request).postDataJSON().source).toBe('bank');
+      await expect(page).toHaveURL(/practice=/);
+    };
+
+    await signInAs(page, viewer.user);
+    await page.goto(homePath(workspace.id));
+    await homePlay(page).click();
+    await startRun(mockUi.dialog(page));
+
+    await workspaceFactory.archive(owner, workspace.id);
+    await page.context().clearCookies();
+    await signInAs(page, owner.user);
+    await page.goto(homePath(workspace.id));
+    await homePlay(page).click();
+    await startRun(mockUi.dialog(page));
+
+    const saved = await owner.api.ok<{ items: unknown[] }>(
+      'GET',
+      `/workspaces/${workspace.id}/mock-exams`,
+      undefined,
+    );
+    expect(saved.items).toHaveLength(1);
+  },
+);

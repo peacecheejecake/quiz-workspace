@@ -238,12 +238,13 @@ test(
     await expect(mockUi.dialog(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
 
-    // A viewer gets the same entry (enabled) and the empty state, without 추가.
+    // A viewer gets the same entry (enabled), the empty state and 추가, without the hint.
     await switchUser(page, viewer, ws.id);
     await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const viewerDialog = mockUi.dialog(page);
     await expect(viewerDialog.getByText(MOCK_TEXT.empty)).toBeVisible();
-    await expect(mockUi.add(viewerDialog)).toHaveCount(0);
+    await expect(mockUi.add(viewerDialog)).toHaveCount(1);
+    await expect(viewerDialog.getByText(MOCK_TEXT.emptyHint)).toHaveCount(0);
   },
 );
 
@@ -652,13 +653,13 @@ test(
     const outsider = await workspaceFactory.member('mock01-ac07-outsider');
     await workspaceFactory.create(outsider);
 
-    // Viewer: the list and 풀기 only; writes are 403.
+    // Viewer: the list, 풀기 and 추가 for a variation-free run; writes are 403.
     await openHome(page, viewer, s.workspaceId);
     let dialog = await openMockExams(page);
     const row = mockUi.row(dialog, '권한 점검');
     await expect(row).toBeVisible();
     await expect(mockUi.practise(row)).toBeVisible();
-    await expect(mockUi.add(dialog)).toHaveCount(0);
+    await expect(mockUi.add(dialog)).toHaveCount(1);
     await expect(mockUi.rowMenu(row, '권한 점검')).toHaveCount(0);
     const config = { variation_types: ['OPTION_SHUFFLE'] as VariationType[], question_count: 1 };
     await expectProblem(
@@ -698,7 +699,7 @@ test(
     dialog = await openMockExams(page);
     const archivedRow = mockUi.row(dialog, '권한 점검');
     await expect(archivedRow).toBeVisible();
-    await expect(mockUi.add(dialog)).toHaveCount(0);
+    await expect(mockUi.add(dialog)).toHaveCount(1);
     await expect(mockUi.rowMenu(archivedRow, '권한 점검')).toHaveCount(0);
     await mockUi.open(archivedRow, '권한 점검').click();
     await expect(mockUi.more(dialog)).toHaveCount(0);

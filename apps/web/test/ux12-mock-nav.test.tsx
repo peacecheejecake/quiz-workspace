@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MockExamDetail } from '../src/components/questions/mock-exams/mock-exam-detail';
+import { MockExamsPanel } from '../src/components/questions/mock-exams/mock-exams-panel';
 
 const EXAM = {
   id: 'exam',
@@ -123,4 +124,49 @@ it('UX12-MOCKNAV-AC03 shows a viewer no 더보기', async () => {
   renderDetail({ canEdit: false });
   expect(await screen.findByRole('button', { name: '풀기' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '더보기' })).toBeNull();
+});
+
+function renderPanel(canEdit: boolean, view: { view: 'list' } | { view: 'create' }) {
+  const onViewChange = vi.fn();
+  const api = { list: async () => ({ ok: true, data: { items: [], llm_available: false } }) };
+  render(
+    <MockExamsPanel
+      open
+      onOpenChange={() => undefined}
+      container={null}
+      workspaceId="w"
+      canEdit={canEdit}
+      view={view}
+      onViewChange={onViewChange}
+      onPractise={() => undefined}
+      onBankStarted={() => undefined}
+      api={api as never}
+    />,
+  );
+  return onViewChange;
+}
+
+it('UX12-MOCKNAV-AC05 shows 추가 without the hint on an empty list without edit rights', async () => {
+  const user = userEvent.setup();
+  const onViewChange = renderPanel(false, { view: 'list' });
+  await user.click(await screen.findByRole('button', { name: '추가' }));
+  expect(onViewChange).toHaveBeenCalledWith({ view: 'create' }, 'push');
+  expect(screen.getByText('아직 모의고사가 없습니다.')).toBeInTheDocument();
+  expect(screen.queryByText(/모의고사를 만드세요/)).toBeNull();
+});
+
+it('UX12-MOCKNAV-AC05 keeps the hint for editors', async () => {
+  renderPanel(true, { view: 'list' });
+  expect(await screen.findByRole('button', { name: '추가' })).toBeInTheDocument();
+  expect(screen.getByText(/모의고사를 만드세요/)).toBeInTheDocument();
+});
+
+it('UX12-MOCKNAV-AC05 offers no variation in the form without edit rights', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ chapters: [] }), { status: 200 })),
+  );
+  renderPanel(false, { view: 'create' });
+  expect(await screen.findByText('변형 출제에는 편집 권한이 필요합니다.')).toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeDisabled();
 });
