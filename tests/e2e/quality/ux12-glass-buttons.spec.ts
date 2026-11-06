@@ -168,7 +168,7 @@ test(
       .toBe(hover);
 
     await page.goto(`/workspaces/${ws.id}?panel=share`);
-    const footer = page.locator('.qz-panel > .footer');
+    const footer = page.locator('.qz-panel > .footer:not(:empty)');
     await expect(footer).toBeVisible();
     expect((await surfaceOf(footer)).color).toBe(TRANSPARENT);
   },
