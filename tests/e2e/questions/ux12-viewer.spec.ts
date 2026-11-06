@@ -116,7 +116,7 @@ test(
 );
 
 test(
-  'UX12-VIEW-AC02 the practice footer 다시 풀기 has a background and a border',
+  'UX12-VIEW-AC02 the practice footer 다시 풀기 is the default button, with a border',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-view-style', 1);
@@ -132,7 +132,7 @@ test(
     await expect(again).toBeEnabled();
     await expect(again).toHaveAttribute('data-variant', 'secondary');
     await expect(again).not.toHaveCSS('border-top-width', '0px');
-    await expect(again).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(again).not.toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
   },
 );
 
