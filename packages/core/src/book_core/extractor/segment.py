@@ -367,11 +367,33 @@ def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry
     return entries, orientation == "ambiguous"
 
 
-def _row_options(row: Sequence[str]) -> list[tuple[str, str]]:
-    """``(label, text)`` of the options a table row starts with a circled label: ``①``, ``①xxx``
-    or ``① x ② y`` in a cell. The cells after a label, up to the next one, are its text, joined
-    as printed (`` | ``). A row whose first cell has no label holds none."""
-    if not row or not row[0] or row[0][0] not in CIRCLED_DIGITS:
+OptionRow = list[tuple[str, str]]
+
+
+def _starts_with_label(cell: str) -> bool:
+    return bool(cell) and cell[0] in CIRCLED_DIGITS
+
+
+def _is_bare_label(cell: str) -> bool:
+    return len(cell) == 1 and _starts_with_label(cell)
+
+
+def _label_column_row(row: Sequence[str]) -> OptionRow:
+    """One option per row: the first cell's label (``①``, ``①xxx``); the cells beside it are its
+    text as printed, even when they refer to labels (``①, ②``)."""
+    found = split_option_line(row[0]) if row and _starts_with_label(row[0]) else None
+    if not found or len(found) != 1:
+        return []
+    label, text = found[0]
+    return [(label, " | ".join(c for c in (text, *row[1:]) if c))]
+
+
+def _row_options(row: Sequence[str]) -> OptionRow:
+    """``(label, text)`` of the options a table row prints side by side: every cell that starts
+    with a circled label opens one (``①``, ``①xxx``, ``① x ② y``). The cells after a label, up to
+    the next one, are its text, joined as printed (`` | ``). A row whose first cell has no label
+    holds none."""
+    if not row or not _starts_with_label(row[0]):
         return []
     labels: list[str] = []
     parts: list[list[str]] = []
@@ -385,21 +407,44 @@ def _row_options(row: Sequence[str]) -> list[tuple[str, str]]:
     return [(label, " | ".join(cells)) for label, cells in zip(labels, parts, strict=True)]
 
 
+def _has_label_column(rows: Sequence[Sequence[str]]) -> bool:
+    """Two or more rows open with a label alone, and those labels are not one of several label
+    cells per row (``| ① | 갑 | ② | 을 |``): the first column holds the option labels."""
+    labelled = [row for row in rows if _starts_with_label(row[0])]
+    return (
+        len(labelled) >= 2
+        and all(_is_bare_label(row[0]) for row in labelled)
+        and not all(any(_is_bare_label(cell) for cell in row[1:]) for row in labelled)
+    )
+
+
+def _is_option_run(found: Sequence[OptionRow], *, continues: bool) -> bool:
+    """The labels run on without a gap from ①, at least two; the table that continues options
+    split over pages needs one, from any label."""
+    labels = sorted(CIRCLED_DIGITS.index(label) for row in found for label, _ in row)
+    first = labels[0] if continues and labels else 0
+    return len(labels) >= (1 if continues else 2) and labels == list(
+        range(first, first + len(labels))
+    )
+
+
 def _table_options(
     block: Block, index: int, *, continues: bool = False
 ) -> tuple[list[str], list[RawOption]]:
-    """``(header parts, options)`` of an option table, ``([], [])`` for any other table. Its
-    labels run on without a gap from ①, at least two; the table that continues options split
-    over pages needs one, from any label. Cells that merely mention a label are not options."""
+    """``(header parts, options)`` of an option table, ``([], [])`` for any other table. A label
+    column keeps the cells beside it as content; other tables are read cell by cell, and a table
+    that fails that reading (labels repeat in the cells) is tried by its first column. Cells that
+    merely mention a label are not options."""
     if block.table is None:
         return [], []
     rows = [[cell.strip() for cell in row] for row in block.table.rows]
-    found = [_row_options(row) for row in rows]
-    labelled = [i for i, row in enumerate(found) if row]
-    labels = sorted(CIRCLED_DIGITS.index(label) for row in found for label, _ in row)
-    first = labels[0] if continues and labels else 0
-    if len(labels) < (1 if continues else 2) or labels != list(range(first, first + len(labels))):
+    by_column = [_label_column_row(row) for row in rows]
+    by_cell = [_row_options(row) for row in rows]
+    readings = [by_column, by_cell] if _has_label_column(rows) else [by_cell, by_column]
+    found = next((r for r in readings if _is_option_run(r, continues=continues)), None)
+    if found is None:
         return [], []
+    labelled = [i for i, row in enumerate(found) if row]
     line = SourceLine(text=block.text, block=block, block_index=index)
     header = [" | ".join(c for c in row if c) for row in rows[: labelled[0]]]
     options = [RawOption(label=x, text=text, lines=[line]) for row in found for x, text in row]

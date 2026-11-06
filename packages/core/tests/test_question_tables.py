@@ -152,6 +152,43 @@ def test_labels_in_several_cells_read_by_column_go_back_in_label_order() -> None
 
 
 @pytest.mark.parametrize(
+    ("rows", "texts"),
+    [
+        # A dedicated label column: the cells beside it refer to labels, they open no option.
+        (
+            (("①", "①, ②", "가"), ("②", "②, ③", "나"), ("③", "③, ④", "다")),
+            ["①, ② | 가", "②, ③ | 나", "③, ④ | 다"],
+        ),
+        (
+            (("①", "②", "가"), ("②", "③", "나")),
+            ["② | 가", "③ | 나"],
+        ),
+        # A bare reference that would also read as a gapless run of options.
+        (
+            (("①", "③ 갑"), ("②", "④ 을")),
+            ["③ 갑", "④ 을"],
+        ),
+        # Labels glued to the first cell of each row.
+        (
+            (("①갑", "①, ②"), ("②을", "②, ③")),
+            ["갑 | ①, ②", "을 | ②, ③"],
+        ),
+    ],
+)
+def test_cells_beside_a_label_column_stay_content(rows: Rows, texts: list[str]) -> None:
+    draft = _draft("1. 옳은 것은?", rows)
+    assert [o.text for o in draft.options] == texts
+    assert draft.question_type == "MCQ"
+    assert "table_in_stem" not in {v.code for v in draft.validations}
+
+
+def test_a_label_cell_and_its_text_in_turn_are_several_options() -> None:
+    rows: Rows = (("①", "갑", "②", "을"), ("③", "병", "④", "정"))
+    draft = _draft("1. 옳은 것은?", rows)
+    assert [o.text for o in draft.options] == ["갑", "을", "병", "정"]
+
+
+@pytest.mark.parametrize(
     "rows",
     [
         # Labels used as content: not from ① and not consecutive.
