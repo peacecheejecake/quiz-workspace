@@ -14,11 +14,7 @@ function selectorsDeclaring(css: string, declaration: RegExp): string[] {
   return [...clean.matchAll(/([^{};]+)\{([^{}]*)\}/g)]
     .filter(([, , body = '']) => declaration.test(body))
     .map(([, selector = '']) =>
-      selector
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/\( /g, '(')
-        .replace(/,? \)/g, ')'),
+      selector.trim().replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/,? \)/g, ')'),
     );
 }
 
@@ -54,7 +50,10 @@ describe('UX12-CONTROLS button boundary guard', () => {
 describe('UX12-CONTROLS compact button rows', () => {
   it('uses --control-gap in the kit rows that hold only buttons', () => {
     const gaps = (css: string, block: string) =>
-      css.split(block)[1]?.split('}')[0]?.match(/gap:\s*([^;]+);/)?.[1];
+      css
+        .split(block)[1]
+        ?.split('}')[0]
+        ?.match(/gap:\s*([^;]+);/)?.[1];
     expect(gaps(overlays, '> .footer {')).toBe('var(--control-gap)');
     expect(gaps(layout, '> .actions {')).toBe('var(--control-gap)');
     expect(gaps(questions, '> .chapter > .header > .actions {')).toBe('var(--control-gap)');

@@ -24,6 +24,7 @@ export function GroupedResults({
                 <li key={item.position}>
                   <Button
                     variant="ghost"
+                    borderless
                     className={styles.row}
                     onClick={() => onSelect(item.position)}
                   >

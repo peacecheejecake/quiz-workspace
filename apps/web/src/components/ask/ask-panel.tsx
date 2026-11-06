@@ -1079,7 +1079,7 @@ function useAskPanel({
               })}
             </ul>
             {cursor ? (
-              <Button size="sm" variant="ghost" onClick={loadMore}>
+              <Button size="sm" variant="ghost" borderless onClick={loadMore}>
                 더 보기
               </Button>
             ) : null}

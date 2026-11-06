@@ -6,7 +6,7 @@ packages/ui/src/primitives/{Button,IconButton}.tsx, styles/{controls,overlays}.c
 
 ## 설계
 
-- 모든 버튼은 기본 상태에서 배경 또는 테두리가 식별돼야 한다. primary는 유지하고 투명 버튼은 border token을 적용한다. hover만 테두리가 생기는 구현은 불가. disabled·selected·focus-visible·dark도 검증한다. 크기는 box-sizing:border-box로 유지한다.
+- **개정(UX12 DESIGN-1, 2026-11-06):** 아래 규칙은 아이콘 ghost와 `borderless` ghost 버튼에는 적용하지 않는다([UX12-CONTROLS](../../screens/ux12-controls.md)). 모든 버튼은 기본 상태에서 배경 또는 테두리가 식별돼야 한다. primary는 유지하고 투명 버튼은 border token을 적용한다. hover만 테두리가 생기는 구현은 불가. disabled·selected·focus-visible·dark도 검증한다. 크기는 box-sizing:border-box로 유지한다.
 - AI 질문 아이콘은 SVG viewBox와 실제 점 도형의 경계 중심을 일치시키고 inline SVG baseline 영향을 제거한다. 아이콘·문구 간격은 유지한다.
 - modal panel/dialog header의 빈 영역 또는 전용 drag handle에서만 touch/pen swipe를 시작한다. 입력·버튼·본문·PDF canvas·splitter에서 시작한 이동은 닫기가 아니다.
 - gesture 시작 시 panel 경계와 viewport 네 가장자리 간 거리가 가장 작은 방향을 고정한다. 동률이면 panel placement 방향을 우선하고 centered dialog는 아래 방향을 우선한다. 시작 후 resize 시 취소한다.
@@ -16,7 +16,7 @@ packages/ui/src/primitives/{Button,IconButton}.tsx, styles/{controls,overlays}.c
 
 ## 수용 기준
 
-- UX10-UI-AC01: light/dark에서 모든 Button/IconButton variant의 기본 경계 또는 배경이 보이고 기존 크기·focus가 유지된다.
+- UX10-UI-AC01: light/dark에서 Button/IconButton의 기본 경계 또는 배경이 보이고(아이콘 ghost·`borderless` 제외, UX12-CONTROLS) 기존 크기·focus가 유지된다.
 - UX10-UI-AC02: AI 점 아이콘의 시각 중심이 양 축에서 중앙이며 버튼 label이 유지된다.
 - UX10-UI-AC03: 오른쪽 panel·하단 sheet·중앙 dialog를 정해진 방향으로 swipe하면 최상위 하나만 닫히고 시작 요소로 focus가 돌아간다.
 - UX10-UI-AC04: 반대 방향·짧은 drag·본문 스크롤·텍스트 선택·splitter/PDF 조작은 닫지 않는다. cancel과 reduced-motion 동작이 정상이다.

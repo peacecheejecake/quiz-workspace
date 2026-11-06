@@ -414,6 +414,7 @@ function AiExplanationArea({
           <Button
             size="sm"
             variant="ghost"
+            borderless
             aria-expanded={expanded}
             aria-controls={bodyId}
             onClick={() => setExpanded((open) => !open)}

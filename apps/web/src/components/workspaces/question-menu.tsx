@@ -2,7 +2,6 @@
 
 import { Fragment, useId, useRef } from 'react';
 import {
-  Button,
   ChevronDownIcon,
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +9,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  IconButton,
 } from '@quiz/ui';
 
 /** Why the workspace is read-only for this member, or null when they can edit. */
@@ -87,9 +87,11 @@ export function QuestionMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button ref={triggerRef} aria-label="문제 메뉴">
-          <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-        </Button>
+        <IconButton
+          ref={triggerRef}
+          label="문제 메뉴"
+          icon={<ChevronDownIcon width={16} height={16} aria-hidden="true" />}
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"

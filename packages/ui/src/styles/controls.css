@@ -83,6 +83,19 @@
 }
 
 /*
+ * The only buttons without a visible boundary (UX12-CONTROLS): icon ghost buttons and ghost text
+ * buttons marked `borderless`. The transparent border keeps their size; hover fills the background.
+ */
+.qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+.qz-button[data-variant='ghost'][data-borderless]:not(
+    [aria-pressed],
+    [data-state='on'],
+    [data-state='off']
+  ) {
+  border-color: transparent;
+}
+
+/*
  * Hover, pressed (while held) and selected/on use three different backgrounds (§4.1). Filled
  * (primary) buttons step the accent fill (--color-accent-hover / -pressed); the others use the
  * neutral state tokens. Hover applies only to hover-capable pointers, so a tap never leaves a
@@ -143,6 +156,16 @@
 
 @media (forced-colors: active) {
   :is(.qz-button, .qz-icon-button) {
+    border-color: ButtonText;
+  }
+
+  /* Same selector as the transparent rule above, so the boundary returns here. */
+  .qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+  .qz-button[data-variant='ghost'][data-borderless]:not(
+      [aria-pressed],
+      [data-state='on'],
+      [data-state='off']
+    ) {
     border-color: ButtonText;
   }
 

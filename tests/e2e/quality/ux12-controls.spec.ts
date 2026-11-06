@@ -183,7 +183,7 @@ test(
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
     await page.goto('/workspaces');
-    const pageActions = page.locator('.qz-page-header > .actions');
+    const pageActions = page.locator('.qz-page-header > .actions').first();
     await expect(pageActions).toBeVisible();
     await expect(pageActions).toHaveCSS('column-gap', GAP);
 
