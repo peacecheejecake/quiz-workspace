@@ -20,6 +20,7 @@
 | UX12-AIOFF | LLM off 잔여 AI UI 삭제 | 공통 AI 화면 | [ux12-ai-off.md](ux12-ai-off.md) |
 | UX12-SEARCHPAGE | 본문 검색 header의 AI에게 묻기 | 본문 검색 | [ux12-search-page.md](ux12-search-page.md) |
 | UX12-VIEW | 문제 보기 컨트롤 | 풀이 panel · 범위 풀이 | [ux12-viewer.md](ux12-viewer.md) |
+| UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |

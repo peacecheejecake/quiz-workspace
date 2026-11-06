@@ -8,10 +8,10 @@ packages/ui/src/primitives/{Button,IconButton}.tsx, styles/{controls,overlays}.c
 
 - **개정(UX12 DESIGN-1, 2026-11-06):** 아래 규칙은 아이콘 ghost와 `borderless` ghost 버튼에는 적용하지 않는다([UX12-CONTROLS](../../screens/ux12-controls.md)). 모든 버튼은 기본 상태에서 배경 또는 테두리가 식별돼야 한다. primary는 유지하고 투명 버튼은 border token을 적용한다. hover만 테두리가 생기는 구현은 불가. disabled·selected·focus-visible·dark도 검증한다. 크기는 box-sizing:border-box로 유지한다.
 - AI 질문 아이콘은 SVG viewBox와 실제 점 도형의 경계 중심을 일치시키고 inline SVG baseline 영향을 제거한다. 아이콘·문구 간격은 유지한다.
-- modal panel/dialog header의 빈 영역 또는 전용 drag handle에서만 touch/pen swipe를 시작한다. 입력·버튼·본문·PDF canvas·splitter에서 시작한 이동은 닫기가 아니다.
-- gesture 시작 시 panel 경계와 viewport 네 가장자리 간 거리가 가장 작은 방향을 고정한다. 동률이면 panel placement 방향을 우선하고 centered dialog는 아래 방향을 우선한다. 시작 후 resize 시 취소한다.
-- 주축 이동 64px 이상 또는 이동 24px 이상·속도 0.5px/ms 이상, 반대 축 이동보다 주축 이동이 1.5배 이상일 때 닫는다. 미달·pointercancel·다중 touch는 원위치. 수치는 semantic motion/gesture 상수로 한 곳에서 관리한다.
-- 최상위 overlay만 반응한다. onOpenChange 등 기존 닫기 경로를 사용해 URL/history·미저장 변경 확인·focus 복귀를 유지한다. 기존 Escape 중첩 닫기 후속 이슈도 회귀 검증한다.
+- **개정(UX12 DESIGN-3, 2026-11-06, D-2):** modal panel/dialog header 전체(제목 글자 포함) 또는 전용 grabber에서만 touch/pen swipe를 시작한다. header 안의 `button`, `a`, `input`, `select`, `textarea`, `contenteditable`과 본문·PDF canvas·splitter에서 시작한 이동은 닫기가 아니다.
+- **개정(UX12 DESIGN-3, 2026-11-06):** 가장 가까운 가장자리 판정을 없앴다(폰의 중앙 dialog가 left로 판정되는 버그). 방향은 폭 768px 미만이면 아래, 넓으면 side panel은 `side` 쪽, 중앙 dialog는 아래, AppShell drawer는 왼쪽이다. 시작 후 resize 시 취소한다.
+- 주축 이동 64px 이상 또는 이동 24px 이상·속도 0.5px/ms 이상, 반대 축 이동보다 주축 이동이 1.5배 이상일 때 닫는다. 미달·pointercancel·다중 touch는 원위치. **개정(UX12 DESIGN-3):** 표면은 CSS `translate`로 손가락을 따라가고, 놓는 순간의 속도 투영으로도 닫으며, 닫을 때는 그 속도로 화면 밖까지 움직인다([UX12-GESTURE](../../screens/ux12-gesture.md)). 수치는 semantic motion/gesture 상수로 한 곳에서 관리한다.
+- 최상위 overlay만 반응한다. onOpenChange 등 기존 닫기 경로를 사용해 URL/history·미저장 변경 확인·focus 복귀를 유지한다. **개정(UX12 DESIGN-3):** 저장하지 않은 입력이 있으면 backdrop 클릭처럼 닫지 않고 되돌린다. 기존 Escape 중첩 닫기 후속 이슈도 회귀 검증한다.
 - 닫기 버튼·Escape가 항상 대안이다. reduced-motion은 이동 애니메이션을 생략한다. 일반 스크롤의 preventDefault를 전역 적용하지 않는다.
 
 ## 수용 기준
