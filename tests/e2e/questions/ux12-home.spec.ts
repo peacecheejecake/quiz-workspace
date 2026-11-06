@@ -75,7 +75,7 @@ test(
 );
 
 test(
-  'UX12-HOME-AC02 after closing the panel hover and Tab focus still preview the dot',
+  'UX12-HOME-AC02 after closing the panel hover and keyboard focus still preview the dot',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openHeatmap(page, workspaceFactory, 'ux12-home-ac02');
@@ -92,9 +92,10 @@ test(
     await page.mouse.move(1, 1);
     await expect(overviewUi.tooltip(page)).toHaveCount(0);
 
-    await page.keyboard.press('Tab');
+    // Arrow keys, not Tab: WebKit's Tab skips buttons. Tab itself is covered in questions.test.tsx.
+    await page.keyboard.press('ArrowRight');
     await expect(dot).not.toBeFocused();
-    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('ArrowLeft');
     await expect(dot).toBeFocused();
     await expect(overviewUi.tooltip(page)).toBeVisible();
   },
