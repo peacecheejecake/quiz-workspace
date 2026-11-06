@@ -398,7 +398,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-7 | 10 | 완료 | 문서 관리 행 수로 변경, UX6-UPLOAD 결정 대체, Codex P2(CI phase)는 merge에서 반영 |
 | CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
 | CHAPTER-8 | 10 | 완료 | Workspace 챕터(migration 20261106210000), dropdown 새 챕터, 잠금 순서 통일, Codex 재리뷰 통과, 통합·E2E는 PR CI에서 확인 |
-| MOCKUX-11 | 10 | 진행 | |
+| MOCKUX-11 | 10 | 완료 | 푼 문제도 문제부터, 해설 보기, 같은 dialog 복귀는 해설 먼저, 스켈레톤, 챕터 풀기 삭제. Codex P2 2건 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
 | VIEW-8 | 10 | 진행 | |
 | MOCKUX-12 | 10 | 완료 | 이어 풀기 n/m을 주 버튼으로, 이어 풀기 지우기, Codex P2 수정 후 재리뷰 통과, 첫 머지는 리뷰를 읽기 전에 함, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-13 | 10 | 진행 | |
