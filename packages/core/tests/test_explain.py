@@ -15,6 +15,7 @@ from book_core.explain import (
     FAKE_RAW_SENTINEL,
     INCOMPLETE,
     PROMPT_VERSION,
+    READABLE_PROMPT_VERSIONS,
     TRUNCATED_SUFFIX,
     AnswerMismatchError,
     ExplainCallMeta,
@@ -25,6 +26,7 @@ from book_core.explain import (
     finish_explanation,
 )
 from book_core.explain.models import ExplainQuestion
+from book_core.explain.prompts import _SYSTEM
 from book_core.llm import LLMProviderError, TextDelta, TextStreamEnd
 
 TERMS = ["증발", "응결", "강수", "유출"]
@@ -73,9 +75,16 @@ def test_aiexpl_01_c04_the_request_has_the_answer_and_sources_but_no_user_field(
     assert request.attempt == 1
 
 
+def test_ux12_askmd_the_prompt_allows_tables_and_v2_stays_readable() -> None:
+    assert READABLE_PROMPT_VERSIONS == (PROMPT_VERSION, "question.ai_explain/v2")
+    assert "문단·목록·강조·코드·제목·인용·표를 쓸 수 있다" in _SYSTEM
+    assert "HTML·링크·이미지는 쓰지 않는다" in _SYSTEM
+    assert "표 칸에서도" in _SYSTEM
+
+
 def test_aiexpl_01_c04_the_human_explanation_has_no_way_into_the_prompt() -> None:
     """UX12 EXPL-2: the question may have one; the request has no field to carry it."""
-    assert PROMPT_VERSION == "question.ai_explain/v2"
+    assert PROMPT_VERSION == "question.ai_explain/v3"
     assert "explanation" not in {f.name for f in dataclasses.fields(ExplainQuestion)}
     with pytest.raises(TypeError):
         explain_question(  # type: ignore[call-arg]

@@ -63,7 +63,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
-from book_core.explain import PROMPT_VERSION
+from book_core.explain import PROMPT_VERSION, READABLE_PROMPT_VERSIONS
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -432,9 +432,9 @@ def _state(
     revision_id: uuid.UUID,
 ) -> dict[str, Any]:
     model = settings.ai_explanation_model
-    newest = repo.newest(kind.name, revision_id, PROMPT_VERSION, model)
-    live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
-    current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+    newest = repo.newest(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
+    live = repo.live(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
+    current = repo.current(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
     cancelled = (
         newest.id
         if newest is not None and newest.status == "failed" and newest.error_code == CANCELLED
@@ -652,8 +652,8 @@ def _create(
     model = settings.ai_explanation_model
     current: ExplanationRow | None = None
     if model is not None:
-        live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
-        current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+        live = repo.live(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
+        current = repo.current(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
         if live is not None:
             return _answer(repo, settings, kind, access, revision_id, 202)
         if current is not None and not regenerate:
@@ -682,8 +682,8 @@ def _create(
     # Lock order everywhere: the user (daily count), then the revision (one row per key).
     repo.lock_user(user_id)
     repo.lock_key(kind.name, revision_id)
-    live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
-    now_current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+    live = repo.live(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
+    now_current = repo.current(kind.name, revision_id, READABLE_PROMPT_VERSIONS, model)
     if live is not None:
         return _answer(repo, settings, kind, access, revision_id, 202)
     if now_current is not None and (
@@ -991,13 +991,13 @@ def _readable(
 ) -> ExplanationRow:
     """The explanation if the gate opens *its* revision: a session submitted on another revision
     of the question (or `view` on an older revision's explanation) is the unknown-id 404. So is a
-    row of another key (an older prompt version or model): every read by key has stopped showing
-    it, and an old id must not keep it readable (D-14)."""
+    row of another key (a prompt version no longer readable, or a model): every read by key has
+    stopped showing it, and an old id must not keep it readable (D-14)."""
     row = repo.get(kind.name, explanation_id)
     model = settings.ai_explanation_model
     if (
         row is None
-        or row.prompt_version != PROMPT_VERSION
+        or row.prompt_version not in READABLE_PROMPT_VERSIONS
         or (model is not None and row.model != model)
     ):
         raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)

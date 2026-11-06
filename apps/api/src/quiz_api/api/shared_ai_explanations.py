@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from book_core.explain import PROMPT_VERSION
+from book_core.explain import READABLE_PROMPT_VERSIONS
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -72,7 +72,7 @@ def get_shared_question_explanation(
     ):
         raise HTTPException(status_code=404, detail=NOT_FOUND)
     row = repo.current(
-        "question", target.revision_id, PROMPT_VERSION, settings.ai_explanation_model
+        "question", target.revision_id, READABLE_PROMPT_VERSIONS, settings.ai_explanation_model
     )
     if row is None or row.body is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
