@@ -391,6 +391,32 @@ describe('HILITE-01-C09 HighlightableText', () => {
     expect(window.getSelection()?.toString()).toBe('의 순서');
   });
 
+  it('UX12-HILITE-AC01 puts back a selection the browser dropped when focus moved in the menu', async () => {
+    render(<Harness />);
+    mouseSelect('장의 ', '핵심');
+    const open = await menu();
+
+    await waitFor(() => expect(open.contains(document.activeElement)).toBe(true));
+
+    // What WebKit does on every focus move (jsdom's focus() collapses after its focus events, so
+    // the event is fired directly).
+    window.getSelection()?.removeAllRanges();
+    fireEvent.focusIn(within(open).getByRole('menuitemradio', { name: '파랑' }));
+    expect(window.getSelection()?.toString()).toBe('장의 핵심');
+
+    window.getSelection()?.removeAllRanges();
+    fireEvent.focusIn(open);
+    expect(window.getSelection()?.toString()).toBe('장의 핵심');
+    // Still the reader's selection, not a change that closes the menu.
+    await act(async () => new Promise((r) => setTimeout(r, 10)));
+    expect(screen.getByRole('menu', { name: '하이라이트' })).toBeVisible();
+
+    // An outside press clears it for good.
+    fireEvent.pointerDown(document.body, { pointerType: 'mouse' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(window.getSelection()?.toString()).toBe('');
+  });
+
   it('HILITE-01-C09 a tap on a highlight (no selection) opens its menu like a click', async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();

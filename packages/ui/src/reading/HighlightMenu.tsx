@@ -67,8 +67,9 @@ function Swatch({ color }: { color: HighlightColor }) {
  * (`role="menu"` "하이라이트") anchored to the selection's box — above it, below when there is no
  * room, and below the end of a touch selection so it does not cover the OS selection menu. Items:
  * the three colors (`menuitemradio`, checked when the selection is exactly one highlight of that
- * color) · `하이라이트 지우기` (when the selection touches a highlight) · `복사`. Escape closes only
- * the menu, keeps the selection and returns focus to the area.
+ * color) · `하이라이트 지우기` (when the selection touches a highlight) · `복사`. The selection stays
+ * painted while the menu is open. Escape closes only the menu, keeps the selection and returns
+ * focus to the area.
  */
 export function HighlightMenu({
   selection,
@@ -217,6 +218,12 @@ export function HighlightMenu({
             returnFocusTo?.current?.focus({ preventScroll: true });
             if (reason === 'escape') last.current?.restore();
             else window.getSelection()?.removeAllRanges();
+          }}
+          onFocus={() => {
+            // WebKit drops the document selection on every focus move, so the menu (which takes
+            // focus, and hands it from item to item) puts it back to keep it painted.
+            // `HighlightableText` ignores these changes while focus is in the menu.
+            if (!closing.current) selection?.restore();
           }}
         >
           {readOnly ? null : (
