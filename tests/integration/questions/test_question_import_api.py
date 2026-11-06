@@ -625,7 +625,8 @@ def test_qimport_01_ac09_drafts_are_read_page_by_page_and_summarized_without_con
     with_blocks = owner.ok("GET", f"{base}/draft-summaries?include_blocks=true")
     for plain, extended in zip(items, with_blocks["items"], strict=True):
         ids = extended.pop("block_ids")
-        assert ids and all(isinstance(i, str) for i in ids)
+        assert ids
+        assert all(isinstance(i, str) for i in ids)
         assert extended == plain
     for draft in full:
         assert draft["payload"]["stem"] not in text
