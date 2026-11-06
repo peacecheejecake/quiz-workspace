@@ -2,15 +2,22 @@
 
 import { Button } from '@quiz/ui';
 import { displayStem } from '@/lib/questions/display-stem';
-import { RESULT_WORDS, type RunResultItem } from '@/lib/questions/practice-runs';
+import {
+  positionLabel,
+  RESULT_WORDS,
+  type RunResultItem,
+  type RunSource,
+} from '@/lib/questions/practice-runs';
 import { groupResults } from './result-groups';
 import styles from './grouped-results.module.css';
 
 export function GroupedResults({
   items,
+  source,
   onSelect,
 }: {
   readonly items: readonly RunResultItem[];
+  readonly source: RunSource;
   readonly onSelect: (position: number) => void;
 }) {
   return (
@@ -27,11 +34,7 @@ export function GroupedResults({
                     className={styles.row}
                     onClick={() => onSelect(item.position)}
                   >
-                    <span>
-                      {item.question_number === null
-                        ? `문제 ${item.position}`
-                        : `${item.question_number}번`}
-                    </span>
+                    <span>{positionLabel(item, source)}</span>
                     <span>
                       {item.preview
                         ? displayStem(item.preview).replace(/\s+/g, ' ').slice(0, 40)

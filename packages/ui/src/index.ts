@@ -130,7 +130,9 @@ export {
   QUESTION_DOT_STATUSES,
   deriveDotStatus,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
 } from './questions/status';

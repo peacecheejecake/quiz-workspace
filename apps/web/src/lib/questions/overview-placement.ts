@@ -1,6 +1,7 @@
 // QOV-01 heatmap placement: overview items in heatmap order with the chapter each one is shown
-// under, its display number and the `3장 12번 문제` title. Pure; shared by the server loader
+// under, its printed number and the `12번 문제` title. Pure; shared by the server loader
 // (filter-independent deep links) and the client screen.
+import { questionTitle } from '@quiz/ui';
 import type { OverviewChapter, OverviewItem, QuestionOverview } from './overview-data';
 
 export const NO_CHAPTER_KEY = 'none';
@@ -8,7 +9,8 @@ export const NO_CHAPTER_KEY = 'none';
 /** A heatmap question with the chapter it is shown under (panel title, labels). */
 export interface PlacedQuestion {
   readonly item: OverviewItem;
-  readonly number: string;
+  /** The textbook's printed number; null for a question without one (UX12-NUMBER). */
+  readonly number: string | null;
   readonly chapterKey: string;
   readonly chapterTitle: string;
   readonly chapterNumber: number | undefined;
@@ -34,16 +36,15 @@ export function placeQuestions(
   const seen = new Set<string>();
   const place = (key: string, title: string, number: number | null) => {
     seen.add(key);
-    (byChapter.get(key) ?? []).forEach((item, index) => {
+    for (const item of byChapter.get(key) ?? []) {
       placed.push({
         item,
-        // Unnumbered questions fall back to their position in the chapter.
-        number: String(item.question_number ?? index + 1),
+        number: item.question_number === null ? null : String(item.question_number),
         chapterKey: key,
         chapterTitle: title,
         chapterNumber: number ?? undefined,
       });
-    });
+    }
   };
   for (const chapter of chapters) place(chapterKey(chapter.id), chapter.title, chapter.number);
   // Defensive: items whose group is missing from `chapters` still get a dot.
@@ -53,13 +54,9 @@ export function placeQuestions(
   return placed;
 }
 
-/**
- * `3장 12번 문제` (or `<chapter title> 12번 문제`): the panel title, matching the dot label's
- * title (@quiz/ui `questionDotLabel`) so the panel names the question the dot announced.
- */
+/** `12번 문제` or `번호 없음`: the panel title, matching the dot's preview. */
 export function placedTitle(p: PlacedQuestion): string {
-  const chapter = p.chapterNumber !== undefined ? `${p.chapterNumber}장` : p.chapterTitle;
-  return `${chapter} ${p.number}번 문제`;
+  return questionTitle(p.number);
 }
 
 /** The placement of `questionId` in `overview` (unfiltered: its position is stable), or null. */
