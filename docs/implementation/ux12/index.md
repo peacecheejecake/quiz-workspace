@@ -402,7 +402,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-11 | 10 | 완료 | 푼 문제도 문제부터, 해설 보기, 같은 dialog 복귀는 해설 먼저, 스켈레톤, 챕터 풀기 삭제. Codex P2 2건 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
 | VIEW-8 | 10 | 완료 | 줄 중간 항목 분리와 추출 줄 보존, 실제 PDF 표시 변경 6건·오분리 0, 기존 8건은 다시 추출 필요, Codex P2 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
 | MOCKUX-12 | 10 | 완료 | 이어 풀기 n/m을 주 버튼으로, 이어 풀기 지우기, Codex P2 수정 후 재리뷰 통과, 첫 머지는 리뷰를 읽기 전에 함, 통합·E2E는 PR CI에서 확인 |
-| MOCKUX-13 | 10 | 진행 | |
+| MOCKUX-13 | 10 | 완료 | 닫기·Escape·바깥·스와이프 확인, Codex P3 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
 | MOCKUX-14 | 10 | 완료 | 번호·O/X 표, 열 전체가 버튼, Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-15 | 10 | 진행 | |
 | DESIGN-7 | 10 | 완료 | 흰 버튼 유지(raised), 해설 회색 유지, 돌아가기 ghost, Codex 지적 없음, 토큰 대비 AA, E2E는 PR CI에서 확인 |
