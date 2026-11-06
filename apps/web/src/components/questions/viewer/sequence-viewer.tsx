@@ -81,6 +81,7 @@ import {
   type GradeResult,
   type PracticeAnswer,
 } from './practice-model';
+import { NavButton } from './nav-button';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
 import {
   QuestionBody,
@@ -463,6 +464,7 @@ export function SequenceViewer({
       }}
       headerActions={header}
       footer={footer ? <div className={styles.footer}>{footer}</div> : undefined}
+      scrollKey={stepKey}
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
@@ -925,9 +927,14 @@ function useSolveStep({
   const formId = useId();
   const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  const submittedHere = useRef<string | null>(null);
   useEffect(() => {
-    // The submit button leaves: keep focus in the panel, on the result.
-    if (outcomeId) resultRef.current?.focus();
+    // The submit button leaves: keep focus in the panel, on the result. Coming back to a submitted
+    // position stays at the top (UX12-VIEW-AC06).
+    if (outcomeId && outcomeId === submittedHere.current) {
+      submittedHere.current = null;
+      resultRef.current?.focus();
+    }
   }, [outcomeId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -957,6 +964,7 @@ function useSolveStep({
         return;
       }
     }
+    if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
       result.ok
         ? { busy: null, outcome: result.data }
@@ -1232,15 +1240,15 @@ function useSolveStep({
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
-        {position > 1 ? (
-          <Button size="sm" disabled={holding} onClick={() => go(position - 1)}>
-            이전
-          </Button>
-        ) : null}
+        <NavButton
+          direction="previous"
+          label="이전"
+          unavailable={position <= 1 || holding}
+          onClick={() => go(position - 1)}
+        />
         {/* Always a way forward, also while the position loads (it is skipped then). */}
         {total === null ? null : last ? (
           <Button
-            size="sm"
             variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
             disabled={holding}
             onClick={toResults}
@@ -1248,13 +1256,15 @@ function useSolveStep({
             결과 보기
           </Button>
         ) : !item || !run || canAnswer ? (
-          <Button size="sm" disabled={holding} onClick={forward}>
-            건너뛰기
-          </Button>
+          <NavButton direction="next" label="건너뛰기" unavailable={holding} onClick={forward} />
         ) : (
-          <Button size="sm" variant="primary" disabled={holding} onClick={forward}>
-            다음
-          </Button>
+          <NavButton
+            direction="next"
+            label="다음"
+            variant="primary"
+            unavailable={holding}
+            onClick={forward}
+          />
         )}
       </nav>
     </>
