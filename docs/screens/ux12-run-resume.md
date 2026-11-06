@@ -3,7 +3,7 @@
 **Route:** `/workspaces/:workspaceId?panel=mock-exams` → `?panel=mock-exams&practice=<run>&i=<k>`
 
 **Phase:** UX12-RESUME.0
-**테스트:** `tests/e2e/questions/ux12-run-resume.spec.ts`, `tests/integration/questions/practice_runs/test_unfinished_runs_contract.py`, `apps/web/test/ux12-run-resume.test.tsx`, `apps/api/tests/test_practice_runs_unit.py`, `supabase/tests/34_practice_run_resume.test.sql`
+**테스트:** `tests/e2e/questions/ux12-run-resume.spec.ts`, `tests/integration/questions/practice_runs/test_practice_runs_contract.py`, `apps/web/test/ux12-run-resume.test.tsx`, `apps/api/tests/test_practice_runs_unit.py`, `supabase/tests/34_practice_run_resume.test.sql`
 
 ```yaml
 id: UX12-RESUME
