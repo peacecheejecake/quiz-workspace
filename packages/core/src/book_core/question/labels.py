@@ -302,7 +302,8 @@ def _break_text(text: str, *, after_table: bool = False) -> str:
     lead, passages, rest = parts
     blocks = ["\n".join([heading, *_passage_lines(body)]) for heading, body in passages]
     if lead:
-        blocks.insert(0, lead)
+        # Text after an earlier passage can open with its item list.
+        blocks.insert(0, _break_items(lead))
     if rest:
         blocks.append(_break_text(rest))
     return "\n\n".join(blocks)
@@ -365,22 +366,30 @@ def _passage_headings(text: str, *, after_table: bool) -> list[tuple[int, int]]:
     return found
 
 
+def _passages_end(text: str, headings: list[tuple[int, int]]) -> tuple[int, int]:
+    """How many of ``headings`` open a passage and where the last of those ends: at the first
+    item list, else at the blank line or end of the text. A heading right above a list has no
+    body, so it is no passage: ``<보기>`` and all after it stay out of the passages."""
+    end = len(text)
+    for i, (start, h_end) in enumerate(headings):
+        tail = len(text) - len(text[h_end:].lstrip())
+        limit = headings[i + 1][0] if i + 1 < len(headings) else len(text)
+        blank = _BLANK_LINE.search(text, tail, limit)
+        end = blank.start() if blank else limit
+        items = stem_item_starts(text[tail:end], require_lead=False)
+        if items:
+            return (i, start) if items[0] == 0 else (i + 1, tail + items[0])
+    return len(headings), end
+
+
 def _passage_parts(
     text: str, *, after_table: bool
 ) -> tuple[str, list[tuple[str, str]], str] | None:
     """``(lead, [(heading, body), ...], rest)`` of the passages in ``text``, ``None`` without one.
     ``after_table``: the text follows a table, so nothing need come before the first heading."""
-    headings = _passage_headings(text, after_table=after_table)
-    if not headings:
-        return None
-    tail = len(text) - len(text[headings[-1][1] :].lstrip())
-    blank = _BLANK_LINE.search(text, tail)
-    tail_end = blank.start() if blank else len(text)
-    items = stem_item_starts(text[tail:tail_end], require_lead=False)
-    end = tail + items[0] if items else tail_end
-    # A heading with no body is no passage: ``<보기>`` right above an item list.
-    if end == tail:
-        headings.pop()
+    found = _passage_headings(text, after_table=after_table)
+    kept, end = _passages_end(text, found)
+    headings = found[:kept]
     if not headings:
         return None
     ends = [start for start, _ in headings[1:]] + [end]

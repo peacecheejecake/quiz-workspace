@@ -464,5 +464,49 @@
       ],
       "rest": ""
     }
+  },
+  {
+    "name": "an item list before a later heading ends the passage it follows",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> ∙병 : 셋",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑 : 하나\n\n(가) 갑이다.\n(나) 을이다.\n\n<추가>\n∙병 : 셋",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "(가) 갑이다. (나) 을이다. <추가> ∙병 : 셋"
+    }
+  },
+  {
+    "name": "a bodiless heading after a passage stays out of that passage",
+    "stem": "옳은 것은? <자료> ∙갑이다. <보기> (가) 갑이다. (나) 을이다.",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑이다.\n\n<보기>\n\n(가) 갑이다.\n(나) 을이다.",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑이다.",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "<보기> (가) 갑이다. (나) 을이다."
+    }
   }
 ]

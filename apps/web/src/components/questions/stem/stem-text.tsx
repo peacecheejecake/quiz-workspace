@@ -86,9 +86,12 @@ function StemPassageBox({ passage }: { readonly passage: StemPassage }) {
 function PassageBlocks({ layout }: { readonly layout: StemPassageLayout }) {
   return (
     <>
-      {layout.lead.map((paragraph, i) => (
-        <p key={`lead-${i}`}>{paragraph}</p>
-      ))}
+      {layout.lead.map((paragraph, i) => {
+        // Text after an earlier passage can open with its item list.
+        const items = stemItems(paragraph);
+        if (items) return <LayoutBlocks key={`lead-${i}`} layout={items} />;
+        return <p key={`lead-${i}`}>{paragraph}</p>;
+      })}
       {layout.passages.map((passage, i) => (
         <StemPassageBox key={i} passage={passage} />
       ))}

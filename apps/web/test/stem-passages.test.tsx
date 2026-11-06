@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { StemBlocks, StemText } from '../src/components/questions/stem/stem-text';
-import { stemItems } from '../src/lib/questions/stem-items';
 import { stemPassageLayout, type StemPassageLayout } from '../src/lib/questions/stem-passages';
 
 const cases = JSON.parse(readFileSync('../../tests/fixtures/stem-passages.json', 'utf8')) as {
@@ -30,12 +29,23 @@ describe('stemPassageLayout', () => {
       const read = stemPassageLayout(normalized);
       expect(read?.lead).toEqual(layout?.lead);
       expect(read?.passages).toEqual(layout?.passages);
-      expect(stemItems(read?.rest ?? '')?.items).toEqual(stemItems(layout?.rest ?? '')?.items);
+      expect(read?.rest.replace(/\s+/gu, ' ')).toEqual(layout?.rest);
     },
   );
 });
 
 describe('StemBlocks with passages', () => {
+  it('keeps an item list between two passages a list', () => {
+    const { container } = render(
+      <div>
+        <StemBlocks stem="옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> ∙병 : 셋" />
+      </div>,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect([...root.children].map((el) => el.tagName)).toEqual(['P', 'SECTION', 'UL', 'SECTION']);
+    expect(root.children[2]?.children).toHaveLength(2);
+  });
+
   it('boxes each passage under its heading, with the item list after them', () => {
     const { container } = render(
       <div>

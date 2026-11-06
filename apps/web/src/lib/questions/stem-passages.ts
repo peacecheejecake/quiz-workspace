@@ -129,6 +129,25 @@ function passage(heading: string, rawBody: string): StemPassage {
 }
 
 /**
+ * How many of the headings open a passage and where the last of those ends: at the first item list,
+ * else at the blank line or end of the text. A heading right above a list has no body, so it is no
+ * passage: "<보기>" and all after it stay out of the passages.
+ */
+function passagesEnd(s: string, headings: readonly Heading[]): { kept: number; end: number } {
+  let end = s.length;
+  for (const [i, heading] of headings.entries()) {
+    const tail = s.length - s.slice(heading.end).trimStart().length;
+    const limit = headings[i + 1]?.start ?? s.length;
+    const blank = BLANK_LINE.exec(s.slice(tail, limit));
+    end = blank ? tail + blank.index : limit;
+    const list = itemListStart(s.slice(tail, end));
+    if (list === 0) return { kept: i, end: heading.start };
+    if (list !== null) return { kept: i + 1, end: tail + list };
+  }
+  return { kept: headings.length, end };
+}
+
+/**
  * The stem's passages with the text before and after them, or null without a passage (the stem is
  * then read as before). `afterTable`: the text follows a table in the stem, so nothing need come
  * before the first heading.
@@ -138,16 +157,9 @@ export function stemPassageLayout(
   { afterTable = false }: { readonly afterTable?: boolean } = {},
 ): StemPassageLayout | null {
   const s = displayStem(stem);
-  const headings = passageHeadings(s, afterTable);
-  const last = headings[headings.length - 1];
-  if (!last) return null;
-  const tail = s.length - s.slice(last.end).trimStart().length;
-  const blank = BLANK_LINE.exec(s.slice(tail));
-  const tailEnd = blank ? tail + blank.index : s.length;
-  const list = itemListStart(s.slice(tail, tailEnd));
-  const end = list === null ? tailEnd : tail + list;
-  // A heading with no body is no passage: "<보기>" right above an item list.
-  if (end === tail) headings.pop();
+  const found = passageHeadings(s, afterTable);
+  const { kept, end } = passagesEnd(s, found);
+  const headings = found.slice(0, kept);
   const first = headings[0];
   if (!first) return null;
   const bodies = headings.map((h, i) => s.slice(h.end, headings[i + 1]?.start ?? end));
