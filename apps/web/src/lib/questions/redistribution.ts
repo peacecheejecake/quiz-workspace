@@ -4,7 +4,9 @@
 // the session's access token server-side; FastAPI decides everything (editors of an active
 // workspace, the targets, the chapter each question still has). Unit-tested.
 import type { Schemas } from '@quiz/api-client';
+import type { ChapterPickerNode } from '@quiz/ui';
 import type { RangeGroup } from '@/components/questions/viewer/range-model';
+import { chapterPickerNodes } from './chapter-picker';
 import { displayStem } from './display-stem';
 import { NO_CHAPTER_KEY } from './overview-placement';
 
@@ -67,6 +69,21 @@ export function targetOptions(list: RedistributionList): TargetOption[] {
       })),
     ),
   ];
+}
+
+/** The tree of `옮길 챕터`; `챕터 없음` comes first as a fixed choice. */
+export function targetPickerNodes(list: RedistributionList): ChapterPickerNode[] {
+  return chapterPickerNodes(
+    list.targets.flatMap((doc) =>
+      doc.chapters.map((c) => ({
+        id: c.id,
+        title: c.title,
+        level: c.depth,
+        documentId: doc.document_id,
+        documentTitle: doc.document_title,
+      })),
+    ),
+  );
 }
 
 export function targetChapterId(value: string): string | null {

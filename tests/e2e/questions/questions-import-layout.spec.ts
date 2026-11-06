@@ -244,7 +244,7 @@ test(
     await expect(importUi.drafts(page).getByRole('combobox', { name: /번 문제 챕터/ })).toHaveCount(
       REVIEW_PAGE_SIZE,
     );
-    await expect(page.getByRole('option')).toHaveCount(0);
+    await expect(page.getByRole('treeitem')).toHaveCount(0);
 
     // Three checked drafts (1, 2, 4 have answers in the paper).
     const pick = (n: number) =>

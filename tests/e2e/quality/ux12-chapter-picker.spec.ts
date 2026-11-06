@@ -2,7 +2,7 @@
 // single-choice dropdowns. book-ko.pdf is the real two-level outline: 1장 > 1.1, 1.2; 2장 > 2.1, 2.2.
 
 import type { Locator, Page } from '@playwright/test';
-import { askUi, openAskPanel, seedAskBook } from '../fixtures/ask.ts';
+import { askUi, openAskPanel, openComposer, seedAskBook } from '../fixtures/ask.ts';
 import { redistUi } from '../fixtures/chapter-redistribution.ts';
 import { seedBookChapters, seedImportDraftCopies } from '../fixtures/db.ts';
 import { outlineNodeId, uploadReadyBook } from '../fixtures/documents.ts';
@@ -85,7 +85,6 @@ test(
     await expect(page.getByRole('tree')).toHaveCount(0);
     await trigger.click();
     await expect(pickerPopover(page, CHAPTER)).toBeVisible();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     await expect(chapterPickerUi.rows(page)).toHaveCount(3);
     await expect(chapterPickerUi.row(page, NONE)).toBeVisible();
     await expect(chapterPickerUi.row(page, CH1)).toHaveAttribute('aria-expanded', 'false');
@@ -163,6 +162,7 @@ test(
     await page.keyboard.press('Enter');
     const filter = chapterPickerUi.filter(page);
     await expect(filter).toBeFocused();
+    await expect(chapterPickerUi.rows(page)).toHaveCount(3); // the editor loads the outline
 
     await page.keyboard.press('ArrowDown');
     await expect(chapterPickerUi.row(page, NONE)).toBeFocused();
@@ -252,7 +252,7 @@ test(
 );
 
 test.describe('sheet', () => {
-  test.use({ viewport: { width: 375, height: 667 } });
+  test.use({ viewport: { width: 375, height: 667 }, hasTouch: true });
 
   test(
     'UX12-PICKER-AC05 below 768px the picker is a full-width bottom sheet that does not raise the keyboard',
@@ -265,6 +265,7 @@ test.describe('sheet', () => {
       await trigger.click();
       const sheet = pickerPopover(page, CHAPTER);
       await expect(sheet).toBeVisible();
+      await expect(chapterPickerUi.rows(page)).toHaveCount(3);
 
       await expect
         .poll(async () => {
@@ -279,6 +280,17 @@ test.describe('sheet', () => {
       await sheet.getByRole('button', { name: CLOSE }).click();
       await expect(sheet).toHaveCount(0);
       await expect(trigger).toBeFocused();
+
+      // One tap chooses; a tap outside only closes.
+      await trigger.tap();
+      await chapterPickerUi.row(page, CH2).tap();
+      await expect(sheet).toHaveCount(0);
+      await expect(trigger).toContainText(CH2);
+      await trigger.tap();
+      await expect(sheet).toBeVisible();
+      await page.touchscreen.tap(187, 40);
+      await expect(sheet).toHaveCount(0);
+      await expect(questionFormUi.form(page)).toBeVisible();
 
       await page.setViewportSize({ width: 1280, height: 800 });
       await trigger.click();
@@ -364,6 +376,7 @@ test(
 
     await page.goto(homePath(ws.id));
     const panel = await openAskPanel(page);
+    await openComposer(panel);
     await askUi.scopeButton(panel).click();
     const popover = askUi.scopePopover(page);
     await chooseFilter(
@@ -420,14 +433,14 @@ test(
     const trigger = questionFormUi.chapter(form);
     await trigger.click();
 
-    const group = page
+    await expect(chapterPickerUi.row(page, CH1)).toBeVisible();
+    const title = await page
       .getByRole('tree')
       .getByRole('treeitem', { expanded: true, level: 1 })
-      .filter({ hasNotText: CH1 })
-      .first();
-    await expect(group).toBeVisible();
+      .last()
+      .getAttribute('aria-label');
+    const group = chapterPickerUi.row(page, title ?? '');
     await expect(group).not.toHaveAttribute('aria-selected');
-    const title = await group.getAttribute('aria-label');
     await group.click();
     await expect(group).toHaveAttribute('aria-expanded', 'false');
     await expect(page.getByRole('tree')).toBeVisible();

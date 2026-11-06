@@ -787,7 +787,7 @@ test(
 
     // Move question 1 to another book chapter (saved at once, keyboard-free path: click).
     await picker(q1).click();
-    await page.getByRole('option', { name: /^1장 물의 순환/ }).click();
+    await page.getByRole('treeitem', { name: /^1장 물의 순환/ }).click();
     await expect(picker(q1)).toContainText('1장 물의 순환');
     await expect(q1.getByText(/직접 고른 챕터|chosen/i)).toBeVisible();
     await expect
@@ -1120,11 +1120,13 @@ test(
       expect(nodes, 'nodes held by the renderer (incl. detached)').toBeLessThan(SCALE_MAX_NODES);
       await cdp.detach();
     }
-    // The picker still lists the whole outline once opened.
+    // The picker still lists the outline once opened (top level: book-ko has 4 sub-chapters).
     await chapterPickers.first().click();
-    await expect(page.getByRole('option')).toHaveCount(await bookChapterOptions(owner, run.id));
+    await expect(page.getByRole('treeitem')).toHaveCount(
+      (await bookChapterOptions(owner, run.id)) - 4,
+    );
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(page.getByRole('tree')).toHaveCount(0);
     await expect(chapterPickers.first()).toBeFocused();
 
     // 전체 선택 covers the drafts on every page, not only the rendered one.

@@ -430,7 +430,7 @@ describe('QuestionImport', () => {
     expect(screen.getByText(/문제 PDF의 ‘제1장 수신제도’에 맞춰 자동으로 골랐습니다/)).toBeTruthy();
 
     await user.click(picker);
-    await user.click(await screen.findByRole('option', { name: '2장 여신제도' }));
+    await user.click(await screen.findByRole('treeitem', { name: '2장 여신제도' }));
 
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: '1번 문제 챕터' }).textContent).toContain(

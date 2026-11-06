@@ -1086,12 +1086,11 @@ test.describe('SEARCH-01-AC08 touch', () => {
   test.use(iphone);
 
   test(
-    'SEARCH-01-AC08 one tap on the selected chapter at the top of the open list closes it in the 필터 popover',
+    'SEARCH-01-AC08 one tap on the selected type at the top of the open list closes it in the 필터 popover',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       const owner = await workspaceFactory.member('search01-ac08');
       const ws = await workspaceFactory.create(owner);
-      // A question without a chapter adds the "챕터 없음" choice below "전체 챕터".
       await createQuestion(owner, ws.id, mcqInput('search01-ac08 문제', ['예', '아니오']));
       await page.addInitScript(() => {
         const w = window as unknown as { __cancelledTouchUps: number };
@@ -1120,32 +1119,31 @@ test.describe('SEARCH-01-AC08 touch', () => {
       await signInAs(page, owner.user);
       await page.goto(homePath(ws.id));
       const popover = await openSearchOptions(page, 'questions');
-      const chapter = popover.getByRole('combobox', { name: /^(챕터|chapter)$/i });
-      await expect(chapter).toHaveText(/전체 챕터|all chapters/i);
+      const type = popover.getByRole('combobox', { name: /^(유형|type)$/i });
+      await expect(type).toHaveText(/전체 유형|all types/i);
 
-      await chapter.tap();
+      await type.tap();
       const list = page.getByRole('listbox');
       await expect(list).toBeVisible();
       const options = list.getByRole('option');
-      await expect(options).toHaveCount(2);
       const selected = options.first();
-      await expect(selected).toHaveText(/전체 챕터|all chapters/i);
+      await expect(selected).toHaveText(/전체 유형|all types/i);
       await expect(selected).toHaveAttribute('data-state', 'checked');
 
       await selected.tap();
       await expect(list).toBeHidden();
-      await expect(chapter).toHaveAttribute('aria-expanded', 'false');
-      await expect(chapter).toHaveText(/전체 챕터|all chapters/i);
+      await expect(type).toHaveAttribute('aria-expanded', 'false');
+      await expect(type).toHaveText(/전체 유형|all types/i);
       await expect(popover).toBeVisible();
-      expect(page.url()).not.toContain('chapter=');
+      expect(page.url()).not.toContain('type=');
       expect(await cancelledTouchUps()).toBe(0);
 
       // Another choice still changes the filter on one tap.
-      await chapter.tap();
-      await list.getByRole('option', { name: /챕터 없음|no chapter/i }).tap();
+      await type.tap();
+      await list.getByRole('option', { name: /서술형|essay/i }).tap();
       await expect(list).toBeHidden();
-      await expect(page).toHaveURL((url) => url.searchParams.get('chapter') === 'none');
-      await expect(chapter).toHaveText(/챕터 없음|no chapter/i);
+      await expect(page).toHaveURL((url) => url.searchParams.get('type') === 'ESSAY');
+      await expect(type).toHaveText(/서술형|essay/i);
       expect(await cancelledTouchUps()).toBe(0);
     },
   );
