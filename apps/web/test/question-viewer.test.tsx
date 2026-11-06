@@ -613,6 +613,140 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByRole('button', { name: '다음' })).toBeInTheDocument();
   });
 
+  it('UX12-RUNBAR-AC01 sequence: the arrows of the Heatmap path, no emphasis after a result', async () => {
+    const user = userEvent.setup();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient()}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    const nav = within(panel).getByRole('navigation', { name: '문제 이동' });
+    const previous = within(nav).getByRole('button', { name: '이전 문제' });
+    const next = within(nav).getByRole('button', { name: '다음 문제' });
+    expect(previous).toHaveAttribute('aria-disabled', 'true');
+    expect(previous).toHaveAttribute('data-variant', 'ghost');
+    expect(next).not.toHaveAttribute('aria-disabled');
+    expect(next).toHaveAttribute('data-variant', 'ghost');
+    expect(within(panel).queryByRole('button', { name: /^(이전|다음|건너뛰기)$/ })).toBeNull();
+
+    await user.click(within(panel).getByRole('radio', { name: '응결' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    await within(panel).findAllByRole('status');
+    expect(within(nav).getByRole('button', { name: '다음 문제' })).toHaveAttribute(
+      'data-variant',
+      'ghost',
+    );
+  });
+
+  it('UX12-RUNBAR-AC02 sequence: on the last position 다음 문제 is disabled beside 결과 보기', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 2 }}
+        archived={false}
+        onNavigate={onNavigate}
+        onClose={noop}
+        client={fakeClient({
+          getItem: vi.fn(async () => ({ ok: true as const, data: item({ position: 2 }) })),
+        })}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    const next = within(panel).getByRole('button', { name: '다음 문제' });
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    const results = within(panel).getByRole('button', { name: '결과 보기' });
+    expect(results).toHaveAttribute('data-variant', 'secondary');
+    expect(within(panel).getByRole('navigation', { name: '문제 이동' }).contains(results)).toBe(
+      false,
+    );
+    await user.click(next);
+    expect(onNavigate).not.toHaveBeenCalled();
+    await user.click(results);
+    expect(onNavigate).toHaveBeenCalledWith({ step: 'results', runId: RUN }, 'replace');
+  });
+
+  it('UX12-RUNBAR-AC03 sequence: 다음 문제 moves on from an unanswered position', async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={onNavigate}
+        onClose={noop}
+        client={fakeClient()}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    expect(onNavigate).toHaveBeenCalledWith({ step: 'solve', runId: RUN, position: 2 }, 'push');
+  });
+
+  it('UX12-RUNBAR-AC04 sequence: 다시 풀기 waits for a result, except on a skipped position of a finished run', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient()}
+      />,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: SUBMIT_UI });
+    const again = within(panel).getByRole('button', { name: /^다시 풀기$/ });
+    expect(again).toHaveAttribute('aria-disabled', 'true');
+    expect(again).toHaveAccessibleDescription(/제출하고 채점이 끝나면/);
+    await user.click(again);
+    expect(screen.queryByRole('dialog', { name: '문제 다시 풀기' })).toBeNull();
+
+    await user.click(within(panel).getByRole('radio', { name: '응결' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    await within(panel).findAllByRole('status');
+    expect(within(panel).getByRole('button', { name: /^다시 풀기$/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    unmount();
+
+    render(
+      <QuestionViewer
+        mode="sequence"
+        workspaceId={WS}
+        state={{ step: 'solve', runId: RUN, position: 1 }}
+        archived={false}
+        onNavigate={noop}
+        onClose={noop}
+        client={fakeClient({
+          getRun: vi.fn(async () => ({
+            ok: true as const,
+            data: run({ finished_at: '2026-11-02T01:00:00Z' }),
+          })),
+        })}
+      />,
+    );
+    expect(
+      await within(screen.getByRole('dialog')).findByRole('button', { name: /^다시 풀기$/ }),
+    ).not.toHaveAttribute('aria-disabled');
+  });
+
   it('UX11-RETURN-AC01 updates bank retry-flag eligibility after a separate grade without changing run result', async () => {
     const user = userEvent.setup();
     const client = fakeClient();

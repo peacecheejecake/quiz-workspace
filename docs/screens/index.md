@@ -26,6 +26,7 @@
 | UX12-AIOFF | LLM off 잔여 AI UI 삭제 | 공통 AI 화면 | [ux12-ai-off.md](ux12-ai-off.md) |
 | UX12-SEARCHPAGE | 본문 검색 header의 AI에게 묻기 | 본문 검색 | [ux12-search-page.md](ux12-search-page.md) |
 | UX12-VIEW | 문제 보기 컨트롤 | 풀이 panel · 범위 풀이 | [ux12-viewer.md](ux12-viewer.md) |
+| UX12-RUNBAR | 범위 풀이의 제출·이전·다음 버튼 | 범위 풀이 | [ux12-run-buttons.md](ux12-run-buttons.md) |
 | UX12-QEDIT | 보기 순서 끌기·줄바꿈 입력 | 문제 편집기 | [ux12-question-edit.md](ux12-question-edit.md) |
 | UX12-NAV | 페이지 이동 반응 | 하위 페이지 링크 | [ux12-navigation.md](ux12-navigation.md) |
 | UX12-SRCMENU | 더보기 메뉴의 원문 보기 | 풀이 panel · 범위 풀이 | [ux12-source-menu.md](ux12-source-menu.md) |
