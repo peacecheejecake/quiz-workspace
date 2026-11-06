@@ -283,7 +283,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-2 | 2 | 완료 | 4fdc3183 · Codex P2 수정 후 재리뷰 통과, E2E·Vitest 40 GREEN |
 | HOME-3 | 2 | 완료 | 4fdc3183 · HOME-2와 함께 리뷰, E2E GREEN |
 | HOME-4 | 3 | 완료 | cb854650 · Codex P2(375px 넘침) 수정 후 재리뷰 통과, E2E 44 GREEN |
-| HOME-5 | 3 | 진행 | |
+| HOME-5 | 3 | 완료 | a5278ad9 · Codex P2(CI phase)는 merge에서 반영, 검색·필터 줄 재구성, E2E GREEN |
 | ASK-1 | 3 | 완료 | |
 | ASK-2 | 3 | 완료 | 0d5f7f05 · Codex P2(CI phase)는 merge에서 반영, E2E 88·Vitest 29 GREEN |
 | EXTRACT-3 | 4 | 진행 | |
