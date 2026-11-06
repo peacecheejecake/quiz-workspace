@@ -1044,8 +1044,8 @@ test(
     const [a = '', b = '', c = '', d = ''] = texts;
     const [ma = '', mb = '', mc = '', md = ''] = multi.revision.options.map((o) => o.text);
     await openOverview(page, s);
-    const success = await tokenColor(page, 'color-success');
-    const danger = await tokenColor(page, 'color-danger');
+    const success = await tokenColor(page, 'color-success-fill');
+    const danger = await tokenColor(page, 'color-danger-fill');
     const grey = await tokenColor(page, 'color-border-strong');
     expect(new Set([success, danger, grey, TRANSPARENT]).size).toBe(4);
 
@@ -1106,7 +1106,7 @@ test(
     // The same tokens in the dark theme (each theme resolves its own values).
     await page.emulateMedia({ colorScheme: 'dark' });
     const dark = {
-      danger: await tokenColor(page, 'color-danger'),
+      danger: await tokenColor(page, 'color-danger-fill'),
       grey: await tokenColor(page, 'color-border-strong'),
     };
     expect(dark.danger).not.toBe(danger);
