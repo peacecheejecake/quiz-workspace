@@ -99,7 +99,7 @@
 //   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, open);
 //   running: text "AI 해설을 만드는 중" with [aria-busy="true"]; one status announcement "AI 해설을
 //   만드는 중입니다" at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
-//   생성", notice "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.", the body
+//   생성", notice "AI가 만든 해설입니다. 정답이 기준이며, 틀릴 수 있습니다.", the body
 //   (each option's text with its why line), footnote button "[1]" (name "[1]" or "출처 1"), list
 //   "출처" with rows "[1] <문서> · <장> · p.<n>" (each a button opening the "본문 발췌" panel with
 //   "PDF에서 보기" → DOC-02 at that page), meta "<시각> · 버전 k" (k ≥ 2), button "다시 만들기"
@@ -546,7 +546,7 @@ export const EXPL_TEXT = {
   started: /AI 해설을 만드는 중입니다|making the AI explanation/i,
   ready: /AI 해설이 준비되었습니다|AI explanation is ready/i,
   aiNotice:
-    /AI가 만든 해설입니다\. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
+    /AI가 만든 해설입니다\. 정답이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
   unavailable:
     /AI 서비스에 연결하지 못했습니다\. 잠시 후 다시 시도하세요|could not reach the AI service/i,
   mismatch:

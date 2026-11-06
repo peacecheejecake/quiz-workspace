@@ -2,10 +2,10 @@
 
 An explanation is shared by every member who submitted the question (one per question revision),
 so its input is the question revision only: type, stem, options in stored order, the server's
-answer (correct option ids / accepted answers), rubric and the human explanation, plus the
-tagged passages (the question's own published source blocks first, then the evidence the API's
-retrieval pinned). There is **no field** for a user's answer, choice or attempt: whatever the
-caller has, it cannot reach the request.
+answer (correct option ids / accepted answers) and rubric, plus the tagged passages (the
+question's own published source blocks first, then the evidence the API's retrieval pinned). There
+is **no field** for a user's answer, choice or attempt, nor for the human explanation (UX12
+EXPL-2): whatever the caller has, it cannot reach the request.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ class ExplainQuestion:
     correct_option_ids: tuple[str, ...]
     accepted_answers: tuple[str, ...]
     rubric: str | None
-    explanation: str | None
 
     @property
     def is_mcq(self) -> bool:
@@ -69,7 +68,6 @@ def explain_question(
     correct_option_ids: Sequence[str] | None,
     accepted_answers: Sequence[str] | None,
     rubric: str | None,
-    explanation: str | None,
 ) -> ExplainQuestion:
     """The DTO from a revision row (options as stored: ``[{id, text}]``)."""
     shown = tuple(
@@ -84,5 +82,4 @@ def explain_question(
         correct_option_ids=tuple(correct_option_ids or ()),
         accepted_answers=tuple(a for a in accepted_answers or () if a.strip()),
         rubric=rubric if rubric and rubric.strip() else None,
-        explanation=explanation if explanation and explanation.strip() else None,
     )
