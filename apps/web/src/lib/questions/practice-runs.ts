@@ -7,6 +7,7 @@
 // `시작`, `결과 보기` and `처음부터 다시` replace the history entry (user decision 2026-11-02, QOV-01-AC14);
 // moving between positions pushes one, like the practice panel's previous/next.
 import type { Schemas } from '@quiz/api-client';
+import { questionNumberLabel } from '@quiz/ui';
 
 export const RUN_PARAM = 'practice';
 export const RUN_SOURCE_PARAM = 'source';
@@ -112,15 +113,12 @@ export function progressText(position: number, total: number): string {
   return `${total}문제 중 ${position}번째`;
 }
 
-/** The question's number as the Heatmap shows it: "3장 12번" (mock exams: "문제 k"). */
+/** The question's printed number: "12번" or "번호 없음" (mock exams: "문제 k"). */
 export function positionLabel(
-  item: Pick<RunItem, 'chapter_number' | 'chapter_title' | 'question_number' | 'position'>,
+  item: Pick<RunItem, 'question_number' | 'position'>,
   source: RunSource,
 ): string {
-  if (source === 'mock' || item.question_number === null) return `문제 ${item.position}`;
-  if (item.chapter_number !== null) return `${item.chapter_number}장 ${item.question_number}번`;
-  if (item.chapter_title) return `${item.chapter_title} ${item.question_number}번`;
-  return `${item.question_number}번`;
+  return source === 'mock' ? `문제 ${item.position}` : questionNumberLabel(item.question_number);
 }
 
 export type PositionResult = NonNullable<RunResultItem['result']>;

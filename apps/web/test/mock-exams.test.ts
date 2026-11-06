@@ -127,14 +127,14 @@ const groups: RangeGroup[] = [
     key: 'c1',
     title: '1장',
     questions: [
-      { id: 'a', number: '1장 1번', preview: 'a', type: 'MCQ' },
-      { id: 'b', number: '1장 2번', preview: 'b', type: 'MCQ' },
+      { id: 'a', number: '1번', preview: 'a', type: 'MCQ' },
+      { id: 'b', number: '2번', preview: 'b', type: 'MCQ' },
     ],
   },
   {
     key: 'none',
     title: '챕터 없음',
-    questions: [{ id: 'c', number: '1번', preview: 'c', type: 'MCQ' }],
+    questions: [{ id: 'c', number: '3번', preview: 'c', type: 'MCQ' }],
   },
 ];
 

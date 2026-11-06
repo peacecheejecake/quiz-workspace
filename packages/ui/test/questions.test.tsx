@@ -217,7 +217,8 @@ describe('QuestionDot', () => {
     // The visible preview card: type, number, chapter, status, favorite.
     const card = document.querySelector('.qz-question-preview');
     expect(card).toHaveTextContent('객관식');
-    expect(card).toHaveTextContent('3장 12번 문제');
+    expect(card).toHaveTextContent('12번 문제');
+    expect(card).not.toHaveTextContent('3장 12번');
     expect(card).toHaveTextContent('어텐션');
     expect(card).toHaveTextContent('아직 보지 않음');
     expect(card).toHaveTextContent('즐겨찾기');

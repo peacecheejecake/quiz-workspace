@@ -47,7 +47,7 @@ export function QuestionPreviewPopover({
   ...question
 }: QuestionPreviewPopoverProps) {
   const layerStyle = useLayerStyle();
-  const title = questionTitle(question);
+  const title = questionTitle(question.questionNumber);
   const type = questionTypeLabels[question.questionType];
   const phrases = questionStatusPhrases(question);
   return (
@@ -70,9 +70,7 @@ export function QuestionPreviewPopover({
               <span aria-hidden="true"> · </span>
               <span>{title}</span>
             </p>
-            {question.chapterNumber !== undefined && question.chapterNumber !== '' ? (
-              <p className="chapter">{question.chapterTitle}</p>
-            ) : null}
+            <p className="chapter">{question.chapterTitle}</p>
             <p className="status">
               <MarkerShape
                 status={question.status}

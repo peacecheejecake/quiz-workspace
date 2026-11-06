@@ -17,7 +17,7 @@ function preview(n: number): RedistributionPreview {
   return {
     items: Array.from({ length: n }, (_, i) => ({
       question_id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
-      number_label: `1장 ${i + 1}번`,
+      number_label: `${i + 1}번`,
       stem_preview: `문제 ${i + 1}`,
       current_chapter: { id: 'c1', title: LONG, document_id: 'd1' },
       recommended_chapter: { id: 'c2', title: '2장 정수 처리', document_id: 'd1' },
@@ -65,7 +65,7 @@ describe('CHREDIST-01 preview rows', () => {
     expect(current?.contains(recommended ?? null)).toBe(false);
     expect(recommended?.contains(current ?? null)).toBe(false);
     expect(within(row).getByRole('checkbox')).toHaveAccessibleName(
-      `적용: 1장 1번 · 문제 1 (${LONG}에서 2장 정수 처리으로)`,
+      `적용: 1번 · 문제 1 (${LONG}에서 2장 정수 처리으로)`,
     );
   });
 

@@ -127,10 +127,13 @@ export { SplitView } from './layout/SplitView';
 export type { SplitViewOrientation, SplitViewProps } from './layout/SplitView';
 
 export {
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   deriveDotStatus,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
 } from './questions/status';

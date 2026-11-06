@@ -24,11 +24,6 @@ export const REDIST_PROBLEMS = {
   notConfirmed: 'urn:quiz-workspace:problem:question-not-confirmed',
 } as const;
 
-/** "1장 3번"; a question without a chapter reads "챕터 없음 3번" (the list's own label). */
-export function rowNumber(q: Pick<RedistributionQuestion, 'chapter_id' | 'label'>): string {
-  return q.chapter_id === null ? `${NO_CHAPTER_TITLE} ${q.label}` : q.label;
-}
-
 function preview(text: string): string {
   return displayStem(text).replace(/\s+/g, ' ').trim();
 }
@@ -42,7 +37,7 @@ export function redistributionGroups(list: RedistributionList): RangeGroup[] {
       .filter((q) => q.chapter_id === chapter.id)
       .map((q) => ({
         id: q.question_id,
-        number: rowNumber(q),
+        number: q.label,
         preview: preview(q.stem_preview),
         type: q.question_type,
         ...(q.chapter_source === 'manual' ? { badge: MANUAL_BADGE } : {}),

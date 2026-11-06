@@ -835,7 +835,7 @@ test(
     await runUi.selectAll(run).check();
     await runUi.start(run).click();
     run = runUi.panel(page);
-    await expect(runUi.title(run, 1, 1)).toBeVisible();
+    await expect(runUi.title(run, 1)).toBeVisible();
     await runUi.option(run, correctText(q1)).check();
     await runUi.submit(run).click();
     await expect(runUi.result(run)).toContainText(RESULT_TEXT.correct);
@@ -848,10 +848,10 @@ test(
     expect(runExplanationId).not.toBe('');
     bankExplanations.set(q1.id, runExplanationId);
     await runUi.next(run).click();
-    await expect(runUi.title(run, 1, 2)).toBeVisible();
+    await expect(runUi.title(run, 2)).toBeVisible();
     await expect(explUi.area(run)).toHaveCount(0); // not submitted yet
     await runUi.previous(run).click();
-    await expect(runUi.title(run, 1, 1)).toBeVisible();
+    await expect(runUi.title(run, 1)).toBeVisible();
     area = explUi.area(run);
 
     await expectDone(area);

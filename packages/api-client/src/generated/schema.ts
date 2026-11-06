@@ -4024,7 +4024,7 @@ export type components = {
     HighlightQuestion: {
       /**
        * Number Label
-       * @description `<n>장 <번호>번` (the Heatmap's numbering).
+       * @description `<번호>번` or `번호 없음` (the printed number).
        */
       number_label: string;
       /**
@@ -6252,7 +6252,7 @@ export type components = {
       chapter_title: string | null;
       /**
        * Number Label
-       * @description "<n>장 <번호>번" like the Heatmap, or "<번호>번".
+       * @description "<번호>번" or "번호 없음".
        */
       number_label: string;
       /**

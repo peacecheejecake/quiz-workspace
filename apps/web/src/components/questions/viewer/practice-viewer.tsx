@@ -72,7 +72,7 @@ import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
   readonly id: string;
-  /** `3장 12번 문제`: names the dialog (same title as the dot's label). */
+  /** `12번 문제`: names the dialog (same title as the dot's preview). */
   readonly title: string;
   readonly chapterTitle: string;
   readonly questionType: keyof typeof questionTypeLabels;

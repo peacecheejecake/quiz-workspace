@@ -277,7 +277,7 @@ test(
     await expect(runUi.start(panel)).toBeDisabled();
     await expect(runUi.startReason(panel)).toBeVisible();
 
-    // Groups start collapsed; expanded, they list "1장 1번 · <발문 앞부분>" — confirmed only.
+    // Groups start collapsed; expanded, they list "1번 · <발문 앞부분>" — confirmed only.
     await expect(runUi.expand(panel, CH1)).toHaveAttribute('aria-expanded', 'false');
     await runUi.expand(panel, CH1).click();
     await expect(runUi.expand(panel, CH1)).toHaveAttribute('aria-expanded', 'true');
@@ -286,7 +286,7 @@ test(
     const first = runUi.question(panel, 1, 1);
     await expect(first).toBeVisible();
     await expect(first).toHaveAccessibleName(
-      new RegExp(`^1장 1번 · ${escapeRegExp(rangeStem(s.label, 1, 1).slice(0, 20))}`),
+      new RegExp(`^1번 · ${escapeRegExp(rangeStem(s.label, 1, 1).slice(0, 20))}`),
     );
     for (const n of [4, 5, 6]) await expect(runUi.question(panel, 1, n)).toHaveCount(0);
     await expect(runUi.question(panel, 2, 3)).toHaveCount(0); // the merged duplicate
@@ -388,13 +388,13 @@ test(
     let panel = await openRangePicker(page);
     const ordered = await startAll(page, panel);
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 1, 1)).toBeVisible();
+    await expect(runUi.title(panel, 1)).toBeVisible();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
 
     await runUi.skip(panel).click();
     await expect(page).toHaveURL(new RegExp(`[?&]practice=${ordered}(&|$)`));
     await expect(page).toHaveURL(/[?&]i=2(&|$)/);
-    await expect(runUi.title(panel, 1, 2)).toBeFocused();
+    await expect(runUi.title(panel, 2)).toBeFocused();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 5));
     await expect(
       runUi
@@ -409,11 +409,11 @@ test(
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
     await page.goForward();
     await expect(page).toHaveURL(/[?&]i=2(&|$)/);
-    await expect(runUi.title(panel, 1, 2)).toBeVisible();
+    await expect(runUi.title(panel, 2)).toBeVisible();
 
     await page.reload();
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 1, 2)).toBeVisible();
+    await expect(runUi.title(panel, 2)).toBeVisible();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 5));
     expect(await runOrder(s.viewer, ordered, 5)).toEqual(heatmapOrder);
 
@@ -446,9 +446,9 @@ test(
 
     // Position 1 of the shuffled run is Heatmap position 3 (1장 3번), also after a reload.
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 1, 3)).toBeVisible();
+    await expect(runUi.title(panel, 3)).toBeVisible();
     await page.reload();
-    await expect(runUi.title(runUi.panel(page), 1, 3)).toBeVisible();
+    await expect(runUi.title(runUi.panel(page), 3)).toBeVisible();
     expect(await runOrder(s.viewer, shuffled, 5)).toEqual(order);
 
     // 시작 replaced the range step's entry (user decision 2026-11-02): one Back closes the panel,

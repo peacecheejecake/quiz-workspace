@@ -76,7 +76,8 @@ export const questionTypeLabels: Record<QuestionType, string> = {
 };
 
 export interface QuestionLabelInput {
-  questionNumber: string;
+  /** The textbook's printed number; null for a question without one. */
+  questionNumber: string | null;
   questionType: QuestionType;
   status: QuestionDotStatus;
   isFavorite: boolean;
@@ -91,15 +92,17 @@ export interface QuestionLabelInput {
   isPendingGrading?: boolean;
 }
 
-/** `3장 12번 문제` (or `<chapter title> 12번 문제` without a chapter number). */
-export function questionTitle({
-  chapterNumber,
-  chapterTitle,
-  questionNumber,
-}: Pick<QuestionLabelInput, 'chapterNumber' | 'chapterTitle' | 'questionNumber'>): string {
-  const chapter =
-    chapterNumber !== undefined && chapterNumber !== '' ? `${chapterNumber}장` : chapterTitle;
-  return `${chapter} ${questionNumber}번 문제`;
+/** A question without a printed number; never replaced by its position (UX12-NUMBER). */
+export const NO_QUESTION_NUMBER = '번호 없음';
+
+/** `12번` for a printed number, otherwise `번호 없음`. */
+export function questionNumberLabel(questionNumber: string | number | null): string {
+  return questionNumber === null ? NO_QUESTION_NUMBER : `${questionNumber}번`;
+}
+
+/** `12번 문제`, or `번호 없음`: the question's visible title. */
+export function questionTitle(questionNumber: string | number | null): string {
+  return questionNumber === null ? NO_QUESTION_NUMBER : `${questionNumber}번 문제`;
 }
 
 /** Status phrases without the title/type, e.g. `마지막 결과 오답, 다시 풀기 표시됨`. */
@@ -121,11 +124,16 @@ export function questionStatusPhrases(input: QuestionLabelInput): string[] {
 
 /**
  * Accessible name of a heatmap dot (docs/questions.md §3.2), e.g.
- * `3장 12번 문제, 객관식, 마지막 결과 오답, 다시 풀기 표시됨, 즐겨찾기`.
+ * `3장 12번 문제, 객관식, 마지막 결과 오답, 다시 풀기 표시됨, 즐겨찾기`. Printed numbers restart
+ * per chapter, so unlike the visible title it keeps the chapter (`<chapter title>` without a
+ * chapter number) to tell the dots of a page apart.
  */
 export function questionDotLabel(input: QuestionLabelInput): string {
+  const { chapterNumber, chapterTitle } = input;
+  const chapter =
+    chapterNumber !== undefined && chapterNumber !== '' ? `${chapterNumber}장` : chapterTitle;
   return [
-    questionTitle(input),
+    `${chapter} ${questionTitle(input.questionNumber)}`,
     questionTypeLabels[input.questionType],
     ...questionStatusPhrases(input),
   ].join(', ');

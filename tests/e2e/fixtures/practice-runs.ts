@@ -49,7 +49,7 @@
 //   P5 GET /practice-runs/{id}/results?offset=&limit= → 200 {total, offset, limit, items:
 //      [{position, question_id|null, available, question_type, chapter_id, chapter_number,
 //      chapter_title, question_number, preview, result: correct|incorrect|pending|skipped|null}]}
-//      (QVIEW-B: no server-built `label` — the client labels "1장 1번" from chapter_number /
+//      (QVIEW-B: no server-built `label` — the client labels "1번" from question_number;
 //      chapter_title and question_number like the Heatmap).
 //   QVIEW-B also: a finished run takes no new session or submission (409
 //      practice-run-finished); an open session of a position is resumed by a repeated P4 call.
@@ -69,10 +69,10 @@
 //   `?practice=new&source=bank`, busy skeleton "불러오는 중" first. Range step: checkbox "전체 선택"
 //   (aria-checked="mixed" when partly selected), one checkbox per chapter named by the chapter
 //   title (+ count) with its own expand button "<장 제목> 펼치기" (aria-expanded), question
-//   checkboxes "1장 1번 · <발문 앞부분> · <유형>", the text "선택 n문제", a collapsible "상태 필터"
+//   checkboxes "1번 · <발문 앞부분> · <유형>", the text "선택 n문제", a collapsible "상태 필터"
 //   group with the home chips (틀린 문제/오답, 다시 풀기, …) and "필터 초기화", checkbox
 //   "무작위 순서" (off), button "시작" (disabled + "풀 문제를 고르세요" with nothing selected).
-//   Solving step: heading "1장 1번" (mock "문제 k", focused on each change), progressbar with
+//   Solving step: heading "1번" (mock "문제 k", focused on each change), progressbar with
 //   aria-valuetext "n문제 중 k번째" and the same text in an aria-live="polite" region, the
 //   QPLAY-01 body (radios/checkboxes named by the option text, textbox "답안", button "제출",
 //   role=status result 정답/오답/채점 대기, self-grade 맞음/틀림), footer "이전", "다음" (after a
@@ -481,12 +481,9 @@ export function practiceRunPath(workspaceId: string, runId: string, position?: n
   return `/workspaces/${workspaceId}?practice=${runId}${i}`;
 }
 
-/** "1장 1번" (not preceded/followed by another digit). */
-export function runLabel(chapter: number, n: number): RegExp {
-  return new RegExp(
-    `(?<!\\d)${chapter}장 ${n}번(?!\\d)|chapter ${chapter},? (no\\.|question) ${n}(?!\\d)`,
-    'i',
-  );
+/** The solving step's title: the printed number alone (UX12-NUMBER). */
+export function runLabel(n: number): RegExp {
+  return new RegExp(`^(${n}번|(no\\.|question) ${n})$`, 'i');
 }
 
 /** "n문제 중 k번째" as the progress value text. */
@@ -529,8 +526,7 @@ export const runUi = {
     panel.getByText(/풀 문제를 고르세요|choose questions to practi[sc]e/i),
   noMatch: (panel: Locator) => panel.getByText(/조건에 맞는 문제가 없습니다|no questions match/i),
   // Solving step
-  title: (panel: Locator, chapter: number, n: number) =>
-    panel.getByRole('heading', { name: runLabel(chapter, n) }),
+  title: (panel: Locator, n: number) => panel.getByRole('heading', { name: runLabel(n) }),
   mockTitle: (panel: Locator, k: number) =>
     panel.getByRole('heading', { name: new RegExp(`^(문제|question) ${k}$`, 'i') }),
   progress: (panel: Locator) => panel.getByRole('progressbar'),

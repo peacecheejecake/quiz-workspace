@@ -95,7 +95,7 @@ def test_chnote_02_c01_member_preview_is_stem_and_options_only_and_records_nothi
         assert body["question_id"] == q["id"]
         assert body["stem"] == q["revision"]["stem"]
         assert body["options"] == q["revision"]["options"], "original order, {id, text} only"
-        assert body["number_label"] == "1장 2번"
+        assert body["number_label"] == "2번"
         assert body["chapter_title"] == CH1
         assert str(q["revision"]["explanation"]) not in res.text
     assert counts(db, s.ws) == before, "no view, session, attempt or activity"
