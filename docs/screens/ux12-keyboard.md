@@ -17,7 +17,7 @@ linked_tests: [UX12-KEYBOARD-AC01, UX12-KEYBOARD-AC02, UX12-KEYBOARD-AC03, UX12-
 ## 동작 방식
 
 - **Android Chrome 등 `interactive-widget`을 지원하는 브라우저:** `interactive-widget=resizes-content`로 layout viewport 자체가 키보드 위로 줄어든다. `dvh`, sticky, fixed가 그대로 동작하고 보정 값은 0이다.
-- **iOS Safari:** `interactive-widget`을 지원하지 않는다(caniuse 기준 26.5까지 미지원, WebKit bug 259770). 키보드는 layout viewport 위를 덮고 Safari는 입력란이 보이도록 visual viewport를 옮긴다. `useKeyboardInset`이 `visualViewport`의 `resize`·`scroll`을 듣고 `--keyboard-inset`, `--keyboard-offset-top`을 넣어 표면을 눈에 보이는 영역으로 되돌린다. Safari의 이동 자체는 막을 수 없어 스크롤 중에는 표면이 잠깐 늦게 따라올 수 있다. **최선 노력**이다.
+- **iOS Safari:** `interactive-widget`을 지원하지 않는다(caniuse 기준 26.5까지 미지원, WebKit bug 259770). 키보드는 layout viewport 위를 덮고 Safari는 입력란이 보이도록 visual viewport를 옮긴다. `useKeyboardInset`이 `visualViewport`의 `resize`·`scroll`을 듣고 `--qz-keyboard-inset`, `--qz-keyboard-offset-top`을 넣어 표면을 눈에 보이는 영역으로 되돌린다. Safari의 이동 자체는 막을 수 없어 스크롤 중에는 표면이 잠깐 늦게 따라올 수 있다. **최선 노력**이다.
 
 ## 수용 기준
 

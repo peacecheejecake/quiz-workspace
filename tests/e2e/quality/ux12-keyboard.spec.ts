@@ -40,8 +40,12 @@ async function mockVisualViewport(page: Page) {
     const mock: Partial<MockViewport> = {};
     (window as unknown as { __viewport: Partial<MockViewport> }).__viewport = mock;
     for (const key of ['height', 'offsetTop', 'scale'] as const) {
-      const real = viewport[key];
-      Object.defineProperty(viewport, key, { configurable: true, get: () => mock[key] ?? real });
+      // Read live: at init time WebKit has no layout yet and reports an empty viewport.
+      const real = Object.getOwnPropertyDescriptor(VisualViewport.prototype, key);
+      Object.defineProperty(viewport, key, {
+        configurable: true,
+        get: () => mock[key] ?? (real?.get?.call(viewport) as number),
+      });
     }
   });
 }

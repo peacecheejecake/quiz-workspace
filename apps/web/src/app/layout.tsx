@@ -17,6 +17,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Android: the keyboard shrinks the layout. iOS Safari ignores this: see useKeyboardInset.
+  interactiveWidget: 'resizes-content',
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
