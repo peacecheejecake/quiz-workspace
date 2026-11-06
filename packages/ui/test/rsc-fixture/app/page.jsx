@@ -15,7 +15,10 @@ import {
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
+  FilterIcon,
+  PlusIcon,
   ChevronUpIcon,
   HistoryIcon,
   SearchIcon,
@@ -247,6 +250,9 @@ export default function Page() {
             <CheckIcon />
             <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
+            <ChevronLeftIcon />
+            <FilterIcon />
+            <PlusIcon />
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />
