@@ -1,7 +1,7 @@
 'use client';
 
 // MOCK-01 만들기 / 설정 바꾸기 (docs/screens/mock-exams.md "만들기 화면"): two steps `옵션 → 범위`
-// (StepProgress). 옵션: 이름, the four 변형 유형 (each described in a Tooltip; the AI ones disabled
+// (a plain step list). 옵션: 이름, the four 변형 유형 (each described in a Tooltip; the AI ones disabled
 // with the reason where the environment has no LLM), 문항 수 (1–100 with an AI type; 보기 섞기 only
 // up to the range, or 범위 전체) and 난이도. 범위: the shared QuestionRangePicker over this
 // workspace's confirmed questions with its filters, "선택 n문제 중 m문항을 만듭니다", the AI notice
