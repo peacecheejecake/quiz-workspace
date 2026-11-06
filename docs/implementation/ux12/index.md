@@ -269,7 +269,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | EXTRACT-2 | 1 | 대기 | EXTRACT-1 뒤 |
 | SHELL-1 | 1 | 완료 | 12cb1e79 · Codex P2 1건 수정(9e71118c), 재리뷰 지적 없음, E2E 22·Vitest 38 GREEN |
 | DESIGN-2 | 1 | 진행 | |
-| HOME-1 | 1 | 진행 | |
+| HOME-1 | 1 | 완료 | ddd8b596 · Codex 지적 없음, Vitest ui 448, E2E Chromium·WebKit GREEN. QOV-01-AC14 WebKit flake는 기존 문제, CI에서 확인 |
 | HILITE-1 | 1 | 진행 | |
 | DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
