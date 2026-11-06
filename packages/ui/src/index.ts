@@ -40,6 +40,7 @@ export {
   CheckIcon,
   CopyIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   CloseIcon,

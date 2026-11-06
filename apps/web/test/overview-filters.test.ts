@@ -1,5 +1,6 @@
 // QOV-01 URL state: the heatmap filters use the overview API's parameter names, so the URL and the
 // API query mirror each other; `?question=` (the open panel) is kept apart from the filters.
+import { QUESTION_DOT_STATUSES } from '@quiz/ui';
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_OVERVIEW_FILTERS,
@@ -17,7 +18,7 @@ const QUESTION = 'A0B1C2D3-1111-4222-8333-444455556666';
 describe('parseOverviewFilters', () => {
   it('reads every filter with the API parameter names', () => {
     const params = new URLSearchParams(
-      `chapter=${CHAPTER}&type=ESSAY&q=%20attention%20&status=retry&status=unseen&favorite=true&retry=false`,
+      `chapter=${CHAPTER}&type=ESSAY&q=%20attention%20&status=retry&status=unseen&favorite=true`,
     );
     expect(parseOverviewFilters(params)).toEqual({
       chapter: CHAPTER,
@@ -26,8 +27,20 @@ describe('parseOverviewFilters', () => {
       // Legend order, whatever the URL order.
       status: ['unseen', 'retry'],
       favorite: true,
-      retry: false,
     });
+  });
+
+  it('UX12-FILTER-AC10 reads a legacy retry link as the retry status', () => {
+    expect(parseOverviewFilters({ retry: 'true' }).status).toEqual(['retry']);
+    expect(parseOverviewFilters({ retry: 'false' }).status).toEqual(
+      QUESTION_DOT_STATUSES.filter((s) => s !== 'retry'),
+    );
+    // Both were asked for at once, and they exclude each other.
+    expect(parseOverviewFilters({ retry: 'true', status: 'unseen' }).status).toEqual([]);
+    expect(overviewSearch(parseOverviewFilters({ retry: 'true' }))).toBe('?status=retry');
+    expect(mergeOverviewFilters('?retry=true&panel=history', EMPTY_OVERVIEW_FILTERS)).toBe(
+      '?panel=history',
+    );
   });
 
   it('accepts the "no chapter" group and record-style search params', () => {
@@ -52,7 +65,6 @@ describe('parseOverviewFilters', () => {
       q: 'x'.repeat(200),
       status: ['correct'],
       favorite: null,
-      retry: null,
     });
   });
 
@@ -77,8 +89,8 @@ describe('overviewSearch', () => {
   it('omits defaults and appends the open question', () => {
     expect(overviewSearch(EMPTY_OVERVIEW_FILTERS)).toBe('');
     expect(overviewSearch(EMPTY_OVERVIEW_FILTERS, 'q-1')).toBe('?question=q-1');
-    expect(overviewSearch({ ...EMPTY_OVERVIEW_FILTERS, retry: true }, 'q-1')).toBe(
-      '?retry=true&question=q-1',
+    expect(overviewSearch({ ...EMPTY_OVERVIEW_FILTERS, favorite: true }, 'q-1')).toBe(
+      '?favorite=true&question=q-1',
     );
   });
 
@@ -107,7 +119,6 @@ describe('overviewApiQuery', () => {
         q: 'softmax',
         status: ['viewed', 'correct'],
         favorite: true,
-        retry: false,
       }),
     ).toEqual({
       chapter: 'none',
@@ -115,7 +126,6 @@ describe('overviewApiQuery', () => {
       q: 'softmax',
       status: ['viewed', 'correct'],
       favorite: true,
-      retry: false,
     });
     expect(overviewApiQuery(EMPTY_OVERVIEW_FILTERS)).toEqual({});
   });

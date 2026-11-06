@@ -116,6 +116,15 @@ export function ArrowLeftIcon(props: IconProps) {
   );
 }
 
+/** An arrowhead without a shaft, pointing left (closes a search that opened sideways). */
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m15 6-6 6 6 6" />
+    </BaseIcon>
+  );
+}
+
 /** Breadcrumb separator. */
 export function ChevronRightIcon(props: IconProps) {
   return (

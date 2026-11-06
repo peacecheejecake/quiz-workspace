@@ -11,7 +11,7 @@ export function SearchSettings({
   label,
   children,
 }: {
-  /** "문제" / "본문": the button is "<label> 설정", the popover "<label> 검색 설정". */
+  /** "본문": the button is "<label> 설정", the popover "<label> 검색 설정". */
   readonly label: string;
   readonly children: ReactNode;
 }) {

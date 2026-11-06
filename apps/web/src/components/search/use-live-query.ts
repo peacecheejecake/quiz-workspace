@@ -40,6 +40,8 @@ export interface LiveQuery {
   };
   /** Commits the current value now (Enter). */
   readonly flush: () => void;
+  /** Empties the box and commits that now, dropping a pending commit. */
+  readonly clear: () => void;
   /** Sets the box from the page (a reset), dropping a pending commit; does not commit. */
   readonly replace: (value: string) => void;
 }
@@ -144,6 +146,11 @@ export function useLiveQuery({
     flush: () => {
       if (composingRef.current) return;
       commit(value);
+    },
+    clear: () => {
+      composingRef.current = false;
+      setValue('');
+      commit('');
     },
     replace: (next) => {
       cancel();

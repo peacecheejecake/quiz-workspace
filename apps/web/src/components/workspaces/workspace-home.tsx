@@ -6,9 +6,10 @@
 //   Workspace header  a line that sticks under the app header (UX12-HEADER, D-7): the `문서 N` menu
 //                     (문서 관리 · 본문 검색 | 직접 추가 · 중복 문제 정리 · 챕터 재분배 | 보관·초안 문제),
 //                     the primary `풀기` and, aligned right, `AI 질문` (icon + text, every member) ·
-//                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 문제
-//                     search (SEARCH-01-AC12: filters the heatmap as you type, no button; its "설정"
-//                     popover holds the heatmap's chapter/type filters).
+//                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 검색
+//                     and 필터 buttons (UX12-FILTER): the first opens the 문제 search (SEARCH-01-AC12:
+//                     filters the heatmap as you type), the second a popover with the chapter/type
+//                     filters.
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -914,10 +915,12 @@ function WorkspaceHomeContent({
             searchable={hasSearchableQuestions(
               hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
             )}
-            settings={
+            filterActive={view.chapter !== null || view.type !== null}
+            filters={
               <div className={searchStyles.optionRow}>
                 <Select
                   label="챕터"
+                  hideLabel
                   options={chapterOptions}
                   value={view.chapter ?? ALL}
                   onValueChange={(value) =>
@@ -926,6 +929,7 @@ function WorkspaceHomeContent({
                 />
                 <Select
                   label="유형"
+                  hideLabel
                   options={[
                     { value: ALL, label: '전체 유형' },
                     ...TYPES.map((type) => ({ value: type, label: questionTypeLabels[type] })),

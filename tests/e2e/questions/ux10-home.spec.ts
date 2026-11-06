@@ -1,6 +1,7 @@
 import {
   createNumberedQuestions,
   expect,
+  openQuestionSearch,
   overviewPath,
   overviewUi,
   signInAs,
@@ -56,27 +57,6 @@ test(
 );
 
 test(
-  'UX10-HOME-AC02 search filters start expanded and preserve selection',
-  { tag: '@infra' },
-  async ({ page, workspaceFactory }) => {
-    const owner = await workspaceFactory.member('ux10-home-02');
-    const workspace = await workspaceFactory.create(owner);
-    await createNumberedQuestions(owner, workspace.id, 'ux10-home-02', 1);
-    await signInAs(page, owner.user);
-    await page.goto(overviewPath(workspace.id));
-    const toggle = page.getByRole('button', { name: /검색 설정/i });
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('combobox', { name: /챕터/i })).toBeVisible();
-    await expect(page.getByRole('group', { name: /상태 필터/i })).toBeVisible();
-    await toggle.click();
-    await expect(page.getByRole('combobox', { name: /챕터/i })).toBeHidden();
-    await expect(page.getByRole('group', { name: /상태 필터/i })).toBeVisible();
-    await toggle.click();
-    await expect(page.getByRole('combobox', { name: /챕터/i })).toBeVisible();
-  },
-);
-
-test(
   'UX10-HOME-AC04 rapid status changes commit only the final selection',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
@@ -102,7 +82,7 @@ test(
     await page.waitForTimeout(450); // the cancelled 350ms timer must not write after Back
     await expect(page).not.toHaveURL(/status=/);
     await unseen.click();
-    const search = page.getByRole('searchbox', { name: /문제 검색/i });
+    const search = await openQuestionSearch(page);
     await search.fill('ux10');
     await expect(page).toHaveURL(/q=ux10/);
     await expect(page).toHaveURL(/status=/);

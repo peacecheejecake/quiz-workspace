@@ -48,6 +48,9 @@ function Box({ urlValue, onCommit }: { urlValue: string; onCommit: (q: string) =
       <button type="button" onClick={() => query.replace('')}>
         reset
       </button>
+      <button type="button" onClick={() => query.clear()}>
+        clear
+      </button>
     </div>
   );
 }
@@ -162,6 +165,28 @@ describe('useLiveQuery', () => {
     fireEvent.compositionEnd(box(), { data: '' });
     expect(onCommit).toHaveBeenCalledTimes(2);
     expect(onCommit).toHaveBeenLastCalledWith('');
+  });
+
+  it('UX12-FILTER-AC03 clear() empties the box at once and drops a pending commit', () => {
+    const onCommit = vi.fn();
+    render(<Box urlValue="chlorine" onCommit={onCommit} />);
+    type('chlorine extra');
+    fireEvent.click(screen.getByRole('button', { name: 'clear' }));
+    expect(box().value).toBe('');
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenLastCalledWith('');
+    pause(LIVE_QUERY_DELAY_MS * 2);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('clear() with nothing committed writes nothing', () => {
+    const onCommit = vi.fn();
+    render(<Box urlValue="" onCommit={onCommit} />);
+    type('chlorine');
+    fireEvent.click(screen.getByRole('button', { name: 'clear' }));
+    pause(LIVE_QUERY_DELAY_MS * 2);
+    expect(box().value).toBe('');
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it('keeps committedRef and pending writes consistent across replace()', () => {
