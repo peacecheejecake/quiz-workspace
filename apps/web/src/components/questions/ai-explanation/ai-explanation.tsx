@@ -9,7 +9,7 @@
 //   none      the `AI 해설` button; feature off / archived: the reason instead
 //   cached    the heading is an open disclosure, the same one as 관련 본문 (UX12-EXPL: the result
 //             stays in view); it reads the stored one, no generation
-//   making    "AI 해설을 만드는 중" and the text so far (SSE, ASK-W's Markdown and number chips),
+//   making    "작성중..." and the text so far (SSE, ASK-W's Markdown and number chips),
 //             aria-busy; also joined when someone else started it (the same stream from seq 0)
 //   done      `AI 생성` badge, the notice, the body (every option), footnotes `[n]` and the `출처`
 //             list (→ 본문 발췌 → PDF에서 보기), "<시각> · 버전 k" and `다시 만들기` (editors)

@@ -10,8 +10,8 @@ import type {
 export const EXPL_TEXT = {
   title: 'AI 해설',
   create: 'AI 해설',
-  working: 'AI 해설을 만드는 중',
-  started: 'AI 해설을 만드는 중입니다',
+  working: '작성중...',
+  started: '작성중...',
   ready: 'AI 해설이 준비되었습니다',
   badge: 'AI 생성',
   notice: 'AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.',

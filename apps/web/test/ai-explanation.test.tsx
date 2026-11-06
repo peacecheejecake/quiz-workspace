@@ -449,10 +449,10 @@ describe('AIEXPL-01 streaming', () => {
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
     const region = area();
-    expect(await within(region).findByText('AI 해설을 만드는 중')).toBeInTheDocument();
+    expect((await within(region).findAllByText('작성중...')).length).toBeGreaterThan(0);
     expect(region.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(await within(region).findByText(/정답은 증발/)).toBeInTheDocument();
-    expect(within(region).getByRole('status')).toHaveTextContent('AI 해설을 만드는 중입니다');
+    expect(within(region).getByRole('status')).toHaveTextContent('작성중...');
     api.state.mockResolvedValue(stateOf({ can_create: false, explanation: done }));
     hold.release?.();
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
