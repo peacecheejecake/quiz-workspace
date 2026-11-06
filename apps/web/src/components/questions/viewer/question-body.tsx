@@ -249,16 +249,20 @@ const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
  * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
- * keeps the option text as its name while its position is announced by the group.
+ * keeps the option text as its name while its position is announced by the group. `data-copy` is
+ * the hidden bold copy that reserves the hovered height (UX12-OPTIONS).
  */
 function OptionLabel({ index, text }: { readonly index: number; readonly text: string }) {
+  const number = `${index + 1}.`;
   return (
-    <>
-      <span className={styles.optionNumber} aria-hidden="true">
-        {index + 1}.
-      </span>{' '}
-      {text}
-    </>
+    <span className={styles.optionCopy} data-copy={`${number} ${text}`}>
+      <span>
+        <span className={styles.optionNumber} aria-hidden="true">
+          {number}
+        </span>{' '}
+        {text}
+      </span>
+    </span>
   );
 }
 

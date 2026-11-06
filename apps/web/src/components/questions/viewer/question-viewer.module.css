@@ -43,6 +43,54 @@
   font-size: var(--font-size-body-lg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  transition: font-weight var(--qz-transition-fast);
+}
+
+/*
+ * Unselected control and hovered row (UX12-OPTIONS, design-system §4.1): a lighter control at rest;
+ * the whole row, not only the control, darkens it and bolds the text. Disabled rows do not react.
+ */
+.option:is(:global(.qz-radio), :global(.qz-checkbox))
+  > :is(:global(.circle), :global(.box)):not(
+    [data-state='checked'],
+    [data-state='indeterminate'],
+    :focus-visible
+  ) {
+  border-color: var(--color-option-control);
+}
+
+@media (hover: hover) {
+  .option:is(:global(.qz-radio), :global(.qz-checkbox)):has(> :enabled):hover
+    > :is(:global(.circle), :global(.box)):not(
+      [data-state='checked'],
+      [data-state='indeterminate'],
+      :focus-visible
+    ) {
+    border-color: var(--color-option-control-hover);
+  }
+
+  .option:is(:global(.qz-radio), :global(.qz-checkbox)):has(> :enabled):hover
+    > :global(.text)
+    > :global(.label) {
+    font-weight: var(--font-weight-semibold);
+  }
+}
+
+/* The hidden bold copy holds the row at its hovered height, so bolder text cannot move the rows. */
+.optionCopy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.optionCopy > *,
+.optionCopy::after {
+  grid-area: 1 / 1;
+}
+
+.optionCopy::after {
+  content: attr(data-copy);
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
 }
 
 .choices {
