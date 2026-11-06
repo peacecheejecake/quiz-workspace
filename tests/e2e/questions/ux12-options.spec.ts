@@ -74,7 +74,7 @@ async function rowBoxes(panel: Locator) {
 }
 
 test(
-  'UX12-OPTIONS-AC01 a hovered option row darkens its control and thickens its border to 2px, without moving or bolding',
+  'UX12-OPTIONS-AC01 a hovered option row darkens and fills its control on hover, without moving or bolding',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = `ux12-opt1-${randomUUID().slice(0, 8)}`;
@@ -90,6 +90,7 @@ test(
     const rest = await tokenColor(page, 'color-option-control');
     const hover = await tokenColor(page, 'color-option-control-hover');
     expect(rest).not.toBe(hover);
+    const fill = await tokenColor(page, 'color-state-hover');
 
     const first = `${label}-1 보기 가`;
     const rows: readonly (readonly [number, readonly string[]])[] = [
@@ -102,13 +103,16 @@ test(
         const option = panelUi.option(panel, text);
         await expect(option).toHaveCSS('border-top-color', rest);
         await expect(option).toHaveCSS('border-top-width', '1px');
+        const restFill = await option.evaluate((e) => getComputedStyle(e).backgroundColor);
+        expect(restFill).not.toBe(fill);
         await expect(labelOf(option)).toHaveCSS('font-weight', REGULAR);
         const height = await rowHeight(option);
         const control = await option.boundingBox();
 
         await rowOf(option).hover();
         await expect(option).toHaveCSS('border-top-color', hover);
-        await expect(option).toHaveCSS('border-top-width', '2px');
+        await expect(option).toHaveCSS('border-top-width', '1px');
+        await expect(option).toHaveCSS('background-color', fill);
         await expect(labelOf(option)).toHaveCSS('font-weight', REGULAR);
         expect(await rowHeight(option)).toBeCloseTo(height, 1);
         expect(await option.boundingBox()).toEqual(control);
@@ -116,6 +120,7 @@ test(
         await moveAway(page);
         await expect(option).toHaveCSS('border-top-color', rest);
         await expect(option).toHaveCSS('border-top-width', '1px');
+        await expect(option).toHaveCSS('background-color', restFill);
       }
       await page.keyboard.press('Escape');
       await expect(panel).toBeHidden();

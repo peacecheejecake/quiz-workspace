@@ -48,10 +48,10 @@
 
 /*
  * Unselected control and hovered row (UX12-OPTIONS, design-system §4.1): a lighter control at rest;
- * the whole row, not only the control, darkens it and thickens its border to 2px (user feedback
- * 2026-11-07; the label no longer changes weight). The control is border-box, so the 20px outer
- * size is kept and nothing shifts; a checked radio keeps its 1px ring and centred dot. Disabled
- * rows do not react.
+ * the whole row, not only the control, darkens its border and fills it with --color-state-hover
+ * (OPTION-HOVER-FILL, user feedback 2026-11-07; the 2px border of OPTION-HOVER is gone, so the 1px
+ * ring keeps its size and the label no longer changes weight). A checked radio keeps its ring and
+ * centred dot. Disabled rows do not react.
  */
 .option:is(:global(.qz-radio), :global(.qz-checkbox))
   > :is(:global(.circle), :global(.box)):not(
@@ -69,8 +69,8 @@
       [data-state='indeterminate'],
       :focus-visible
     ) {
-    border-width: 2px;
     border-color: var(--color-option-control-hover);
+    background-color: var(--color-state-hover);
   }
 }
 
