@@ -369,6 +369,10 @@ Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase
 | UX11-RETURN | 다시 풀기·하단 global 복귀/X | UX10-QVIEW/PLAY 인계 | return.md AC01~05·권한·상태·브라우저·리뷰 |
 | UX11-STEM | 괄호 항목·bullet·보조 본문 줄바꿈 | 독립 | stem.md AC01~05·TS/Python parity·반례·리뷰 |
 
+### UX12 — 2026-11-06 피드백 TODO
+
+[세부 구현 기준](implementation/ux12/index.md). 사용자가 넘긴 TODO 96개 중 완료 21개를 제외한 75개를 12개 Epic, 46개 Task로 나눴다. 구현은 Task마다 Opus 5.5 subagent(effort 기본값) 1개, main thread는 검수와 orchestration만 맡는다(사용자 지시 2026-11-06, 이 프로젝트 한정). PR은 Wave 묶음마다 하나다. 각 Task의 범위·개정 대상·의존·결정은 세부 문서를 따른다.
+
 ## 4. Task 의존 그래프
 
 ```mermaid
