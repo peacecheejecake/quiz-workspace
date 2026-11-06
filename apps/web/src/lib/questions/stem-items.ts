@@ -171,13 +171,13 @@ function labelsIn(s: string, start: number, end: number): Label[] {
 const SENTENCE_ENDS = new Set(['?', '.', ':', ')', '」', '>', '？', '：', '）']);
 
 /** The question sentence may precede a list: empty, or ending like a sentence or answer mark. */
-function leadEnds(lead: string): boolean {
+export function leadEnds(lead: string): boolean {
   const text = lead.trimEnd();
   if (text === '') return true;
   return SENTENCE_ENDS.has(text[text.length - 1] as string) || displayStem(text) !== text;
 }
 
-function paragraphs(text: string): string[] {
+export function paragraphs(text: string): string[] {
   return text.trim() === '' ? [] : stemParagraphs(text.trim());
 }
 
@@ -197,6 +197,22 @@ function strictList(labels: readonly Label[], family: number, format: Format): L
   const list = labels.filter((l) => l.readings.some((r) => r.family === family));
   if (list.length < 2 || !list.every((l, k) => has(l, family, format, k))) return null;
   return list;
+}
+
+/**
+ * Where a list starts in `text` (one block), whatever comes before it: after a passage the last
+ * item needs no sentence end (UX12-PASSAGE). Null without a list.
+ */
+export function itemListStart(text: string): number | null {
+  const labels = labelsIn(text, 0, text.length);
+  for (const label of labels) {
+    for (const reading of label.readings) {
+      if (reading.index !== 0) continue;
+      const group = strictList(labels, reading.family, reading.format);
+      if (group?.[0] === label) return label.start;
+    }
+  }
+  return null;
 }
 
 /**

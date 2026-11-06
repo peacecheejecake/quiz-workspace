@@ -217,6 +217,33 @@
     }
   },
   {
+    "name": "fullwidth heading",
+    "stem": "옳은 것은? ＜자료＞ ∙갑 : 하나 ∙을 : 둘",
+    "normalized": "옳은 것은?\n\n＜자료＞\n∙갑 : 하나\n∙을 : 둘",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "＜자료＞",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "을 : 둘",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
     "name": "no sentence end before the list after a passage",
     "stem": "옳은 것은? <자료> ∙시세 : 5억원 ㄱ. 갑 ㄴ. 을",
     "normalized": "옳은 것은?\n\n<자료>\n∙시세 : 5억원\n\nㄱ. 갑\nㄴ. 을",
@@ -367,5 +394,75 @@
     "stem": "옳은 것은? <보기> (가) 갑 (나) 을",
     "normalized": "옳은 것은? <보기>\n\n(가) 갑\n(나) 을",
     "layout": null
+  },
+  {
+    "name": "a word range before a colon stays on the item line",
+    "stem": "옳은 것은? <근무 일정> ∙월요일 - 금요일 : 휴무 ∙토요일 : 근무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n∙월요일 - 금요일 : 휴무\n∙토요일 : 근무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "월요일 - 금요일 : 휴무",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "토요일 : 근무",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "every item with its own word range stays on one line",
+    "stem": "옳은 것은? <근무 일정> ∙월요일 - 금요일 : 휴무 ∙토요일 - 일요일 : 근무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n∙월요일 - 금요일 : 휴무\n∙토요일 - 일요일 : 근무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "월요일 - 금요일 : 휴무",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "토요일 - 일요일 : 근무",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "a word range with no item marker stays in the passage text",
+    "stem": "옳은 것은? <근무 일정> 월요일 - 금요일 : 휴무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n월요일 - 금요일 : 휴무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "월요일 - 금요일 : 휴무",
+          "lines": []
+        }
+      ],
+      "rest": ""
+    }
   }
 ]

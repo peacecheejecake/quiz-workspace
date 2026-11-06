@@ -39,3 +39,51 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* UX12-PASSAGE (docs/questions.md §4 12): one box per <제목> passage, the same box as the items. */
+.passage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  min-inline-size: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.passageHeading {
+  margin: 0;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.passageIntro {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lines,
+.subs {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-2);
+}
+
+/* Sub-items sit under their parent's text, past its marker, and indented from that text. */
+.subs {
+  grid-column: 2;
+  margin-block-start: var(--space-1);
+  padding-inline-start: var(--space-2);
+}
