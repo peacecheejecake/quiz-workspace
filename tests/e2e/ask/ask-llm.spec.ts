@@ -664,6 +664,7 @@ test(
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId, q.id)}`);
       const offPractice = panelUi.panel(page);
       await expect(offPractice).toBeVisible();
+      await panelUi.reveal(offPractice).click(); // a solved question opens to be answered
       await expect(
         offPractice.getByRole('status').filter({ hasText: RESULT_TEXT.incorrect }),
       ).toBeVisible();
