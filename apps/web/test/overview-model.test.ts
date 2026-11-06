@@ -52,12 +52,7 @@ describe('placeQuestions / heatmapChapters', () => {
       ['c', null, 'none'],
       ['d', '7', 'none'],
     ]);
-    expect(placed.map(placedTitle)).toEqual([
-      '12번 문제',
-      '4번 문제',
-      '번호 없음',
-      '7번 문제',
-    ]);
+    expect(placed.map(placedTitle)).toEqual(['12번 문제', '4번 문제', '번호 없음', '7번 문제']);
     const groups = heatmapChapters(placed);
     expect(groups.map((g) => [g.id, g.title, g.number, g.questions.length])).toEqual([
       [C2, 'Attention', 3, 1],

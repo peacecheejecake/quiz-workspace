@@ -287,10 +287,7 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
     async listDraftBlocks(workspaceId, documentId, signal, watch = watchJob) {
       const runs = await call<{
         items: { id: string; status: string; job_id: string | null }[];
-      }>(
-        EDITOR_PATHS.latestImport(workspaceId, documentId),
-        { signal },
-      );
+      }>(EDITOR_PATHS.latestImport(workspaceId, documentId), { signal });
       const run = runs.items[0];
       if (!run) return [];
       if (run.job_id && (run.status === 'queued' || run.status === 'running')) {

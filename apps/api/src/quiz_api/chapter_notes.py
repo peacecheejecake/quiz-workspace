@@ -70,9 +70,7 @@ def relabel(refs: list[Ref], numbers: Mapping[uuid.UUID, int | None]) -> list[Re
     """`refs` labelled by the questions' current numbers: a stored label may predate UX12-NUMBER
     (`3장 12번`, or a position). A question missing from `numbers` keeps its stored label."""
     return [
-        replace(r, label=question_label(numbers[r.question_id]))
-        if r.question_id in numbers
-        else r
+        replace(r, label=question_label(numbers[r.question_id])) if r.question_id in numbers else r
         for r in refs
     ]
 
