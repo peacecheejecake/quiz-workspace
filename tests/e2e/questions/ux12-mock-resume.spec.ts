@@ -4,6 +4,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { mockUi } from '../fixtures/mock-exams.ts';
 import {
+  closeUnfinishedRun,
   createPracticeRun,
   createShuffleMockExam,
   getPracticeRun,
@@ -171,7 +172,7 @@ test(
     expect(url.get('practice')).toBe(run.id);
     expect(url.get('i')).toBe('2');
     expect(url.get('mock')).toBeNull();
-    await runUi.close(panel).click();
+    await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
     await expect(resumeButton(mockUi.row(dialog, exam.title), '1/4')).toBeVisible();
 
@@ -184,7 +185,7 @@ test(
     await runUi.option(panel, item.options?.[0]?.text ?? '').check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toBeVisible();
-    await runUi.close(panel).click();
+    await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
     await expect.poll(() => practiceParam(page)).toBeNull();
     expect(new URL(page.url()).searchParams.get('mock')).toBe(exam.id);
@@ -213,7 +214,7 @@ test(
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     await expect(panel.getByRole('radio').first()).toBeVisible();
     const before = await shown(panel);
-    await runUi.close(panel).click();
+    await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
 
     await resumeButton(mockUi.row(dialog, exam.title), '1/3').click();
@@ -243,7 +244,7 @@ test(
     let dialog = await openList(page, ws.id);
     await resumeButton(mockUi.row(dialog, exam.title), '1/3').click();
     await expect(runUi.mockTitle(panel, 3)).toBeVisible();
-    await runUi.close(panel).click();
+    await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
 
     // A new round: 풀기 alone, and the old run still opens by its URL.

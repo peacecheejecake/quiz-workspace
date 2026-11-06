@@ -24,6 +24,9 @@ insert into public.practice_runs (id, workspace_id, user_id, source, range, rand
          '00000000-0000-4000-8000-000000120001', 'bank', '{}', false, 1,
          array['20000000-0000-4000-8000-000000120001']::uuid[]);
 
+grant quiz_api to postgres;
+grant usage on schema extensions to quiz_api;
+
 set local role quiz_api;
 select lives_ok(
   $$ update public.practice_runs set resume_dismissed_at = now()

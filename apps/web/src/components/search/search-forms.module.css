@@ -34,13 +34,6 @@
   margin-inline-start: var(--space-2);
 }
 
-/* Phones: a classic scrollbar gutter takes 15px from the seven buttons' line. */
-@media (max-width: 539px) {
-  .lineForm {
-    margin-inline-start: var(--space-1);
-  }
-}
-
 /* 검색 · box · 필터 (UX12-FILTER). The middle column opens, so the gap widens and 필터 moves over;
    the buttons' columns are fixed because auto columns would take the free space of a 0fr one. */
 .searchLine {

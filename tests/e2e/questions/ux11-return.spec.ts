@@ -165,6 +165,8 @@ test(
     await page.reload();
     await expect(runUi.result(panel)).toContainText(/정답|오답/);
     await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
+    await expect(panel.getByRole('status').filter({ hasText: /정답|오답/ })).toHaveCount(0);
+    await expect(panel.getByRole('radio').first()).toBeEnabled();
     await panel.getByRole('radio').first().check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toContainText(/정답|오답/);

@@ -207,6 +207,9 @@ test(
       await runUi.submit(panel).click();
       await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
       await again(panel).click();
+      await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toHaveCount(
+        0,
+      );
     }
     expect(orders.size).toBeGreaterThan(1);
   },
