@@ -134,8 +134,8 @@ function labelAt(s: string, p: number): Label | undefined {
 
 /** Nothing but blanks since the last line break. */
 const AT_LINE_START = /\n[^\S\r\n]*$/u;
-/** "이름 : 값" right after a ` - `; `10:30` and `10 : 3` are no name. */
-export const NAME_VALUE = /^(?!\s*\d)\s*[^\n∙•·ㆍ:：-]{1,30}(?<!\d)[:：]\s*\S/u;
+/** "이름 : 값" right after a ` - `; a name neither starts nor ends in a digit (`오전 10 : 30`). */
+export const NAME_VALUE = /^(?!\s*\d)\s*[^\n∙•·ㆍ:：-]{1,30}(?<![\d\s])[^\S\r\n]*[:：]\s*\S/u;
 
 /** A line break followed by one or more blank lines (as in display-stem). */
 const PARAGRAPH_BREAK = /\r?\n(?:[^\S\r\n]*\r?\n)+/gu;

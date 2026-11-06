@@ -334,8 +334,8 @@ _PASSAGE_BULLETS = "∙•·ㆍ"
 _SENTENCE_END = re.compile(r"[.!?。\uff01\uff1f][)\uff09\"'\u2019”」』]*\s*$")
 _AT_LINE_START = re.compile(r"\n[^\S\r\n]*$")
 _ENDS_QUESTION = re.compile(r"[?\uff1f](?:\s*[(\uff08]\s*[)\uff09])*\s*$")
-# ``이름 : 값`` right after a `` - ``; ``10:30`` and ``10 : 3`` are no name.
-_NAME_VALUE = re.compile(r"(?!\s*\d)\s*[^\n∙•·ㆍ:\uff1a-]{1,30}(?<!\d)[:\uff1a]\s*\S")
+# ``이름 : 값`` right after a `` - ``; a name neither starts nor ends in a digit (``오전 10 : 30``).
+_NAME_VALUE = re.compile(r"(?!\s*\d)\s*[^\n∙•·ㆍ:\uff1a-]{1,30}(?<![\d\s])[^\S\r\n]*[:\uff1a]\s*\S")
 _ITEM_DASH = re.compile(r"(?<!\S)-\s+(?=\S)")
 _PASSAGE_MARKER = re.compile(r"[∙•·ㆍ]|(?<!\S)-(?=\s)")
 
