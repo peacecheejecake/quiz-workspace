@@ -295,7 +295,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DESIGN-3 | 5 | 진행 | |
 | DESIGN-4 | 5 | 대기 | |
 | SHELL-2 | 5 | 대기 | |
-| VIEW-3 | 5 | 진행 | |
+| VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
 | EXPL-3 | 5 | 진행 | |
 | VIEW-4 | 5 | 대기 | |
 | VIEW-5 | 5 | 대기 | |
