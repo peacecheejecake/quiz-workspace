@@ -349,6 +349,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |
   | 즐겨찾기·다시 풀기 toggle 켜짐(`.qz-study-toggle[data-state="on"]`, UX12 VIEW-2) | 투명 + 아이콘 fill·stroke 반전 | `--color-state-hover` | `--color-state-pressed` | 아이콘과 이름이 상태를 전달 |
+  | 홈 `즐겨찾기만` 칩 켜짐(`aria-pressed="true"`, UX12 HOME-6) | 투명 + `--color-accent` 글자·테두리 + 체크 아이콘 | `--color-state-hover` | `--color-state-pressed` | 체크 아이콘·`aria-pressed`·semibold가 상태를 전달 |
   | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | `--color-state-selected` 배경 + text-primary + `aria-selected` (하단 bar 없음, UX4) |
   | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
   | 객관식 보기 행(`QuestionBody`, UX12 VIEW-2) | 꺼짐: 경계 `--color-option-control` | 행 hover: 경계 `--color-option-control-hover` + 글자 semibold(비활성 제외) | — | accent 채움 |
@@ -462,7 +463,7 @@ type QuestionDotProps = {
 - 점은 `<button>`으로 구현하고 label에 챕터·번호·유형·상태·favorite·retry를 포함.
 - roving tabindex 또는 명확한 Tab/Arrow navigation을 제공하여 수백 개의 버튼이 키보드 사용자에게 부담이 되지 않게 한다.
 - hover/focus에는 Tooltip/Popover로 preview, click/Enter/Space에는 Floating Question Panel. 풀이 panel을 닫아 focus가 dot으로 돌아올 때는 preview를 열지 않는다(UX12-HOME-AC01, `focusQuestionDotQuietly`). 사용자가 Tab·Arrow로 옮긴 focus와 hover는 그대로 preview를 연다.
-- 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상태 필터를 펼치면(기본 접힘, chevron 버튼 `aria-expanded`) 색 견본과 텍스트가 함께 보인다.
+- 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상단 줄의 `필터` popover를 열면(UX12 HOME-6) 색 견본과 텍스트가 함께 보인다.
 - 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX9-STROKE(2026-11-02, 사용자 요청)부터 모바일에서 24px이고(이전: 32px), 데스크톱은 UX12-HOME-1부터 28px이다.
 
 ### 6.1 Marker 렌더링 구현 규칙

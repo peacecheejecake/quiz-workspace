@@ -37,9 +37,9 @@
 //              name with 원문/텍스트) whose current block carries aria-current="true"; block
 //              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
 //              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
-//   UX12-FILTER  under the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
+//   UX12-FILTER  on the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
 //              문제 search box, and icon button "필터" → popover "필터" (combobox "챕터" = tree popover
-//              UX12-PICKER, combobox "유형" = Select).
+//              UX12-PICKER, combobox "유형" = Select, group "상태 필터" of chips, UX12-HOMEFILTER).
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -124,8 +124,9 @@ export const homeUi = {
   /** The button that opens the box; named 검색 닫기 while it is open (UX12-FILTER). */
   questionSearchButton: (page: Page) =>
     homeUi.header(page).getByRole('button', { name: /^(검색|search|검색 닫기|close search)$/i }),
-  /** The status message under the 문제 search (why it is disabled). */
-  questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
+  /** The status message under the sticky line's buttons (why 검색 is disabled). */
+  questionSearchMessage: (page: Page) =>
+    main(page).getByRole('status', { name: /^(문제 검색 안내|question search (note|message))$/i }),
   /** The home's retired "본문 검색" disclosure button (SEARCH-01-AC10, retired by UX9). */
   contentSearchToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
@@ -143,8 +144,13 @@ export const homeUi = {
     page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
+  /** The chips, inside the 필터 popover (UX12-HOMEFILTER): `openStatusFilters` first. */
   statusFilters: (page: Page) =>
-    main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+    homeUi
+      .searchSettings(page, 'questions')
+      .getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+  /** Why 미열람 is off under 즐겨찾기만 (empty otherwise). */
+  statusFilterNote: (page: Page) => homeUi.searchSettings(page, 'questions').getByRole('status'),
 };
 
 export type SearchScopeName = 'questions' | 'body';
@@ -338,6 +344,14 @@ export async function openSearchOptions(
   const popover = homeUi.searchSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
+}
+
+/** Opens the home's 필터 popover (no-op when it is open) and returns its 상태 필터 chips. */
+export async function openStatusFilters(page: Page): Promise<Locator> {
+  await openSearchOptions(page, 'questions');
+  const group = homeUi.statusFilters(page);
+  await expect(group).toBeVisible();
+  return group;
 }
 
 /** Closes a scope's settings popover when it is open. */

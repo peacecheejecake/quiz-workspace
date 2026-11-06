@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { useSyncExternalStore } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { OverviewItem, QuestionOverview } from '../src/lib/questions/overview-data';
 import { EMPTY_OVERVIEW_FILTERS } from '../src/lib/questions/overview-filters';
 import type { PlacedQuestion } from '../src/lib/questions/overview-placement';
@@ -175,9 +175,7 @@ function Screen({
           onCreateOpenChange={onCreateOpenChange}
           onQuestionsChanged={onQuestionsChanged}
           filters={filters}
-          view={filters}
           navigating={false}
-          onFiltersChange={onFiltersChange}
           onResetFilters={vi.fn()}
           overview={data}
           failure={null}
@@ -188,7 +186,6 @@ function Screen({
   );
 }
 
-const onFiltersChange = vi.fn();
 const realPushState = window.history.pushState.bind(window.history);
 
 beforeEach(() => {
@@ -223,23 +220,6 @@ afterEach(() => {
 const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
-
-describe('UX12-FILTER-AC01 status filter', () => {
-  it('is always visible with all statuses selected', async () => {
-    const user = userEvent.setup();
-    onFiltersChange.mockReset();
-    render(<Screen />);
-    const group = screen.getByRole('group', { name: '상태 필터' });
-    expect(within(group).queryByRole('button', { name: '다시 풀기만' })).toBeNull();
-    expect(within(group).queryByRole('button', { name: '필터 초기화' })).toBeNull();
-    const retry = within(group).getByRole('button', { name: '다시 풀기' });
-    expect(retry).toHaveAttribute('aria-pressed', 'true');
-    await user.click(retry);
-    expect(onFiltersChange).toHaveBeenCalledWith({
-      status: ['unseen', 'viewed', 'incorrect', 'correct'],
-    });
-  });
-});
 
 describe('QuestionsOverview practice panel', () => {
   it('opens from a dot with ?question=, records the view and returns focus on Escape', async () => {
@@ -412,15 +392,19 @@ describe('QuestionsOverview review fixes', () => {
     expect(dot(3)).toHaveFocus();
   });
 
-  it('focus goes to the status filter toggle when the heatmap is empty after closing', async () => {
+  it('focus goes to the 필터 button when the heatmap is empty after closing', async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Screen />);
+    const filter = document.createElement('button');
+    filter.setAttribute('data-home-filter', '');
+    document.body.append(filter);
+    onTestFinished(() => filter.remove());
     await user.click(dot(1));
     await screen.findByRole('dialog', { name: '1번 문제' });
     rerender(<Screen data={only()} />);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('button', { name: '미열람' })).toHaveFocus();
+    expect(filter).toHaveFocus();
   });
 
   it('a rejected my-state request rolls the optimistic change back and reports it', async () => {

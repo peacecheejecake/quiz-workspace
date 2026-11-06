@@ -23,8 +23,22 @@
   min-width: 0;
 }
 
-.stateFilters[hidden] {
-  display: none;
+/* The chips and, under 즐겨찾기만, why 미열람 is off (UX12-HOMEFILTER). */
+.statusFilter {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.statusFilterNote {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+}
+
+/* Empty but mounted, so it can announce: it takes no room. */
+.statusFilterNote:empty {
+  margin-block-start: calc(-1 * var(--space-2));
 }
 
 /* Chips keep their size and wrap as whole chips at any width (UX4); no squeezing, no scrolling. */
@@ -38,6 +52,30 @@
 
 .stateFilters > * {
   flex: none;
+}
+
+/* 미열람 under 즐겨찾기만: aria-disabled, so it stays focusable and describes its reason. */
+.chipOff {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* 즐겨찾기만 on: no fill, accent text and border, and a check icon (never colour alone). The
+   repeated class outranks the kit's selected fill; hover and press keep their state fills. */
+.favoriteChip.favoriteChip.favoriteChip[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: transparent;
+  color: var(--color-accent);
+}
+
+@media (hover: hover) {
+  .favoriteChip.favoriteChip.favoriteChip.favoriteChip[aria-pressed='true']:hover {
+    background: var(--color-state-hover);
+  }
+}
+
+.favoriteChip.favoriteChip.favoriteChip.favoriteChip[aria-pressed='true']:active {
+  background: var(--color-state-pressed);
 }
 
 .swatch {
@@ -73,6 +111,11 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);
+}
+
+/* Empty but mounted, so it can announce: the heatmap stays right under the sticky line. */
+.inFilter:empty {
+  margin-block-end: calc(-1 * var(--space-3));
 }
 
 .heatmap[aria-busy='true'] {

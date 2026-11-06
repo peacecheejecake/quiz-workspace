@@ -12,6 +12,7 @@ import {
   overviewPath,
   signInAs,
   test,
+  openStatusFilters,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -139,7 +140,7 @@ test('UX12-MOCKFORM-AC03 filters are always shown with the home swatches and tex
       );
 
   await page.goto(overviewPath(workspace.id));
-  const home = await swatches(page.getByRole('group', { name: /^(상태 필터|status filter)$/i }));
+  const home = await swatches(await openStatusFilters(page));
   expect(home).toHaveLength(5);
 
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));

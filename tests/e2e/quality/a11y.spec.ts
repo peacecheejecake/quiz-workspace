@@ -214,6 +214,11 @@ test(
     await page.goto(homePath(ws.id));
     await openSearchOptions(page, 'questions');
     await expectAccessible(page, 'question search settings popover');
+    await homeUi
+      .statusFilters(page)
+      .getByRole('button', { name: /^(즐겨찾기만|favorites? only)$/i })
+      .click();
+    await expectAccessible(page, 'filter popover with 즐겨찾기만 on');
     await closeSearchOptions(page, 'questions');
     await page.goto(searchPath(ws.id));
     await openContentSearch(page);
