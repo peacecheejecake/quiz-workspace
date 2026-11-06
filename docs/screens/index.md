@@ -27,6 +27,7 @@
 | UX12-NAV | 페이지 이동 반응 | 하위 페이지 링크 | [ux12-navigation.md](ux12-navigation.md) |
 | UX12-SRCMENU | 더보기 메뉴의 원문 보기 | 풀이 panel · 범위 풀이 | [ux12-source-menu.md](ux12-source-menu.md) |
 | UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
+| UX12-OPEN | 문제 열기 속도 | 풀이 panel | [ux12-question-open.md](ux12-question-open.md) |
 | UX12-GLASS | floating 표면 gradient·복귀 bar 모양 | 공통 UI | [ux12-glass.md](ux12-glass.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |

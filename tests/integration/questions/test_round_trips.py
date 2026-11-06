@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import selectors
 import socket
 import threading
@@ -156,6 +157,42 @@ BUDGETS = {
     "GET practice-session": 6,  # PERF-1: 3
     "PATCH my-state": 9,  # PERF-1: 7
 }
+
+
+@pytest.mark.red
+def test_ux12_open_ac07_opening_stays_within_its_budget_and_reports_timing(
+    seed: Any, measured: tuple[TestClient, CountingProxy]
+) -> None:
+    http, proxy = measured
+    alice = seed.client("ux12-open-trips")
+    ws = alice.create_workspace()
+    q = alice.create_question(ws["id"], seed.mcq(_stem("열기"), ["a", "b", "c"], 0))
+    meter = Meter(http, proxy, alice.user.token)
+    path = f"/questions/{q['id']}/practice-open"
+    for _ in range(2):
+        meter.trips("GET", f"/workspaces/{ws['id']}")
+
+    key = {"Idempotency-Key": uuid.uuid4().hex}
+    fresh, opened = meter.trips("POST", path, {}, headers=key)
+    session = opened["session"]
+    cached, reused = meter.trips("POST", path, {"cached_session_id": session["id"]})
+    assert reused["reused"] is True
+    meter.trips(
+        "POST", f"/practice-sessions/{session['id']}/submit", {"selected_option_ids": ["opt-1"]}
+    )
+    result, shown = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
+    assert shown["result"]["id"] == session["id"]
+
+    assert {"fresh": fresh, "cached": cached, "result": result} == {
+        "fresh": min(fresh, 10),
+        "cached": min(cached, 8),
+        "result": min(result, 9),
+    }
+
+    timing = http.post(
+        f"/api/v1{path}", json={}, headers={"Authorization": f"Bearer {alice.user.token}"}
+    ).headers["Server-Timing"]
+    assert re.fullmatch(r'db;dur=\d+\.\d;desc="\d+", app;dur=\d+\.\d', timing)
 
 
 def test_study_paths_stay_within_their_round_trip_budget(
