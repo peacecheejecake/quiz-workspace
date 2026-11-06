@@ -55,6 +55,9 @@ export const AI_NOTICE_TEXT =
   '고른 문제의 발문·보기·정답·해설과 관련 본문이 AI 서비스로 전송됩니다.';
 export const NO_RANGE_TEXT = '출제 범위를 고르세요';
 export const WORKING_TEXT = '문제를 만드는 중입니다. 창을 닫아도 계속 만듭니다.';
+export const WAITING_LABEL = '대기 중';
+export const WAITING_TEXT =
+  '앞선 작업을 기다리고 있습니다. 문서 처리나 문제 추출이 끝나면 시작하고, 창을 닫아도 순서는 유지됩니다.';
 export const NOT_FOUND_TEXT = '모의고사를 찾을 수 없습니다.';
 export const FAILED_TITLE = '모의고사를 만들지 못했습니다';
 export const EMPTY_TEXT = '아직 모의고사가 없습니다.';
@@ -137,6 +140,16 @@ export function isGenerating(exam: Pick<MockExam, 'latest_generation'>): boolean
   return status === 'queued' || status === 'running';
 }
 
+/** Whether the newest round is queued behind other jobs: no worker has taken it (MOCK-01-C12). */
+export function isWaiting(exam: Pick<MockExam, 'latest_generation'>): boolean {
+  return exam.latest_generation?.status === 'queued';
+}
+
+/** The status badge: a round no worker took yet is 대기 중, not 만드는 중. */
+export function statusLabel(exam: Pick<MockExam, 'status' | 'latest_generation'>): string {
+  return isWaiting(exam) ? WAITING_LABEL : STATUS_LABELS[exam.status];
+}
+
 /** The running round's progress as {done, total} ("20개 중 7개"). */
 export function generationProgress(generation: MockExamGeneration | null | undefined): {
   done: number;
@@ -166,6 +179,8 @@ export function failureText(errorCode: string | null | undefined): string {
     case 'no-matching-questions':
     case 'no_matching_questions':
       return '범위에 맞는 확정 문제가 없습니다.';
+    case 'mock_llm_disabled':
+      return `${AI_DISABLED_TEXT} 설정을 바꿔 \`보기 섞기\`로 만들어 보세요.`;
     default:
       return '모의고사를 만들지 못했습니다. 다시 시도하세요.';
   }

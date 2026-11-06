@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 import billiard
 
-from quiz_worker.celery_app import DEFAULT_QUEUE, INTERACTIVE_QUEUE, app_from_environment
+from quiz_worker.celery_app import app_from_environment, worker_queues
 from quiz_worker.resources import configure_threads
 from quiz_worker.settings import get_settings
 
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 def build_worker_argv(
-    concurrency: int, log_level: str, *, beat: bool = True, queue: str = DEFAULT_QUEUE
+    concurrency: int, log_level: str, *, beat: bool = True, interactive: bool = False
 ) -> list[str]:
     argv = [
         "worker",
         f"--concurrency={concurrency}",
         f"--loglevel={log_level.upper()}",
-        f"--queues={queue}",
+        f"--queues={','.join(worker_queues(interactive=interactive))}",
         # No gossip/mingle broadcast traffic; a single small deployment does not need it.
         "--without-gossip",
         "--without-mingle",
@@ -71,12 +71,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     # WORKER_QUEUE=interactive (ASK-B): a separate process for `ask.answer` with its own pool
     # size (ASK_WORKER_CONCURRENCY) and no beat; the default process keeps the beat schedule.
+    # Both also read the on-demand queue (MOCK-01-C11).
     interactive = settings.queue == "interactive"
     worker_argv = build_worker_argv(
         settings.ask_worker_concurrency if interactive else settings.concurrency,
         settings.log_level,
         beat=settings.embedded_beat and not interactive,
-        queue=INTERACTIVE_QUEUE if interactive else DEFAULT_QUEUE,
+        interactive=interactive,
     )
     app.worker_main([*worker_argv, *(argv or [])])
 

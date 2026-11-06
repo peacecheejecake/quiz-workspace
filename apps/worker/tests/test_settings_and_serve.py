@@ -60,7 +60,7 @@ def test_worker_argv_uses_configured_concurrency_and_job_queue() -> None:
     assert argv[0] == "worker"
     assert "--concurrency=1" in argv
     assert "--loglevel=INFO" in argv
-    assert "--queues=quiz.jobs" in argv
+    assert "--queues=quiz.jobs,quiz.ondemand" in argv
     assert "--beat" in argv
     assert "--scheduler=celery.beat:Scheduler" in argv
     assert "--beat" not in serve.build_worker_argv(1, "info", beat=False)

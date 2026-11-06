@@ -53,14 +53,16 @@ import {
   EMPTY_TEXT,
   generationProgress,
   isGenerating,
+  isWaiting,
   metaText,
   MOCK_POLL_MS,
   NOT_FOUND_TEXT,
   newOptions,
   progressPercent,
   progressValueText,
-  STATUS_LABELS,
   STATUS_TONES,
+  WAITING_TEXT,
+  statusLabel,
   unfinishedRunName,
   unfinishedRunProgress,
   type MockExam,
@@ -759,7 +761,7 @@ function ListRow({
               {exam.title}
             </button>
           )}
-          <Badge tone={STATUS_TONES[exam.status]}>{STATUS_LABELS[exam.status]}</Badge>
+          <Badge tone={STATUS_TONES[exam.status]}>{statusLabel(exam)}</Badge>
         </div>
         <p className={styles.meta}>
           {metaText(exam)} ·{' '}
@@ -772,6 +774,7 @@ function ListRow({
             valueText={progressValueText(progress)}
           />
         ) : null}
+        {isWaiting(exam) ? <p className={styles.meta}>{WAITING_TEXT}</p> : null}
       </div>
       <div className={styles.itemActions}>
         {canPractise(exam) ? (

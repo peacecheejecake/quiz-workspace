@@ -518,7 +518,7 @@ export const VARIATION_LABEL: Readonly<Record<VariationType, RegExp>> = {
 };
 
 export const STATUS_TEXT: Readonly<Record<MockStatus, RegExp>> = {
-  generating: /만드는 중|generating/i,
+  generating: /만드는 중|대기 중|generating|waiting/i,
   ready: /준비됨|ready/i,
   partial: /일부만 만듦|partially (made|generated)/i,
   failed: /^(실패|failed)$/i,
@@ -534,7 +534,7 @@ export const MOCK_TEXT = {
   aiDisabled: /이 환경에서는 AI 변형을 쓸 수 없습니다|AI variations are not available here/i,
   aiNotice: /AI 서비스로 전송됩니다|sent to an AI service/i,
   noRange: /출제 범위를 고르세요|choose a range/i,
-  working: /문제를 만드는 중입니다|making questions/i,
+  working: /문제를 만드는 중입니다|앞선 작업을 기다리고|making questions|waiting for/i,
   replaceConfirm:
     /지금 문제 (\d+)개를 새로 만든 문제로 바꿉니다\. 편집한 문제도 바뀝니다|replaces the current/i,
   edited: /^(편집됨|edited)$/i,

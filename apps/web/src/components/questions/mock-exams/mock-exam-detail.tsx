@@ -33,6 +33,7 @@ import {
   failureText,
   generationProgress,
   isGenerating,
+  isWaiting,
   MOCK_POLL_MS,
   needsReview,
   NOT_FOUND_TEXT,
@@ -44,11 +45,12 @@ import {
   replaceText,
   roundText,
   SAME_DIFFICULTY_LABEL,
-  STATUS_LABELS,
   STATUS_TONES,
+  statusLabel,
   usesAi,
   VARIATION_LABELS,
   variationText,
+  WAITING_TEXT,
   WORKING_TEXT,
   type MockExam,
   type MockExamQuestion,
@@ -377,7 +379,7 @@ export function MockExamDetail({
           </h2>
         )}
         <div className={styles.badges}>
-          <Badge tone={STATUS_TONES[shown.status]}>{STATUS_LABELS[shown.status]}</Badge>
+          <Badge tone={STATUS_TONES[shown.status]}>{statusLabel(shown)}</Badge>
           {round ? <span>{round}</span> : null}
           <span>문제 {shown.question_count_current}개</span>
         </div>
@@ -473,7 +475,7 @@ export function MockExamDetail({
                 valueText={progressValueText(progress)}
               />
               <p className={styles.muted}>
-                {progressValueText(progress)} · {WORKING_TEXT}
+                {progressValueText(progress)} · {isWaiting(shown) ? WAITING_TEXT : WORKING_TEXT}
               </p>
             </div>
           ) : null}
