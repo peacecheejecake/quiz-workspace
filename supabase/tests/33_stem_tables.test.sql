@@ -6,10 +6,14 @@ set local search_path = public, extensions;
 
 select plan(16);
 
-select col_type_is('public', 'question_revisions', 'stem_tables', 'jsonb');
-select col_is_null('public', 'question_revisions', 'stem_tables');
-select col_type_is('public', 'mock_exam_question_revisions', 'stem_tables', 'jsonb');
-select col_is_null('public', 'mock_exam_question_revisions', 'stem_tables');
+select col_type_is('public', 'question_revisions', 'stem_tables', 'jsonb',
+  'question_revisions.stem_tables is jsonb');
+select col_is_null('public', 'question_revisions', 'stem_tables',
+  'question_revisions.stem_tables is nullable');
+select col_type_is('public', 'mock_exam_question_revisions', 'stem_tables', 'jsonb',
+  'mock_exam_question_revisions.stem_tables is jsonb');
+select col_is_null('public', 'mock_exam_question_revisions', 'stem_tables',
+  'mock_exam_question_revisions.stem_tables is nullable');
 select ok(has_function_privilege('quiz_api', 'public.stem_tables_valid(jsonb)', 'execute')
   and has_function_privilege('quiz_worker', 'public.stem_tables_valid(jsonb)', 'execute')
   and not has_function_privilege('anon', 'public.stem_tables_valid(jsonb)', 'execute')
