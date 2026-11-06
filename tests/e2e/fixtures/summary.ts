@@ -610,7 +610,9 @@ export const summaryUi = {
   chaptersHeading: (panel: Locator) =>
     panel.getByRole('heading', { level: 3, name: /^(장별 요약|chapter summaries)$/i }),
   keyPoints: (panel: Locator) => panel.getByRole('list', { name: /^(핵심|key points)$/i }),
-  pageLinks: (scope: Locator) => scope.getByRole('link', { name: PAGE_LINK }),
+  /** A button for members (원본 PDF dialog, UX12-SOURCE), a link for share guests. */
+  pageLinks: (scope: Locator) =>
+    scope.getByRole('button', { name: PAGE_LINK }).or(scope.getByRole('link', { name: PAGE_LINK })),
   chapter: (panel: Locator, title: string) =>
     panel.getByRole('button', { name: new RegExp(`^${escape(title)}`) }),
   stale: (panel: Locator) =>

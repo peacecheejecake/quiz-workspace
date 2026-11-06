@@ -481,6 +481,14 @@ export const DRAFT_SAVED = /초안.*(저장|생성)|draft (saved|created)/i;
 export const PUBLISHED = /발행(됨| 완료)|published/i;
 export const INDEX_FAILED = /색인.*실패|indexing failed|reindex(ing)? failed/i;
 
+/** UX12-SOURCE: the 원본 PDF dialog a source page link opens in place (URL unchanged). */
+export const sourcePdfUi = {
+  dialog: (page: Page) => page.getByRole('dialog', { name: /^(원본 PDF|source pdf)$/i }).last(),
+  currentPage: (dialog: Locator) => dialog.getByLabel(/현재 페이지|current page/i),
+  fullDocument: (dialog: Locator) =>
+    dialog.getByRole('link', { name: /^(전체 문서 보기|open (the )?full document)$/i }),
+};
+
 export const searchUi = {
   /** The 본문 search box (on the 본문 search page: openContentSearch). */
   box: (page: Page) =>

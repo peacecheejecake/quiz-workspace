@@ -103,6 +103,7 @@ import {
   seedMembership,
   setDocumentKind,
   signInAs,
+  sourcePdfUi,
   uploadPdf,
   waitForJob,
   type Member,
@@ -310,23 +311,25 @@ test(
     await expect(mark).toHaveText(/가나다|원리/);
     await expectBoldUnderlined(mark);
 
-    // Row → "본문 발췌" panel → "PDF에서 보기" opens DOC-02 at p.2.
+    // Row → "본문 발췌" panel → "PDF에서 보기" → 전체 문서 보기 opens DOC-02 at p.2.
     await relatedUi.open(first).click();
     const excerpt = relatedUi.excerptPanel(page);
     await expect(excerpt).toBeVisible();
     await expect(excerpt).toContainText(TEXT.answer.slice(0, 30));
     await relatedUi.openInPdf(excerpt).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${s.workspaceId}/documents/${s.book.documentId}`,
     );
     await expect(editorUi.currentPage(page)).toHaveValue(String(ANSWER_PAGE));
 
     // Back on the home, the submitted result is restored, then the second row's
-    // "PDF" link opens DOC-02 at p.4.
+    // "PDF" button opens the dialog and 전체 문서 보기 DOC-02 at p.4.
     panel = await reopenSubmitted(page, s.workspaceId, question);
     await expect(relatedUi.toggle(panel)).toHaveAttribute('aria-expanded', 'false');
     body = await expandRelated(panel);
-    const link = relatedUi.pdf(relatedUi.row(body, 1));
+    await relatedUi.pdf(relatedUi.row(body, 1)).click();
+    const link = sourcePdfUi.fullDocument(sourcePdfUi.dialog(page));
     await expect(link).toHaveAttribute('href', /[?&]page=4(&|$)/);
     await link.click();
     await expect(page).toHaveURL(

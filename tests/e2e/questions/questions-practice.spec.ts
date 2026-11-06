@@ -55,6 +55,7 @@ import {
   seedGradedAttempt,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   startPractice,
   submitPractice,
   test,
@@ -905,7 +906,8 @@ test(
     await expect(detail).toContainText(v1Stem);
 
     await expect(detailUi.sourcesHeading(detail)).toBeVisible();
-    const link = detail.getByRole('link', { name: /2–3쪽|pages? 2/i });
+    await detail.getByRole('button', { name: /2–3쪽|pages? 2/i }).click();
+    const link = sourcePdfUi.fullDocument(sourcePdfUi.dialog(page));
     await expect(link).toHaveAttribute(
       'href',
       `/workspaces/${ws.id}/documents/${documentId}?page=2`,

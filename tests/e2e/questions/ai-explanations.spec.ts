@@ -90,6 +90,7 @@ import {
   searchUi,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   startPractice,
   submitPractice,
   type Member,
@@ -305,11 +306,12 @@ test(
       expect.stringMatching(EXPL_TEXT.ready),
     ]);
 
-    // [1] → 본문 발췌 → PDF에서 보기 opens DOC-02 at that page.
+    // [1] → 본문 발췌 → PDF에서 보기 → 전체 문서 보기 opens DOC-02 at that page.
     await explUi.footnote(area, 1).first().click();
     const excerpt = searchUi.excerptPanel(page);
     await expect(excerpt).toBeVisible();
     await searchUi.openInPdf(excerpt).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${s.workspaceId}/documents/${s.documentId}`,
     );

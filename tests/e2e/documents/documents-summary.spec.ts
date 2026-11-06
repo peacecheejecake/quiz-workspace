@@ -34,6 +34,7 @@ import {
   questionPaper,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   snippet,
   uploadPdf,
   waitForJob,
@@ -229,12 +230,13 @@ test(
     await expect(panel).toBeHidden();
     await expect(opener).toBeFocused();
 
-    // A key point's page link opens DOC-02 at that page.
+    // A key point's page link opens the 원본 PDF dialog; 전체 문서 보기 DOC-02 at that page.
     await opener.click();
     await expect(summaryUi.overallHeading(panel)).toBeVisible();
     const link = summaryUi.pageLinks(summaryUi.keyPoints(panel).first()).first();
     const target = await linkedPage(link);
     await link.click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === `/workspaces/${ws.id}/documents/${doc.documentId}` &&
