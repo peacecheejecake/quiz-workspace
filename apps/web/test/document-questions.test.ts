@@ -184,6 +184,26 @@ describe('selectionHighlights of a draft question (UX12-EXTRACT-AC01)', () => {
     ]);
   });
 
+  it('keeps a page of the question that holds only an uncaptioned figure', () => {
+    const spanning = [
+      ...page,
+      {
+        ...block('figure-page', 'c', 'image', 120, 100, 300, 300),
+        page: 38,
+        locations: [{ page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } }],
+      } as ContentBlock,
+    ];
+    const ids = [...draft, 'figure-page'];
+    expect(selectionHighlights(spanning[4], null, spanning, groups, [ids])).toEqual([
+      ...whole,
+      { page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } },
+    ]);
+    const confirmed = { id: 'q', blockIds: ids } as unknown as DocumentQuestion;
+    expect(selectionHighlights(spanning[4], null, spanning, pageGroups(spanning, [confirmed]))).toEqual(
+      [...whole, { page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } }],
+    );
+  });
+
   it('prefers the confirmed question when a block belongs to both', () => {
     const confirmed = { id: 'q', blockIds: ['option'] } as unknown as DocumentQuestion;
     const mixed = pageGroups(page, [confirmed]);

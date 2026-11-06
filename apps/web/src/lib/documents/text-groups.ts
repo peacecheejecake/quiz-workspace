@@ -123,8 +123,9 @@ export function textTargetForPage(groups: readonly PageGroup[], page: number): T
 }
 
 /**
- * One box per page around a question's blocks. An image beside or above the question's text is
- * page decoration an earlier import kept as a figure (UX12-EXTRACT): it does not stretch the box.
+ * One box per page around a question's blocks. An image beside or above the question's text on
+ * its page is decoration an earlier import kept as a figure (UX12-EXTRACT): it does not stretch
+ * the box. A page with no text of the question proves nothing: a figure there stays.
  */
 function questionBoxes(blocks: readonly ContentBlock[]): ContentBlock['locations'] {
   type Box = { x0: number; y0: number; x1: number; y1: number };
@@ -151,11 +152,10 @@ function questionBoxes(blocks: readonly ContentBlock[]): ContentBlock['locations
   for (const block of blocks) {
     if (block.type !== 'image') continue;
     for (const { page, bbox } of block.locations) {
+      if (!bbox) continue;
       const beside = text.get(page);
-      if (!bbox || !beside) continue;
-      if (bbox.x1 > beside.x0 && bbox.x0 < beside.x1 && bbox.y1 > beside.y0) {
-        grow(boxes, page, bbox);
-      }
+      const inColumn = beside && bbox.x1 > beside.x0 && bbox.x0 < beside.x1;
+      if (!beside || (inColumn && bbox.y1 > beside.y0)) grow(boxes, page, bbox);
     }
   }
   return [...boxes.entries()].sort(([a], [b]) => a - b).map(([page, bbox]) => ({ page, bbox }));
