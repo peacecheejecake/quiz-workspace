@@ -449,7 +449,7 @@ export function PracticeViewer({
           다시 풀기
         </Button>
       ) : null}
-      {ready ? (
+      {ready && (outcome || view.lastGradedResult || view.isPendingGrading) ? (
         <Button
           onClick={() => {
             resetKey.current = newKey();
