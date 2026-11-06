@@ -95,6 +95,39 @@ describe('FlagSync', () => {
     return { calls, send, events, sync, flush };
   }
 
+  it('UX12-RETRYOPEN settled waits for every queued change of that question only', async () => {
+    const { calls, sync, flush } = setup();
+    let done = false;
+    await sync.settled('q');
+    sync.toggle('q', OFF, { needs_retry: true });
+    sync.toggle('q', OFF, { is_favorite: true });
+    void sync.settled('q').then(() => {
+      done = true;
+    });
+    await sync.settled('other');
+    calls[0]?.resolve({ ok: true, data: { ...OFF, needs_retry: true } });
+    await flush();
+    expect(done).toBe(false);
+    calls[1]?.resolve({ ok: true, data: { is_favorite: true, needs_retry: true } });
+    await flush();
+    expect(done).toBe(true);
+  });
+
+  it('UX12-RETRYOPEN settled also ends on a failure and on a reset', async () => {
+    const { calls, sync, flush } = setup();
+    let ended = 0;
+    sync.toggle('q', OFF, { needs_retry: true });
+    void sync.settled('q').then(() => (ended += 1));
+    calls[0]?.resolve({ ok: false, message: 'no' });
+    await flush();
+    expect(ended).toBe(1);
+    sync.toggle('q', OFF, { needs_retry: true });
+    void sync.settled('q').then(() => (ended += 1));
+    sync.invalidate('q');
+    await flush();
+    expect(ended).toBe(2);
+  });
+
   it('drops a pre-reset response without affecting a fresh flag change', async () => {
     const { calls, events, sync, flush } = setup();
     sync.toggle('q', OFF, { is_favorite: true });

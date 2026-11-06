@@ -54,6 +54,19 @@ describe('openQuestionPractice', () => {
     expect(sentBody(cached)).toEqual({ cached_session_id: 'session', baseline_attempt_id: null });
     const forced = respondWith(200, opened());
     await openQuestionPractice(WS, Q, KEY, { forceNew: true }, forced);
+    const another = respondWith(200, opened(WS));
+    await openQuestionPractice(
+      WS,
+      Q,
+      KEY,
+      { cached: { sessionId: 's', baselineAttemptId: 'a', anotherTry: true } },
+      another,
+    );
+    expect(sentBody(another)).toEqual({
+      cached_session_id: 's',
+      baseline_attempt_id: 'a',
+      cached_another_try: true,
+    });
     expect(sentBody(forced)).toEqual({ force_new: true });
   });
 

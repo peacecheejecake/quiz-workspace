@@ -889,6 +889,7 @@ export function QuestionsOverview({
           });
         }}
         onFlagsChange={changeFlags}
+        flagsSettled={(questionId) => flagSync.settled(questionId)}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={({ onShowSource }) =>

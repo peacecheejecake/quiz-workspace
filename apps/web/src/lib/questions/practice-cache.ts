@@ -18,6 +18,7 @@ interface Entry {
   readonly storedAt: number;
   readonly epoch: number;
   readonly baselineAttemptId: string | null;
+  readonly anotherTry: boolean;
 }
 
 export interface PracticeCacheOptions {
@@ -87,8 +88,18 @@ export class PracticeSessionCache {
       : undefined;
   }
 
+  /** The session came from `다시 풀기`: the server keeps it in front of the latest result. */
+  anotherTry(questionId: string): boolean {
+    return this.get(questionId) ? !!this.entries.get(questionId.toLowerCase())?.anotherTry : false;
+  }
+
   /** Keeps an open session of this workspace; anything else (submitted, foreign) is ignored. */
-  put(session: PracticeSession, epoch = 0, baselineAttemptId: string | null = null): void {
+  put(
+    session: PracticeSession,
+    epoch = 0,
+    baselineAttemptId: string | null = null,
+    anotherTry = false,
+  ): void {
     if (session.workspace_id.toLowerCase() !== this.workspaceId) return;
     if (this.wasDropped(session.id)) return;
     const key = session.question_id.toLowerCase();
@@ -102,6 +113,7 @@ export class PracticeSessionCache {
       storedAt: this.now(),
       epoch,
       baselineAttemptId,
+      anotherTry,
     });
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;

@@ -114,6 +114,11 @@ export interface PracticeViewerProps {
     questionId: string,
     flags: { is_favorite?: boolean; needs_retry?: boolean },
   ) => void;
+  /**
+   * Resolves once the question's toggles are saved: `practice-open` reads the 다시 풀기 mark, and it
+   * does not wait in the server action queue the save goes through (UX12-RETRYOPEN).
+   */
+  readonly flagsSettled?: (questionId: string) => Promise<void>;
   /** A session was opened: the server recorded the view. */
   readonly onReset?: (questionId: string) => void;
   readonly onViewed: (questionId: string) => void;
@@ -202,6 +207,7 @@ export function PracticeViewer({
   onCloseAutoFocus,
   headerExtra,
   invalidated = null,
+  flagsSettled,
 }: PracticeViewerProps) {
   const questionId = question?.id ?? null;
   const returnControl = useOptionalPracticeReturn();
@@ -279,6 +285,10 @@ export function PracticeViewer({
     const startedAt = performance.now();
     const open = async () => {
       const resetVersion = practiceResetVersion(workspaceId, id);
+      if (flagsSettled) {
+        await flagsSettled(id);
+        if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
+      }
       const held =
         opening.cached && cache.get(id)?.id === opening.cached.id ? opening.cached : null;
       const opened = await openQuestionPractice(workspaceId, id, key, {
@@ -288,6 +298,7 @@ export function PracticeViewer({
               cached: {
                 sessionId: held.id,
                 baselineAttemptId: cache.baselineAttemptId(id) ?? null,
+                anotherTry: cache.anotherTry(id),
               },
             }
           : {}),
@@ -324,7 +335,7 @@ export function PracticeViewer({
         return;
       }
       if (!data.reused) {
-        cache.put(data.session, data.reset_epoch, data.latest_attempt_id);
+        cache.put(data.session, data.reset_epoch, data.latest_attempt_id, !!opening.forceNew);
         onViewed(id);
       }
       setSession({
