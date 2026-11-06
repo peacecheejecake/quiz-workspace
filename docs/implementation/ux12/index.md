@@ -400,7 +400,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | VIEW-8 | 10 | 진행 | |
 | MOCKUX-12 | 10 | 진행 | |
 | MOCKUX-13 | 10 | 진행 | |
-| DESIGN-6 | 10 | 진행 | Heatmap 기본 28px, hover 1.5배 |
+| DESIGN-6 | 10 | 완료 | 마커 실제 21px·18px였던 것을 28px로, hover 1.5배, 간격 0→7px, Codex P2(기존 테스트 값) 수정, Chromium Storybook 측정, E2E는 PR CI에서 확인 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
