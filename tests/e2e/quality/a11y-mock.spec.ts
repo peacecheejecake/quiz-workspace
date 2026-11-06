@@ -82,7 +82,7 @@ async function openPlayByKeyboard(page: Page): Promise<Locator> {
   const play = page.getByRole('button', { name: /^풀기$/ });
   await keyTo(page, play);
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await expect(dialog).toBeVisible();
   await keyTo(page, mockUi.add(dialog));
   await page.keyboard.press('Enter');
@@ -243,7 +243,7 @@ test(
       await openRangeFilters(dialog);
       await expect(dialog.getByText(MOCK_TEXT.aiNotice)).toBeVisible();
       await expectAccessible(page, 'mock exam create, range step mixed with filters and AI notice');
-      await mockUi.previous(dialog).click();
+      await mockUi.backToOptions(dialog).click();
       await mockUi.backToList(dialog).click();
 
       // Detail while generating (held), then failed, partly made and round 2.

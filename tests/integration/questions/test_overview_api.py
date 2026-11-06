@@ -349,6 +349,7 @@ def test_filters_and_count_scope(seed: Any) -> None:
     assert ids(f"chapter={ch1}") == [a["id"], b["id"]]
     assert ids("chapter=none") == [essay["id"]]
     assert ids("type=ESSAY") == [essay["id"]]
+    assert ids("type=ESSAY&type=MCQ") == [a["id"], b["id"], c["id"], essay["id"]]
     assert ids("q=고양이") == [essay["id"]]
     assert ids("q=%25") == []  # LIKE wildcards are literal
     assert ids("status=none") == []

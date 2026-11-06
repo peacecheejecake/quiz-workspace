@@ -391,7 +391,7 @@ def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange)
         for c in candidates
         if (range_.all or c.id in picked)
         and c.id not in excluded
-        and (f.type is None or c.question_type == f.type)
+        and (f.types is None or c.question_type in f.types)
     ]
 
 

@@ -615,7 +615,7 @@ test(
 
     // A failing round (문구 변형 on 2장, provider unavailable): progress over the old questions,
     // then the alert; the 2회차 questions stay.
-    await mockUi.previous(dialog).click();
+    await mockUi.backToOptions(dialog).click();
     await mockUi.variation(dialog, 'OPTION_SHUFFLE').uncheck();
     await mockUi.variation(dialog, 'PARAPHRASE').check();
     await mockUi.next(dialog).click();

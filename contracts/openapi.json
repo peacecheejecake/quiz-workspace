@@ -10024,21 +10024,27 @@
             "description": "Keep these dot statuses; empty selects none, omitted selects all.",
             "title": "Status"
           },
-          "type": {
+          "types": {
             "anyOf": [
               {
-                "enum": [
-                  "MCQ",
-                  "SHORT_ANSWER",
-                  "ESSAY"
-                ],
-                "type": "string"
+                "items": {
+                  "enum": [
+                    "MCQ",
+                    "SHORT_ANSWER",
+                    "ESSAY"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "minItems": 1,
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Type"
+            "description": "Keep these question types; omitted selects all.",
+            "title": "Types"
           }
         },
         "title": "RangeFilters",
@@ -29810,23 +29816,29 @@
             }
           },
           {
+            "description": "Repeatable.",
             "in": "query",
             "name": "type",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "MCQ",
-                    "SHORT_ANSWER",
-                    "ESSAY"
-                  ],
-                  "type": "string"
+                  "items": {
+                    "enum": [
+                      "MCQ",
+                      "SHORT_ANSWER",
+                      "ESSAY"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 3,
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeatable.",
               "title": "Type"
             }
           },

@@ -7054,8 +7054,11 @@ export type components = {
        * @description Keep these dot statuses; empty selects none, omitted selects all.
        */
       status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
-      /** Type */
-      type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Types
+       * @description Keep these question types; omitted selects all.
+       */
+      types?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[] | null;
     };
     /** ReadinessReport */
     ReadinessReport: {
@@ -19326,7 +19329,8 @@ export interface operations {
         retry?: boolean | null;
         /** @description Repeatable statuses; none selects no questions, omitted selects all. */
         status?: (('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry') | 'none')[] | null;
-        type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+        /** @description Repeatable. */
+        type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[] | null;
       };
       header?: never;
       path: {

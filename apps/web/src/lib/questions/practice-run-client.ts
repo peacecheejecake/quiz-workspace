@@ -25,7 +25,8 @@ export interface RangeQuery {
   readonly status: readonly string[];
   readonly favorite: boolean;
   readonly retry: boolean;
-  readonly type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY' | null;
+  /** Empty: every type. */
+  readonly types: readonly ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[];
 }
 
 export const RUN_BFF_PATHS = {
@@ -133,7 +134,7 @@ export function createPracticeRunApi(
       else for (const status of query.status) params.append('status', status);
       if (query.favorite) params.set('favorite', 'true');
       if (query.retry) params.set('retry', 'true');
-      if (query.type) params.set('type', query.type);
+      for (const type of query.types) params.append('type', type);
       const search = params.toString();
       const result = await call<QuestionOverview>(
         `${RUN_BFF_PATHS.overview(workspaceId)}${search ? `?${search}` : ''}`,

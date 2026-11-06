@@ -57,7 +57,7 @@ class OverviewFilter:
 
     chapter_id: uuid.UUID | None = None
     no_chapter: bool = False
-    question_type: QuestionType | None = None
+    question_types: tuple[QuestionType, ...] = ()
     text: str | None = None
 
 
@@ -143,8 +143,8 @@ def overview_statement(
         conditions.append(chapters.c.id.is_(None))
     elif flt.chapter_id is not None:
         conditions.append(chapters.c.id == flt.chapter_id)
-    if flt.question_type is not None:
-        conditions.append(questions.c.question_type == flt.question_type)
+    if flt.question_types:
+        conditions.append(questions.c.question_type.in_(flt.question_types))
     if flt.text:
         conditions.append(question_revisions.c.stem.ilike(_like_pattern(flt.text), "\\"))
 

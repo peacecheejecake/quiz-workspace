@@ -13,7 +13,7 @@ test('UX12-PLAY-AC01 asks for a name only when a variation makes a mock exam', a
   await createNumberedQuestions(owner, workspace.id, 'ux12-play', 2);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
 
   // 변형 없음 = a bank run: nothing stores a name.
   await expect(mockUi.variations(dialog).first()).toBeVisible();

@@ -326,11 +326,6 @@ test(
 
     // 틀린 문제 keeps 1장 2번 (own attempt) and 2장 2번 (only through the merged duplicate, C07);
     // the selection shrinks to the visible ones and 전체 선택 picks the visible ones only.
-    if (await runUi.filterToggle(panel).isVisible()) {
-      if ((await runUi.filterToggle(panel).getAttribute('aria-expanded')) !== 'true') {
-        await runUi.filterToggle(panel).click();
-      }
-    }
     // All status chips start selected; leave only incorrect selected.
     const filters = panel.getByRole('group', { name: '상태 필터' });
     for (const label of ['안 푼 문제', '본 문제', '맞힌 문제', '다시 풀기']) {
@@ -424,7 +419,7 @@ test(
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
     await page.waitForLoadState('networkidle');
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    const play = page.getByRole('dialog', { name: /모의고사|practice/i });
+    const play = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await play.getByRole('button', { name: /^(추가|add)$/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
     await expect(random).not.toBeChecked();
@@ -812,11 +807,6 @@ test(
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     panel = await openRangePicker(page);
-    if ((await runUi.filterToggle(panel).count()) > 0) {
-      if ((await runUi.filterToggle(panel).getAttribute('aria-expanded')) !== 'true') {
-        await runUi.filterToggle(panel).click();
-      }
-    }
     await runUi.retryFilter(panel).click();
     await expect(runUi.noMatch(panel)).toBeVisible();
     await expect(runUi.resetFilters(panel)).toBeVisible();

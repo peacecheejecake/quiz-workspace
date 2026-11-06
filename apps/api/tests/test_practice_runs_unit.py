@@ -28,7 +28,13 @@ from quiz_api.api.practice_runs import (
 from quiz_api.errors import ProblemException, ProblemType
 from quiz_api.idempotency import request_hash
 from quiz_api.openapi_export import render_openapi
-from quiz_api.question_ranges import MAX_RANGE_IDS, QuestionRange, RangeRow, select_range
+from quiz_api.question_ranges import (
+    MAX_RANGE_IDS,
+    QuestionRange,
+    RangeFilters,
+    RangeRow,
+    select_range,
+)
 from quiz_api.repositories.practice_runs import RunProgress, RunRecord
 from quiz_api.settings import Environment, Settings
 
@@ -94,6 +100,26 @@ def test_filters_narrow_the_whole_selection() -> None:
     assert pick(all=True, filters={"retry": False, "type": "MCQ"}) == [*IDS[:3], IDS[5]]
     # An explicitly picked question that the filter hides is not in the result.
     assert pick(question_ids=[str(IDS[0])], filters={"status": ["incorrect"]}) == []
+
+
+def test_types_keep_every_chosen_type() -> None:
+    assert pick(all=True, filters={"types": ["MCQ"]}) == pick(all=True, filters={"type": "MCQ"})
+    every = pick(all=True)
+    others = [i for i in every if i not in pick(all=True, filters={"types": ["MCQ"]})]
+    assert others
+    assert pick(all=True, filters={"types": ["MCQ", "ESSAY", "SHORT_ANSWER"]}) == every
+
+
+def test_a_range_saved_with_one_type_reads_as_types() -> None:
+    assert RangeFilters.model_validate({"type": "ESSAY"}).types == ["ESSAY"]
+    assert RangeFilters.model_validate({"type": None}).types is None
+    assert RangeFilters.model_validate({"type": None, "types": ["MCQ"]}).types == ["MCQ"]
+    assert "type" not in RangeFilters.model_validate({"type": "MCQ"}).model_dump()
+
+
+def test_an_empty_type_list_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        RangeFilters.model_validate({"types": []})
 
 
 @pytest.mark.parametrize("field", ["question_ids", "excluded_question_ids"])

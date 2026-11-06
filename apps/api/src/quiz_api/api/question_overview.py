@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.exceptions import RequestValidationError
@@ -161,7 +161,7 @@ def _invalid(field: str, msg: str) -> RequestValidationError:
 
 
 def _scope(
-    chapter: str | None, question_type: QuestionType | None, q: str | None
+    chapter: str | None, question_types: list[QuestionType] | None, q: str | None
 ) -> OverviewFilter:
     chapter_id: uuid.UUID | None = None
     no_chapter = False
@@ -178,7 +178,7 @@ def _scope(
     return OverviewFilter(
         chapter_id=chapter_id,
         no_chapter=no_chapter,
-        question_type=question_type,
+        question_types=tuple(question_types or ()),
         text=q.strip() if q and q.strip() else None,
     )
 
@@ -228,7 +228,10 @@ def get_question_overview(
         str | None,
         Query(max_length=36, description="A chapter id, or `none` for questions without one."),
     ] = None,
-    question_type: Annotated[QuestionType | None, Query(alias="type")] = None,
+    question_types: Annotated[
+        list[QuestionType] | None,
+        Query(alias="type", max_length=len(get_args(QuestionType)), description="Repeatable."),
+    ] = None,
     q: Annotated[
         str | None, Query(max_length=MAX_SEARCH, description="Case-insensitive stem search.")
     ] = None,
@@ -243,7 +246,7 @@ def get_question_overview(
 ) -> QuestionOverview:
     """The caller's question heatmap: CONFIRMED questions with their study status, grouped by
     chapter, plus the status counts. Read-only: never records a view."""
-    rows = repo.rows(access.workspace_id, access.user_id, _scope(chapter, question_type, q))
+    rows = repo.rows(access.workspace_id, access.user_id, _scope(chapter, question_types, q))
     scope = [_item(r) for r in rows]
     counts = summarize((i.status, i.is_favorite) for i in scope)
 

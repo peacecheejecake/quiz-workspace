@@ -51,7 +51,7 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id));
   await page.getByRole('button', { name: /^풀기$/ }).click();
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await expect(dialog).toBeVisible();
   await mockUi.add(dialog).click();
   await expect(dialog.getByRole('checkbox', { name: /보기 섞기|shuffle/i })).not.toBeChecked();
@@ -88,7 +88,7 @@ test('UX10-PLAY-AC02 rejects a count larger than the selected range', async ({
   await createNumberedQuestions(owner, workspace.id, 'count', 3);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await dialog.getByLabel(/문항 수|question count/i).fill('4');
   await dialog.getByRole('button', { name: /다음|next/i }).click();
   await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
@@ -104,8 +104,8 @@ test('UX10-PLAY-AC03 uses steps instead of a generation progressbar', async ({
   const workspace = await workspaceFactory.create(owner);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
-  await expect(dialog.getByRole('list', { name: /풀기 단계/ })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
+  await expect(dialog.getByRole('list', { name: /모의고사 단계/ })).toBeVisible();
   await expect(dialog.getByRole('progressbar')).toHaveCount(0);
 });
 
@@ -118,7 +118,7 @@ test('UX10-PLAY-AC03 aligns 문항 수 and 난이도 on desktop and stacks them 
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await mockUi.variation(dialog, 'PARAPHRASE').check();
 
   const count = await boxOf(mockUi.questionCount(dialog));
@@ -150,7 +150,7 @@ test('UX10-PLAY-AC04 keeps action rows at the dialog bottom and fields reachable
   ]) {
     await page.setViewportSize(viewport);
     await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-    const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+    const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     const next = dialog.getByRole('button', { name: /다음|next/i });
     await expect(next).toBeInViewport();
     const dialogBox = await dialog.boundingBox();
@@ -332,7 +332,7 @@ test('UX10-PLAY-AC01 selecting shuffle creates a mock instead of a bank run', as
   await createNumberedQuestions(owner, workspace.id, 'mock-route', 2);
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
-  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
   await dialog.getByRole('checkbox', { name: /보기 섞기/ }).check();
   await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
   await dialog.getByRole('button', { name: /다음|next/i }).click();

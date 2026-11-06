@@ -157,6 +157,19 @@ html body[data-scroll-locked] {
     gap: var(--space-1);
   }
 
+  /* FloatingPanelPinned / FloatingPanelFooter fill these; without content they take no room. */
+  > :is(.pinned, .footer):empty {
+    display: none;
+  }
+
+  > .pinned {
+    display: grid;
+    flex: none;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    border-bottom: 1px solid var(--color-border);
+  }
+
   > .body {
     flex: 1 1 auto;
     min-height: 0;
@@ -239,7 +252,7 @@ html body[data-scroll-locked] {
       animation-name: qz-sheet-out;
     }
 
-    > :is(.header, .body, .footer) {
+    > :is(.header, .pinned, .body, .footer) {
       padding-inline: var(--space-4);
     }
   }
@@ -284,7 +297,7 @@ html body[data-scroll-locked] {
       animation-name: qz-sheet-out;
     }
 
-    > :is(.header, .body, .footer) {
+    > :is(.header, .pinned, .body, .footer) {
       padding-inline: var(--space-4);
     }
   }

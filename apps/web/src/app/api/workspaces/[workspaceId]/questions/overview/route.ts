@@ -1,5 +1,5 @@
 // QOV-01 / QVIEW-01 / QSEARCH-CACHE relay: the Heatmap's questions under its filters
-// (`chapter`, `type`, `q`, repeatable `status`, `favorite`, `retry`). Previews only, never an
+// (`chapter`, `q`, repeatable `type` and `status`, `favorite`, `retry`). Previews only, never an
 // answer; reading it records nothing. FastAPI checks the membership and judges the study state.
 import { isUuid, notFound, problemResponse, relayToApi } from '@/lib/documents/bff';
 import { NO_CHAPTER, OVERVIEW_SEARCH_MAX } from '@/lib/questions/overview-filters';
@@ -25,11 +25,11 @@ export async function GET(
     }
     out.set('chapter', chapter === NO_CHAPTER ? NO_CHAPTER : chapter.toLowerCase());
   }
-  const type = incoming.get('type');
-  if (type !== null) {
-    if (!TYPES.has(type)) return problemResponse(400, 'Bad Request', 'Malformed query.');
-    out.set('type', type);
+  const types = incoming.getAll('type');
+  if (types.length > TYPES.size || !types.every((type) => TYPES.has(type))) {
+    return problemResponse(400, 'Bad Request', 'Malformed query.');
   }
+  for (const type of new Set(types)) out.append('type', type);
   const q = incoming.get('q');
   if (q !== null) {
     const trimmed = q.trim();
