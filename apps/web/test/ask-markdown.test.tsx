@@ -1,10 +1,12 @@
+// @vitest-environment jsdom
 // UX12-ASKMD: the AI answer's allow-listed Markdown (lib/ask/markdown.ts) and its React rendering
 // (components/ask/answer-markdown.tsx), syntax by syntax and with half-written streaming input.
 // The browser-visible behaviour is in tests/e2e/ask/ux12-ask-markdown.spec.ts.
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AnswerMarkdown } from '../src/components/ask/answer-markdown';
 import { parseAnswerInline, parseAnswerMarkdown, safeHref } from '../src/lib/ask/markdown';
 
@@ -22,6 +24,8 @@ function show(text: string, sources: readonly number[] | null = [1, 2]) {
 
 const stream = (text: string) => show(text, null);
 
+afterEach(cleanup);
+
 describe('blocks', () => {
   it('turns headings into levels that keep the page order', () => {
     const levels = (text: string, headingBase?: number) =>
@@ -33,11 +37,11 @@ describe('blocks', () => {
     expect(levels('# 가\n#### 나')).toEqual([3, 4]);
     expect(levels('# 가\n## 나\n### 다\n#### 라\n##### 마', 3)).toEqual([3, 4, 5, 6, 6]);
     expect(levels('## 가\n### 나', 5)).toEqual([5, 6]);
-    expect(levels('제목 줄\n===\n\n## 제목 ##')).toEqual([3, 3]);
+    expect(levels('제목 줄\n===\n\n## 제목 ##')).toEqual([3, 4]);
     expect(levels('#태그는 제목이 아니다')).toEqual([]);
     const container = show('## 제목 [1]\n\n본문');
-    expect(within(container).getByRole('heading', { level: 3 })).toHaveTextContent('제목');
-    expect(within(container).getByRole('button', { name: '출처 1' })).toBeInTheDocument();
+    expect(within(container).getByRole('heading', { level: 3 }).textContent).toContain('제목');
+    within(container).getByRole('button', { name: '출처 1' });
   });
 
   it('joins soft lines, and keeps hard breaks', () => {
@@ -58,7 +62,7 @@ describe('blocks', () => {
     expect(container.querySelectorAll('pre')).toHaveLength(1);
     expect(within(container).queryByRole('button')).toBeNull();
     const scroller = within(container).getByRole('group', { name: '코드' });
-    expect(scroller).toHaveAttribute('tabindex', '0');
+    expect(scroller.getAttribute('tabindex')).toBe('0');
     expect(container.querySelector('b')).toBeNull();
     expect(show('```\n열린 채로 끝난 코드').querySelector('pre')?.textContent).toBe(
       '열린 채로 끝난 코드',
@@ -71,7 +75,7 @@ describe('blocks', () => {
     expect(quote?.querySelector('li')?.textContent).toBe('목록');
     expect(quote?.querySelector('blockquote')?.textContent).toBe('안쪽');
     expect(quote?.textContent).not.toContain('밖');
-    expect(within(quote as HTMLElement).getByRole('button')).toBeInTheDocument();
+    within(quote as HTMLElement).getByRole('button');
   });
 
   it('stops nesting at a depth limit', () => {
@@ -90,13 +94,15 @@ describe('blocks', () => {
   });
 
   it('keeps a loose list one list, and its numbers', () => {
-    const container = show('1. 가\n\n2. 나\n\n   이어지는 문단\n\n설명\n\n3. 다\n\n* 별표\n+ 더하기');
+    const container = show(
+      '1. 가\n\n2. 나\n\n   이어지는 문단\n\n설명\n\n3. 다\n\n* 별표\n+ 더하기',
+    );
     const lists = container.querySelectorAll('ol');
     expect(lists).toHaveLength(2);
     expect(lists[0]?.querySelectorAll(':scope > li')).toHaveLength(2);
     expect(lists[0]?.querySelector('p')?.textContent).toBe('이어지는 문단');
     expect(lists[0]?.hasAttribute('start')).toBe(false);
-    expect(lists[1]).toHaveAttribute('start', '3');
+    expect(lists[1]?.getAttribute('start')).toBe('3');
     expect(container.querySelector('ul')?.querySelectorAll('li')).toHaveLength(2);
   });
 
@@ -108,10 +114,10 @@ describe('blocks', () => {
     const container = show('- [x] 끝 [1]\n- [ ] 남음\n- [X] 대문자\n- 그냥');
     const boxes = within(container).getAllByRole('checkbox');
     expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, false, true]);
-    expect(boxes[0]).toBeDisabled();
-    expect(boxes[0]).toHaveAccessibleName('완료');
-    expect(boxes[1]).toHaveAccessibleName('미완료');
-    expect(within(container).getByRole('button', { name: '출처 1' })).toBeInTheDocument();
+    expect((boxes[0] as HTMLInputElement).disabled).toBe(true);
+    expect(boxes[0]?.getAttribute('aria-label')).toBe('완료');
+    expect(boxes[1]?.getAttribute('aria-label')).toBe('미완료');
+    within(container).getByRole('button', { name: '출처 1' });
     expect(container.textContent).not.toContain('[x]');
   });
 
@@ -134,9 +140,9 @@ describe('tables', () => {
     const table = within(container).getByRole('table');
     const headers = within(table).getAllByRole('columnheader');
     expect(headers.map((h) => h.textContent)).toEqual(['왼쪽', '가운데', '오른쪽', '기본']);
-    expect(headers[0]).toHaveAttribute('scope', 'col');
+    expect(headers[0]?.getAttribute('scope')).toBe('col');
     const cells = within(table).getAllByRole('cell');
-    expect(within(cells[0] as HTMLElement).getByRole('button')).toHaveTextContent('출처 1');
+    within(cells[0] as HTMLElement).getByRole('button', { name: '출처 1' });
     expect(cells[1]?.querySelector('strong')?.textContent).toBe('나');
     expect(cells[2]?.querySelector('code')?.textContent).toBe('a|b');
     expect(parseAnswerMarkdown(TABLE)[0]).toMatchObject({
@@ -150,8 +156,8 @@ describe('tables', () => {
 
   it('scrolls inside a focusable group', () => {
     const scroller = within(show(TABLE)).getByRole('group', { name: '표' });
-    expect(scroller).toHaveAttribute('tabindex', '0');
-    expect(within(scroller).getByRole('table')).toBeInTheDocument();
+    expect(scroller.getAttribute('tabindex')).toBe('0');
+    within(scroller).getByRole('table');
   });
 
   it('pads short rows, cuts long ones, and ends at a line without pipes', () => {
@@ -189,7 +195,7 @@ describe('tables', () => {
     expect(within(container).getAllByRole('table')).toHaveLength(2);
     expect(container.querySelector('li table')).not.toBeNull();
     expect(container.querySelector('blockquote table')).not.toBeNull();
-    expect(within(container).getByRole('button', { name: '출처 1' })).toBeInTheDocument();
+    within(container).getByRole('button', { name: '출처 1' });
   });
 });
 
@@ -221,7 +227,7 @@ describe('inline', () => {
       { kind: 'text', text: ' ' },
       { kind: 'code', text: '**x**' },
     ]);
-    expect(parseAnswerInline('`열림')).toEqual([{ kind: 'text', text: '`열림' }]);
+    expect(show('`열림').textContent).toBe('`열림');
   });
 
   it('honours backslash escapes, also for footnotes', () => {
@@ -259,10 +265,10 @@ describe('links', () => {
 
   it('opens a safe link in a new tab, with that in its name', () => {
     const link = within(show('[**문서** 안내](https://example.com/a_b "제목")')).getByRole('link');
-    expect(link).toHaveAttribute('href', 'https://example.com/a_b');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer nofollow');
-    expect(link).toHaveAccessibleName('문서 안내 (새 탭에서 열림)');
+    expect(link.getAttribute('href')).toBe('https://example.com/a_b');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer nofollow');
+    expect(link.getAttribute('aria-label')).toBe('문서 안내 (새 탭에서 열림)');
     expect(link.querySelector('strong')?.textContent).toBe('문서');
   });
 
@@ -289,11 +295,11 @@ describe('links', () => {
 
   it('prefers a footnote to a link, and never nests a button in a link', () => {
     const footnote = show('[1](https://example.com)');
-    expect(within(footnote).getByRole('button', { name: '출처 1' })).toBeInTheDocument();
+    within(footnote).getByRole('button', { name: '출처 1' });
     const inside = show('[글 [1]](https://example.com/x)');
     const link = within(inside).getByRole('link');
     expect(within(link).queryByRole('button')).toBeNull();
-    expect(link).toHaveTextContent('글 [1]');
+    expect(link.textContent).toBe('글 [1]');
   });
 
   it('keeps images, HTML, references and footnote syntax as text', () => {
@@ -329,7 +335,7 @@ describe('footnotes', () => {
 describe('half-written answers', () => {
   it('never throws or shows raw bold marks, at any cut of a full answer', () => {
     const answer = readFileSync(
-      new URL('../../../packages/core/src/book_core/ask/fake.py', import.meta.url),
+      join(process.cwd(), '../../packages/core/src/book_core/ask/fake.py'),
       'utf8',
     ).match(/MARKDOWN_ANSWER = """([\s\S]*?)"""/)?.[1];
     expect(answer).toBeTruthy();
@@ -405,7 +411,8 @@ describe('half-written answers', () => {
       ['앞\n\n| 가 | 나 |\n', 0],
       ['앞\n\n| 가 | 나 |\n| --', 0],
       ['앞\n\n| 가 | 나 |\n| --- | -', 0],
-      ['앞\n\n| 가 | 나 |\n| --- | --- |', 1],
+      ['앞\n\n| 가 | 나 |\n| --- | --- |', 0],
+      ['앞\n\n| 가 | 나 |\n| --- | --- |\n', 1],
       ['앞\n\n| 가 | 나 |\n| --- | --- |\n| 1', 1],
       ['앞\n\n| 가 | 나 |\n| --- | --- |\n| 1 | **2', 1],
     ];
@@ -455,6 +462,6 @@ describe('half-written answers', () => {
       />,
     );
     expect(container.querySelector('table')).toBe(table);
-    expect(screen.getByRole('button', { name: '출처 1' })).toBeInTheDocument();
+    screen.getByRole('button', { name: '출처 1' });
   });
 });

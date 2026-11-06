@@ -1,15 +1,14 @@
 'use client';
 
-// One answer of the AI 질문 panel (ASK-01 "답 메시지"): the answer's Markdown subset (the DOCSUM
-// renderer's parser: HTML, links and images stay text) with its footnote buttons, the `출처` list,
+// One answer of the AI 질문 panel (ASK-01 "답 메시지"): the answer's Markdown (UX12-ASKMD, HTML
+// and images stay text) with its footnote buttons, the `출처` list,
 // the state lines (progress, stopped, failed, not found, uncited, truncated), the action row
 // (`복사`, `도움이 안 됨`, `다시 시도` on a failed or stopped answer) and the answer versions
 // ("답 k/n"; UX12-ASK removed `다시 생성`, older conversations still hold versions).
 // While it streams the article is aria-busy and the model's `[Sn]` tags show as number chips; the
 // validated `[n]` footnotes replace them when it is done.
 import { Button, Popover, PopoverContent, PopoverTrigger, RadioGroup } from '@quiz/ui';
-import { Fragment, useId, useState, type ReactNode } from 'react';
-import { parseSummaryMarkdown, type InlineNode } from '@/lib/documents/summary';
+import { useId, useState } from 'react';
 import type { AskMessage, AskSource, FeedbackReason } from '@/lib/ask/client';
 import {
   ASK_TEXT,
@@ -19,8 +18,8 @@ import {
   isTerminal,
   searchedLine,
   sourceLine,
-  splitFootnotes,
 } from '@/lib/ask/model';
+import { AnswerMarkdown } from './answer-markdown';
 import styles from './ask.module.css';
 
 export interface AnswerActions {
@@ -244,64 +243,5 @@ function FeedbackButton({
       </Popover>
       {label ? <span className={styles.meta}>{`의견: ${label}`}</span> : null}
     </>
-  );
-}
-
-/**
- * The answer's Markdown subset with its footnotes (or streaming tags) in place of `[n]`; also the
- * AI 해설 body (AIEXPL-01, components/questions/ai-explanation).
- */
-export function AnswerMarkdown({
-  text,
-  sourceNumbers,
-  renderCite,
-}: {
-  readonly text: string;
-  readonly sourceNumbers: ReadonlySet<number> | null;
-  readonly renderCite: (n: number) => ReactNode;
-}) {
-  const blocks = parseSummaryMarkdown(text);
-  const inline = (nodes: readonly InlineNode[]): ReactNode =>
-    nodes.map((node, i) =>
-      node.kind === 'text' ? (
-        <Fragment key={i}>
-          {splitFootnotes(node.text, sourceNumbers).map((part, j) =>
-            part.kind === 'text' ? (
-              <Fragment key={j}>{part.text}</Fragment>
-            ) : part.kind === 'tag' ? (
-              <span key={j} className={styles.tag}>
-                [{part.number}]
-              </span>
-            ) : (
-              <Fragment key={j}>{renderCite(part.number)}</Fragment>
-            ),
-          )}
-        </Fragment>
-      ) : node.kind === 'strong' ? (
-        <strong key={i}>{inline(node.children)}</strong>
-      ) : (
-        <em key={i}>{inline(node.children)}</em>
-      ),
-    );
-  return (
-    <div className={styles.markdown}>
-      {blocks.map((block, i) =>
-        block.kind === 'paragraph' ? (
-          <p key={i}>{inline(block.content)}</p>
-        ) : block.ordered ? (
-          <ol key={i}>
-            {block.items.map((item, j) => (
-              <li key={j}>{inline(item)}</li>
-            ))}
-          </ol>
-        ) : (
-          <ul key={i}>
-            {block.items.map((item, j) => (
-              <li key={j}>{inline(item)}</li>
-            ))}
-          </ul>
-        ),
-      )}
-    </div>
   );
 }
