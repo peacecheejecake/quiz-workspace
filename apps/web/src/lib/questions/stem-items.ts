@@ -132,6 +132,11 @@ function labelAt(s: string, p: number): Label | undefined {
   return found.length > 0 ? { start: p, end: j + 1, readings: found } : undefined;
 }
 
+/** Nothing but blanks since the last line break. */
+const AT_LINE_START = /\n[^\S\r\n]*$/u;
+/** "이름 : 값" right after a ` - `; `10:30` and `10 : 3` are no name. */
+export const NAME_VALUE = /^(?!\s*\d)\s*[^\n∙•·ㆍ:：-]{1,30}(?<!\d)[:：]\s*\S/u;
+
 /** A line break followed by one or more blank lines (as in display-stem). */
 const PARAGRAPH_BREAK = /\r?\n(?:[^\S\r\n]*\r?\n)+/gu;
 
@@ -274,7 +279,39 @@ export function stemItems(stem: string): StemLayout | null {
       trailing: paragraphs(s.slice(blockEnd)),
     };
   }
-  return null;
+  return dashRunLayout(s);
+}
+
+/**
+ * `-` items without sentence ends (UX12-PASSAGE2): a run opens at a line start or after the
+ * question sentence, and each item starts a line or has the `이름 : 값` shape, at least two. Other
+ * dashes stay text: `A - B`, `1 - 2`, a lone dash in prose.
+ */
+function dashRunLayout(s: string): StemLayout | null {
+  const dashes = [...s.matchAll(/(?<!\S)-\s+(?=\S)/gu)];
+  const opening = dashes.findIndex(({ index }) => {
+    const prefix = s.slice(0, index);
+    return AT_LINE_START.test(prefix) || leadEnds(prefix);
+  });
+  const first = dashes[opening];
+  if (first === undefined) return null;
+  const end = blocks(s).find(([, blockEnd]) => first.index < blockEnd)?.[1] ?? s.length;
+  const items = dashes.slice(opening).filter(({ index }) => {
+    if (index >= end) return false;
+    const prefix = s.slice(0, index);
+    return (
+      prefix.trim() === '' || AT_LINE_START.test(prefix) || NAME_VALUE.test(s.slice(index + 1, end))
+    );
+  });
+  if (items[0] !== first || items.length < 2) return null;
+  return {
+    lead: paragraphs(displayStem(s.slice(0, first.index).trimEnd())),
+    items: items.map((item, i) => ({
+      label: '-',
+      text: s.slice(item.index + item[0].length, items[i + 1]?.index ?? end).trim(),
+    })),
+    trailing: paragraphs(s.slice(end)),
+  };
 }
 
 /** Split only an explicit question answer mark followed by a substantial passage. */

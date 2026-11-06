@@ -5,7 +5,7 @@
 // Mirrors `_passage_parts` in packages/core/src/book_core/question/labels.py;
 // tests/fixtures/stem-passages.json holds their shared cases.
 import { displayStem } from './display-stem';
-import { itemListStart, leadEnds, paragraphs } from './stem-items';
+import { itemListStart, leadEnds, NAME_VALUE, paragraphs } from './stem-items';
 
 export interface StemPassageLine {
   /** The marker as printed ("∙", "-"). */
@@ -40,8 +40,6 @@ const BULLETS = '∙•·ㆍ';
 const SENTENCE_END = /[.!?。！？][)）"'’”」』]*\s*$/u;
 const AT_LINE_START = /\n[^\S\r\n]*$/u;
 const ENDS_QUESTION = /[?？](?:\s*[(（]\s*[)）])*\s*$/u;
-/** "이름 : 값" right after a ` - `; `10:30` is no name. */
-const NAME_VALUE = /^\s*[^\n∙•·ㆍ:：-]{1,30}(?<!\d)[:：]\s*\S/u;
 
 interface Heading {
   readonly start: number;
