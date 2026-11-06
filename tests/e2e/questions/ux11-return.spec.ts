@@ -241,10 +241,13 @@ test(
   'UX11-RETURN-AC04 confirmed account refresh preserves same-user drafts and clears the old account search draft',
   { tag: '@infra' },
   async ({ page, browser, workspaceFactory }) => {
+    test.setTimeout(180_000);
     const owner = await workspaceFactory.member(`return-search-a-${randomUUID().slice(0, 8)}`);
     const other = await workspaceFactory.member(`return-search-b-${randomUUID().slice(0, 8)}`);
     const ws = await workspaceFactory.create(owner);
     seedMembership(ws.id, other.user.id, 'viewer');
+    // The 본문 search box needs a published book (SEARCH-01-AC09).
+    await uploadReadyBook(owner, ws.id, 'book-ko');
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}/search`);
     const search = page.getByRole('searchbox', { name: '본문 검색어' });
