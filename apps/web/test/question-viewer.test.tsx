@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
 import type { PracticeRun, RunItem } from '../src/lib/questions/practice-runs';
+import { QuestionManageMenu } from '../src/components/questions/practice/question-manage-menu';
 import type { RunClient } from '../src/components/questions/viewer/question-viewer';
 import type { AskLauncher } from '../src/components/ask/ask-launcher';
 
@@ -234,6 +235,9 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
         onClose={noop}
         onFlagsChange={noop}
         onViewed={noop}
+        headerExtra={({ onShowSource, onReset }) => (
+          <QuestionManageMenu onShowDetail={noop} onShowSource={onShowSource} onReset={onReset} />
+        )}
       />,
     );
     const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
@@ -246,7 +250,10 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       'aria-disabled',
       'true',
     );
-    expect(within(panel).getByRole('button', { name: '초기화' })).toBeInTheDocument();
+    // VIEW-RESET: `초기화` is an item of the header menu, not a footer button.
+    expect(within(panel).queryByRole('button', { name: '초기화' })).toBeNull();
+    await userEvent.click(within(panel).getByRole('button', { name: '문제 정보' }));
+    expect(await screen.findByRole('menuitem', { name: '초기화' })).toBeInTheDocument();
     expect(within(panel).queryByRole('region', { name: '해설' })).toBeNull();
   });
 

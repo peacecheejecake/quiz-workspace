@@ -236,7 +236,6 @@ export function PracticeViewer({
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
   const source = useQuestionSource(questionId ? { kind: 'question', id: questionId } : null);
-  const extra = headerExtra?.({ onShowSource: source.onShowSource });
 
   // One cache per workspace: another workspace starts empty (the old one is dropped).
   const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
@@ -571,6 +570,15 @@ export function PracticeViewer({
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
   const resetKey = useRef(newKey());
+  const resetReturnFocus = useRef<HTMLElement | null>(null);
+  const [resetReturn, setResetReturn] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    resetReturnFocus.current = resetReturn;
+  }, [resetReturn]);
+  // A fresh idempotency key each time the confirm opens; a retry inside it reuses the key.
+  useEffect(() => {
+    if (resetOpen) resetKey.current = newKey();
+  }, [resetOpen]);
   const pendingGrade = outcome?.result === 'pending' && work.selfGrade === null;
   const finished = outcome !== null && !pendingGrade;
 
@@ -620,17 +628,6 @@ export function PracticeViewer({
           }}
         />
       )}
-      {ready && (outcome || view.lastGradedResult || view.isPendingGrading) ? (
-        <Button
-          onClick={() => {
-            resetKey.current = newKey();
-            setResetError(null);
-            setResetOpen(true);
-          }}
-        >
-          초기화
-        </Button>
-      ) : null}
       <QuestionNav
         previousUnavailable={!neighbors.previous || !onNavigate}
         nextUnavailable={!neighbors.next || !onNavigate}
@@ -643,6 +640,18 @@ export function PracticeViewer({
       />
     </div>
   ) : undefined;
+
+  const canReset = !!ready && !!(outcome || view?.lastGradedResult || view?.isPendingGrading);
+  // VIEW-RESET: `초기화` lives in the header's 문제 관리 / 문제 정보 menu, with today's condition.
+  const openReset = (trigger: HTMLElement | null) => {
+    setResetReturn(trigger);
+    setResetError(null);
+    setResetOpen(true);
+  };
+  const extra = headerExtra?.({
+    onShowSource: source.onShowSource,
+    onReset: canReset ? openReset : undefined,
+  });
 
   return (
     <FloatingSidePanel
@@ -688,6 +697,7 @@ export function PracticeViewer({
       <ConfirmDialog
         open={resetOpen}
         onOpenChange={setResetOpen}
+        returnFocusRef={resetReturnFocus}
         title="풀이 기록 초기화"
         description={
           <>

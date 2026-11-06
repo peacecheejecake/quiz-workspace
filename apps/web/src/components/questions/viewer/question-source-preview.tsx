@@ -40,6 +40,11 @@ const FIGURE_FAILURE_TEXT = '그림을 불러오지 못했습니다';
 export interface QuestionSourceControls {
   /** `trigger`: where focus goes back when the dialog closes (it also finds the host panel). */
   readonly onShowSource: ((trigger: HTMLElement | null) => void) | null;
+  /**
+   * Opens the 풀이 기록 초기화 confirm; absent where the viewer has no reset (VIEW-RESET).
+   * `trigger`: the menu button, where focus goes back when the confirm closes.
+   */
+  readonly onReset?: ((trigger: HTMLElement | null) => void) | null;
 }
 
 type PdfState =

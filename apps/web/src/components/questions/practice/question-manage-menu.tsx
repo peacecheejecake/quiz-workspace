@@ -7,6 +7,7 @@
 // 변형 출제 went with QGEN-01, QGEN-RM); everyone else gets a read-only `문제 정보` menu. The API
 // re-checks every write. Dialogs open once the menu has returned focus to its trigger, so closing
 // them brings focus back there. UX12-SRCMENU: `원문 보기` is there only with a source region.
+// VIEW-RESET: the practice panel's `초기화` is an item here, only while it has something to reset.
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,7 @@ export function QuestionManageMenu({
   busy = false,
   onShowDetail,
   onShowSource = null,
+  onReset = null,
   manage = null,
 }: {
   /** The question is being loaded for the editor, archived or deleted. */
@@ -38,12 +40,17 @@ export function QuestionManageMenu({
   readonly onShowDetail: (focus: DetailFocus, trigger: HTMLElement | null) => void;
   /** Opens the 문제 원문 dialog; null = the question has no source region. */
   readonly onShowSource?: QuestionSourceControls['onShowSource'];
+  /** Opens the 풀이 기록 초기화 confirm; null = no reset item (VIEW-RESET). */
+  readonly onReset?: QuestionSourceControls['onReset'];
   /** Editors of a non-archived workspace: the write items (null = the read-only 문제 정보 menu). */
   readonly manage?: QuestionManageActions | null;
 }) {
   const label = manage ? '문제 관리' : '문제 정보';
   const afterClose = (action: () => void) => () => window.setTimeout(action, 0);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // 초기화 runs once the menu has handed focus back to its trigger, so cancelling the confirm
+  // returns focus there (VIEW-RESET).
+  const resetPending = useRef(false);
   function showDetail(focus: DetailFocus) {
     window.setTimeout(() => onShowDetail(focus, triggerRef.current), 0);
   }
@@ -59,7 +66,15 @@ export function QuestionManageMenu({
           disabled={busy}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" aria-label={label}>
+      <DropdownMenuContent
+        align="end"
+        aria-label={label}
+        onCloseAutoFocus={() => {
+          if (!resetPending.current) return;
+          resetPending.current = false;
+          if (onReset) window.setTimeout(() => onReset(triggerRef.current), 0);
+        }}
+      >
         <DropdownMenuItem onSelect={() => showDetail('answers')}>정답·해설 보기</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => showDetail('history')}>수정 이력·출처</DropdownMenuItem>
         {onShowSource ? (
@@ -68,6 +83,9 @@ export function QuestionManageMenu({
           >
             원문 보기
           </DropdownMenuItem>
+        ) : null}
+        {onReset ? (
+          <DropdownMenuItem onSelect={() => (resetPending.current = true)}>초기화</DropdownMenuItem>
         ) : null}
         {manage ? (
           <>

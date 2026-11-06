@@ -21,7 +21,6 @@ import {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const AGAIN = /^다시 풀기$|^solve again$/i;
-const RESET = /^초기화$|^reset$/i;
 const REASON = /제출하고 채점이 끝나면/;
 const BANK_RUN = { source: 'bank', range: { all: true }, random_order: false } as const;
 /** Taller than any test viewport: the panel body has to scroll. */
@@ -137,8 +136,20 @@ test(
   },
 );
 
+/** `초기화` sits in the header menu (VIEW-RESET): open it, look, and close it with Escape. */
+async function expectReset(page: Page, panel: Locator, shown: boolean): Promise<void> {
+  const trigger = panelUi.manage(panel).or(panelUi.info(panel));
+  await trigger.click();
+  const item = panelUi.manageItem(page, 'reset');
+  await expect(item).toHaveCount(shown ? 1 : 0);
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeVisible(); // Escape closes the menu, not the panel
+  await expect(trigger).toBeFocused();
+  await expect(panel.getByRole('button', { name: /^초기화$|^reset$/i })).toHaveCount(0);
+}
+
 test(
-  'UX12-VIEW-AC03 초기화 shows only when there is a result to reset',
+  'UX12-VIEW-AC03 초기화 is a header menu item that shows only when there is a result to reset',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-view-reset', 1);
@@ -147,16 +158,16 @@ test(
     await page.goto(overviewPath(s.workspaceId));
     const panel = await openPanel(page, 1);
     await expect(panelUi.submit(panel)).toBeVisible();
-    await expect(panel.getByRole('button', { name: RESET })).toHaveCount(0);
+    await expectReset(page, panel, false);
 
     await panelUi.option(panel, firstOption(question)).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await expect(panel.getByRole('button', { name: RESET })).toBeVisible();
+    await expectReset(page, panel, true);
 
     await panel.getByRole('button', { name: AGAIN }).click();
     await expect(panelUi.submit(panel)).toBeVisible();
-    await expect(panel.getByRole('button', { name: RESET })).toBeVisible();
+    await expectReset(page, panel, true);
   },
 );
 

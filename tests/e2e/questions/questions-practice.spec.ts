@@ -1477,12 +1477,13 @@ test(
     const otherPanel = await openPanel(otherTab, 1);
     await panelUi.reveal(otherPanel).click();
     await expect(panelUi.result(otherPanel)).toContainText(RESULT_TEXT.correct);
-    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    await choosePanelMenu(page, panel, 'reset');
     const confirmation = page.getByRole('alertdialog', { name: /풀이 기록 초기화/ });
     await expect(confirmation).toContainText(/Heatmap/);
     await confirmation.getByRole('button', { name: /취소|cancel/i }).click();
+    await expect(panelUi.manage(panel).or(panelUi.info(panel))).toBeFocused();
     expect(await listAttempts(s.owner, question.id)).toHaveLength(1);
-    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    await choosePanelMenu(page, panel, 'reset');
     await confirmation.getByRole('button', { name: /^초기화$/ }).click();
     await expect(panel).not.toBeVisible();
     await expect(otherPanel).not.toBeVisible();
