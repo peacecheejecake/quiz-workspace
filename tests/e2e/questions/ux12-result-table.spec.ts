@@ -1,6 +1,6 @@
 // UX12-RESULTTABLE — the results step's table (docs/screens/ux12-result-table.md).
 import type { Locator, Page } from '@playwright/test';
-import { createMockExam, createNumberedQuestions } from '../fixtures/mock-exams.ts';
+import { ALL, createMockExam } from '../fixtures/mock-exams.ts';
 import { createPracticeRun, practiceRunPath, runUi } from '../fixtures/practice-runs.ts';
 import {
   createQuestion,
@@ -113,12 +113,13 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-table-marks', 3);
-    const essay = await createQuestion(s.owner, s.workspaceId, {
+    await createQuestion(s.owner, s.workspaceId, {
       question_type: 'ESSAY',
       stem: `${s.tag} 서술: 물의 순환을 쓰시오.`,
+      rubric: `${s.tag} 채점 기준`,
+      explanation: `${s.tag} 해설`,
       question_number: 4,
     });
-    expect(essay.id).toBeTruthy();
     const run = await createPracticeRun(s.owner, s.workspaceId, BANK_RUN);
     await signInAs(page, s.owner.user);
     await page.goto(practiceRunPath(s.workspaceId, run.id, 1));
@@ -230,30 +231,26 @@ test(
       ),
     ).toBeLessThanOrEqual(0);
 
-    await expect(
-      rows.nth(1).getByRole('cell', { name: /더 이상 풀 수 없는 문제/ }),
-    ).toHaveText('불가');
+    await expect(rows.nth(1).getByRole('cell', { name: /더 이상 풀 수 없는 문제/ })).toHaveText(
+      '불가',
+    );
     await expect(panel.getByText('불가: 더 이상 풀 수 없는 문제')).toBeVisible();
     await rows.nth(1).getByRole('button').click();
     await expect(page).toHaveURL(/[?&]i=2(&|$)/);
     await expect(runUi.unavailable(panel)).toBeVisible();
 
     // A mock run: the same table, numbered by position.
-    const mockOwner = await workspaceFactory.member('ux12-table-mock');
-    const workspace = await workspaceFactory.create(mockOwner);
-    await createNumberedQuestions(mockOwner, workspace.id, 'ux12-table-mock', 2);
-    const exam = await createMockExam(mockOwner, workspace.id, '표 시험', {
+    const exam = await createMockExam(s.owner, s.workspaceId, '표 시험', {
       variation_types: ['OPTION_SHUFFLE'],
       question_count: 2,
     });
-    const mockRun = await createPracticeRun(mockOwner, workspace.id, {
+    const mockRun = await createPracticeRun(s.owner, s.workspaceId, {
       source: 'mock',
       mock_exam_id: exam.id,
-      range: { all: true },
+      range: ALL,
       random_order: false,
     });
-    await signInAs(page, mockOwner.user);
-    const mockPanel = await openResults(page, workspace.id, mockRun.id);
+    const mockPanel = await openResults(page, s.workspaceId, mockRun.id);
     await expect(runUi.resultList(mockPanel).getByRole('rowheader')).toHaveText([
       '문제 1',
       '문제 2',

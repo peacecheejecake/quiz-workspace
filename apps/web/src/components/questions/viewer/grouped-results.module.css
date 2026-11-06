@@ -1,21 +1,116 @@
 .list {
+  display: grid;
+  gap: var(--space-3);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.row {
-  display: flex;
-  width: 100%;
-  justify-content: flex-start;
-  gap: var(--space-2);
-  white-space: normal;
-  text-align: left;
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
 }
 
+/* The padding holds the last column's overlap, so it never overflows the panel. */
+.table {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  padding: 0 1px 1px 0;
+}
+
+/* Neighbouring columns share one border line. */
+.column {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  margin: 0 -1px -1px 0;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+/* Opaque, so the marks keep their contrast on glass. */
+.number,
+.result {
+  background: var(--color-surface);
+}
+
+.number {
+  display: grid;
+  place-items: center;
+  min-block-size: 2.25rem;
+  border-block-end: 1px solid var(--color-border);
+  font-size: var(--font-size-label);
+}
+
+.target {
+  padding: var(--space-1);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+/* The whole column is the button's target. */
+.target::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.target:focus-visible {
+  outline: none;
+}
+
+.result {
+  display: grid;
+  place-items: center;
+  min-block-size: 2.25rem;
+  padding: var(--space-1);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.correct,
+.incorrect {
+  font-size: var(--font-size-section-title);
+}
 .correct {
   color: var(--color-success);
 }
 .incorrect {
   color: var(--color-danger);
+}
+
+/* On the state colour the success and danger text would fall under AA in light mode. */
+.column:has(.target:focus-visible) {
+  z-index: 1;
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.column:has(.target:focus-visible) > .number,
+.column:has(.target:focus-visible) > .result {
+  background: var(--color-state-hover);
+}
+.column:has(.target:focus-visible) > .result {
+  color: var(--color-text-primary);
+}
+
+@media (hover: hover) {
+  .column:has(.target:hover) > .number,
+  .column:has(.target:hover) > .result {
+    background: var(--color-state-hover);
+  }
+  .column:has(.target:hover) > .result {
+    color: var(--color-text-primary);
+  }
+}
+
+.note {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label-sm);
 }
