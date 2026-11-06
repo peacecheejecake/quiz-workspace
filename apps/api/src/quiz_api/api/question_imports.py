@@ -283,7 +283,7 @@ class DraftPublishError(BaseModel):
 class DraftChapterRef(BaseModel):
     id: uuid.UUID
     title: str
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: a Workspace chapter.")
     document_title: str
 
 
@@ -969,6 +969,7 @@ def _summary_out(
 
 
 def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[BookChapterOption]:
+    chapters = DraftChapterRepository(repo.session)
     return [
         BookChapterOption(
             id=c.id,
@@ -977,7 +978,10 @@ def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[Boo
             document_title=c.document_title,
             level=c.level,
         )
-        for c in DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+        for c in [
+            *chapters.book_chapters(run.workspace_id),
+            *chapters.workspace_chapters(run.workspace_id),
+        ]
     ]
 
 
@@ -1468,7 +1472,7 @@ def update_question_draft(
                     [
                         {
                             "loc": ("body", "chapter_id"),
-                            "msg": "Unknown chapter: use a chapter of a book's current revision.",
+                            "msg": "Unknown chapter: use a Workspace or current book chapter.",
                             "type": "value_error",
                         }
                     ]

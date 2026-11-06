@@ -1,6 +1,7 @@
 """Chapter edits on the active revision (CHMAN-01). Reads go straight to the tables; every write
 to a published revision goes through the `chapter_edit_*` SECURITY DEFINER functions
 (20261106150000_chapter_edit.sql): quiz_api holds no privilege that reaches past the guard.
+Workspace chapters (UX12-CHAPTERADD) have no revision, so they are written directly.
 """
 
 from __future__ import annotations
@@ -9,19 +10,23 @@ import json
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import and_, func, select, text, update
+from sqlalchemy import and_, bindparam, delete, func, insert, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from quiz_api.chapter_tree import PlacedNode
 from quiz_api.repositories.tables import (
+    activity_events,
     chapter_notes,
     chapters,
     documents,
     question_drafts,
     question_import_runs,
     questions,
+    workspace_chapter_trees,
 )
 
 BOOK = "book"
@@ -48,8 +53,8 @@ class EditableDocument:
 class ChapterRef:
     id: uuid.UUID
     workspace_id: uuid.UUID
-    document_id: uuid.UUID
-    document_revision_id: uuid.UUID
+    document_id: uuid.UUID | None  # None with the revision: a Workspace chapter
+    document_revision_id: uuid.UUID | None
     parent_id: uuid.UUID | None
     section_key: str
 
@@ -92,6 +97,15 @@ class ChapterEditRepository:
             .order_by(documents.c.created_at, documents.c.id)
         )
         return [BookRow(r.id, r.title, r.active_revision_id, r.chapter_tree_version) for r in rows]
+
+    def book_title(self, document_id: uuid.UUID) -> str:
+        return str(
+            self._session.execute(
+                select(
+                    func.coalesce(func.nullif(documents.c.title, ""), documents.c.filename)
+                ).where(documents.c.id == document_id)
+            ).scalar_one()
+        )
 
     def version(self, document_id: uuid.UUID) -> int:
         return int(
@@ -144,6 +158,27 @@ class ChapterEditRepository:
                 .order_by(chapters.c.sort_order, chapters.c.id)
             ).mappings()
         )
+
+    def workspace_tree(self, workspace_id: uuid.UUID) -> list[RowMapping]:
+        """The Workspace chapters (UX12-CHAPTERADD) in outline order."""
+        return list(
+            self._session.execute(
+                select(*_CHAPTER_COLUMNS)
+                .where(
+                    chapters.c.workspace_id == workspace_id,
+                    chapters.c.document_revision_id.is_(None),
+                )
+                .order_by(chapters.c.sort_order, chapters.c.id)
+            ).mappings()
+        )
+
+    def workspace_version(self, workspace_id: uuid.UUID) -> int:
+        found = self._session.execute(
+            select(workspace_chapter_trees.c.version).where(
+                workspace_chapter_trees.c.workspace_id == workspace_id
+            )
+        ).scalar_one_or_none()
+        return int(found) if found is not None else 0
 
     def question_counts(self, workspace_id: uuid.UUID) -> dict[uuid.UUID, int]:
         """Live CONFIRMED questions per chapter (what the Heatmap shows)."""
@@ -268,6 +303,111 @@ class ChapterEditRepository:
                 text("select public.chapter_edit_finish(:w, :d, :h)"),
                 {"w": workspace_id, "d": document_id, "h": content_hash},
             ).scalar_one()
+        )
+
+    # Workspace chapters are no revision content: plain writes under the tree row's lock.
+
+    def lock_workspace_tree(self, workspace_id: uuid.UUID) -> None:
+        """FOR UPDATE on the tree row, made on first use. Before any document or question."""
+        self._session.execute(
+            pg_insert(workspace_chapter_trees)
+            .values(workspace_id=workspace_id)
+            .on_conflict_do_nothing(index_elements=["workspace_id"])
+        )
+        self._session.execute(
+            select(workspace_chapter_trees.c.workspace_id)
+            .where(workspace_chapter_trees.c.workspace_id == workspace_id)
+            .with_for_update()
+        ).one()
+
+    def create_workspace_chapter(
+        self,
+        workspace_id: uuid.UUID,
+        chapter_id: uuid.UUID,
+        parent_id: uuid.UUID | None,
+        title: str,
+    ) -> None:
+        # level and sort_order are placeholders until `write_workspace_tree`.
+        self._session.execute(
+            insert(chapters).values(
+                id=chapter_id,
+                workspace_id=workspace_id,
+                workspace_level_of=workspace_id,
+                parent_id=parent_id,
+                section_key=f"{USER_KEY_PREFIX}{chapter_id}",
+                level=1,
+                sort_order=0,
+                title=title,
+            )
+        )
+
+    def rename_workspace_chapter(self, chapter_id: uuid.UUID, title: str) -> None:
+        self._session.execute(
+            update(chapters)
+            .where(chapters.c.id == chapter_id, chapters.c.document_revision_id.is_(None))
+            .values(title=title)
+        )
+
+    def delete_workspace_chapter(self, chapter_id: uuid.UUID, heir: uuid.UUID | None) -> None:
+        """Its children go to its parent, as in `chapter_edit_delete`."""
+        self._session.execute(
+            update(chapters).where(chapters.c.parent_id == chapter_id).values(parent_id=heir)
+        )
+        self._session.execute(delete(chapters).where(chapters.c.id == chapter_id))
+
+    def write_workspace_tree(self, workspace_id: uuid.UUID, nodes: Sequence[PlacedNode]) -> None:
+        if not nodes:
+            return
+        self._session.execute(
+            update(chapters)
+            .where(
+                chapters.c.id == bindparam("node_id"),
+                chapters.c.workspace_id == workspace_id,
+                chapters.c.document_revision_id.is_(None),
+            )
+            .values(
+                parent_id=bindparam("node_parent"),
+                level=bindparam("node_level"),
+                sort_order=bindparam("node_order"),
+            ),
+            [
+                {
+                    "node_id": n.id,
+                    "node_parent": n.parent_id,
+                    "node_level": n.level,
+                    "node_order": n.sort_order,
+                }
+                for n in nodes
+            ],
+        )
+
+    def finish_workspace(self, workspace_id: uuid.UUID) -> int:
+        return int(
+            self._session.execute(
+                update(workspace_chapter_trees)
+                .where(workspace_chapter_trees.c.workspace_id == workspace_id)
+                .values(version=workspace_chapter_trees.c.version + 1)
+                .returning(workspace_chapter_trees.c.version)
+            ).scalar_one()
+        )
+
+    def record_workspace_activity(
+        self,
+        workspace_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        event_type: str,
+        metadata: dict[str, Any],
+    ) -> None:
+        """Ids and counts only (C05)."""
+        self._session.execute(
+            insert(activity_events).values(
+                workspace_id=workspace_id,
+                actor_id=actor_id,
+                event_type=event_type,
+                target_type="workspace",
+                target_id=workspace_id,
+                metadata=metadata,
+            )
         )
 
     def move_drafts(

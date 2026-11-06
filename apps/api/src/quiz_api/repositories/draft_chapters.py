@@ -13,10 +13,13 @@ from book_core.chapter_matching import BookChapter
 from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.orm import Session, aliased
 
+from quiz_api.repositories.questions import lock_workspace_tree_shared
 from quiz_api.repositories.tables import chapters, content_blocks, documents
 
 BOOK = "book"
 QUESTION_PAPER = "question_paper"
+# The group of the chapters without a document (UX12-CHAPTERADD), named like "챕터 없음".
+WORKSPACE_CHAPTERS_TITLE = "Workspace 챕터"
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,21 @@ class DraftChapterRepository:
         """Level-1 outline nodes of the current revision of every live question paper here, in
         outline order (CHAP-MATCH: the fallback chapters and the editor's extra choices)."""
         return self._current_outline(workspace_id, QUESTION_PAPER, level_one=True)
+
+    def workspace_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
+        """The Workspace chapters in outline order. Never matching candidates: they have no
+        text, and the outline's owner is a person."""
+        rows = self._session.execute(
+            select(chapters.c.id, chapters.c.title, chapters.c.level)
+            .where(
+                chapters.c.workspace_id == workspace_id,
+                chapters.c.document_revision_id.is_(None),
+            )
+            .order_by(chapters.c.sort_order, chapters.c.id)
+        )
+        return [
+            BookChapter(r.id, r.title, None, WORKSPACE_CHAPTERS_TITLE, int(r.level)) for r in rows
+        ]
 
     def _current_outline(
         self, workspace_id: uuid.UUID, document_type: str, *, level_one: bool = False
@@ -205,7 +223,7 @@ class DraftChapterRepository:
         self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID]
     ) -> dict[uuid.UUID, BookChapter]:
         """chosen chapter id -> the same section in its book's current revision (missing when
-        the book was deleted or the section no longer exists)."""
+        the book was deleted or the section no longer exists). A Workspace chapter is itself."""
         return self.current_chapters(workspace_id, chapter_ids, book_only=True)
 
     def current_chapters(
@@ -220,6 +238,16 @@ class DraftChapterRepository:
         ids = sorted(set(chapter_ids))
         if not ids:
             return {}
+        out = {
+            r.id: BookChapter(r.id, r.title, None, WORKSPACE_CHAPTERS_TITLE, int(r.level))
+            for r in self._session.execute(
+                select(chapters.c.id, chapters.c.title, chapters.c.level).where(
+                    chapters.c.workspace_id == workspace_id,
+                    chapters.c.id.in_(ids),
+                    chapters.c.document_revision_id.is_(None),
+                )
+            )
+        }
         current = aliased(chapters)
         rows = self._session.execute(
             select(
@@ -252,26 +280,29 @@ class DraftChapterRepository:
                 *([documents.c.document_type == BOOK] if book_only else []),
             )
         )
-        return {
-            r.chosen_id: BookChapter(r.id, r.title, r.document_id, r.document_title, int(r.level))
+        out.update(
+            (r.chosen_id, BookChapter(r.id, r.title, r.document_id, r.document_title, int(r.level)))
             for r in rows
-        }
+        )
+        return out
 
     def lock_documents_of(self, workspace_id: uuid.UUID, chapter_ids: Iterable[uuid.UUID]) -> None:
         """FOR SHARE on the books of these chapters, in id order (the question lock order: a
-        revision publish either commits first or waits for this transaction)."""
+        revision publish either commits first or waits for this transaction). The workspace's
+        chapter tree row comes first when one is a Workspace chapter."""
         ids = sorted(set(chapter_ids))
         if not ids:
             return
-        doc_ids = sorted(
-            set(
-                self._session.execute(
-                    select(chapters.c.document_id).where(
-                        chapters.c.workspace_id == workspace_id, chapters.c.id.in_(ids)
-                    )
-                ).scalars()
-            )
+        found = set(
+            self._session.execute(
+                select(chapters.c.document_id).where(
+                    chapters.c.workspace_id == workspace_id, chapters.c.id.in_(ids)
+                )
+            ).scalars()
         )
+        if None in found:
+            lock_workspace_tree_shared(self._session, workspace_id)
+        doc_ids = sorted(d for d in found if d is not None)
         if doc_ids:
             self._session.execute(
                 select(documents.c.id)

@@ -207,7 +207,7 @@ class QuestionRevision(BaseModel):
 
 class ChapterRef(BaseModel):
     id: uuid.UUID
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: a Workspace chapter.")
     title: str
 
 

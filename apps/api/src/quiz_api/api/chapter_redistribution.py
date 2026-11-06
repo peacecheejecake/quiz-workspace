@@ -120,7 +120,7 @@ class RedistributionTargetChapter(BaseModel):
 
 
 class RedistributionTargetDocument(BaseModel):
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: the Workspace chapters.")
     document_title: str
     chapters: list[RedistributionTargetChapter] = Field(description="Outline order.")
 
@@ -295,10 +295,11 @@ def list_redistribution_questions(
                 chapter_source=row.chapter_source,
             )
         )
-    targets: dict[uuid.UUID, RedistributionTargetDocument] = {}
+    targets: dict[uuid.UUID | None, RedistributionTargetDocument] = {}
     for chapter in [
         *repo.book_chapters(access.workspace_id),
         *repo.paper_chapters(access.workspace_id),
+        *repo.workspace_chapters(access.workspace_id),
     ]:
         doc = targets.get(chapter.document_id)
         if doc is None:

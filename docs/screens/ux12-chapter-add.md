@@ -19,7 +19,7 @@
 
 **트리 잠금·version:** 새 표 `workspace_chapter_trees(workspace_id, version)`가 Workspace 챕터에서 `documents` 행의 역할을 한다. 쓰기는 이 행을 FOR UPDATE로 잡고 `version`을 올린다(일괄 이동의 `expected_version`). `workspaces` 행을 쓰지 않는 이유는 모든 쓰기가 그 행을 FOR SHARE로 잡고 있어, 올려 잡으면 서로를 기다리기 때문이다. 잠금 순서는 Workspace FOR SHARE → **트리 행** → 문서(id 순) → 문제(id 순)다. 문제 저장·재분배·import는 Workspace 챕터를 고르면 트리 행을 FOR SHARE로 잡고, Fork 커밋도 문서보다 먼저 FOR SHARE로 잡는다. 행이 없으면 Workspace 챕터도 없다.
 
-**DB 불변:** 두 null은 함께다, null 행은 `user-<uuid>` key이고 쪽·제목 블록이 없다, 상위는 같은 Workspace의 Workspace 챕터다(trigger; `chapters_parent_fk`는 revision이 null이면 검사하지 않는다), Workspace를 지우면 함께 지워진다(FK).
+**DB 불변:** 두 null은 함께다, null 행은 `user-<uuid>` key이고 쪽·제목 블록이 없다, 상위는 같은 Workspace의 Workspace 챕터다(trigger; `chapters_parent_fk`는 revision이 null이면 검사하지 않는다), Workspace를 지우면 함께 지워진다(`workspace_level_of` FK: `workspace_id` FK는 교재 장도 revision보다 먼저 지워 `revision_content_guard`에 걸린다).
 
 **교재가 있는 Workspace에서 dropdown으로 만든 장의 자리:** 지금 고른 챕터가 살아 있는 교재의 장이면 그 교재의 맨 끝 최상위 장(CHMAN-01의 활성 revision 경로), 아니면(챕터 없음, 문제지 장, Workspace 챕터) Workspace 챕터의 맨 끝 최상위 장이다. 서버가 `near_chapter_id`로 정한다.
 
@@ -37,7 +37,7 @@
 | Heatmap `heatmap_source`·`heatmap_order` | 그대로. 문서 정렬값이 null이라 교재 장 뒤, `챕터 없음` 앞이다. `chapter_lineage`·`chapter_ancestors`는 `parent_id`만 읽는다 |
 | 범위 풀이·모의고사 범위 `question_ranges` | 그대로. Workspace 소속만 검사한다 |
 | 문제 목록, `practice_runs`, `mock_practice`, `mock_exams`, `highlights`, `question_duplicates`, `ask`·`ai_explanations` 제목 | 그대로. left join으로 제목만 읽는다 |
-| 정리 노트 `_chapter_select`, `workspace_chapters`, `chapter_note_store` | 그대로 제외. inner join(활성 revision)이라 노트가 없고 `POST /chapters/{id}/note`는 404다. 노트는 `section_key` + 문서에 묶이고 본문이 입력이다 |
+| 정리 노트 `_chapter_select`, `workspace_chapters`, `chapter_note_store` | API는 그대로 제외. inner join(활성 revision)이라 노트가 없고 `GET`·`POST /chapters/{id}/note`는 404다. 노트는 `section_key` + 문서에 묶이고 본문이 입력이다. **고침:** 홈 Heatmap 묶음의 `정리 노트` 버튼은 Workspace 챕터에 없다 |
 | 문서 요약 `summary_store`, `document_content` | 그대로 제외. revision으로 읽는다 |
 | 검색·Ask `chapters_by_id`·`chapters_of`, `/documents/{id}/outline` | 그대로 제외. 본문 범위라 고를 수 없다. 범위 JSON에 남은 id는 없는 것으로 읽는다 |
 | 재매칭 `chapter_rematch` | 그대로. `candidates`는 `chapter_source = auto`만 보고 `d.document_type <> 'book'`이 null이라 제외된다. dropdown 지정은 `manual`이다 |
@@ -87,7 +87,7 @@ Workspace 챕터 쓰기도 CHMAN-01-C01과 같다: `Action.DOCUMENT_EDIT`, 보�
 
 ### UX12-CHAPTERADD-AC01
 
-교재가 없는 Workspace에서 문제 편집기의 `챕터`를 열고 `새 챕터`를 눌러 `시험 범위 1`을 입력하고 `추가`를 누르면 popover가 닫히고 focus는 트리거에 있으며 트리거에 `시험 범위 1`이 보인다. 저장하면 그 문제가 그 챕터에 속하고 홈 Heatmap에 그 챕터 묶음이 보인다.
+교재가 없는 Workspace에서 문제 편집기의 `챕터`를 열고 `새 챕터`를 눌러 `시험 범위 1`을 입력하고 `추가`를 누르면 popover가 닫히고 focus는 트리거에 있으며 트리거에 `시험 범위 1`이 보인다. 저장하면 그 문제가 그 챕터에 속하고 홈 Heatmap에 그 챕터 묶음이 보인다. 그 묶음에 `정리 노트` 버튼은 없다(본문이 없다).
 
 ### UX12-CHAPTERADD-AC02
 
