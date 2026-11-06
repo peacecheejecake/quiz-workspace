@@ -167,6 +167,8 @@ function Content({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [form, setForm] = useState<TitleForm | null>(null);
   const [removing, setRemoving] = useState<TreeChapter | null>(null);
+  // The server asked for a destination the loaded counts did not show (a question arrived since).
+  const [targetRequired, setTargetRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [dragLabel, setDragLabel] = useState<string | null>(null);
@@ -325,6 +327,10 @@ function Content({
   }
 
   const pickerNodes = treePickerNodes(tree);
+  // The row as last read: its counts change, and it may be gone.
+  const current = removing
+    ? tree.documents.flatMap((d) => d.chapters).find((c) => c.id === removing.id)
+    : undefined;
   return (
     <div className={styles.body} aria-busy={busy || undefined}>
       <p role="status" className={styles.notice}>
@@ -336,18 +342,20 @@ function Content({
         </p>
       ) : null}
 
-      {removing ? (
+      {current ? (
         <DeleteConfirm
-          key={removing.id}
-          chapter={removing}
+          key={current.id}
+          chapter={current}
           tree={tree}
           busy={busy}
+          targetRequired={targetRequired}
           onCancel={() => setRemoving(null)}
           onConfirm={(target) => {
-            void write(
-              (key) => api.remove(removing.id, target, key),
-              `${removing.title}을 삭제했습니다.`,
-            ).then((done) => {
+            void write(async (key) => {
+              const result = await api.remove(current.id, target, key);
+              if (!result.ok && result.kind === 'targetRequired') setTargetRequired(true);
+              return result;
+            }, `${current.title}을 삭제했습니다.`).then((done) => {
               if (done) setRemoving(null);
             });
           }}
@@ -422,7 +430,10 @@ function Content({
                         form={form}
                         onForm={setForm}
                         onAction={(action) => onRowAction(document, chapter, action)}
-                        onDelete={() => setRemoving(chapter)}
+                        onDelete={() => {
+                          setTargetRequired(false);
+                          setRemoving(chapter);
+                        }}
                         onRename={(title) => {
                           void write(
                             (key) => api.rename(chapter.id, title, key),
@@ -673,19 +684,22 @@ function DeleteConfirm({
   chapter,
   tree,
   busy,
+  targetRequired,
   onCancel,
   onConfirm,
 }: {
   readonly chapter: TreeChapter;
   readonly tree: ChapterTree;
   readonly busy: boolean;
+  readonly targetRequired: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: (target: string | null) => void;
 }) {
   const [target, setTarget] = useState('');
   const reasonId = useId();
   const titleId = useId();
-  const needsTarget = chapter.question_count > 0;
+  const attached = chapter.attached_question_count;
+  const needsTarget = attached > 0 || targetRequired;
   const nodes = useMemo(() => treePickerNodes(tree, chapter.id), [tree, chapter.id]);
   const blocked = needsTarget && target === '';
   const rootRef = useRef<HTMLElement>(null);
@@ -726,7 +740,9 @@ function DeleteConfirm({
       </div>
       {blocked ? (
         <p id={reasonId} className={styles.muted}>
-          {`이 챕터의 문제 ${chapter.question_count}개를 옮길 챕터를 고르세요`}
+          {attached > 0
+            ? `초안·보관 문제를 포함한 이 챕터의 문제 ${attached}개를 옮길 챕터를 고르세요`
+            : '이 챕터의 문제를 옮길 챕터를 고르세요'}
         </p>
       ) : null}
     </section>

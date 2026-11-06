@@ -8498,6 +8498,11 @@ export type components = {
     /** TreeChapter */
     TreeChapter: {
       /**
+       * Attached Question Count
+       * @description Every question on the chapter, also drafts, archived and deleted ones: more than zero means a delete needs `move_questions_to`.
+       */
+      attached_question_count: number;
+      /**
        * Has Note
        * @description A chapter note exists (deleting hides it).
        */

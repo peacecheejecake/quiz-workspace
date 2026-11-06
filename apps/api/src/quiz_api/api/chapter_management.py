@@ -112,6 +112,10 @@ class TreeChapter(BaseModel):
     sort_order: int = Field(description="Pre-order position in the revision.")
     page: int | None
     question_count: int = Field(description="Live CONFIRMED questions, sub-chapters excluded.")
+    attached_question_count: int = Field(
+        description="Every question on the chapter, also drafts, archived and deleted ones: more "
+        "than zero means a delete needs `move_questions_to`."
+    )
     has_note: bool = Field(description="A chapter note exists (deleting hides it).")
     user_created: bool
 
@@ -253,6 +257,7 @@ def _out(
     row: RowMapping,
     document_id: uuid.UUID,
     counts: Mapping[uuid.UUID, int],
+    attached: Mapping[uuid.UUID, int],
     noted: set[tuple[uuid.UUID, str]],
 ) -> TreeChapter:
     key = row["section_key"]
@@ -265,6 +270,7 @@ def _out(
         sort_order=row["sort_order"],
         page=row["page"],
         question_count=counts.get(row["id"], 0),
+        attached_question_count=attached.get(row["id"], 0),
         has_note=(document_id, key) in noted,
         user_created=key.startswith(USER_KEY_PREFIX),
     )
@@ -385,6 +391,7 @@ def get_chapter_tree(access: ReadTree, edit: EditRepo) -> ChapterTree:
     book text, answers or explanations."""
     workspace_id = access.workspace_id
     counts = edit.question_counts(workspace_id)
+    attached = edit.attached_question_counts(workspace_id)
     noted = edit.noted_sections(workspace_id)
     return ChapterTree(
         documents=[
@@ -393,7 +400,9 @@ def get_chapter_tree(access: ReadTree, edit: EditRepo) -> ChapterTree:
                 title=book.title,
                 revision_id=book.revision_id,
                 version=book.version,
-                chapters=[_out(r, book.id, counts, noted) for r in edit.tree(book.revision_id)],
+                chapters=[
+                    _out(r, book.id, counts, attached, noted) for r in edit.tree(book.revision_id)
+                ],
             )
             for book in edit.books(workspace_id)
         ]
@@ -439,7 +448,7 @@ def create_chapter(
             {"chapter_id": str(chapter_id)},
         )
         row = next(r for r in edit.tree(editing.revision_id) if r["id"] == chapter_id)
-        return ChapterWrite(chapter=_out(row, body.document_id, {}, set()), version=version)
+        return ChapterWrite(chapter=_out(row, body.document_id, {}, {}, set()), version=version)
 
     return _idempotent(
         idempotency,
@@ -493,6 +502,7 @@ def update_chapter(
                 row,
                 chapter.document_id,
                 edit.question_counts(workspace_id),
+                edit.attached_question_counts(workspace_id),
                 edit.noted_sections(workspace_id),
             ),
             version=version,
@@ -555,10 +565,14 @@ def move_chapters(
             {"moves": len(body.moves)},
         )
         counts = edit.question_counts(workspace_id)
+        attached = edit.attached_question_counts(workspace_id)
         noted = edit.noted_sections(workspace_id)
         return ChapterTreeResult(
             version=version,
-            chapters=[_out(r, document_id, counts, noted) for r in edit.tree(editing.revision_id)],
+            chapters=[
+                _out(r, document_id, counts, attached, noted)
+                for r in edit.tree(editing.revision_id)
+            ],
         )
 
     return _idempotent(

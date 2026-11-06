@@ -7,6 +7,7 @@ import { ChapterManagementPanel } from '../src/components/chapters/chapter-manag
 
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
+const C = '33333333-3333-4333-8333-333333333333';
 
 function node(id: string, title: string, sort: number, extra: object = {}) {
   return {
@@ -18,6 +19,7 @@ function node(id: string, title: string, sort: number, extra: object = {}) {
     sort_order: sort,
     page: 1,
     question_count: 0,
+    attached_question_count: 0,
     has_note: false,
     user_created: false,
     ...extra,
@@ -31,7 +33,11 @@ const TREE = {
       title: '교재',
       revision_id: 'r1',
       version: 7,
-      chapters: [node(A, '1장', 0), node(B, '2장', 1, { question_count: 3, has_note: true })],
+      chapters: [
+        node(A, '1장', 0),
+        node(B, '2장', 1, { question_count: 3, attached_question_count: 3, has_note: true }),
+        node(C, '3장', 2, { attached_question_count: 2 }),
+      ],
     },
   ],
 };
@@ -123,6 +129,35 @@ describe('ChapterManagementPanel', () => {
     await chooseItem(user, '2장', '삭제');
     const confirm = await screen.findByRole('region', { name: '2장을 삭제할까요?' });
     expect(within(confirm).getByText(/정리 노트는 더 이상 보이지 않습니다/)).toBeTruthy();
+    expect(
+      (within(confirm).getByRole('button', { name: '삭제' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('CHMAN-01-AC03 asks for a target when only drafts or archived questions are attached', async () => {
+    relay({});
+    mount();
+    const user = userEvent.setup();
+    await chooseItem(user, '3장', '삭제');
+    const confirm = await screen.findByRole('region', { name: '3장을 삭제할까요?' });
+    expect(within(confirm).getByText(/초안·보관 문제를 포함한 이 챕터의 문제 2개/)).toBeTruthy();
+    expect(
+      (within(confirm).getByRole('button', { name: '삭제' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('CHMAN-01-AC03 shows the destination choice after chapter-target-required', async () => {
+    relay({
+      [`DELETE /api/chapters/${A}`]: () =>
+        json({ type: 'urn:quiz-workspace:problem:chapter-target-required' }, 422),
+    });
+    mount();
+    const user = userEvent.setup();
+    await chooseItem(user, '1장', '삭제');
+    const confirm = await screen.findByRole('region', { name: '1장을 삭제할까요?' });
+    expect(within(confirm).queryByText('문제를 옮길 챕터')).toBeNull();
+    await user.click(within(confirm).getByRole('button', { name: '삭제' }));
+    expect(await within(confirm).findByText('문제를 옮길 챕터')).toBeTruthy();
     expect(
       (within(confirm).getByRole('button', { name: '삭제' }) as HTMLButtonElement).disabled,
     ).toBe(true);

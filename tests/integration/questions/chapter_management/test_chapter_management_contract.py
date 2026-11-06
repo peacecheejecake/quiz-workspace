@@ -148,6 +148,7 @@ def test_chman_01_c03_the_tree_lists_live_books_with_counts_and_no_book_text(
         "sort_order",
         "page",
         "question_count",
+        "attached_question_count",
         "has_note",
         "user_created",
     }
@@ -347,6 +348,18 @@ def test_chman_01_c06_delete_moves_questions_and_keeps_records(seed: Any, db: An
     assert s.owner.ok("GET", f"/questions/{s.q2['id']}")["chapter_id"] is None
     res = delete(s.owner, child["id"])
     assert res.status_code == 200, res.text
+
+
+def test_chman_01_c06_a_chapter_with_only_inactive_questions_reports_them(seed: Any) -> None:
+    s = Space(seed, "chman-inactive")
+    notes.delete_question(s.owner, s.q1)
+    row = node(s.owner, s.ws, s.ch[CH1])
+    assert row["question_count"] == 0, "not on the Heatmap"
+    assert row["attached_question_count"] == 1, "but the delete has to move it"
+    res = delete(s.owner, s.ch[CH1])
+    assert res.status_code == 422, res.text
+    assert res.json()["type"] == TARGET_REQUIRED
+    assert delete(s.owner, s.ch[CH1], "none").status_code == 200
 
 
 def test_chman_01_c07_the_correction_draft_follows_and_restore_carries_the_tree(

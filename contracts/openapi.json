@@ -13347,6 +13347,11 @@
       },
       "TreeChapter": {
         "properties": {
+          "attached_question_count": {
+            "description": "Every question on the chapter, also drafts, archived and deleted ones: more than zero means a delete needs `move_questions_to`.",
+            "title": "Attached Question Count",
+            "type": "integer"
+          },
           "has_note": {
             "description": "A chapter note exists (deleting hides it).",
             "title": "Has Note",
@@ -13418,6 +13423,7 @@
           "sort_order",
           "page",
           "question_count",
+          "attached_question_count",
           "has_note",
           "user_created"
         ],

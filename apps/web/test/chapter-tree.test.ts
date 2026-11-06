@@ -24,6 +24,7 @@ function chapter(id: string, parent: string | null, sort: number, level = 1): Tr
     sort_order: sort,
     page: null,
     question_count: 0,
+    attached_question_count: 0,
     has_note: false,
     user_created: false,
   };

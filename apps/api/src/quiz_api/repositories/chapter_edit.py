@@ -159,6 +159,19 @@ class ChapterEditRepository:
         )
         return {chapter_id: int(count) for chapter_id, count in rows}
 
+    def attached_question_counts(self, workspace_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        """Every question per chapter, in any state: what a delete has to move (the foreign key
+        has no action, see `questions_in_chapter`)."""
+        rows = self._session.execute(
+            select(questions.c.chapter_id, func.count())
+            .where(
+                questions.c.workspace_id == workspace_id,
+                questions.c.chapter_id.is_not(None),
+            )
+            .group_by(questions.c.chapter_id)
+        )
+        return {chapter_id: int(count) for chapter_id, count in rows}
+
     def noted_sections(self, workspace_id: uuid.UUID) -> set[tuple[uuid.UUID, str]]:
         """(document, section_key) of every chapter with a current note."""
         rows = self._session.execute(

@@ -37,7 +37,7 @@ linked_tests: [CHMAN-01-AC01 … CHMAN-01-AC08]
 - **행 메뉴:** `이름 바꾸기`, `하위 챕터 추가`, `위로`, `아래로`, `들여쓰기`, `내어쓰기`, `삭제`. 끌기와 같은 결과를 내는 키보드·터치 동등 경로이며, 할 수 없는 항목은 비활성이다(맨 위의 `위로`, 깊이 20의 `들여쓰기` 등).
 - **끌어서 옮기기:** 행을 끌어 다른 행 위에 놓으면 그 장의 하위 맨 끝으로 간다. 형제 사이 순서는 `위로`·`아래로`로 바꾼다. 자기·하위 행이나 깊이 20을 넘는 위치에 놓으면 아무 일도 없고 alert로 이유를 알린다. 끌기 손잡이는 pointer 전용이고 보조 기술에서는 숨긴다: 키보드·스크린 리더 경로는 행 메뉴다(WCAG 2.5.7).
 - **문제 놓기 (사용자 항목 "챕터 > drop"):** 트리 옆(좁은 폭에서는 트리 아래) `문제` 목록은 챕터 재분배와 같은 Heatmap 순서의 확정 문제다. 문제를 장 행에 끌어 놓으면 기존 `chapter-assignments`(source `manual`)로 옮긴다. 키보드·터치에서는 문제 행의 `챕터로 옮기기` `ChapterPicker`가 같은 일을 한다. 이 경로는 CHREDIST-01의 충돌 규칙을 그대로 따른다.
-- **삭제 확인:** 트리 위 확인 영역 "<장>을 삭제할까요?"(`삭제`·`취소`). 문제가 있으면 `문제를 옮길 챕터` `ChapterPicker`(지우는 장 제외, 맨 위 `챕터 없음`)를 고르기 전까지 `삭제`는 비활성이고 이유 글자가 보인다. 노트가 있으면 경고 "이 챕터의 정리 노트는 더 이상 보이지 않습니다."를 보인다.
+- **삭제 확인:** 트리 위 확인 영역 "<장>을 삭제할까요?"(`삭제`·`취소`). 초안·보관 문제까지 포함해 문제가 있으면(화면을 읽은 뒤 문제가 생겨 서버가 `chapter-target-required`로 거절한 경우도 같다) `문제를 옮길 챕터` `ChapterPicker`(지우는 장 제외, 맨 위 `챕터 없음`)를 고르기 전까지 `삭제`는 비활성이고 이유 글자가 보인다. 노트가 있으면 경고 "이 챕터의 정리 노트는 더 이상 보이지 않습니다."를 보인다.
 - **닫기:** 닫으면 홈이 다시 읽혀 Heatmap·필터의 장 이름과 묶음이 새 트리를 따른다. focus는 메뉴 버튼으로 돌아간다.
 
 ## 화면 상태
@@ -62,7 +62,7 @@ Workspace FOR SHARE → 문서 FOR UPDATE → 문제 id 순 FOR UPDATE. 삭제 �
 
 ### CHMAN-01-C03 조회
 
-`GET /workspaces/{id}/chapter-tree` → `{documents: [{document_id, title, revision_id, version, chapters: [{id, parent_id, section_key, title, level, sort_order, page, question_count, has_note, user_created}]}]}`. 살아 있는 교재의 활성 revision만, outline 순서. `question_count`는 그 장의 살아 있는 `CONFIRMED` 문제 수(하위 장 제외), `has_note`는 살아 있는 정리 노트 존재 여부, `version`은 `documents.chapter_tree_version`이다. 본문·정답·해설은 없다.
+`GET /workspaces/{id}/chapter-tree` → `{documents: [{document_id, title, revision_id, version, chapters: [{id, parent_id, section_key, title, level, sort_order, page, question_count, attached_question_count, has_note, user_created}]}]}`. 살아 있는 교재의 활성 revision만, outline 순서. `question_count`는 그 장의 살아 있는 `CONFIRMED` 문제 수(하위 장 제외), `attached_question_count`는 초안·보관·삭제 표시까지 그 장을 가리키는 모든 문제 수로 0보다 크면 삭제에 대상이 필요하다, `has_note`는 살아 있는 정리 노트 존재 여부, `version`은 `documents.chapter_tree_version`이다. 본문·정답·해설은 없다.
 
 ### CHMAN-01-C04 생성·이름
 
