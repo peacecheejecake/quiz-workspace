@@ -273,7 +273,7 @@ def create_mock_exam(client: Any, workspace_id: str, question_ids: list[str]) ->
         },
         (202,),
     )
-    client.wait_for_job(str(exam["latest_generation"]["job_id"]))
+    assert exam["status"] == "ready"
     current: dict[str, Any] = client.ok("GET", f"/mock-exams/{exam['id']}")
     assert current["status"] == "ready", current["status"]
     return current
@@ -1144,7 +1144,7 @@ def test_c04_mock_run_positions_are_submitted_once_and_keep_their_questions(seed
     assert mock_submit(owner, second["id"], [mock_wrong(mq[1])]).status_code == 404
     # 다시 만들기 mid-run (decision n): the run keeps the questions it started with.
     remade = owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     new_ids = {q["id"] for q in mock_questions(owner, exam["id"])}
     assert len(new_ids) == 3
     assert not new_ids & {q["id"] for q in mq}
@@ -1366,7 +1366,7 @@ def test_c05_standalone_sessions_end_with_their_mock_exam_round_and_workspace(se
     remade_exam = create_mock_exam(owner, ws_id, [mcqs[1]["id"]])
     [(old_q, old_s)] = opened(remade_exam["id"])
     remade = owner.ok("POST", f"/mock-exams/{remade_exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     refused(mock_submit(owner, old_s["id"], old_q["correct_option_ids"]), old_s["id"], 0)
     [(new_q, new_s)] = opened(remade_exam["id"])
     assert new_q["id"] != old_q["id"]
@@ -1540,7 +1540,7 @@ def test_ux11_return_historical_mock_retry_is_separate_and_keeps_run(seed: Any) 
     owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
     before = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
     remade = owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
-    owner.wait_for_job(str(remade["latest_generation"]["job_id"]))
+    assert remade["status"] == "ready"
     assert item(owner, run["id"], 1)["available"] is True
     path = f"/practice-runs/{run['id']}/items/1/retry-session"
     assert other.call("POST", path, {}).status_code == 404

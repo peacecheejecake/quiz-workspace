@@ -2,8 +2,9 @@
 
 The API creates mock exams, their revision history, queued generations with their pinned plan
 and `mock_exam.generate` job, question edits (new revisions) and removals; the worker fills
-generations. Routes commit once. Job idempotency: `mock_exam_generation:<generation id>:1`.
-Activities `mock_exam.*` carry ids and counts only.
+generations. A generation of 보기 섞기 only has no job: `store_shuffle_copies` finishes it in the
+request (UX12-MOCKSHUFFLE-C01). Routes commit once. Job idempotency:
+`mock_exam_generation:<generation id>:1`. Activities `mock_exam.*` carry ids and counts only.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from book_core.generation import stored_source_evidence
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -453,8 +455,9 @@ class MockExamRepository:
         range_: dict[str, Any],
         plan: list[dict[str, Any]],
         seed: int,
+        with_job: bool = True,
     ) -> uuid.UUID:
-        """The queued generation (pinned plan) + its job + activity."""
+        """The queued generation (pinned plan) + its job (`with_job`) + activity."""
         version = (
             int(
                 self._session.execute(
@@ -468,21 +471,23 @@ class MockExamRepository:
             + 1
         )
         generation_id = uuid.uuid4()
-        job_id: uuid.UUID = self._session.execute(
-            text(
-                "insert into public.async_jobs (workspace_id, created_by, job_type, "
-                "schema_version, idempotency_key, payload) values (:w, :a, :t, :v, :k, "
-                "cast(:p as jsonb)) returning id"
-            ),
-            {
-                "w": exam.workspace_id,
-                "a": actor_id,
-                "t": JOB_TYPE,
-                "v": JOB_SCHEMA_VERSION,
-                "k": job_key(generation_id),
-                "p": _json({"generation_id": str(generation_id)}),
-            },
-        ).scalar_one()
+        job_id: uuid.UUID | None = None
+        if with_job:
+            job_id = self._session.execute(
+                text(
+                    "insert into public.async_jobs (workspace_id, created_by, job_type, "
+                    "schema_version, idempotency_key, payload) values (:w, :a, :t, :v, :k, "
+                    "cast(:p as jsonb)) returning id"
+                ),
+                {
+                    "w": exam.workspace_id,
+                    "a": actor_id,
+                    "t": JOB_TYPE,
+                    "v": JOB_SCHEMA_VERSION,
+                    "k": job_key(generation_id),
+                    "p": _json({"generation_id": str(generation_id)}),
+                },
+            ).scalar_one()
         self._session.execute(
             text(
                 "insert into public.mock_exam_generations (id, workspace_id, mock_exam_id, "
@@ -512,6 +517,43 @@ class MockExamRepository:
             {"generation_id": str(generation_id), "version": version, "question_count": len(plan)},
         )
         return generation_id
+
+    def source_evidence(
+        self, workspace_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """question id -> its stored sources as a copy's evidence (the worker's value)."""
+        rows = self._session.execute(
+            text(
+                "select question_id, document_id, document_revision_id, page_start, page_end, "
+                "block_ids, locations from public.question_sources "
+                "where workspace_id = :w and question_id = any(:ids) and document_id is not null "
+                "order by created_at, id"
+            ),
+            {"w": workspace_id, "ids": list(question_ids)},
+        )
+        out: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            evidence = stored_source_evidence(
+                document_id=str(r.document_id),
+                revision_id=str(r.document_revision_id) if r.document_revision_id else None,
+                page_start=r.page_start,
+                page_end=r.page_end,
+                block_ids=tuple(r.block_ids or ()),
+                locations=list(r.locations or []),
+            )
+            if evidence is not None:
+                out.setdefault(str(r.question_id), []).append(evidence.model_dump(mode="json"))
+        return out
+
+    def store_shuffle_copies(
+        self, generation_id: uuid.UUID, evidence: dict[str, list[dict[str, Any]]]
+    ) -> None:
+        """Copies a job-less generation's pinned revisions and shows it (one definer function:
+        this role cannot write those rows itself)."""
+        self._session.execute(
+            text("select public.mock_exam_store_shuffle_copies(:g, cast(:e as jsonb))"),
+            {"g": generation_id, "e": _json(evidence)},
+        )
 
     def delete_exam(self, exam: ExamRecord, actor_id: uuid.UUID) -> None:
         """Soft delete; a queued/running generation is cancelled (its job too)."""

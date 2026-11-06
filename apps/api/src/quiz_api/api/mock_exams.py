@@ -18,11 +18,15 @@ A generation pins its plan at request time: the range resolved to the workspace'
 CONFIRMED questions (`quiz_api.mock_exam_ranges`, the QVIEW-B resolver), `min(문항 수, range)`
 sources picked by the seed and their variation types (`book_core.mock_exam.make_plan`).
 
+보기 섞기 only (UX12-MOCKSHUFFLE-C01): no job and no LLM. The request copies the pinned revisions
+in their source option order and answers `ready`; options are ordered per run
+(`quiz_api.api.practice_runs`). AI generations copy their 보기 섞기 items the same way in the job.
+
 Limits (MOCK-01-C06): 문항 수 1..100 with an AI variation type, 1..min(range, 5,000) (or null =
 the whole range) with 보기 섞기 only (422); AI types need WORKER_MOCK_EXAMS and an LLM (409
 `mock-llm-disabled`); one queued/running generation per mock exam (409
-`mock-generation-running`); at most MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE in the workspace (409
-`generation-busy`); MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE starts per user (429 +
+`mock-generation-running`); at most MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE with a job in the
+workspace (409 `generation-busy`); MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE starts per user (429 +
 Retry-After). A retry with the same `Idempotency-Key` returns the first response before any
 limit is checked.
 
@@ -579,11 +583,12 @@ def _start(
     new_config: bool,
     saved_range: bool = False,
 ) -> uuid.UUID:
-    """Resolve, plan, enforce the start limits and queue the generation (no commit). A count
-    over the range is refused when the settings are new (create / 설정 바꾸기); a plain remake
-    of a range that shrank since makes `min(count, range)` like the AI types. A `saved_range`
-    (다시 만들기 of the stored range) drops questions gone since instead of 422 (C08). A whole
-    range (`question_count` null) over 5,000 questions is 422 however it starts (C06)."""
+    """Resolve, plan, enforce the start limits and queue the generation, or with 보기 섞기
+    only finish it here (no commit). A count over the range is refused when the settings are new
+    (create / 설정 바꾸기); a plain remake of a range that shrank since makes `min(count, range)`
+    like the AI types. A `saved_range` (다시 만들기 of the stored range) drops questions gone
+    since instead of 422 (C08). A whole range (`question_count` null) over 5,000 questions is 422
+    however it starts (C06)."""
     repo.lock_workspace_generations(exam.workspace_id)
     candidates = resolve_candidates(
         repo.session, exam.workspace_id, actor_id, range_, saved=saved_range
@@ -612,7 +617,11 @@ def _start(
             f"A mock exam holds at most {MAX_RANGE_QUESTIONS:,} questions: the range has "
             f"{len(candidates):,}. Choose a question count or a smaller range.",
         )
-    if repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace:
+    with_job = uses_llm(types)
+    if (
+        with_job
+        and repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace
+    ):
         raise ProblemException(
             409,
             ProblemType.GENERATION_BUSY,
@@ -628,14 +637,19 @@ def _start(
         )
     chosen = seed if seed is not None else secrets.randbelow(MAX_SEED + 1)
     plan = make_plan(candidates, config.question_count, types, chosen)
-    return repo.create_generation(
+    generation_id = repo.create_generation(
         exam,
         actor_id,
         config=config.model_dump(mode="json"),
         range_=range_.model_dump(mode="json"),
         plan=[p.as_json() for p in plan],
         seed=chosen,
+        with_job=with_job,
     )
+    if not with_job:
+        sources = [uuid.UUID(p.question_id) for p in plan]
+        repo.store_shuffle_copies(generation_id, repo.source_evidence(exam.workspace_id, sources))
+    return generation_id
 
 
 def _replayed(
@@ -717,7 +731,8 @@ def create_mock_exam(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Save a mock exam and start its first generation. With an AI variation type the range's
-    questions, answers, explanations and related book text are sent to the LLM provider."""
+    questions, answers, explanations and related book text are sent to the LLM provider;
+    with 보기 섞기 only the response is already `ready` (`job_id` null)."""
     user_id, workspace_id = access.user_id, access.workspace_id
     scope = f"POST /workspaces/{workspace_id}/mock-exams"
     body_hash = request_hash(body.model_dump(mode="json"))

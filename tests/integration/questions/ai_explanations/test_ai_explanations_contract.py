@@ -322,7 +322,7 @@ def shuffle_exam(owner: Any, ws: str, question_ids: list[str]) -> list[dict[str,
         },
         (202,),
     )
-    owner.wait_for_job(str(made["latest_generation"]["job_id"]))
+    assert made["status"] == "ready"
     items: list[dict[str, Any]] = owner.ok(
         "GET", f"/mock-exams/{made['id']}/questions?include=answers"
     )["items"]

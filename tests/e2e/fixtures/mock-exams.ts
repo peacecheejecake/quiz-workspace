@@ -28,7 +28,7 @@
 //      latest_generation: Generation|null (the newest, any status), created_at, updated_at}.
 //      `status` = generating while latest_generation is queued/running, else ready / partial /
 //      failed from latest_generation (failed keeps current_generation, the earlier questions).
-//      Generation = {id, version, status, job_id, requested_count, created_count, skipped_count,
+//      Generation = {id, version, status, job_id (null: 보기 섞기 only, no job), requested_count, created_count, skipped_count,
 //      error_code: string|null, progress: {done, total}|null, seed, created_at, finished_at}.
 //      GET /workspaces/{id}/mock-exams → 200 {llm_available: bool, items: MockExam[]} newest
 //      first, any member (archived too); `llm_available` = this environment can run the AI types
@@ -335,7 +335,7 @@ export interface Generation {
   readonly id: string;
   readonly version: number;
   readonly status: GenerationStatus;
-  readonly job_id: string;
+  readonly job_id: string | null;
   readonly requested_count: number;
   readonly created_count: number;
   readonly skipped_count: number;
@@ -525,6 +525,7 @@ export const STATUS_TEXT: Readonly<Record<MockStatus, RegExp>> = {
 };
 
 export const MOCK_TEXT = {
+  made: /모의고사 문제를 만들었습니다|questions are ready/i,
   empty: /아직 모의고사가 없습니다|no mock exams yet/i,
   emptyHint: /`?추가`?로 변형 유형과 범위를 골라|add one to choose variation types and a range/i,
   notFound: /모의고사를 찾을 수 없습니다|mock exam not found/i,

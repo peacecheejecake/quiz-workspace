@@ -30,7 +30,9 @@ Option shuffle (UX12-CHAPTERRUN-C03): `shuffle_options` is a bank run's setting,
 `practice_runs.range` jsonb (`run_range`; no key means off, as on every older run). A position of
 such a run shows `shuffled_option_ids` under `run_option_seed(seed, position)` whether or not its
 session is open yet, the session stores that order and grading stays on option ids. A retry of a
-position draws a new shuffle. A mock run has its own question copies and refuses the field (422).
+position draws a new shuffle. A mock run refuses the field (422): its 보기 섞기 questions shuffle
+the same way by their variation type, whatever the run (UX12-MOCKSHUFFLE-C03), and its other
+questions keep their stored order.
 
 No answers (C03): `PracticeRun` and `RunResults` carry no question content and no answers.
 `RunItem` carries the question without answers; the answers of a position appear only in its
@@ -94,7 +96,12 @@ from quiz_api.authz import (
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
-from quiz_api.practice_grading import AttemptResult, run_option_seed, shuffled_option_ids
+from quiz_api.practice_grading import (
+    AttemptResult,
+    new_shuffle_seed,
+    run_option_seed,
+    shuffled_option_ids,
+)
 from quiz_api.question_ranges import (
     MAX_RANGE_QUESTIONS,
     QuestionRange,
@@ -421,11 +428,13 @@ def run_range(body: PracticeRunCreate) -> dict[str, Any]:
     return {**stored, "shuffle_options": True} if body.shuffle_options else stored
 
 
-def position_options(run: RunRecord, position: int, options: list[Any]) -> list[RunOption]:
+def position_options(
+    run: RunRecord, position: int, options: list[Any], *, shuffle: bool = False
+) -> list[RunOption]:
     """The options of a position without a session, in the order its session will show."""
     by_id = {o["id"]: o["text"] for o in options}
     ids = list(by_id)
-    if run.shuffle_options:
+    if run.shuffle_options or shuffle:
         ids = shuffled_option_ids(ids, run_option_seed(run.seed, position))
     return [RunOption(id=i, text=by_id[i]) for i in ids]
 
@@ -559,7 +568,7 @@ def _mock_item(
         stem, multi = session.revision.stem, session.revision.is_multi_answer
         stem_tables = session.revision.stem_tables
     else:
-        options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
+        options = position_options(run, position, live.options, shuffle=live.shuffles_options)
         stem, multi = live.stem, live.is_multi_answer
         stem_tables = live.stem_tables
     return RunItem(
@@ -769,11 +778,14 @@ def start_run_item_retry_session(
         if target.question_type == "MCQ"
         else []
     )
+    retry_seed = new_shuffle_seed() if displayed and target.shuffles_options else None
+    if retry_seed is not None:
+        displayed = shuffled_option_ids(displayed, retry_seed)
     opened = mocks.open_session(
         target,
         user.id,
         displayed_option_ids=displayed,
-        shuffle_seed=None,
+        shuffle_seed=retry_seed,
         retry_origin_run_id=run.id,
         retry_origin_position=position,
     )

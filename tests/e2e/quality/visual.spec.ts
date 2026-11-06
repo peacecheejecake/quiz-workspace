@@ -443,12 +443,12 @@ test(
     }
     // 보기 섞기 only (no LLM) with fixed seeds; every question of the range is taken, in Heatmap
     // order, so the rows are the same on every run.
-    const exams: { id: string; job: string }[] = [];
+    const exams: { id: string }[] = [];
     for (const [title, range, count] of [
       ['1장 복습', { all: false, chapter_ids: [chapters[1]] }, 3],
       ['중간 점검', { all: true }, 5],
     ] as const) {
-      const exam = await owner.api.ok<{ id: string; latest_generation: { job_id: string } }>(
+      const exam = await owner.api.ok<{ id: string }>(
         'POST',
         `/workspaces/${ws.id}/mock-exams`,
         {
@@ -459,9 +459,8 @@ test(
         },
         [202],
       );
-      exams.push({ id: exam.id, job: exam.latest_generation.job_id });
+      exams.push({ id: exam.id });
     }
-    for (const exam of exams) await waitForJob(owner, exam.job);
     const [, midterm] = exams;
     if (!midterm) throw new Error('no mock exam');
 

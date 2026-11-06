@@ -802,7 +802,7 @@ export type paths = {
     put?: never;
     /**
      * Start Mock Practice Session
-     * @description Open a mock exam question: pins its active revision and optionally shuffles MCQ options.
+     * @description Open a mock exam question: pins its active revision and its MCQ option order.
      *     No answers in the response, nothing recorded outside the mock exam tables. With a run
      *     position the caller's mock run must hold this question; an open session is resumed, and a
      *     submitted one is 409 `already-submitted`.
@@ -2450,7 +2450,8 @@ export type paths = {
     /**
      * Create Mock Exam
      * @description Save a mock exam and start its first generation. With an AI variation type the range's
-     *     questions, answers, explanations and related book text are sent to the LLM provider.
+     *     questions, answers, explanations and related book text are sent to the LLM provider;
+     *     with 보기 섞기 only the response is already `ready` (`job_id` null).
      */
     post: operations['createMockExam'];
     delete?: never;
