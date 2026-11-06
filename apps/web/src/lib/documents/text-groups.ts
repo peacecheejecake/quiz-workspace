@@ -128,7 +128,12 @@ export function textTargetForPage(groups: readonly PageGroup[], page: number): T
  * the box. A page with no text of the question proves nothing: a figure there stays.
  */
 function questionBoxes(blocks: readonly ContentBlock[]): ContentBlock['locations'] {
-  type Box = { x0: number; y0: number; x1: number; y1: number };
+  interface Box {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  }
   const grow = (boxes: Map<number, Box>, page: number, bbox: Box) => {
     const box = boxes.get(page);
     boxes.set(
