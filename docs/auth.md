@@ -28,8 +28,10 @@
 | AUTH-06 | `/reset-password` | 유효한 복구 세션만 신규 비밀번호 설정 허용 |
 | AUTH-07 | `/auth/error` | 만료·잘못된 링크, 네트워크 오류와 재시도 UX |
 | ACCOUNT-01 | `/settings/security` | 사용자 이메일, 비밀번호 변경, 로그아웃 |
+| UX12-SETTINGS | `/settings/preferences` | 이 브라우저의 드래그 자동 복사 설정 |
+| UX12-HELP | `/help` | 사용 도움말, 릴리스 노트 |
 
-보호 구역: `/workspaces/**`, `/documents/**`, `/questions/**`, `/settings/**`. 미인증 진입 시 `/login?next=<상대 경로>`로 이동하되 `next`는 반드시 내부 상대 경로 allowlist로 검증해 open redirect를 차단한다. 이미 로그인된 사용자는 auth 페이지 접근 시 마지막 workspace 또는 workspace 목록으로 이동한다.
+보호 구역: `/workspaces/**`, `/documents/**`, `/questions/**`, `/settings/**`, `/help`. 미인증 진입 시 `/login?next=<상대 경로>`로 이동하되 `next`는 반드시 내부 상대 경로 allowlist로 검증해 open redirect를 차단한다. 이미 로그인된 사용자는 auth 페이지 접근 시 마지막 workspace 또는 workspace 목록으로 이동한다.
 
 ## 3. 로그인/토큰 흐름
 

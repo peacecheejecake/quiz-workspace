@@ -120,6 +120,8 @@ function offscreenDistance(element: HTMLElement, edge: DragEdge): number {
 
 /** Swallows the click the browser sends after a drag that began on a control in `surface`. */
 function swallowReleaseClick(surface: HTMLElement) {
+  // Held here: the timer below can outlive the page's globals.
+  const view = window;
   const stop = (event: MouseEvent) => {
     if (!(event.target instanceof Node) || !surface.contains(event.target)) return;
     event.preventDefault();
@@ -127,10 +129,10 @@ function swallowReleaseClick(surface: HTMLElement) {
     remove();
   };
   const remove = () => {
-    window.removeEventListener('click', stop, true);
+    view.removeEventListener('click', stop, true);
     clearTimeout(timer);
   };
-  window.addEventListener('click', stop, true);
+  view.addEventListener('click', stop, true);
   const timer = setTimeout(remove, MOTION.clickWindow);
 }
 

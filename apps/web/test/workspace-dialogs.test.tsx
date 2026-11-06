@@ -330,9 +330,11 @@ describe('AppFrame mobile drawer', () => {
     const user = userEvent.setup();
     nav.pathname = '/workspaces/a/documents';
     const frame = () => (
-      <AppFrame header={<span>Quiz</span>} sidebar={<a href="#search">검색</a>}>
-        본문
-      </AppFrame>
+      <ToastProvider>
+        <AppFrame header={<span>Quiz</span>} sidebar={<a href="#search">검색</a>}>
+          본문
+        </AppFrame>
+      </ToastProvider>
     );
     const { rerender } = render(frame());
     await user.click(screen.getByRole('button', { name: '메뉴 열기' }));

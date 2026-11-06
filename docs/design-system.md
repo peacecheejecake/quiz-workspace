@@ -126,7 +126,9 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
-### 3.2 Dark theme (초안)
+### 3.2 Dark theme
+
+테마 선택(UX12 SHELL-3, 결정 D-5, [UX12-SETTINGS](screens/ux12-settings.md)): 사용자 메뉴의 `시스템`·`라이트`·`다크`, 기본 `시스템`. 고른 값은 `quiz-theme` cookie에 두고 RootLayout이 `<html data-theme>`로 찍어 보낸다(깜빡임 없음, 인라인 script 없음). `시스템`은 cookie와 `data-theme`이 모두 없고 `prefers-color-scheme` media query가 정한다.
 
 ```css
 [data-theme="dark"] {

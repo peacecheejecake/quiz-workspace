@@ -180,6 +180,7 @@ export type {
   HighlightBlockElement,
   RenderHighlightBlock,
 } from './reading/HighlightableText';
+export { copyableText } from './reading/dom-selection';
 export { HIGHLIGHT_MENU_TEXT, HighlightMenu } from './reading/HighlightMenu';
 export type { HighlightMenuProps } from './reading/HighlightMenu';
 export {
