@@ -74,8 +74,9 @@ test(
     const { run } = await importPaperDrafts(owner, ws.id);
     const path = `/question-imports/${run.id}/draft-summaries`;
 
-    const plain = await owner.api.ok<{ items: { block_ids: string[] }[] }>('GET', path);
-    expect(plain.items.every((d) => d.block_ids.length === 0)).toBe(true);
+    const plain = await owner.api.ok<{ items: Record<string, unknown>[] }>('GET', path);
+    expect(plain.items.length).toBeGreaterThan(0);
+    for (const item of plain.items) expect(item).not.toHaveProperty('block_ids');
 
     const withBlocks = await owner.api.ok<{ items: Record<string, unknown>[] }>(
       'GET',
