@@ -23,7 +23,7 @@
 - **Header:** global header는 `glass-surface`이고 gradient 층만 없다.
 - **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 불투명 canvas다.
 - **ConfirmDialog:** 머리글과 동작 행 사이의 구분선이 없다. `ModalDialog`와 panel의 구분선은 그대로다.
-- **Heatmap:** `--heatmap-marker-hover-scale`은 D-12로 이미 1.3이다. hover·focus-visible만 확대하고 격자는 움직이지 않으며 잘리지 않는다.
+- **Heatmap:** `--heatmap-marker-hover-scale`은 UX12 DESIGN-6로 1.5다. hover·focus-visible만 확대하고 격자는 움직이지 않으며 잘리지 않는다.
 
 ## 유리 위 버튼·영역 목록
 
@@ -77,7 +77,7 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 **아이콘 전용 버튼:** 홈의 secondary 아이콘 버튼(`이력`)은 테두리가 투명한 1px이고 크기는 36px을 유지한다. 즐겨찾기 같은 toggle은 테두리가 보인다.
 
 ### UX12-GLASSBTN-AC06
-**Heatmap 확대:** cell에 pointer를 올리면 marker가 1.3배가 되고 cell 위치는 변하지 않는다. 부모가 marker를 자르지 않는다.
+**Heatmap 확대:** cell에 pointer를 올리면 marker가 1.5배가 되고 cell 위치는 변하지 않는다. 부모가 marker를 자르지 않는다.
 
 ### UX12-GLASSBTN-AC07
 **홈 sticky 영역:** 홈 toolbar는 sticky이고 blur가 적용되며 배경이 반투명하다.
