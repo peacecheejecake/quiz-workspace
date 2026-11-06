@@ -365,4 +365,4 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-8 | 10 | 진행 | |
 | DESIGN-5 | 10 | 진행 | |
 | HOME-6 | 10 | 진행 | |
-| ASK-3 | 10 | 진행 | |
+| ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
