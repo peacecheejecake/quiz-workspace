@@ -332,5 +332,5 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | VIEW-7 | 5 | 완료 | Codex P2 3건 수정 후 재리뷰 통과, 첫 구현 E2E·화면 확인, 수정분 E2E는 PR CI |
 | EXTRACT-9 | 8 | 완료 | a540c198 · Codex P1(span 메모리)·P2(CI phase) 수정 후 재리뷰 통과, 표 편집 포함, 칸 병합·해제 제외, 발문 표 28개 중 병합 18개. migration·pgTAP·E2E는 PR CI에서 확인 |
 | MOCKUX-1 | 9 | 진행 | |
-| MOCKUX-2 | 9 | 진행 | |
+| MOCKUX-2 | 9 | 완료 | Codex P1·P2는 MOCKUX-1 합류와 merge에서 반영, 모든 멤버 추가, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-3 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 공용 footer, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
