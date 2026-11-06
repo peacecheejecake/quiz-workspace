@@ -9,7 +9,7 @@
 
 **트리거:** 닫힌 모양은 `Select`와 같다. 레이블, 고른 값(없으면 placeholder), 아래 chevron. 역할은 `combobox`, `aria-haspopup="dialog"`, 이름은 레이블이다. 위아래 화살표 키로도 열린다.
 
-**Popover:** kit `Popover`(이름 = 레이블, `modal`)에 찾기 입력란과 트리가 있다. 바꾼 `Select`처럼 열린 동안 아래 화면은 눌리지 않고(바깥을 누르면 닫히기만 한다) focus는 안에 머문다. modal panel의 스크롤 잠금은 맨 위 잠금만 휠을 통과시키므로 picker도 modal이어야 목록이 스크롤된다. 내용은 **열린 동안에만** 렌더링한다. 닫힌 picker는 DOM에 트리 항목을 하나도 두지 않는다(QIMP-REVIEW-SCALE: 초안 752 × 챕터 300에서 탭이 죽었다). modal `FloatingSidePanel` 안에서 열어도 panel 위에 뜨고, 안에서 스크롤·클릭해도 panel이 닫히거나 움직이지 않으며, Escape는 picker만 닫는다. 다른 popover(`필터`, `질문 범위`) 안에서 열어 고르면 바깥 popover는 그대로 열려 있다.
+**Popover:** kit `Popover`(이름 = 레이블, `modal`)에 찾기 입력란과 트리가 있다. 바꾼 `Select`처럼 열린 동안 아래 화면은 눌리지 않고(바깥을 누르면 닫히기만 한다) focus는 안에 머문다. 목록의 터치·휠 스크롤은 picker의 modal 여부와 상관없다([UX12-CHAPTERSCROLL](ux12-doc-count-chapter-scroll.md)). 내용은 **열린 동안에만** 렌더링한다. 닫힌 picker는 DOM에 트리 항목을 하나도 두지 않는다(QIMP-REVIEW-SCALE: 초안 752 × 챕터 300에서 탭이 죽었다). modal `FloatingSidePanel` 안에서 열어도 panel 위에 뜨고, 안에서 스크롤·클릭해도 panel이 닫히거나 움직이지 않으며, Escape는 picker만 닫는다. 다른 popover(`필터`, `질문 범위`) 안에서 열어 고르면 바깥 popover는 그대로 열려 있다.
 
 **트리:** 순서대로 온 목록의 `level`로 스택을 쌓아 만든다. level이 건너뛰어도(1 → 3) 한 단계만 들여쓴다. 맨 위 고정 항목(`전체 챕터`, `챕터 없음`, `전체 장`)은 언제나 최상위다. 처음에는 최상위만 보이고, 고른 항목이 있으면 그 조상이 펼쳐져 있으며 목록이 그 항목까지 스크롤된다. 행을 누르면 고르고 닫으며 focus는 트리거로 돌아온다. 행 앞의 `<제목> 펼치기`/`<제목> 접기` 버튼은 고르지 않고 접고 펼친다. 고른 행은 체크 아이콘과 `aria-selected`로 나타낸다(색만으로 구분하지 않음).
 
