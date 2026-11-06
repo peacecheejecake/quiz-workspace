@@ -7,6 +7,7 @@ describe('safeNextPath', () => {
     ['/workspaces?tab=archived', '/workspaces?tab=archived'],
     ['/workspaces/e2e-ws/documents?tab=all', '/workspaces/e2e-ws/documents?tab=all'],
     ['/settings/security', '/settings/security'],
+    ['/help', '/help'],
     ['/documents/abc', '/documents/abc'],
     ['/questions', '/questions'],
     ['/reset-password', '/reset-password'],

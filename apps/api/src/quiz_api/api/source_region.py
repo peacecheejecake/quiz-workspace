@@ -4,8 +4,11 @@
     GET /mock-exam-questions/{id}/source-region        `보기 섞기` mock question, by its origin
 
 The response says where a question sits in its import PDF: per-page bbox unions of the
-`question_sources` rows with an import run, in page order. It carries no text, answer,
-explanation or block id. A question without such a region (manual, book-only, bbox-less, deleted
+question's own locations in the `question_sources` rows with an import run, in page order; a
+page whose union touches a printed answer line has none (QSRC-01-C06). It carries no text, answer,
+explanation or block id. `figures` are the question's images inside its own region, shown above
+the options (UX12-REEXTRACT): never text blocks or images read after an inline answer. A question
+without such a region (manual, book-only, bbox-less, deleted
 source document), a DRAFT or deleted question, and any non-member get one 404. Mock questions
 follow their origin question and never use the mock's own evidence. Reading records nothing.
 """
@@ -51,6 +54,7 @@ class QuestionSourceRegion(BaseModel):
 
     question_id: uuid.UUID
     regions: list[SourceRegionItem]
+    figures: list[SourceRegionItem]
 
 
 class MockQuestionSourceRegion(BaseModel):
@@ -58,6 +62,7 @@ class MockQuestionSourceRegion(BaseModel):
 
     mock_exam_question_id: uuid.UUID
     regions: list[SourceRegionItem]
+    figures: list[SourceRegionItem]
 
 
 def get_repo(session: Annotated[Session, Depends(get_db_session)]) -> SourceRegionRepository:
@@ -68,8 +73,6 @@ Repo = Annotated[SourceRegionRepository, Depends(get_repo)]
 
 
 def _items(regions: list[Region]) -> list[SourceRegionItem]:
-    if not regions:
-        raise HTTPException(status_code=404, detail=NOT_FOUND)
     return [
         SourceRegionItem(
             document_id=r.document_id,
@@ -81,6 +84,15 @@ def _items(regions: list[Region]) -> list[SourceRegionItem]:
     ]
 
 
+def _found(
+    repo: SourceRegionRepository, workspace_id: uuid.UUID, question_id: uuid.UUID
+) -> tuple[list[SourceRegionItem], list[SourceRegionItem]]:
+    regions, figures = repo.question_view(workspace_id, question_id)
+    if not regions:
+        raise HTTPException(status_code=404, detail=NOT_FOUND)
+    return _items(regions), _items(figures)
+
+
 @router.get("/questions/{question_id}/source-region", operation_id="getQuestionSourceRegion")
 def get_question_source_region(
     access: QuestionAccess, repo: Repo, response: Response
@@ -90,10 +102,8 @@ def get_question_source_region(
     workspace_id = access.workspace.workspace_id
     if not repo.question_is_readable(workspace_id, access.resource_id):
         raise HTTPException(status_code=404, detail=NOT_FOUND)
-    return QuestionSourceRegion(
-        question_id=access.resource_id,
-        regions=_items(repo.question_regions(workspace_id, access.resource_id)),
-    )
+    regions, figures = _found(repo, workspace_id, access.resource_id)
+    return QuestionSourceRegion(question_id=access.resource_id, regions=regions, figures=figures)
 
 
 @router.get(
@@ -109,7 +119,7 @@ def get_mock_exam_question_source_region(
     origin = repo.mock_origin(workspace_id, access.resource_id)
     if origin is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
+    regions, figures = _found(repo, workspace_id, origin)
     return MockQuestionSourceRegion(
-        mock_exam_question_id=access.resource_id,
-        regions=_items(repo.question_regions(workspace_id, origin)),
+        mock_exam_question_id=access.resource_id, regions=regions, figures=figures
     )

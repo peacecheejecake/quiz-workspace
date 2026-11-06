@@ -293,7 +293,7 @@ test(
     await expect(section.locator('mark[data-search-result]')).toHaveCount(1);
     await expect(
       highlightUi
-        .row(section, highlightUi.rowMeta('pink', 'explanation', '1장 2번'))
+        .row(section, highlightUi.rowMeta('pink', 'explanation', '2번'))
         .locator('mark[data-search-result]'),
     ).toHaveCount(1);
     await expect(

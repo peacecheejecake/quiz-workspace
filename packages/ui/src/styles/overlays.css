@@ -39,9 +39,9 @@ html body[data-scroll-locked] {
 .qz-panel {
   position: fixed;
   z-index: var(--z-side-panel);
-  top: var(--space-4);
+  top: calc(var(--space-4) + var(--qz-keyboard-offset-top));
   right: var(--space-4);
-  bottom: var(--space-4);
+  bottom: calc(var(--space-4) + var(--qz-keyboard-inset));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -118,6 +118,12 @@ html body[data-scroll-locked] {
     border-bottom: 1px solid var(--color-border);
   }
 
+  > .header > .start {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+
   > .header > .heading {
     flex: 1;
     min-width: 0;
@@ -184,7 +190,7 @@ html body[data-scroll-locked] {
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--space-2);
+    gap: var(--control-gap);
     padding: var(--space-2) var(--space-5) var(--space-3);
     border-top: 1px solid var(--color-border);
   }
@@ -194,14 +200,15 @@ html body[data-scroll-locked] {
   .qz-panel {
     top: auto;
     right: 0;
-    bottom: 0;
+    bottom: var(--qz-keyboard-inset);
     left: 0;
     width: 100%;
-    max-height: 90dvh;
+    max-height: calc(90dvh - var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset));
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding-bottom: env(safe-area-inset-bottom);
-    /* Full-width sheets cover the reading area: keep them opaque for legibility. */
-    background: var(--color-glass-solid);
+    /* Full-width sheets cover the reading area: opaque for legibility. The longhand keeps the
+       gradient layer of .glass-surface (UX12 DESIGN-4). */
+    background-color: var(--color-glass-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 
@@ -215,8 +222,8 @@ html body[data-scroll-locked] {
     }
 
     &[data-mobile-layout='full'] {
-      top: 0;
-      height: 100dvh;
+      top: var(--qz-keyboard-offset-top);
+      height: calc(100dvh - var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset));
       max-height: none;
       border-radius: 0;
       padding-top: env(safe-area-inset-top);
@@ -254,18 +261,18 @@ html body[data-scroll-locked] {
 
 @media (width < 868px) {
   .qz-panel[data-paired][data-mobile-layout='full'] {
-    top: 0;
+    top: var(--qz-keyboard-offset-top);
     right: 0;
-    bottom: 0;
+    bottom: var(--qz-keyboard-inset);
     left: 0;
     /* The whole viewport, also over a classic scrollbar gutter (html keeps `scrollbar-gutter`). */
     width: 100vw;
-    height: 100dvh;
+    height: calc(100dvh - var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset));
     max-height: none;
     border-radius: 0;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-    background: var(--color-glass-solid);
+    background-color: var(--color-glass-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 
@@ -337,13 +344,15 @@ html body[data-scroll-locked] {
 .qz-modal {
   position: fixed;
   z-index: var(--z-modal);
-  top: 50%;
+  top: calc(50% + (var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset)) / 2);
   left: 50%;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   width: min(560px, calc(100vw - 2 * var(--space-4)));
-  max-height: calc(100dvh - 2 * var(--space-4));
+  max-height: calc(
+    100dvh - 2 * var(--space-4) - var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset)
+  );
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -410,7 +419,7 @@ html body[data-scroll-locked] {
 /* Tooltip: inverted, opaque for legibility. */
 .qz-tooltip {
   z-index: var(--z-popover);
-  max-width: 280px;
+  max-width: min(280px, calc(100vw - 2 * var(--space-4)));
   padding: 6px var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--color-text-primary);
@@ -429,7 +438,7 @@ html body[data-scroll-locked] {
   position: fixed;
   z-index: var(--z-toast);
   right: 0;
-  bottom: 0;
+  bottom: var(--qz-keyboard-inset);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -756,6 +765,178 @@ html body[data-scroll-locked] {
 }
 
 /* Header gestures do not interfere with scrolling the overlay body. */
-:is(.qz-panel, .qz-modal) > .header {
+:is(.qz-panel, .qz-modal, .qz-drawer) > .header {
   touch-action: none;
+}
+
+/* A surface dragged off screen (useDragDismiss) has already left: no exit keyframes. */
+:is(.qz-panel, .qz-modal, .qz-drawer)[data-swiped][data-state='closed'] {
+  animation: none !important;
+}
+
+:is(.qz-panel, .qz-modal, .qz-drawer)[data-dragging] {
+  user-select: none;
+}
+
+.qz-panel > .header > .grabber {
+  display: none;
+}
+
+@media (width < 768px) {
+  .qz-panel > .header {
+    position: relative;
+  }
+
+  .qz-panel > .header > .grabber {
+    position: absolute;
+    top: var(--space-1);
+    left: 50%;
+    display: block;
+    width: var(--space-8);
+    height: var(--space-1);
+    border-radius: var(--radius-pill);
+    background: var(--color-border-strong);
+    transform: translateX(-50%);
+  }
+}
+
+/* ChapterPicker (docs/screens/ux12-chapter-picker.md): a filter box over a tree. Two classes beat
+   .qz-popover; the close button exists only on the sheet. */
+.qz-chapter-picker.qz-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: max(var(--radix-popover-trigger-width), 320px);
+  max-width: min(420px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(420px, var(--radix-popover-content-available-height));
+  padding: var(--space-2);
+
+  > .close {
+    display: none;
+  }
+
+  > .tree {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    overscroll-behavior: contain;
+  }
+
+  > .empty {
+    margin: 0;
+    padding: var(--space-2);
+    color: var(--color-text-secondary);
+  }
+
+  > .tree > .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    box-sizing: border-box;
+    min-height: var(--control-height-md);
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color var(--qz-transition-fast);
+
+    &:hover {
+      background: var(--color-state-hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-focus);
+      outline-offset: -2px;
+    }
+
+    &[data-group] {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-label);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    > .toggle,
+    > .spacer {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: var(--control-height-sm);
+      height: var(--control-height-sm);
+    }
+
+    > .toggle {
+      padding: 0;
+      border: 0;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--color-state-pressed);
+      }
+    }
+
+    > .title {
+      flex: 1;
+      min-width: 0;
+      padding-block: var(--space-1);
+      overflow-wrap: anywhere;
+    }
+
+    > .check {
+      flex: none;
+      margin-inline-end: var(--space-2);
+    }
+
+    @media (forced-colors: active) {
+      &:is(:hover, :focus-visible) {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
+      }
+    }
+  }
+}
+
+/* The sheet is the same popover pinned to the bottom edge. The positioner writes its place inline
+   on the wrapper Radix portals, so only !important can take it back. */
+@media (width < 768px) {
+  [data-radix-popper-content-wrapper]:has(> .qz-chapter-picker) {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    /* The whole viewport, also over a classic scrollbar gutter (html keeps `scrollbar-gutter`). */
+    width: 100vw;
+    min-width: 0 !important;
+    transform: none !important;
+  }
+
+  .qz-chapter-picker.qz-popover {
+    width: 100%;
+    max-width: 100%;
+    max-height: 70dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: var(--space-3) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom));
+    /* The longhand keeps the gradient layer of .glass-surface, as on .qz-panel. */
+    background-color: var(--color-glass-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+
+    &:has(> .close) {
+      padding-right: var(--space-3);
+    }
+
+    > .filter {
+      margin-right: calc(var(--control-height-sm) + var(--space-1));
+    }
+
+    > .close {
+      display: inline-flex;
+    }
+  }
 }

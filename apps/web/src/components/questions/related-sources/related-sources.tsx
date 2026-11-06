@@ -8,16 +8,18 @@
 // the list (and makes the server store it); collapsing and expanding again reuses what was loaded.
 //   loading   3 skeleton lines and role=status "관련 본문을 찾는 중입니다"
 //   list      an ol of passages (location, excerpt with the query words in <mark>, `문제 출처`
-//             badge, "PDF" link; a row opens SEARCH-01's excerpt panel) and one status "관련 본문 n개"
+//             badge, "PDF" button for the 원본 PDF dialog, UX12-SOURCE; a row opens SEARCH-01's
+//             excerpt panel) and one status "관련 본문 n개"
 //   none      role=status "관련 본문을 찾지 못했습니다."
 //   degraded  the list plus the keyword-only notice
 //   error     role=alert + `다시 시도`
 // The expanded state is not remembered (a new question or session starts collapsed again). The
 // shared guest version is SharedRelatedSources.
-import { Badge, Button, ChevronDownIcon, ChevronUpIcon, Skeleton } from '@quiz/ui';
-import Link from 'next/link';
+import { Badge, Button, Skeleton } from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
+import { SectionDisclosure } from '../section-disclosure/section-disclosure';
 import type { ExplanationGate, ExplanationTarget } from '@/lib/ai-explanations/client';
 import {
   createRelatedClient,
@@ -89,6 +91,7 @@ function RelatedSourcesArea({
   // --- excerpt panel ---------------------------------------------------------------------------
   const [excerpt, setExcerpt] = useState<{ item: SearchItem; stale: boolean } | null>(null);
   const [excerptOpen, setExcerptOpen] = useState(false);
+  const [pdfPage, setPdfPage] = useState<PdfPageTarget | null>(null);
   const excerptRequest = useRef(0);
   const mounted = useRef(true);
   useEffect(() => {
@@ -169,12 +172,19 @@ function RelatedSourcesArea({
               key={`${source.rank}:${source.document_id}:${source.block_id}`}
               source={source}
               onOpen={() => openSource(source)}
-              pdfHref={pdfLinkFor(workspaceId, {
-                document_id: source.document_id,
-                revision_id: source.revision_id,
-                page: source.page_start,
-                block_id: source.block_id,
-              })}
+              onOpenPdf={() =>
+                setPdfPage({
+                  documentId: source.document_id,
+                  page: source.page_start,
+                  documentHref: pdfLinkFor(workspaceId, {
+                    document_id: source.document_id,
+                    revision_id: source.revision_id,
+                    page: source.page_start,
+                    block_id: source.block_id,
+                  }),
+                  documentTitle: source.document_title,
+                })
+              }
             />
           ))}
         </ol>
@@ -195,16 +205,19 @@ function RelatedSourcesArea({
       busy={requested && load.status === 'loading'}
       after={
         // Inside the area, so over a modal panel or dialog it is that layer's own child layer.
-        excerpt ? (
-          <DocumentExcerptPanel
-            workspaceId={workspaceId}
-            client={search}
-            item={excerpt.item}
-            open={excerptOpen}
-            onClose={() => setExcerptOpen(false)}
-            notice={excerpt.stale ? RELATED_TEXT.stale : null}
-          />
-        ) : null
+        <>
+          {excerpt ? (
+            <DocumentExcerptPanel
+              workspaceId={workspaceId}
+              client={search}
+              item={excerpt.item}
+              open={excerptOpen}
+              onClose={() => setExcerptOpen(false)}
+              notice={excerpt.stale ? RELATED_TEXT.stale : null}
+            />
+          ) : null}
+          <PdfPageDialog target={pdfPage} onClose={() => setPdfPage(null)} />
+        </>
       }
     >
       {content}
@@ -227,43 +240,28 @@ export function RelatedShell({
   /** Kept outside the collapsible body (the excerpt panel). */
   readonly after?: ReactNode;
 }) {
-  const headingId = useId();
-  const bodyId = useId();
   return (
-    <section className={styles.area} aria-labelledby={headingId}>
-      <h3 id={headingId} className={styles.heading}>
-        <button
-          type="button"
-          className={`${styles.toggle} qz-focus-ring`}
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={onToggle}
-        >
-          {RELATED_TEXT.title}
-          {expanded ? (
-            <ChevronUpIcon width={16} height={16} aria-hidden="true" />
-          ) : (
-            <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-          )}
-        </button>
-      </h3>
-      <div id={bodyId} className={styles.body} hidden={!expanded} aria-busy={busy || undefined}>
-        {children}
-      </div>
-      {after}
-    </section>
+    <SectionDisclosure
+      title={RELATED_TEXT.title}
+      expanded={expanded}
+      onToggle={onToggle}
+      busy={busy}
+      after={after}
+    >
+      {children}
+    </SectionDisclosure>
   );
 }
 
-/** One passage: the row button (location + excerpt), the badge, and the PDF link. */
+/** One passage: the row button (location + excerpt), the badge, and the PDF button. */
 function RelatedRow({
   source,
   onOpen,
-  pdfHref,
+  onOpenPdf,
 }: {
   readonly source: RelatedSource;
   readonly onOpen: () => void;
-  readonly pdfHref: string;
+  readonly onOpenPdf: () => void;
 }) {
   const locationId = useId();
   return (
@@ -284,13 +282,15 @@ function RelatedRow({
           <Badge tone="accent">{RELATED_TEXT.sourceBadge}</Badge>
         ) : null}
         {source.stale ? <span className={styles.hint}>{RELATED_TEXT.stale}</span> : null}
-        <Link
-          href={pdfHref}
+        <button
+          type="button"
           className={`${styles.link} qz-focus-ring`}
+          aria-haspopup="dialog"
           aria-describedby={locationId}
+          onClick={onOpenPdf}
         >
           {RELATED_TEXT.pdf}
-        </Link>
+        </button>
       </div>
     </li>
   );

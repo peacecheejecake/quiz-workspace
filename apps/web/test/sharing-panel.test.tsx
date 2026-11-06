@@ -45,6 +45,10 @@ function link(id: string, overrides: Partial<ShareLink> = {}): ShareLink {
     id,
     workspace_id: WS,
     allow_fork: false,
+    include_notes: true,
+    include_ai_explanations: true,
+    include_summary: true,
+    include_owner_records: false,
     expires_at: null,
     revoked_at: null,
     rotated_from_id: null,
@@ -116,7 +120,16 @@ describe('WorkspaceSharingPanel', () => {
 
     const [workspaceId, policy, key] = actions.create.mock.calls[0] ?? [];
     expect(workspaceId).toBe(WS);
-    expect(policy).toEqual({ allowFork: false, expiresAt: null });
+    expect(policy).toEqual({
+      allowFork: false,
+      expiresAt: null,
+      scope: {
+        include_notes: true,
+        include_ai_explanations: true,
+        include_summary: true,
+        include_owner_records: false,
+      },
+    });
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
     const stored = JSON.stringify({ ...localStorage, ...sessionStorage });
     expect(stored.includes(SECRET_1)).toBe(false);
@@ -455,5 +468,57 @@ describe('WorkspaceSharingPanel loading (UX3c)', () => {
     actions.list.mockResolvedValueOnce({ ok: true, links: [link(L1)] });
     await user.click(within(alert).getByRole('button', { name: '다시 시도' }));
     expect(await within(panel).findByText('공유 중')).toBeVisible();
+  });
+
+  describe('공유 범위 (UX12-SHARE)', () => {
+    const region = () => screen.findByRole('region', { name: '공유 범위' });
+
+    it('sends a new link the chosen scope and starts from the defaults', async () => {
+      actions.create.mockResolvedValue({ ok: true, links: [] });
+      renderScreen([]);
+      const scope = await region();
+      const owner = within(scope).getByRole('switch', { name: /내 풀이 이력·하이라이트/ });
+      expect(owner.getAttribute('aria-checked')).toBe('false');
+      for (const name of [/^정리 노트/, /^AI 해설/, /^문서 요약/]) {
+        expect(within(scope).getByRole('switch', { name }).getAttribute('aria-checked')).toBe(
+          'true',
+        );
+      }
+      await userEvent.click(within(scope).getByRole('switch', { name: /^정리 노트/ }));
+      await userEvent.click(screen.getByRole('button', { name: '링크 만들기' }));
+      await waitFor(() => expect(actions.create).toHaveBeenCalled());
+      expect(actions.create.mock.calls[0]?.[1]).toMatchObject({
+        scope: {
+          include_notes: false,
+          include_ai_explanations: true,
+          include_summary: true,
+          include_owner_records: false,
+        },
+      });
+    });
+
+    it('saves one flag at a time on an existing link', async () => {
+      actions.update.mockResolvedValue({ ok: true, links: [link(L1, { include_summary: false })] });
+      renderScreen([link(L1)]);
+      const scope = await region();
+      await userEvent.click(within(scope).getByRole('switch', { name: /^문서 요약/ }));
+      await waitFor(() => expect(actions.update).toHaveBeenCalled());
+      expect(actions.update.mock.calls[0]?.[2]).toEqual({ scope: { include_summary: false } });
+    });
+
+    it('rewrites the scope notice when owner records are public', async () => {
+      renderScreen([link(L1, { include_owner_records: true })]);
+      await region();
+      const notices = screen.getByRole('region', { name: '공개 범위와 저작권' });
+      expect(notices.textContent).toMatch(/내 풀이 이력·하이라이트를 읽기 전용으로/);
+      expect(notices.textContent).not.toMatch(/개인 풀이 기록·즐겨찾기는 공개되지/);
+    });
+
+    it('keeps the private notice with the option off', async () => {
+      renderScreen([link(L1)]);
+      await region();
+      const notices = screen.getByRole('region', { name: '공개 범위와 저작권' });
+      expect(notices.textContent).toMatch(/개인 풀이 기록·즐겨찾기는 공개되지/);
+    });
   });
 });

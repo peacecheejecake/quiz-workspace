@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from book_core.llm import LLMRequest
 
 EXTRACT_TASK = "questions.extract"
-EXTRACT_PROMPT_VERSION = "questions.extract/v3"
+EXTRACT_PROMPT_VERSION = "questions.extract/v5"
 
 SYSTEM_PROMPT = """\
 You convert one printed exam question into structured data for a question bank.
@@ -29,6 +29,15 @@ Rules:
   "ㄱ. ...", "(A) ...", "㉠ ...", "⑴ ..."), put a blank line after the question sentence and
   each item on its own line, starting with its label as printed; a wrapped item line continues
   its item with a space. A label mentioned inside a sentence ("(가)와 (나)에") is not an item.
+- Passages: when a titled passage such as "<제목>" or "〈제목〉" follows the question sentence, put
+  a blank line before it and after it. The title takes its own line, then its text, with each
+  item starting with "∙", "·" or "•" on its own line and each " - " sub-item on its own line
+  under its item. Keep every mark as printed. Do not break a range, a number, a word such as
+  "A·B" or a hyphen inside a sentence. A title mentioned inside a sentence ("<보기>에서") is not
+  a passage.
+- Tables: lines starting with "|" are the rows of a table printed in the question. Copy them
+  verbatim into the stem where they were printed, one row per line and the "| --- |" row included,
+  with a blank line before and after the table. Never rewrite, summarize or drop a table.
 - Do not include the question number in the stem or the option labels in option texts.
 - question_type: MCQ when the question has options; ESSAY when it asks for a written
   explanation (e.g. 서술하시오, 설명하시오, explain, describe); otherwise SHORT_ANSWER.
@@ -58,7 +67,7 @@ class LLMAnswer(BaseModel):
 
 
 class LLMQuestion(BaseModel):
-    """Structured output schema of ``questions.extract/v3``."""
+    """Structured output schema of ``questions.extract/v5``."""
 
     model_config = ConfigDict(extra="forbid")
 

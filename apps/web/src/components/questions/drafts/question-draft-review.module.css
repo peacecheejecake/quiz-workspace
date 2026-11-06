@@ -78,6 +78,10 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.optionGridHead {
+  padding-inline: calc(1px + var(--space-3));
+}
+
 .optionText {
   flex: 1;
   min-width: 0;
@@ -138,7 +142,12 @@
 }
 
 .pageLink {
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }

@@ -211,6 +211,7 @@ export function VerificationNotice({ email: initialEmail }: { email?: string | u
         {target ? (
           <Button
             variant="ghost"
+            borderless
             onClick={() => {
               openedByUser.current = true;
               setEditing((value) => !value);

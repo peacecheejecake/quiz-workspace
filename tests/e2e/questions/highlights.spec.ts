@@ -33,6 +33,7 @@ import {
   highlightRequest,
   highlightRowCount,
   highlightUi,
+  isOnTop,
   itemText,
   markStyle,
   noteSetup,
@@ -278,7 +279,11 @@ test(
     await dragSelect(body, PHRASE_B);
     menu = highlightUi.menu(page);
     await highlightUi.copyItem(menu).click();
-    await expect(highlightUi.copied(page)).toBeVisible();
+    // The menu closes, the selection goes and the toast shows over the modal panel.
+    await expect(menu).toBeHidden();
+    await expect(highlightUi.copiedToast(page)).toBeVisible();
+    await expect.poll(() => isOnTop(highlightUi.copiedToast(page))).toBe(true);
+    await expect.poll(() => selectionText(page)).toBe('');
     expect(await copiedTexts(page)).toEqual([PHRASE_B]);
 
     // Escape closes the menu, keeps the selection and returns focus to the note body.
@@ -356,7 +361,12 @@ test(
     const mark = highlightUi.markWith(explanation, '첫 번째 보기가');
     await expect(mark).toHaveCount(1);
     await expectMarkColor(mark, 'pink');
-    await expect(highlightUi.collectedNotice(panel)).toContainText(CH1);
+    // The toast replaced the text under the explanation; it shows over the panel.
+    await expect(highlightUi.collectedToast(page)).toContainText(CH1);
+    await expect.poll(() => isOnTop(highlightUi.collectedToast(page))).toBe(true);
+    await expect(
+      panel.getByText(/정리 노트의 내 하이라이트에 모았습니다|added to my highlights/i),
+    ).toHaveCount(0);
 
     // The chapter has no AI note, yet its panel lists the highlight under 내 하이라이트.
     await page.keyboard.press('Escape');
@@ -366,10 +376,10 @@ test(
     await expect(noteUi.empty(note)).toBeVisible();
     const section = highlightUi.section(note);
     await expect(highlightUi.heading(section, 1)).toBeVisible();
-    const row = highlightUi.row(section, highlightUi.rowMeta('pink', 'explanation', '1장 1번'));
+    const row = highlightUi.row(section, highlightUi.rowMeta('pink', 'explanation', '1번'));
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('첫 번째 보기가');
-    await expect(row).toContainText(/\[\^h1\]\s*1장\s*1번\s*[—–-]\s*\S/);
+    await expect(row).toContainText(/\[\^h1\]\s*1번\s*[—–-]\s*\S/);
 
     // The "문제 상세" dialog shows the same highlight in its explanation.
     await page.goto(overviewPath(s.workspaceId, q(s, 1).id));
@@ -409,8 +419,8 @@ test(
       highlightUi.rowMeta('yellow', 'note', '버전 2'),
       highlightUi.rowMeta('blue', 'note', '버전 2'),
       highlightUi.rowMeta('blue', 'note', '버전 1'),
-      highlightUi.rowMeta('pink', 'explanation', '1장 1번'),
-      highlightUi.rowMeta('yellow', 'explanation', '1장 2번'),
+      highlightUi.rowMeta('pink', 'explanation', '1번'),
+      highlightUi.rowMeta('yellow', 'explanation', '2번'),
     ];
     for (const [i, meta] of metas.entries()) await expect(rows.nth(i)).toContainText(meta);
     await expect(

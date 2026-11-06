@@ -74,8 +74,6 @@ export const SUMMARY_ACTION_MESSAGES: Readonly<Record<SummaryFailureKind, string
   failed: '요청을 처리하지 못했습니다. 잠시 후 다시 시도하세요.',
 };
 
-export const SUMMARY_UNAVAILABLE_REASON = '이 환경에서는 AI 요약을 사용할 수 없습니다.';
-
 /** The failed run's reason (docs/screens/documents-summary.md "오류 이유 문구"). */
 export function summaryErrorReason(code: string | null | undefined): string {
   if (code === 'llm_unavailable' || code === 'llm_timeout') {
@@ -199,8 +197,6 @@ export interface SummaryPanelModel {
   readonly createInEmpty: boolean;
   /** The auto-refresh line (a document with a summary): on/off, and the editor's button. */
   readonly auto: { readonly on: boolean; readonly action: 'disable' | 'enable' | null } | null;
-  /** `요약 만들기` is aria-disabled with {@link SUMMARY_UNAVAILABLE_REASON}. */
-  readonly unavailable: boolean;
   /** Not summarizable (yet): a question paper, or no published revision. */
   readonly notice: string | null;
 }
@@ -234,15 +230,14 @@ export function summaryPanelModel(
     failure: failed ? summaryErrorReason(run?.error_code) : null,
     stale: staleText,
     empty,
-    retry: canEdit && failed,
-    createInEmpty: canEdit && empty && notice === null,
+    retry: canEdit && failed && state.available,
+    createInEmpty: canEdit && empty && notice === null && state.available,
     auto: summary
       ? {
           on: state.enabled,
-          action: canEdit ? (state.enabled ? 'disable' : 'enable') : null,
+          action: !canEdit ? null : state.enabled ? 'disable' : state.available ? 'enable' : null,
         }
       : null,
-    unavailable: !state.available,
     notice,
   };
 }

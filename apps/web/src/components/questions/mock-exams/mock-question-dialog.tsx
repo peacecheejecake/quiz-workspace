@@ -15,7 +15,9 @@ import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher
 import { FormNotice } from '@/components/auth/form-notice';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 import {
   contentBody,
   errorSummary,
@@ -26,7 +28,12 @@ import {
 } from '@/lib/questions/form';
 import { QuestionContentFields } from '../question-content-fields';
 import { QuestionBody } from '../viewer/question-body';
-import { QuestionSourcePreview } from '../viewer/question-source-preview';
+import {
+  QuestionFigures,
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+} from '../viewer/question-source-preview';
 import type { MockExamApi } from './mock-exam-client';
 import { needsReview, VARIATION_LABELS, type MockExamQuestion } from './mock-exam-model';
 import styles from './mock-exams.module.css';
@@ -75,7 +82,11 @@ export function MockQuestionDialog({
   if (target && target !== shown) setShown(target);
   const view = target ?? shown;
   const question = view?.question ?? null;
+  const grid =
+    question?.question_type === 'MCQ' ? optionGrid(question.stem, question.options) : null;
   const asks = useAskLauncher() !== null;
+  // QSRC-01 `manage(mock)`: the origin's region, `보기 섞기` questions only (API).
+  const source = useQuestionSource(question ? { kind: 'mock', id: question.id } : null);
 
   const [editing, setEditing] = useState<{ session: number; open: boolean }>({
     session: 0,
@@ -162,12 +173,13 @@ export function MockQuestionDialog({
                     확인하고 필요하면 편집하세요. 풀이 화면에는 이 안내가 보이지 않습니다.
                   </p>
                 ) : null}
-                {/* QSRC-01 `manage(mock)`: the origin's region, `보기 섞기` questions only (API). */}
-                <QuestionSourcePreview target={{ kind: 'mock', id: question.id }} aboveModals />
+                <QuestionSourceButton source={source} />
+                <QuestionSourceDialog source={source} aboveModals />
                 <QuestionBody
                   kind="revision"
                   type={question.question_type}
                   heading="문제"
+                  figures={<QuestionFigures source={source} />}
                   revision={{
                     id: question.revision.id,
                     version: question.revision.version,
@@ -209,11 +221,14 @@ export function MockQuestionDialog({
               </>
             ) : (
               <>
-                <StemText stem={question.stem} className={styles.previewStem} />
+                <StemText stem={grid?.stem ?? question.stem} className={styles.previewStem} />
+                {grid ? <OptionGridHead grid={grid} className={styles.previewGridHead} /> : null}
                 {question.question_type === 'MCQ' ? (
                   <ol className={styles.previewOptions} aria-label="보기">
-                    {question.options.map((o) => (
-                      <li key={o.id}>{o.text}</li>
+                    {question.options.map((o, index) => (
+                      <li key={o.id}>
+                        {grid ? <OptionCells grid={grid} index={index} /> : o.text}
+                      </li>
                     ))}
                   </ol>
                 ) : null}

@@ -3,8 +3,8 @@
 // home and a breadcrumb `Workspace 이름 › … › 현재 페이지` in its PageHeader `back`/`breadcrumb`
 // slots.
 import { BackLink, Breadcrumb, type BreadcrumbItem } from '@quiz/ui';
-import Link from 'next/link';
 import { workspaceHomePath } from '@/lib/workspaces/home';
+import { PendingLink } from './pending-link';
 
 export interface WorkspaceCrumb {
   readonly id: string;
@@ -14,7 +14,11 @@ export interface WorkspaceCrumb {
 /** PageHeader `back`: to the workspace home. */
 export function WorkspaceBackLink({ workspaceId }: { readonly workspaceId: string }) {
   return (
-    <BackLink href={workspaceHomePath(workspaceId)} label="Workspace 홈" linkComponent={Link} />
+    <BackLink
+      href={workspaceHomePath(workspaceId)}
+      label="Workspace 홈"
+      linkComponent={PendingLink}
+    />
   );
 }
 
@@ -28,7 +32,7 @@ export function WorkspaceBreadcrumb({
 }) {
   return (
     <Breadcrumb
-      linkComponent={Link}
+      linkComponent={PendingLink}
       items={[{ label: workspace.name, href: workspaceHomePath(workspace.id) }, ...trail]}
     />
   );

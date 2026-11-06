@@ -232,12 +232,17 @@ export type OptionError =
   | { readonly field: 'types'; readonly message: string }
   | { readonly field: 'count'; readonly message: string };
 
-/** What blocks `다음`: an empty or long name, no type, an AI type that is off, a bad count. */
+/**
+ * What blocks `다음`: an empty or long name, an AI type that is off, a bad count. No type is a
+ * bank run, which stores no name (UX12-PLAY-AC01).
+ */
 export function checkOptions(values: OptionValues, llmAvailable: boolean): OptionError | null {
-  const title = values.title.trim();
-  if (title === '') return { field: 'title', message: '이름을 입력하세요.' };
-  if (title.length > TITLE_MAX) {
-    return { field: 'title', message: `이름은 ${TITLE_MAX}자까지 쓸 수 있습니다.` };
+  if (values.types.length > 0) {
+    const title = values.title.trim();
+    if (title === '') return { field: 'title', message: '이름을 입력하세요.' };
+    if (title.length > TITLE_MAX) {
+      return { field: 'title', message: `이름은 ${TITLE_MAX}자까지 쓸 수 있습니다.` };
+    }
   }
   const ai = usesAi(values.types);
   if (ai && !llmAvailable) return { field: 'types', message: AI_DISABLED_TEXT };

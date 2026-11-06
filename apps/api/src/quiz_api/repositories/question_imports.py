@@ -77,6 +77,8 @@ class RunRecord:
     finished_at: datetime | None
     # QIMP-JOB: the run's newest registration job (None = never submitted).
     registration_job_id: uuid.UUID | None = None
+    # UX12-REEXTRACT: the run this one reads again (`params.reextract_of`).
+    reextract_of: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +196,7 @@ def _run_select() -> Any:
         question_import_runs.c.updated_at,
         question_import_runs.c.finished_at,
         question_import_runs.c.registration_job_id,
+        question_import_runs.c.params,
         async_jobs.c.status.label("job_status"),
         async_jobs.c.last_error.label("job_error"),
         documents.c.title.label("document_title"),
@@ -221,6 +224,7 @@ def _run_select() -> Any:
 
 def _run(row: Any) -> RunRecord:
     status = present_status(row.status, row.job_status)
+    reextract_of = row.params.get("reextract_of")
     return RunRecord(
         id=row.id,
         workspace_id=row.workspace_id,
@@ -237,6 +241,7 @@ def _run(row: Any) -> RunRecord:
         updated_at=row.updated_at,
         finished_at=row.finished_at,
         registration_job_id=row.registration_job_id,
+        reextract_of=uuid.UUID(reextract_of) if reextract_of else None,
     )
 
 
@@ -371,6 +376,32 @@ class QuestionImportRepository:
         ).one_or_none()
         return _run(row) if row is not None else None
 
+    def working_run(self, workspace_id: uuid.UUID, document_id: uuid.UUID) -> RunRecord | None:
+        """A queued or running run of the document, if any. Callers hold the document row
+        (`paper`), so two starts cannot both see none."""
+        rows = self._session.execute(
+            _run_select().where(
+                question_import_runs.c.workspace_id == workspace_id,
+                question_import_runs.c.source_document_id == document_id,
+                question_import_runs.c.status.in_(("queued", "running")),
+            )
+        )
+        runs = (_run(row) for row in rows)
+        return next((run for run in runs if run.status in {"queued", "running"}), None)
+
+    def earlier_run_ids(self, run: RunRecord) -> list[uuid.UUID]:
+        """The runs of the same document before `run`, newest first."""
+        rows = self._session.execute(
+            select(question_import_runs.c.id)
+            .where(
+                question_import_runs.c.workspace_id == run.workspace_id,
+                question_import_runs.c.source_document_id == run.source_document_id,
+                question_import_runs.c.created_at < run.created_at,
+            )
+            .order_by(question_import_runs.c.created_at.desc(), question_import_runs.c.id.desc())
+        )
+        return [row.id for row in rows]
+
     def list_runs(
         self, workspace_id: uuid.UUID, *, limit: int, document_id: uuid.UUID | None = None
     ) -> list[RunRecord]:
@@ -418,8 +449,10 @@ class QuestionImportRepository:
         actor_id: uuid.UUID,
         document_id: uuid.UUID,
         revision_id: uuid.UUID,
+        reextract_of: uuid.UUID | None = None,
     ) -> uuid.UUID:
-        """The run (pinned to the document's active revision) + its first job + activity."""
+        """The run (pinned to the given revision) + its first job + activity. `reextract_of`:
+        the run this one reads again (UX12-REEXTRACT)."""
         run_id = uuid.uuid4()
         job_id = self._insert_job(workspace_id, actor_id, run_id, 1)
         self._session.execute(
@@ -431,9 +464,19 @@ class QuestionImportRepository:
                 source_document_revision_id=revision_id,
                 async_job_id=job_id,
                 status="queued",
+                params={"reextract_of": str(reextract_of)} if reextract_of else {},
             )
         )
-        self._activity(workspace_id, actor_id, "question_import.started", run_id, {})
+        if reextract_of is None:
+            self._activity(workspace_id, actor_id, "question_import.started", run_id, {})
+        else:
+            self._activity(
+                workspace_id,
+                actor_id,
+                "question_import.reextracted",
+                run_id,
+                {"reextract_of": str(reextract_of)},
+            )
         return run_id
 
     def retry_run(self, run: RunRecord, actor_id: uuid.UUID) -> None:

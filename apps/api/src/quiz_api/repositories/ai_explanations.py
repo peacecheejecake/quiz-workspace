@@ -28,6 +28,7 @@ EXPLAIN_JOB_SCHEMA_VERSION = 1
 # One retry of a crashed attempt (the job never retries a provider call on its own).
 EXPLAIN_JOB_MAX_ATTEMPTS = 2
 LIVE = ("queued", "running")
+CANCELLED = "cancelled"
 PAGE_SPAN = 20
 
 
@@ -60,6 +61,8 @@ class ExplanationRow:
     target_id: uuid.UUID
     revision_id: uuid.UUID
     version: int
+    prompt_version: str
+    model: str
     status: str
     job_id: uuid.UUID | None
     error_code: str | None
@@ -69,6 +72,7 @@ class ExplanationRow:
     created_at: datetime
     finished_at: datetime | None
     superseded_at: datetime | None
+    created_by: uuid.UUID | None = None
 
     @property
     def terminal(self) -> bool:
@@ -116,8 +120,9 @@ class SourceView:
 
 
 _COLUMNS = (
-    "id, workspace_id, {target} as target_id, {revision} as revision_id, version, status, "
-    "job_id, error_code, body, sources, truncated, created_at, finished_at, superseded_at"
+    "id, workspace_id, {target} as target_id, {revision} as revision_id, version, "
+    "prompt_version, model, status, job_id, error_code, body, sources, truncated, created_at, "
+    "finished_at, superseded_at, created_by"
 )
 
 
@@ -129,6 +134,8 @@ def _row(kind: str, row: Any) -> ExplanationRow:
         target_id=row.target_id,
         revision_id=row.revision_id,
         version=row.version,
+        prompt_version=row.prompt_version,
+        model=row.model,
         status=row.status,
         job_id=row.job_id,
         error_code=row.error_code,
@@ -138,6 +145,7 @@ def _row(kind: str, row: Any) -> ExplanationRow:
         created_at=row.created_at,
         finished_at=row.finished_at,
         superseded_at=row.superseded_at,
+        created_by=row.created_by,
     )
 
 
@@ -475,6 +483,19 @@ class ExplanationRepository:
             return None
         nested.commit()
         return explanation_id, job_id
+
+    def cancel(self, kind: str, explanation_id: uuid.UUID) -> None:
+        """An unfinished row becomes failed + `cancelled`; a finished one stays as it is, and the
+        worker's locked finish decides a race (20261106120000_ai_explanation_cancel.sql)."""
+        table = TABLES[kind]
+        self._session.execute(
+            text(
+                f"update public.{table.name} set status = 'failed', error_code = :c, "  # noqa: S608
+                "started_at = coalesce(started_at, now()), finished_at = now() "
+                "where id = :e and status in ('queued', 'running')"
+            ),
+            {"e": explanation_id, "c": CANCELLED},
+        )
 
     def mark_published(self, job_id: uuid.UUID) -> None:
         self._session.execute(

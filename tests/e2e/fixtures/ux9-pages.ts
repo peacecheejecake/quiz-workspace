@@ -55,8 +55,9 @@ import {
   truthQuestion,
   type Draft,
   type ImportRun,
+  QUESTION_DOT_NAME,
 } from './questions.ts';
-import { main } from './workspace-ui.ts';
+import { HOME_MENU_NAME, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -283,7 +284,9 @@ export function searchPagePath(workspaceId: string, query = ''): string {
 
 export const searchPageUi = {
   /** The home header's icon link (right before 이력). */
-  homeEntry: (page: Page) => main(page).getByRole('link', { name: BODY_SEARCH }),
+  /** In the home's `문서 N` menu (UX12-HEADER): open the menu first. */
+  homeEntry: (page: Page) =>
+    page.getByRole('menu', { name: HOME_MENU_NAME }).getByRole('menuitem', { name: BODY_SEARCH }),
   heading: (page: Page) => main(page).getByRole('heading', { level: 1, name: BODY_SEARCH }),
   backLink: (page: Page) => main(page).getByRole('link', { name: /workspace 홈|back/i }),
   breadcrumb: (page: Page) => page.getByRole('navigation', { name: /^(위치|breadcrumb)$/i }),
@@ -336,15 +339,11 @@ export const homeDialogUi = {
 export const homeBackgroundUi = {
   banner: (page: Page) => page.getByRole('banner', { includeHidden: true }).first(),
   documentsButton: (page: Page) =>
-    page
-      .locator('main')
-      .getByRole('button', { name: /^(문서|documents)\s*\d+$/i, includeHidden: true }),
+    page.locator('main').getByRole('button', { name: HOME_MENU_NAME, includeHidden: true }),
   historyButton: (page: Page) =>
     page.locator('main').getByRole('button', { name: /^(이력|history)$/i, includeHidden: true }),
   questionMenuButton: (page: Page) =>
-    page
-      .locator('main')
-      .getByRole('button', { name: /^(문제 메뉴|question menu)$/i, includeHidden: true }),
+    page.locator('main').getByRole('button', { name: HOME_MENU_NAME, includeHidden: true }),
   questionSearch: (page: Page) =>
     page.locator('main').getByRole('search', {
       name: /^(문제 검색|question search|search questions)$/i,
@@ -357,7 +356,7 @@ export const homeBackgroundUi = {
   dots: (page: Page) =>
     homeBackgroundUi
       .heatmap(page)
-      .getByRole('button', { name: /\d+번 문제|question \d+/i, includeHidden: true }),
+      .getByRole('button', { name: QUESTION_DOT_NAME, includeHidden: true }),
   chapterGroup: (page: Page, title: string) =>
     homeBackgroundUi.heatmap(page).getByRole('region', { name: title, includeHidden: true }),
   /** The 본문 search page's result list (SEARCH-02). */

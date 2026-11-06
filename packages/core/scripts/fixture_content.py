@@ -407,6 +407,13 @@ class QuestionContent:
     key_labels: tuple[str, ...] | None = None
     key_text: str | None = None
     figure_caption: str | None = None
+    # QTABLE-01: a table printed after the stem (rows, the first one is the header), then the rest
+    # of the stem; options printed as a table (header cells, then one cell per ` | ` part).
+    stem_table: tuple[tuple[str, ...], ...] | None = None
+    stem_after: str | None = None
+    option_table_header: tuple[str, ...] | None = None
+    # `①응집` in one cell rather than `①` and `응집` in two.
+    option_labels_glued: bool = False
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -508,6 +515,56 @@ QUESTIONS_KO = QuestionPaperContent(
 )
 
 
+# QTABLE-01: tables in a stem and option tables (docs/screens/question-tables.md).
+QUESTIONS_TABLES_KO = QuestionPaperContent(
+    fixture_id="questions-tables-ko",
+    language="ko",
+    title="제2회 합성 확인 평가 — 정수 처리 단계",
+    instructions=f"※ 이 평가지는 {SYNTHETIC_MARKER_KO}입니다. 다음 물음에 답하시오.",
+    running_header="합성 확인 평가 · 테스트용",
+    answer_key_heading="정답",
+    questions=(
+        QuestionContent(
+            1,
+            "MCQ",
+            "다음 표를 보고 물음에 답하시오.",
+            ("응집", "침전", "여과", "소독"),
+            "circled",
+            key_labels=("②",),
+            stem_table=(
+                ("단계", "주요 작용", "예시 체류 시간"),
+                ("응집", "미세 입자 결합", "약 30분"),
+                ("침전", "플록 가라앉힘", "약 3시간"),
+            ),
+            stem_after="위 표에서 체류 시간이 가장 긴 단계는?",
+        ),
+        QuestionContent(
+            2,
+            "MCQ",
+            "단계와 주요 작용이 옳은 것은?",
+            (
+                "응집 | 미세 입자 결합",
+                "침전 | 플록 가라앉힘",
+                "여과 | 남은 입자 제거",
+                "소독 | 미생물 억제",
+            ),
+            "circled",
+            key_labels=("①",),
+            option_table_header=("단계", "주요 작용"),
+        ),
+        QuestionContent(
+            3,
+            "MCQ",
+            "단계와 체류 시간이 옳은 것은?",
+            ("응집 | 약 30분", "침전 | 약 3시간", "여과 | 약 1시간", "소독 | 약 30분"),
+            "circled",
+            option_table_header=("단계", "예시 체류 시간"),
+            option_labels_glued=True,
+        ),
+    ),
+)
+
+
 @dataclass(frozen=True)
 class RetrievalQueryContent:
     id: str
@@ -557,14 +614,16 @@ def all_strings() -> list[str]:
                 else:
                     out.append(item.caption)
                     out += [cell for row in item.rows for cell in row]
-    paper = QUESTIONS_KO
-    out += [paper.title, paper.instructions, paper.running_header, paper.answer_key_heading]
-    for q in paper.questions:
-        out += [q.stem, *q.options, *q.labels, *(q.key_labels or ())]
-        if q.key_text:
-            out.append(q.key_text)
-        if q.figure_caption:
-            out.append(q.figure_caption)
+    for paper in (QUESTIONS_KO, QUESTIONS_TABLES_KO):
+        out += [paper.title, paper.instructions, paper.running_header, paper.answer_key_heading]
+        for q in paper.questions:
+            out += [q.stem, *q.options, *q.labels, *(q.key_labels or ())]
+            out += [*(q.option_table_header or ()), q.stem_after or ""]
+            out += [cell for row in q.stem_table or () for cell in row]
+            if q.key_text:
+                out.append(q.key_text)
+            if q.figure_caption:
+                out.append(q.figure_caption)
     return out
 
 
@@ -580,5 +639,8 @@ def heading_strings() -> list[str]:
                 for item in section.body:
                     if isinstance(item, Table):
                         out += [cell for row in item.rows[: item.header_rows] for cell in row]
-    out += [QUESTIONS_KO.title, QUESTIONS_KO.answer_key_heading]
+    for paper in (QUESTIONS_KO, QUESTIONS_TABLES_KO):
+        out += [paper.title, paper.answer_key_heading]
+    for q in QUESTIONS_TABLES_KO.questions:
+        out += [*(q.option_table_header or ()), *(q.stem_table[0] if q.stem_table else ())]
     return out

@@ -369,6 +369,10 @@ Task별 RED를 바로 직전에 작성한다. shared registry/생성물/CI phase
 | UX11-RETURN | 다시 풀기·하단 global 복귀/X | UX10-QVIEW/PLAY 인계 | return.md AC01~05·권한·상태·브라우저·리뷰 |
 | UX11-STEM | 괄호 항목·bullet·보조 본문 줄바꿈 | 독립 | stem.md AC01~05·TS/Python parity·반례·리뷰 |
 
+### UX12 — 2026-11-06 피드백 TODO
+
+[세부 구현 기준](implementation/ux12/index.md). 사용자가 넘긴 TODO 96개 중 완료 21개를 제외한 75개를 12개 Epic, 46개 Task로 나눴다. 구현은 Task마다 Opus 5.5 subagent(effort 기본값) 1개, main thread는 검수와 orchestration만 맡는다(사용자 지시 2026-11-06, 이 프로젝트 한정). PR은 Wave 묶음마다 하나다. 각 Task의 범위·개정 대상·의존·결정은 세부 문서를 따른다.
+
 ## 4. Task 의존 그래프
 
 ```mermaid
@@ -872,6 +876,9 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-05 | **QSEARCH-CACHE**: 문제 keyword 필터 debounce를 250ms에서 350ms로 바꾸고 검색어 비우기는 0ms로 복원한다. 전체 RSC 재조회 대신 경량 BFF와 workspace/user 범위 인메모리 LRU(최대 50·TTL 5분)를 사용한다. SSR은 무필터 및 현재 다른 필터를 유지한 빈 검색어 결과를 미리 채운다. 문제 변경 중 도착한 이전 조회는 버리고 다시 읽는다. 기존 UX7-SEARCH 기록의 250ms·server 재읽기를 이 결정으로 대체한다. | SEARCH-01-AC12 |
 
 | 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
+| 2026-11-06 | UX12-ASK(D-10): AI 질문의 답에서 `AI 생성` badge와 `다시 생성` 버튼을 뺀다. ASK-SPEC 2026-11-01 사용자 결정(답마다 `AI 생성` 표시, 성공한 답에도 `다시 생성`)을 뒤집는다. 실패·중지 답의 `다시 시도`, 안내 문구, 예전 대화의 "답 k/n"은 남기고 API `/regenerate`와 계약은 바꾸지 않는다. 대화 화면의 `새 대화`도 뺀다(찾을 수 없는 대화 상태만 예외). | 사용자 결정 D-10, [UX12 계획](implementation/ux12/index.md) §4.7, [UX12-ASK](screens/ux12-ask.md) |
+| 2026-11-06 | UX12-HOME-1: 데스크톱 `--heatmap-cell`을 다시 28px로 올린다(marker 21px, 간격 7px, 1/3 규칙 유지). touch 셀은 24px 유지. UX5-UI의 28px → 24px 결정을 뒤집는다. | 사용자 요청 "desktop → cell 크기 더 크게(28px?)", [UX12 계획](implementation/ux12/index.md) HOME-1 |
+| 2026-11-06 | UX12-SHARE(D-9): 링크마다 `include_notes`·`include_ai_explanations`·`include_summary`(기본 켜짐)와 `include_owner_records`(기본 꺼짐)를 둔다. 옵션을 켠 링크에 한해 2026-11-02 결정(하이라이트·풀이는 게스트에게 없음, workspace-sharing §1·§3·§11)을 뒤집는다. 끈 링크의 차단은 그대로다. Fork는 옵션을 manifest에 고정하고 commit에서 현재 값과 AND 하며 옵션 변경으로 취소하지 않는다. 풀이 이력은 제출 답안 없이 결과·시각만 준다. | 사용자 항목 "공유 설정 > 포함할 항목", 사용자 결정 2026-11-06. 근거는 workspace-sharing §12 |
 
 ### UX10 사용자 결정 — 2026-11-05
 
@@ -911,6 +918,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 최종 infra QA에서 PERF-1의 기존 상한(open 8·submit 5·GET session 3·PATCH state 7)을 초과했다. 기존 PERF-1 결정은 GET을 row-lock 없는 autocommit으로 보았지만, 새 리셋 계약은 답변 노출과 재전송을 막기 위해 트랜잭션 전체의 잠금과 잠금 대기 **뒤**의 새 epoch snapshot이 필요하다. advisory lock과 epoch 조회를 한 SQL statement에 합치면 대기 전 snapshot으로 오래된 결과를 승인할 수 있으므로 이 분리는 유지한다.
 
 불필요한 epoch row 생성·중복 reset 시각 조회를 제거하고, 소유자/멤버십·문항·epoch 조회를 안전하게 묶은 뒤의 측정 상한은 세션 열기 10, 제출 6, session GET 6, my-state PATCH 9다. Main은 이 네 경로의 실제 트랜잭션/잠금 비용을 새 기준으로 승인했다. 다른 Workspace·overview·documents 상한은 바꾸지 않는다. 테스트는 새 수치에 고정해 이후 추가 왕복을 계속 차단하며, 권한 matrix·리셋/alias/동시성 계약을 함께 통과해야 한다. 수치 변경만으로 기존 실패를 숨기지 않으며 독립 리뷰에서 잠금·snapshot 보존을 확인한다.
+
+### UX12 DESIGN-1: UX10-UI의 버튼 경계 규칙 변경 (2026-11-06)
+
+사용자 결정 D-1에 따라 UX10-UI-AC01의 "모든 버튼은 경계를 보인다"를 바꾼다. 아이콘 ghost와 `borderless` ghost 버튼만 경계 없이 둘 수 있고, 나머지 컨트롤은 경계를 유지한다. 기준은 `docs/screens/ux12-controls.md`(phase `UX12-CONTROLS.0`)와 `docs/design-system.md` §4.1이다.
 
 ## 8. 진행 현황
 

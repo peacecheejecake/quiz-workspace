@@ -25,15 +25,19 @@
 // Nothing reaches the bank before a human approves it; a failed extraction keeps the drafts it
 // already persisted and "다시 시도" retries the same run (the API reconciles, no duplicates);
 // a registration whose response was lost is retried with the same Idempotency-Key.
+// `다시 추출` (UX12-REEXTRACT) follows a new run with fresh drafts; registered questions stay,
+// and each draft says what it replaces. Archiving an earlier question is a separate choice.
 // Drafts the server refuses (changed since, or not confirmable) stay selected and are named.
-import { Badge, Button, Checkbox, EmptyState, ProgressBar } from '@quiz/ui';
+import { Badge, Button, Checkbox, ConfirmDialog, EmptyState, ProgressBar } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import type { Job } from '@/lib/documents/client-api';
 import { watchJob } from '@/lib/documents/job-events';
+import { setQuestionStatusAction } from '@/lib/questions/actions';
 import { duplicateReason } from '@/lib/questions/duplicates';
+import { previousObject, reextractSummary, type DraftPrevious } from '@/lib/questions/reextract';
 import {
   approvePublishSelection,
   chapterBody,
@@ -64,6 +68,7 @@ import {
   type SelectedImportDraft,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
+import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import {
@@ -83,6 +88,7 @@ import { DraftPager } from '../drafts/draft-pager';
 import { QuestionDraftReview, type DraftReviewState } from '../drafts/question-draft-review';
 import { DraftChapterField } from './draft-chapter-field';
 import { ImportJobProgress, type ImportStep } from './import-job-progress';
+import { ReextractNote } from './reextract-note';
 import { SourceComparePanel } from './source-compare-panel';
 import styles from './question-import.module.css';
 
@@ -101,6 +107,8 @@ export interface QuestionImportProps {
   readonly initialSummaries?: readonly DraftSummary[];
   /** The workspace's book chapters (draft chapter picker, CHAPTER-MAP). */
   readonly initialChapters?: readonly BookChapterOption[];
+  /** Re-extracted runs: earlier numbers with no draft here (UX12-REEXTRACT). */
+  readonly initialMissingPrevious?: readonly number[];
   /** The PDF the page was opened for (`?document=`), if any. */
   readonly documentId?: string;
   readonly loadFailed: boolean;
@@ -161,6 +169,8 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
 }
 
+const NO_NUMBERS: readonly number[] = [];
+
 export function QuestionImport({
   workspaceId,
   readOnly,
@@ -168,6 +178,7 @@ export function QuestionImport({
   initialDrafts,
   initialSummaries,
   initialChapters = [],
+  initialMissingPrevious = NO_NUMBERS,
   documentId,
   loadFailed,
   registrationPollMs = 1000,
@@ -199,6 +210,23 @@ export function QuestionImport({
   );
   const [chapterOptions, setChapterOptions] =
     useState<readonly BookChapterOption[]>(initialChapters);
+  const chapterNodes = useMemo(
+    () =>
+      chapterPickerNodes(
+        chapterOptions.map((o) => ({
+          id: o.id,
+          title: o.title,
+          level: o.level,
+          documentId: o.document_id,
+          documentTitle: o.document_title,
+        })),
+      ),
+    [chapterOptions],
+  );
+  const [missingPrevious, setMissingPrevious] = useState(initialMissingPrevious);
+  const [confirmingReextract, setConfirmingReextract] = useState(false);
+  const [archiving, setArchiving] = useState<DraftPrevious | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
   /** Drafts whose chapter change is being saved. */
   const [savingChapter, setSavingChapter] = useState<ReadonlySet<string>>(new Set());
   const [listFailed, setListFailed] = useState(loadFailed);
@@ -219,6 +247,12 @@ export function QuestionImport({
   const [editing, setEditing] = useState<ReviewDraft | null>(null);
   const [editorSession, setEditorSession] = useState(0);
   const [comparing, setComparing] = useState<ReviewDraft | null>(null);
+  // The page a draft's page link asked for (UX12-SOURCE); 원본 비교 starts at the first page.
+  const [comparePage, setComparePage] = useState<number | undefined>(undefined);
+  const compareDraft = useCallback((draft: ReviewDraft | null) => {
+    setComparing(draft);
+    setComparePage(undefined);
+  }, []);
   /** The page of the draft list on screen (0-based; kept within the pages when drafts change). */
   const [page, setPage] = useState(0);
   const draftsHeading = useRef<HTMLHeadingElement | null>(null);
@@ -228,6 +262,8 @@ export function QuestionImport({
   const controller = useRef<AbortController | null>(null);
   /** Idempotency-Key of the retry of a failed run, per failed job. */
   const retryKeys = useRef(new Map<string, string>());
+  /** Idempotency-Key of `다시 추출`, per run it reads again. */
+  const reextractKeys = useRef(new Map<string, string>());
   /** Idempotency-Key of the last registration request whose outcome is unknown (network). */
   const registerKey = useRef<{ readonly body: string; readonly key: string } | null>(null);
   const registrationController = useRef<AbortController | null>(null);
@@ -262,7 +298,8 @@ export function QuestionImport({
       pagesController.current?.abort();
       pagesController.current = null;
       pagesInFlight.current = new Set();
-      const { items, chapters } = await client.draftSummaries(importId, signal);
+      const summaries = await client.draftSummaries(importId, signal);
+      const { items, chapters } = summaries;
       const list = sortDrafts(items.map(summaryFromImport));
       const { start, end } = draftPageRange(shownPage.current, list.length);
       const page =
@@ -273,6 +310,7 @@ export function QuestionImport({
       setContents(next.contents);
       setPageLoads(new Map(end > start ? [[start, 'done']] : []));
       setChapterOptions(chapters);
+      setMissingPrevious(summaries.missingPrevious);
       return loaded;
     },
     [client],
@@ -383,6 +421,81 @@ export function QuestionImport({
         retryable: true,
       });
     }
+  }
+
+  async function reextract() {
+    if (!run) return;
+    setConfirmingReextract(false);
+    const { signal } = newController();
+    let key = reextractKeys.current.get(run.id);
+    if (!key) {
+      key = crypto.randomUUID();
+      reextractKeys.current.set(run.id, key);
+    }
+    setFailure(null);
+    setStatus(null);
+    setActivity({ step: 'starting' });
+    try {
+      const fresh = await client.reextractImport(run.id, key);
+      setSelected(new Set());
+      setStates({});
+      setRegistration(null);
+      setPage(0);
+      shownPage.current = 0;
+      await followRun(fresh, signal);
+    } catch (error) {
+      if (isAbort(error, signal) || onUnauthenticated(error)) return;
+      setActivity(null);
+      if (error instanceof ImportApiError && error.kind === 'importRunning') {
+        // Another tab started it: follow that run.
+        try {
+          const latest = await client.latestRun(
+            workspaceId,
+            signal,
+            run.source_document_id ?? undefined,
+          );
+          if (latest) {
+            await followRun(latest, signal);
+            return;
+          }
+        } catch {
+          // Fall through to the failure below.
+        }
+      }
+      setFailure({
+        message: error instanceof ImportApiError ? error.message : '다시 추출하지 못했습니다.',
+        retryable: false,
+      });
+    }
+  }
+
+  async function archivePrevious() {
+    const target = archiving;
+    if (!run || !target?.question_id || !target.revision_id) return;
+    setArchiveBusy(true);
+    let message: string | null = '이전 문제를 보관하지 못했습니다. 다시 시도해 주세요.';
+    try {
+      const result = await setQuestionStatusAction(
+        workspaceId,
+        target.question_id,
+        target.revision_id,
+        'ARCHIVED',
+      );
+      message = result.ok ? null : result.message;
+    } catch {
+      // Keeps the message above.
+    }
+    setArchiveBusy(false);
+    setArchiving(null);
+    if (message) {
+      setFailure({ message, retryable: false });
+      return;
+    }
+    setStatus({
+      text: `${previousObject(target)} 보관했습니다. 풀이 기록은 남습니다.`,
+      bank: false,
+    });
+    await refreshDrafts(run.id);
   }
 
   // Resume following a run that was still working when the page loaded; stop on leave.
@@ -524,13 +637,11 @@ export function QuestionImport({
     setEditing(draft);
   }, []);
   const sourceDocumentId = run?.source_document_id ?? null;
-  const draftPageHref = useCallback(
-    (draft: ReviewDraft, page: number) =>
-      (draft.sourceDocumentId ?? sourceDocumentId)
-        ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`
-        : null,
-    [sourceDocumentId, workspaceId],
-  );
+  const openDraftPage = useCallback((draft: ReviewDraft, page: number) => {
+    setComparing(draft);
+    setComparePage(page);
+  }, []);
+  const reextracted = Boolean(run?.reextract_of) && activity === null;
   const renderChapter = useCallback(
     (draft: ReviewDraft) => {
       // UX7-DEDUP (QIMPORT-01-AC10): the same question exists; a hint, not a block.
@@ -542,11 +653,20 @@ export function QuestionImport({
               <Badge tone="warning">중복</Badge> <span>{duplicate}</span>
             </p>
           ) : null}
+          {reextracted ? (
+            <ReextractNote
+              workspaceId={workspaceId}
+              previous={draft.previous ?? null}
+              canArchive={canEdit}
+              onArchive={setArchiving}
+            />
+          ) : null}
           {draft.chapter ? (
             <DraftChapterField
               number={draftNumber(draft)}
               info={draft.chapter}
               options={chapterOptions}
+              nodes={chapterNodes}
               readOnly={!canEdit || draft.publishedQuestionId !== null}
               disabled={publishing || savingChapter.has(draft.id)}
               onChange={(chapterId) => void changeChapter(draft, chapterId)}
@@ -555,7 +675,16 @@ export function QuestionImport({
         </>
       );
     },
-    [canEdit, changeChapter, chapterOptions, publishing, savingChapter],
+    [
+      canEdit,
+      changeChapter,
+      chapterNodes,
+      chapterOptions,
+      publishing,
+      reextracted,
+      savingChapter,
+      workspaceId,
+    ],
   );
 
   function markRefused(refused: readonly RefusedDraft[]) {
@@ -875,16 +1004,29 @@ export function QuestionImport({
               </p>
             </div>
             {canEdit ? (
-              <Button
-                variant="primary"
-                onClick={() => void publish()}
-                disabled={selectedCount === 0 || busy}
-                loading={publishing}
-              >
-                선택한 문제 승인 및 등록 ({selectedCount})
-              </Button>
+              <div className={styles.headerActions}>
+                {run.status === 'succeeded' ? (
+                  <Button
+                    onClick={() => setConfirmingReextract(true)}
+                    disabled={busy || publishing}
+                  >
+                    다시 추출
+                  </Button>
+                ) : null}
+                <Button
+                  variant="primary"
+                  onClick={() => void publish()}
+                  disabled={selectedCount === 0 || busy}
+                  loading={publishing}
+                >
+                  선택한 문제 승인 및 등록 ({selectedCount})
+                </Button>
+              </div>
             ) : null}
           </div>
+          {reextracted ? (
+            <p className={styles.meta}>{reextractSummary(drafts, missingPrevious)}</p>
+          ) : null}
           {canEdit && drafts.length > 0 ? (
             <div className={styles.selectionBar}>
               <Checkbox
@@ -926,9 +1068,10 @@ export function QuestionImport({
               selectionDisabled={publishing}
               onSelectChange={selectDraft}
               onEdit={editDraft}
-              onCompare={setComparing}
+              onCompare={compareDraft}
               renderExtra={renderChapter}
-              pageHref={draftPageHref}
+              onOpenPage={openDraftPage}
+              sourceDocumentId={sourceDocumentId}
             />
           ) : pageFailed ? (
             <div role="alert" className={styles.failure}>
@@ -965,11 +1108,34 @@ export function QuestionImport({
         save={saveDraft}
         reload={reloadDraft}
       />
+      <ConfirmDialog
+        open={confirmingReextract}
+        onOpenChange={setConfirmingReextract}
+        title="이 PDF를 다시 추출할까요?"
+        description="새 초안을 처음부터 검토합니다. 등록된 문제는 바뀌지 않습니다. 등록하지 않은 초안에서 고친 내용은 새 초안으로 옮겨지지 않습니다."
+        confirmLabel="다시 추출"
+        onConfirm={() => void reextract()}
+      />
+      <ConfirmDialog
+        open={archiving !== null}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null);
+        }}
+        title={archiving ? `${previousObject(archiving)} 보관할까요?` : ''}
+        description="문제 풀이와 Heatmap에서 빠지고 풀이 기록은 남습니다. `보관·초안 문제`에서 되돌릴 수 있습니다. 새 초안은 그대로 미등록입니다."
+        confirmLabel="보관"
+        loading={archiveBusy}
+        returnFocusRef={draftsHeading}
+        onConfirm={() => void archivePrevious()}
+      />
       <SourceComparePanel
         draft={comparing}
+        initialPage={comparePage}
+        sourceDocumentId={sourceDocumentId}
+        workspaceId={workspaceId}
         drafts={pageDrafts ?? []}
-        onSelect={setComparing}
-        onClose={() => setComparing(null)}
+        onSelect={compareDraft}
+        onClose={() => compareDraft(null)}
       />
     </div>
   );

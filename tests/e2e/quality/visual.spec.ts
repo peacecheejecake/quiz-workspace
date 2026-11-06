@@ -476,12 +476,12 @@ test(
     // 만들기: options (default name, 문구 변형 checked) and the range (1장 open, 1장 1번 off).
     await mockUi.add(dialog).click();
     await expect(mockUi.variations(dialog)).toHaveCount(4);
-    await mockUi.title(dialog).fill('기말 대비');
     for (const type of ['OPTION_SHUFFLE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
       const box = mockUi.variation(dialog, type);
       if (await box.isChecked()) await box.uncheck();
     }
     await mockUi.variation(dialog, 'PARAPHRASE').check();
+    await mockUi.title(dialog).fill('기말 대비');
     await mockUi.questionCount(dialog).fill('4');
     await snapEvery(page, 'mock-exams-create-options');
     await mockUi.next(dialog).click();
@@ -527,12 +527,12 @@ test(
     await runUi.chapter(panel, '2장 정수 처리').check();
     await runUi.start(panel).click();
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 2, 1)).toBeVisible();
+    await expect(runUi.title(panel, 1)).toBeVisible();
     await runUi.option(panel, '응집').check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await runUi.next(panel).click();
-    await expect(runUi.title(panel, 2, 2)).toBeVisible();
+    await expect(runUi.title(panel, 2)).toBeVisible();
     await goToResults(panel);
     await expect(
       runUi.summary(panel, { correct: 1, incorrect: 0, pending: 0, skipped: 1 }),

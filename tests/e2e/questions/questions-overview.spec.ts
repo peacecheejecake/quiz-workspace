@@ -30,6 +30,7 @@ import {
   fillMcq,
   getOverview,
   homeUi,
+  QUESTION_MENU_ORDER,
   importPaperDrafts,
   JOB_TIMEOUT_MS,
   listAttempts,
@@ -64,12 +65,13 @@ import {
   type Member,
   type Problem,
   type Question,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const HOVER_SCALE = 1.18;
+const HOVER_SCALE = 1.3;
 const BOOK = book('book-ko');
 const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
@@ -253,7 +255,7 @@ test(
 );
 
 test(
-  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.18x with a preview and no grid shift',
+  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.3x with a preview and no grid shift',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac04', 3);
@@ -521,6 +523,8 @@ test(
     // Space opens it too.
     await page.keyboard.press('Space');
     await expect(thirdPanel).toBeVisible();
+    // Closing before the session opens cancels it, and only an opened session marks the view.
+    await expect(panelUi.submit(thirdPanel)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(third).toBeFocused();
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 3).id)).status).toBe('viewed');
@@ -549,16 +553,16 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: the 문제 search (UX7-SEARCH; no 본문 search disclosure under it since UX9), then
-    // 문서 n · 문제 and the icon buttons 본문 검색 (a link to the search page, SEARCH-02) · 이력 ·
-    // 공유하기 (UX4). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
+    // Header: the `문서 N` menu · 풀기 and the icon buttons 이력 · 공유하기, then the 문제 search
+    // (UX12-HEADER). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
-    await expect(homeUi.questionSearch(page)).toBeVisible();
+    await expect(homeUi.questionSearchButton(page)).toBeVisible();
     await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
-    await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
-    await expect(homeUi.contentSearchLink(page)).toHaveText(''); // icon only, named "본문 검색"
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
+    await homeUi.openMenu(page);
+    await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
+    await page.keyboard.press('Escape');
     await expect(main(page).getByRole('link', { name: /^(문제은행|question bank)$/i })).toHaveCount(
       0,
     );
@@ -573,8 +577,7 @@ test(
     const order = await Promise.all(
       [
         homeUi.documentsButton(page),
-        homeUi.questionMenuButton(page),
-        homeUi.contentSearchLink(page),
+        main(page).getByRole('button', { name: /^풀기$/ }),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
@@ -745,7 +748,7 @@ test(
         await route.fallback();
       },
     );
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const review = docUi.reviewLink(homeUi.documentsDialog(page));
     await expect(review).toBeVisible({ timeout: JOB_TIMEOUT_MS });
     await expect.poll(() => prefetched > 0 && prefetching === 0).toBe(true);
@@ -821,11 +824,7 @@ test(
     await page.keyboard.press('Enter');
     await expect(homeUi.questionMenu(page)).toBeVisible();
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(직접 추가|add question)$/i,
-      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
-      // CHREDIST-01 (UX9-REDIST-W): editor-only like the two above.
-      /^(챕터 재분배|redistribute chapters)$/i,
-      /^(보관·초안 문제|archived and draft questions)$/i,
+      ...QUESTION_MENU_ORDER,
     ]);
     await expect(
       homeUi.questionMenu(page).getByRole('menuitem', { name: /^(전체 문제|all questions)$/i }),
@@ -833,9 +832,11 @@ test(
     // UX7-DOCS: PDF 관리 moved into 문서 관리 (DOC-01-AC09); QGEN-RM retired 변형 출제.
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await expect(homeUi.questionMenuItem(page, 'generate')).toHaveCount(0);
-    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'documents')).toBeFocused();
     await page.keyboard.press('ArrowDown');
-    await expect(homeUi.questionMenuItem(page, 'duplicates')).toBeFocused();
+    await expect(homeUi.questionMenuItem(page, 'contentSearch')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(homeUi.questionMenuItem(page, 'create')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
@@ -923,7 +924,7 @@ test(
 
     // The heatmap re-reads: one dot in that chapter's group.
     const group = overviewUi.heatmap(page).getByRole('region', { name: new RegExp(CH1.title) });
-    await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(1);
     await expect(overviewUi.dots(page)).toHaveCount(1);
 
     // Server: one CONFIRMED MCQ in that chapter, answered by the stable id of "증발".
@@ -1135,7 +1136,7 @@ test(
     // 문서 관리 · 이력 · 링크 공유: open, close (button or Escape), Back, Forward.
     const dialogs = [
       {
-        open: () => homeUi.documentsButton(page).click(),
+        open: () => homeUi.openDocuments(page),
         dialog: documents,
         close: closeDocuments,
       },
@@ -1178,7 +1179,7 @@ test(
      */
     async function openDocumentsAndFilter(): Promise<void> {
       await arrive();
-      await homeUi.documentsButton(page).click();
+      await homeUi.openDocuments(page);
       await expect(documents).toBeVisible();
       const filters = main(page).getByRole('group', {
         name: /^(상태 필터|status filter)$/i,
@@ -1275,7 +1276,7 @@ test(
     // neither.
     const summary = homeUi.dialog(page, /^(문서 요약|document summary)$/i);
     await arrive();
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     await expect(documents).toBeVisible();
     await documents
       .getByRole('button', { name: new RegExp(`^${bookTitle} (요약|summary)$`, 'i') })

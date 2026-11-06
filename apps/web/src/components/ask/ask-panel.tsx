@@ -5,13 +5,15 @@
 // `?panel=ask&conversation=<id>` (one conversation). It opens at once and loads behind a skeleton
 // (QOV-01-AC09).
 //
-//   body    toolbar (`대화 목록` · `새 대화` · `질문 범위`) and "범위: …"; the list (rows with a
-//           `삭제` menu → ConfirmDialog) or the conversation log (role=log "대화": "내 질문" and
-//           "AI 답변" articles, ask-answer.tsx)
-//   footer  the attachment chip (display only here; the question-side buttons are ASK-Q), the
-//           question input (Enter sends, Shift+Enter breaks the line, never while an IME composes),
-//           the counter from 80% of the limit, the reason when new questions are off, `보내기` /
-//           `답변 중지`, and the one visually hidden live region (answer started / finished, copied)
+//   list          rows with a `삭제` menu → ConfirmDialog, the reason when new questions are off,
+//                 a refused action, and the `새 대화` FAB (UX12-ASK)
+//   conversation  the header's back arrow, the log (role=log "대화": "내 질문" and "AI 답변"
+//                 articles, ask-answer.tsx) and the floating composer: the attachment chip (display
+//                 only here; the question-side buttons are ASK-Q), the question input (Enter sends,
+//                 Shift+Enter breaks the line, never while an IME composes), `보내기` / `답변 중지`,
+//                 `질문 범위`, the counter from 80% of the limit and the reason when questions are off
+//
+// One visually hidden live region (answer started / finished, copied) stays mounted on both.
 //
 // Streaming: the answer being made is read from the same-origin SSE relay (fetch streaming, the
 // relay adds the token); a broken stream resumes with Last-Event-ID, then falls back to polling
@@ -26,8 +28,10 @@ import {
   DropdownMenuTrigger,
   FloatingSidePanel,
   IconButton,
+  ArrowLeftIcon,
   CloseIcon,
   MoreIcon,
+  PlusIcon,
   Skeleton,
   Textarea,
 } from '@quiz/ui';
@@ -87,7 +91,7 @@ import {
 import { createSearchClient, type OutlineItem, type SearchItem } from '@/lib/search/client';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 import { AskAnswer } from './ask-answer';
-import { SendIcon } from './ask-icons';
+import { SendIcon, StopIcon } from './ask-icons';
 import { AskScopePopover, type ScopeDocument } from './ask-scope';
 import styles from './ask.module.css';
 
@@ -200,10 +204,12 @@ export function AskPanel(props: AskPanelProps) {
         // included: a panel on top of it lives at the body.
         container={modal ? null : container}
         title={ASK_TEXT.title}
+        titleRef={body.titleRef}
+        headerStart={body.headerStart}
         description={body.subtitle ?? undefined}
         closeLabel="AI 질문 닫기"
         mobileLayout="full"
-        footer={body.footer}
+        className={styles.panel}
         onCloseAutoFocus={(event) => {
           if (!returnFocus?.isConnected) return;
           event.preventDefault();
@@ -704,8 +710,6 @@ function useAskPanel({
     setSending(true);
     setPending(question);
     setRefusal(null);
-    // Asking from the list starts a new conversation: show it, not the list.
-    if (!conversation) setMode('new');
     let created: Conversation | null = null;
     let receiptDeferred = false;
     try {
@@ -842,14 +846,12 @@ function useAskPanel({
     sendingRef.current = true;
     setSending(true);
     setRefusal(null);
-    const action =
-      message.status === 'failed' || message.status === 'stopped' ? 'retry' : 'regenerate';
     try {
-      const op = `${action}:${message.id}`;
+      const op = `retry:${message.id}`;
       const key = await operationKey(op);
       let result: MessageAccepted;
       try {
-        result = await client.again(message.id, action, key);
+        result = await client.again(message.id, 'retry', key);
         settleOperation(op, key, conversation.id);
       } catch (error) {
         settleOperation(op, key, conversation.id, error);
@@ -952,18 +954,28 @@ function useAskPanel({
   }
 
   // --- navigation -------------------------------------------------------------------------------
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const fabRef = useRef<HTMLButtonElement | null>(null);
+  const focusInputRef = useRef(false);
   const showList = () => {
     viewEpochRef.current += 1;
+    // Leaving ends this compose session: what is sent next no longer joins a lost first send.
+    recovery.startCompose(recovery.token(), workspaceId);
     setMode('list');
     if (conversationId !== null) onNavigate(null, 'push');
   };
   const startNew = () => {
     viewEpochRef.current += 1;
-    recovery.startCompose(recovery.token(), workspaceId);
+    focusInputRef.current = true;
+    // The list has no composer: an unsent draft waits there, with the scope it was written for.
+    const keepDraft = conversationId === null && mode === 'list' && draft.trim() !== '';
+    if (conversationId !== null) recovery.startCompose(recovery.token(), workspaceId);
+    if (!keepDraft) {
+      setDraft('');
+      setScope(EMPTY_SCOPE);
+    }
     setConversation(null);
     setMode('new');
-    setDraft('');
-    setScope(EMPTY_SCOPE);
     setRefusal(null);
     if (conversationId !== null) onNavigate(null, 'push');
   };
@@ -972,12 +984,27 @@ function useAskPanel({
   const composingRef = useRef(false);
   const [composing, setComposing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const onList = conversationId === null && mode === 'list';
+  const composerShown =
+    !onList && (conversationId === null || load === 'loading' || load === 'ready');
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [draft]);
+  }, [composerShown, draft]);
+  // The button that was pressed is gone: focus moves on with the screen.
+  useLayoutEffect(() => {
+    if (!focusInputRef.current || !inputRef.current) return;
+    focusInputRef.current = false;
+    inputRef.current.focus();
+  });
+  const shownList = useRef(onList);
+  useLayoutEffect(() => {
+    if (shownList.current === onList) return;
+    shownList.current = onList;
+    if (open && onList) (fabRef.current ?? titleRef.current)?.focus({ preventScroll: true });
+  }, [onList, open]);
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.shiftKey) return;
     if (event.nativeEvent.isComposing || composingRef.current || event.keyCode === 229) return;
@@ -987,6 +1014,7 @@ function useAskPanel({
 
   const counterId = useId();
   const reasonId = useId();
+  const scopeLineId = useId();
   const counter = counterText(draft.trim().length, limits.max_question_chars);
   const describedBy = [blockedReason ? reasonId : null, counter ? counterId : null]
     .filter(Boolean)
@@ -996,28 +1024,31 @@ function useAskPanel({
   const turns = conversationTurns(messages);
   const lastTurn = turns.at(-1);
   const attachment = conversation?.attachment ?? null;
+  const canStart = askState?.available === true && !archived;
+  const statusLines = (
+    <>
+      {blockedReason ? (
+        <p id={reasonId} className={styles.hint}>
+          {blockedReason}
+        </p>
+      ) : null}
+      {refusalText ? (
+        <p role="alert" className={styles.refusal}>
+          {refusalText}
+        </p>
+      ) : null}
+    </>
+  );
+  const headerStart = onList ? null : (
+    <IconButton label="대화 목록" icon={<ArrowLeftIcon />} onClick={showList} />
+  );
 
   const content = (
     <>
-      <div className={styles.toolbar}>
-        {conversationId !== null || mode === 'new' ? (
-          <Button size="sm" variant="ghost" onClick={showList}>
-            대화 목록
-          </Button>
-        ) : null}
-        <Button size="sm" variant="ghost" onClick={startNew}>
-          새 대화
-        </Button>
-        <AskScopePopover
-          scope={scope}
-          documents={documents}
-          chapters={scopeChapters}
-          onChange={setScope}
-        />
-      </div>
-      {scopeLine ? <p className={styles.scopeText}>{scopeLine}</p> : null}
-
-      {conversationId === null && mode === 'list' ? (
+      <p role="status" className="qz-visually-hidden">
+        {announcement}
+      </p>
+      {onList ? (
         rows === null && !listFailed ? (
           <LoadingRows />
         ) : listFailed && rows === null ? (
@@ -1079,7 +1110,7 @@ function useAskPanel({
               })}
             </ul>
             {cursor ? (
-              <Button size="sm" variant="ghost" onClick={loadMore}>
+              <Button size="sm" variant="ghost" borderless onClick={loadMore}>
                 더 보기
               </Button>
             ) : null}
@@ -1090,7 +1121,14 @@ function useAskPanel({
       ) : conversationId !== null && load === 'loading' ? (
         <LoadingRows />
       ) : conversationId !== null && load === 'notFound' ? (
-        <p className={styles.empty}>{ASK_TEXT.notFound}</p>
+        <div className={styles.actions}>
+          <p className={styles.empty}>{ASK_TEXT.notFound}</p>
+          {canStart ? (
+            <Button size="sm" onClick={startNew}>
+              새 대화
+            </Button>
+          ) : null}
+        </div>
       ) : conversationId !== null && load === 'error' ? (
         <div className={styles.actions}>
           <p className={styles.hint}>대화를 불러오지 못했습니다.</p>
@@ -1153,6 +1191,7 @@ function useAskPanel({
           ) : null}
         </div>
       )}
+      {composerShown ? null : statusLines}
       {receipts
         .filter((item) => item.workspaceId === workspaceId)
         .map((item) => (
@@ -1169,7 +1208,7 @@ function useAskPanel({
             item.workspaceId === workspaceId &&
             (item.conversationId === conversationId ||
               item.createdConversationId === conversationId) &&
-            item.text !== draft,
+            (!composerShown || item.text !== draft),
         )
         .map((item, index) => (
           <div key={`${index}-${item.conversationId}`} role="group" aria-label="보내지 못한 질문">
@@ -1201,112 +1240,133 @@ function useAskPanel({
             </Button>
           </div>
         ))}
-      <div ref={endRef} aria-hidden="true" />
-      {unseen && !atEnd ? (
-        <Button
-          size="sm"
-          className={styles.newAnswer}
-          onClick={() => {
-            endRef.current?.scrollIntoView({ block: 'end' });
-            setUnseen(false);
-          }}
-        >
-          새 답변
-        </Button>
+      {onList && canStart ? (
+        <div className={styles.fabDock}>
+          <IconButton
+            ref={fabRef}
+            label="새 대화"
+            icon={<PlusIcon />}
+            variant="primary"
+            className={styles.fab}
+            onClick={startNew}
+          />
+        </div>
       ) : null}
+      {composerShown ? (
+        <div className={styles.dock}>
+          {unseen && !atEnd ? (
+            <Button
+              size="sm"
+              className={styles.newAnswer}
+              onClick={() => {
+                endRef.current?.scrollIntoView({ block: 'end' });
+                setUnseen(false);
+              }}
+            >
+              새 답변
+            </Button>
+          ) : null}
+          {composer()}
+        </div>
+      ) : null}
+      {onList ? null : <div ref={endRef} className={styles.end} aria-hidden="true" />}
     </>
   );
 
-  const footer = (
-    <div className={styles.composer}>
-      {attachment ? (
-        <div role="group" aria-label="첨부한 문제" className={styles.chip}>
-          <span className={styles.chipText}>
-            <span className={styles.chipLabel}>{attachment.label}</span>
-            <span>{disclosureText(attachment)}</span>
-          </span>
-          <IconButton
-            label="첨부한 문제 빼기"
-            icon={<CloseIcon />}
-            size="sm"
-            onClick={() => void detach()}
+  function composer() {
+    return (
+      <div className={styles.composer}>
+        {attachment ? (
+          <div role="group" aria-label="첨부한 문제" className={styles.chip}>
+            <span className={styles.chipText}>
+              <span className={styles.chipLabel}>{attachment.label}</span>
+              <span>{disclosureText(attachment)}</span>
+            </span>
+            <IconButton
+              label="첨부한 문제 빼기"
+              icon={<CloseIcon />}
+              size="sm"
+              onClick={() => void detach()}
+            />
+          </div>
+        ) : null}
+        <div className={styles.inputRow}>
+          <Textarea
+            ref={inputRef}
+            label="질문"
+            hideLabel
+            placeholder={ASK_TEXT.placeholder}
+            rows={1}
+            value={draft}
+            readOnly={blockedReason !== null}
+            aria-disabled={blockedReason !== null || undefined}
+            aria-describedby={describedBy || undefined}
+            className={styles.input}
+            fieldClassName={styles.inputField}
+            enterKeyHint="send"
+            {...(composing ? { 'data-own-escape': '' } : {})}
+            onChange={(event) => {
+              draftEditRef.current += 1;
+              setDraft(event.target.value);
+              if (refusal && refusal.seconds == null) setRefusal(null);
+            }}
+            onCompositionStart={() => {
+              composingRef.current = true;
+              setComposing(true);
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+              setComposing(false);
+            }}
+            onKeyDown={onKeyDown}
           />
+          <div className={styles.inputActions}>
+            {/* One button in both states: focus stays on it when `보내기` becomes `답변 중지`. */}
+            {running || canStart ? (
+              <IconButton
+                label={running ? '답변 중지' : '보내기'}
+                icon={running ? <StopIcon /> : <SendIcon />}
+                variant="primary"
+                aria-disabled={(!running && !canSend) || undefined}
+                aria-describedby={!running && blockedReason ? reasonId : undefined}
+                onClick={() => void (running ? stop() : send())}
+              />
+            ) : null}
+            {blockedReason ? null : (
+              <AskScopePopover
+                scope={scope}
+                documents={documents}
+                chapters={scopeChapters}
+                describedBy={scopeLine ? scopeLineId : undefined}
+                onChange={setScope}
+              />
+            )}
+          </div>
         </div>
-      ) : null}
-      <div className={styles.inputRow}>
-        <Textarea
-          ref={inputRef}
-          label="질문"
-          hideLabel
-          placeholder={ASK_TEXT.placeholder}
-          rows={1}
-          value={draft}
-          readOnly={blockedReason !== null}
-          aria-disabled={blockedReason !== null || undefined}
-          aria-describedby={describedBy || undefined}
-          className={styles.input}
-          fieldClassName={styles.inputField}
-          enterKeyHint="send"
-          {...(composing ? { 'data-own-escape': '' } : {})}
-          onChange={(event) => {
-            draftEditRef.current += 1;
-            setDraft(event.target.value);
-            if (refusal && refusal.seconds == null) setRefusal(null);
-          }}
-          onCompositionStart={() => {
-            composingRef.current = true;
-            setComposing(true);
-          }}
-          onCompositionEnd={() => {
-            composingRef.current = false;
-            setComposing(false);
-          }}
-          onKeyDown={onKeyDown}
-        />
-        {running ? (
-          <Button size="sm" onClick={() => void stop()}>
-            답변 중지
-          </Button>
-        ) : askState?.available && !archived ? (
-          <IconButton
-            label="보내기"
-            icon={<SendIcon />}
-            variant="primary"
-            aria-disabled={!canSend || undefined}
-            aria-describedby={blockedReason ? reasonId : undefined}
-            onClick={() => void send()}
-          />
+        {scopeLine || counter || blockedReason || refusalText ? (
+          <div className={styles.composerMeta}>
+            {scopeLine ? (
+              <p id={scopeLineId} className={styles.hint}>
+                {scopeLine}
+              </p>
+            ) : null}
+            {statusLines}
+            {counter ? (
+              <p id={counterId} className={tooLong ? styles.refusal : styles.hint}>
+                {counter}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
-      {counter || blockedReason || refusalText ? (
-        <div className={styles.composerMeta}>
-          {blockedReason ? (
-            <p id={reasonId} className={styles.hint}>
-              {blockedReason}
-            </p>
-          ) : null}
-          {refusalText ? (
-            <p role="alert" className={styles.refusal}>
-              {refusalText}
-            </p>
-          ) : null}
-          {counter ? (
-            <p id={counterId} className={tooLong ? styles.refusal : styles.hint}>
-              {counter}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      <p role="status" className="qz-visually-hidden">
-        {announcement}
-      </p>
-    </div>
-  );
+    );
+  }
 
   const overlays = (
     <>
       <DocumentExcerptPanel
         workspaceId={workspaceId}
+        linkOnly
         client={search}
         item={excerpt?.item ?? null}
         open={excerptOpen}
@@ -1329,7 +1389,7 @@ function useAskPanel({
   );
 
   const subtitle = conversationId !== null && conversation ? (conversation.title ?? null) : null;
-  return { content, footer, overlays, subtitle };
+  return { content, headerStart, overlays, subtitle, titleRef };
 }
 
 const PENDING_ANSWER: AskMessage = {

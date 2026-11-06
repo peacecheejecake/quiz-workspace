@@ -94,9 +94,9 @@ describe('range model', () => {
   };
   const groups = rangeGroups(overview);
 
-  it('groups the Heatmap questions by chapter with their Heatmap numbers', () => {
+  it('groups the Heatmap questions by chapter with their printed numbers', () => {
     expect(groups.map((g) => [g.key, g.title, g.questions.map((q) => q.number)])).toEqual([
-      ['c1', '1장 물의 순환', ['1장 1번', '1장 2번']],
+      ['c1', '1장 물의 순환', ['1번', '2번']],
       ['none', '챕터 없음', ['5번']],
     ]);
     expect(groups[0]?.questions[0]?.preview).toBe('증발은?');
@@ -132,14 +132,12 @@ describe('range model', () => {
 });
 
 describe('run labels and failures', () => {
-  it('labels positions like the Heatmap, mock exam questions by position', () => {
-    const at = { chapter_number: 3, chapter_title: '3장', question_number: 12, position: 4 };
-    expect(positionLabel(at, 'bank')).toBe('3장 12번');
-    expect(positionLabel({ ...at, chapter_number: null }, 'bank')).toBe('3장 12번');
-    expect(positionLabel({ ...at, chapter_number: null, chapter_title: null }, 'bank')).toBe(
-      '12번',
-    );
+  it('labels positions by printed number, mock exam questions by position', () => {
+    const at = { question_number: 12, position: 4 };
+    expect(positionLabel(at, 'bank')).toBe('12번');
+    expect(positionLabel({ ...at, question_number: null }, 'bank')).toBe('번호 없음');
     expect(positionLabel(at, 'mock')).toBe('문제 4');
+    expect(positionLabel({ ...at, question_number: null }, 'mock')).toBe('문제 4');
     expect(progressText(2, 5)).toBe('5문제 중 2번째');
     expect(summaryText({ correct: 1, incorrect: 1, pending: 2, skipped: 1 })).toBe(
       '맞음 1 · 틀림 1 · 채점 대기 2 · 건너뜀 1',

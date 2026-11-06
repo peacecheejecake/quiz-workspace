@@ -99,12 +99,12 @@
 //   "<이름> 메뉴" (editors) with menuitems 이름 바꾸기 / 설정 바꾸기 / 삭제; progressbar "문제 생성
 //   진행률" (value text "n개 중 k개") while generating. Empty: "아직 모의고사가 없습니다." (+ the hint
 //   for editors). Rename: inline textbox "모의고사 이름" (Enter saves, Escape cancels).
-//   Create / 설정 바꾸기: StepProgress list "진행 단계" with 옵션 → 범위; step 1 textbox "이름",
+//   Create / 설정 바꾸기: step list "풀기 단계" with 옵션 → 범위; step 1 textbox "이름" (once a type is chosen),
 //   group "변형 유형" with four checkboxes (an unavailable one is disabled and described by
 //   "이 환경에서는 AI 변형을 쓸 수 없습니다."), spinbutton "문항 수", combobox "난이도", button "다음";
 //   step 2 QuestionRangePicker (shared with QVIEW-01; labels in fixtures/range-picker.ts: "전체
 //   선택", chapter checkboxes by title — "챕터 없음" for questions without one — with "<장 제목>
-//   펼치기", question checkboxes "<n>장 <m>번 · …", "선택 n문제", the "상태 필터" chips incl.
+//   펼치기", question checkboxes "<m>번 · …", "선택 n문제", the "상태 필터" chips incl.
 //   "즐겨찾기만"), text "선택 n문제 중 m문항을 만듭니다", the AI
 //   notice "…AI 서비스로 전송됩니다.", buttons "이전" and "만들기" (설정 바꾸기: "다시 만들기"), disabled
 //   and described by "출제 범위를 고르세요" when nothing is selected; "아직 확정된 문제가 없습니다."
@@ -131,7 +131,7 @@ import { JOB_TIMEOUT_MS } from './documents.ts';
 import { REPO_ROOT } from './local-env.ts';
 import type { DotStatus, QuestionInput, QuestionOption, QuestionType } from './questions.ts';
 import { startSummaryOffStack, type SummaryOffStack } from './summary.ts';
-import { main } from './workspace-ui.ts';
+import { HOME_MENU_NAME, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 const SCENARIO_FILE = join(REPO_ROOT, 'tests/fixtures/llm/generation-scenarios.json');
@@ -564,11 +564,11 @@ export function partialText(requested: number, created: number): RegExp {
 export const mockUi = {
   menuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(모의고사|mock exams?)$/i }),
   generateMenuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(변형 출제|generate variants?)$/i }),
   dialog: (page: Page) =>
     main(page).getByRole('dialog', { name: /^(모의고사|문제 풀기|mock exams?|practice)$/i }),

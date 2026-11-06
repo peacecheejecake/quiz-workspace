@@ -10,7 +10,7 @@ apps/api/src/quiz_api/api/{practice,mock_practice,practice_runs}.py, repositorie
 
 ## 이미 푼 문제 열기
 
-**캐시 정합성 결정:** Heatmap을 명시적으로 열 때는 서버의 recent/epoch metadata를 먼저 확인한다. 캐시가 있어도 다른 run·탭·기기에서 완료된 풀이를 놓치면 안 된다. 미제출 session의 내용·TTL·200개 제한·비저장은 유지하고, metadata 확인 후 아직 유효하면 같은 session을 재사용해 새 POST/전체 session 재요청을 하지 않는다. 기존 UX7의 추가 HTTP 0회 기준은 이 경량 metadata GET만 예외로 개정한다. 확인 전에는 캐시 답 입력으로 제출할 수 없게 한다. 강제 새 풀이도 epoch는 확인하되 이전 결과 대신 새 미제출 session을 연다.
+**캐시 정합성 결정(UX12-OPEN 개정):** Heatmap을 명시적으로 열 때는 서버의 recent/epoch metadata를 먼저 확인한다. 캐시가 있어도 다른 run·탭·기기에서 완료된 풀이를 놓치면 안 된다. 미제출 session의 내용·TTL·200개 제한·비저장은 유지하고, 확인 후 아직 유효하면 같은 session을 재사용한다. 확인과 재사용·새 session 열기는 `POST /api/v1/questions/:id/practice-open` 한 호출, 한 트랜잭션으로 처리한다([ux12-question-open.md](../../screens/ux12-question-open.md)). 기존 UX7의 추가 HTTP 0회 기준은 이 호출 하나만 예외로 개정한다. 확인 전에는 캐시 답 입력으로 제출할 수 없게 한다. 강제 새 풀이도 epoch는 확인하되 이전 결과 대신 새 미제출 session을 연다.
 
 Heatmap의 practice 모드에서는 서버가 본인·해당 문제·현재 reset epoch에서 최신 제출 session을 찾아 결과를 제공한다. 현재 revision과 일치하는 결과만 현재 문제 정답으로 표시한다. revision이 달라졌으면 새 문제 상태로 열고 지난 풀이 안내/이력 링크를 제공한다. pending 결과는 정답/오답으로 위조하지 않는다. 새 미제출 session 응답에는 정답·해설이 없다. sequence는 해당 run session 기준 결과만 표시하며 다른 run의 답을 재사용하지 않는다. 서버 경계에서 membership·session owner를 검사한다.
 

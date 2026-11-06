@@ -48,6 +48,7 @@ def _shared_ops() -> list[SharedOp]:
 
 SHARED_OPS = _shared_ops()
 FORK = "startWorkspaceFork"
+OWNER_RECORD_OPS = {"listSharedOwnerAttempts", "listSharedOwnerHighlights"}
 
 
 def _body(op: SharedOp) -> Any:
@@ -73,7 +74,11 @@ class Shared:
     chapter: str
 
     def link(self, **policy: Any) -> tuple[dict[str, Any], str]:
-        link = self.owner.create_link(self.ws, **{"allow_fork": True, **policy})
+        # Everything on, so every route has its positive control and is attacked for real.
+        # The owner records default to off: see test_owner_records_are_404_with_the_option_off.
+        link = self.owner.create_link(
+            self.ws, **{"allow_fork": True, "include_owner_records": True, **policy}
+        )
         cookie = self.seed.guest().session(link["id"], link["secret"])
         return link, cookie
 
@@ -344,6 +349,22 @@ def test_fork_off_blocks_forks_but_keeps_reading(shared: Shared) -> None:
             assert (res.status_code, _type(res)) == (403, FORK_NOT_ALLOWED)
         else:
             assert res.status_code == 200, f"{op.operation_id}: {res.status_code}"
+
+
+def test_owner_records_are_404_with_the_option_off(shared: Shared) -> None:
+    """A valid session is not enough: with `include_owner_records` off the two routes answer the
+    missing-route 404, not the dead-link one, and a request without a session stays 401."""
+    ops = [o for o in SHARED_OPS if o.operation_id in OWNER_RECORD_OPS]
+    assert {o.operation_id for o in ops} == OWNER_RECORD_OPS
+    link, cookie = shared.link(include_owner_records=False)
+    for op in ops:
+        res = shared.send(op, link["id"], cookie)
+        assert (res.status_code, _type(res)) == (404, "about:blank"), (
+            f"{op.operation_id}: {res.status_code} {res.text[:200]}"
+        )
+        _privacy(res, op.operation_id)
+        anonymous = shared.send(op, link["id"], None)
+        assert (anonymous.status_code, _type(anonymous)) == (401, SESSION_REQUIRED)
 
 
 def test_a_guest_session_is_not_a_login_on_any_member_route(shared: Shared) -> None:

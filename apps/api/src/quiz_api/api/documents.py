@@ -221,10 +221,16 @@ class DocumentSummary(BaseModel):
         "server starts one for a question paper or a confident `mixed` PDF once it is processed, "
         "QIMPORT-01-AC06); null when it has none.",
     )
+    has_summary: bool = Field(
+        default=False,
+        description="A stored summary exists (any revision), readable even where summaries "
+        "cannot be created (DOCSUM-01-AC05).",
+    )
 
 
 class DocumentList(BaseModel):
     items: list[DocumentSummary]
+    summary_available: bool = Field(description="This environment can create summaries.")
 
 
 class RevisionSummary(BaseModel):
@@ -235,6 +241,7 @@ class RevisionSummary(BaseModel):
 
 
 class DocumentDetail(DocumentSummary):
+    summary_available: bool = Field(description="This environment can create summaries.")
     active_revision: RevisionSummary | None
     latest_revision: RevisionSummary | None = Field(
         description="The newest revision (a draft while a parse or correction is pending)."
@@ -320,6 +327,7 @@ def _summary(
     job: ProcessingJobRecord | None = None,
     latest_import: uuid.UUID | None = None,
     question_count: int = 0,
+    has_summary: bool = False,
 ) -> DocumentSummary:
     return DocumentSummary(
         id=doc.id,
@@ -339,6 +347,7 @@ def _summary(
         updated_at=doc.updated_at,
         processing_job=DocumentProcessingJob(**vars(job)) if job is not None else None,
         latest_import_id=latest_import,
+        has_summary=has_summary,
     )
 
 
@@ -559,6 +568,7 @@ def _verify_object(storage: Storage, upload: UploadRecord) -> None:
 def list_documents(
     access: Annotated[WorkspaceAccess, _workspace(Action.READ)],
     repo: DocumentRepo,
+    settings: SettingsDep,
     document_type: Annotated[
         DocumentType | None, Query(description="Only this document type.")
     ] = None,
@@ -570,8 +580,13 @@ def list_documents(
     jobs = repo.processing_jobs(access.workspace_id, ids)
     imports = repo.latest_imports(access.workspace_id, ids)
     counts = repo.question_counts(access.workspace_id, ids)
+    summarized = repo.summarized_documents(access.workspace_id, ids)
     return DocumentList(
-        items=[_summary(d, jobs.get(d.id), imports.get(d.id), counts.get(d.id, 0)) for d in docs]
+        items=[
+            _summary(d, jobs.get(d.id), imports.get(d.id), counts.get(d.id, 0), d.id in summarized)
+            for d in docs
+        ],
+        summary_available=settings.summary_available,
     )
 
 
@@ -582,18 +597,24 @@ def _revision(repo: DocumentRepository, revision_id: uuid.UUID | None) -> Revisi
 
 @router.get("/documents/{document_id}", operation_id="getDocument")
 def get_document(
-    access: Annotated[ResourceAccess, _document(Action.READ)], repo: DocumentRepo
+    access: Annotated[ResourceAccess, _document(Action.READ)],
+    repo: DocumentRepo,
+    settings: SettingsDep,
 ) -> DocumentDetail:
-    return _detail(repo, repo.get_document(access.resource_id))
+    return _detail(repo, repo.get_document(access.resource_id), settings)
 
 
-def _detail(repo: DocumentRepository, doc: DocumentRecord) -> DocumentDetail:
+def _detail(repo: DocumentRepository, doc: DocumentRecord, settings: Settings) -> DocumentDetail:
     latest = repo.latest_revision(doc.id)
     job = repo.processing_jobs(doc.workspace_id, [doc.id]).get(doc.id)
     imports = repo.latest_imports(doc.workspace_id, [doc.id])
     counts = repo.question_counts(doc.workspace_id, [doc.id])
+    summarized = repo.summarized_documents(doc.workspace_id, [doc.id])
     return DocumentDetail(
-        **_summary(doc, job, imports.get(doc.id), counts.get(doc.id, 0)).model_dump(),
+        **_summary(
+            doc, job, imports.get(doc.id), counts.get(doc.id, 0), doc.id in summarized
+        ).model_dump(),
+        summary_available=settings.summary_available,
         active_revision=_revision(repo, doc.active_revision_id),
         latest_revision=RevisionSummary(**vars(latest)) if latest else None,
     )
@@ -608,6 +629,7 @@ def update_document_kind(
     access: Annotated[ResourceAccess, _document(Action.DOCUMENT_EDIT)],
     body: DocumentKindChange,
     repo: DocumentRepo,
+    settings: SettingsDep,
     publisher: PublisherDep,
 ) -> DocumentDetail:
     """Change a PDF's kind (`종류 변경`, DOC-01-AC08; editor+, archived workspaces read-only).
@@ -645,7 +667,7 @@ def update_document_kind(
     repo.commit()
     if job is not None:
         publish_job(repo, publisher, job)
-    return _detail(repo, repo.get_document(doc.id))
+    return _detail(repo, repo.get_document(doc.id), settings)
 
 
 @router.get("/documents/{document_id}/source-url", operation_id="getDocumentSourceUrl")

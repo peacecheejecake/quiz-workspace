@@ -85,12 +85,13 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
     // + PALETTE-UNIFY 5 fill tokens (danger/success/warning/neutral/neutral-subtle)
-    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
-    expect(Object.keys(docLight)).toHaveLength(42);
-    expect(Object.keys(docDark)).toHaveLength(42);
-    // 37 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
-    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
-    expect(Object.keys(docRoot)).toHaveLength(79);
+    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border
+    // + UX12 VIEW-2 2 option control borders + UX12 DESIGN-4 glass-gradient (themed, not a color).
+    expect(Object.keys(docLight)).toHaveLength(45);
+    expect(Object.keys(docDark)).toHaveLength(45);
+    // 39 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX12 DESIGN-4 glass-gradient.
+    expect(Object.keys(docRoot)).toHaveLength(83);
   });
 });
 
@@ -143,6 +144,9 @@ describe('generated tokens.css', () => {
       expect(t['color-warning-fill']).toBe(t['question-status-retry']);
       expect(t['color-neutral-fill']).toBe(t['question-status-viewed']);
       expect(t['color-neutral-fill-subtle']).toBe(t['question-status-unseen']);
+      // UX12 VIEW-2: aliases, because --question-status-* is marker-only.
+      expect(t['color-option-control']).toBe(t['question-status-viewed']);
+      expect(t['color-option-control-hover']).toBe(t['color-border-strong']);
     },
   );
 
@@ -151,6 +155,26 @@ describe('generated tokens.css', () => {
     expect(questionStatuses).toEqual(EXPECTED_STATUSES);
     for (const token of STATUS_TOKENS) expect(decls[token], token).toMatch(/^#[0-9a-f]{6}$/);
   });
+});
+
+// UX12 DESIGN-4: Playwright cannot emulate prefers-reduced-transparency, so the rule is read here.
+describe('glass-surface base styles', () => {
+  const base = readFileSync(resolve(import.meta.dirname, '../src/base.css'), 'utf8');
+
+  it('layers the gradient over the glass color', () => {
+    const decls = base.slice(base.indexOf('.glass-surface {'));
+    expect(decls.slice(0, decls.indexOf('}'))).toMatch(
+      /background-color: var\(--color-glass\);\s+background-image: var\(--glass-gradient\);/,
+    );
+  });
+
+  it.each(['@media (prefers-reduced-transparency: reduce)', '@supports not'])(
+    '%s falls back to the flat solid color (the shorthand drops the gradient)',
+    (rule) => {
+      const block = base.slice(base.indexOf(rule));
+      expect(block.slice(0, block.indexOf('}'))).toContain('background: var(--color-glass-solid);');
+    },
+  );
 });
 
 describe('generated TS module', () => {
@@ -198,6 +222,7 @@ describe('typography scale (design-system.md §4)', () => {
   const num = (name: keyof typeof staticTokens) => Number(staticTokens[name]);
 
   it('sizes fall in the §4 ranges', () => {
+    expect(px('font-size-label-xs')).toBe(11);
     for (const name of ['font-size-label-sm', 'font-size-label'] as const) {
       expect(px(name), name).toBeGreaterThanOrEqual(12);
       expect(px(name), name).toBeLessThanOrEqual(13);
@@ -229,11 +254,17 @@ describe('density (design-system.md §4, v1.2.2)', () => {
     expect(px('app-header-height')).toBeGreaterThan(px('control-height-md'));
   });
 
+  it('button rows are compact (UX12-CONTROLS)', () => {
+    expect(staticTokens['control-gap']).toBe('var(--space-1)');
+    expect(px('space-1')).toBe(4);
+  });
+
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
-    expect(staticTokens['heatmap-cell']).toBe('24px');
+    expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
     expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
     expect(staticTokens['heatmap-dot']).toBe('16px');
     expect(staticTokens['heatmap-gap']).toBe('0px');
+    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.3'); // UX12 D-12: was 1.18
   });
 
   it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {

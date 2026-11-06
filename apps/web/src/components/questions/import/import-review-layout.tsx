@@ -67,6 +67,7 @@ export interface ImportReviewData {
   readonly drafts: readonly ReviewDraft[];
   readonly summaries: readonly DraftSummary[];
   readonly chapters: readonly BookChapterOption[];
+  readonly missingPrevious?: readonly number[];
   readonly loadedAt: string;
   readonly loadFailed: boolean;
 }
@@ -227,11 +228,11 @@ export function ImportReviewLayout({
   /** Re-reads the documents and the newest runs (and the running extractions' progress). */
   const refreshList = useCallback(async () => {
     try {
-      const [docs, latest] = await Promise.all([
+      const [list, latest] = await Promise.all([
         documentsClient.listDocuments(workspaceId),
         importClient.listRuns(workspaceId, REVIEW_RUNS).catch(() => null),
       ]);
-      setDocuments(docs);
+      setDocuments(list.items);
       if (latest) setRuns(latest);
       setListFailed(false);
       const working = (latest ?? []).filter(
@@ -513,6 +514,9 @@ export function ImportReviewLayout({
                 initialDrafts={review.drafts}
                 initialSummaries={review.summaries}
                 initialChapters={review.chapters}
+                {...(review.missingPrevious
+                  ? { initialMissingPrevious: review.missingPrevious }
+                  : {})}
                 loadedAt={review.loadedAt}
                 documentId={documentId ?? undefined}
                 loadFailed={review.loadFailed}

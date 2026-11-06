@@ -3,6 +3,7 @@
 // this list in sync with src/index.ts.
 import {
   useModalLayerOpen,
+  useDragDismiss,
   AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
@@ -11,10 +12,14 @@ import {
   Badge,
   Breadcrumb,
   Button,
+  ChapterPicker,
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
+  FilterIcon,
+  PlusIcon,
   ChevronUpIcon,
   HistoryIcon,
   SearchIcon,
@@ -22,6 +27,7 @@ import {
   SplitView,
   TrashIcon,
   CloseIcon,
+  GripIcon,
   ConfirmDialog,
   COPY_FEEDBACK_MS,
   CopyButton,
@@ -59,8 +65,10 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   QuestionDot,
+  focusQuestionDotQuietly,
   QuestionHeatmap,
   QuestionMarker,
   QuestionPreviewPopover,
@@ -89,7 +97,9 @@ import {
   deriveDotStatus,
   focusRingClassName,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
   useTheme,
@@ -99,6 +109,7 @@ import {
   drawableHighlights,
   exactHighlight,
   FIND_IN_NOTE_LIMIT,
+  copyableText,
   findInNote,
   foldForSearch,
   HIGHLIGHT_COLORS,
@@ -126,7 +137,9 @@ for (const value of [PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS])
   if (typeof value !== 'number') throw new Error('kit constants must be plain numbers in RSC');
 }
 
-const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet];
+if (typeof copyableText !== 'function') throw new Error('copyableText must be a plain function');
+
+const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet, useDragDismiss];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [
   QuestionDot,
@@ -183,9 +196,12 @@ const label = questionDotLabel({
   isFavorite: true,
   lastGradedResult: 'incorrect',
 });
+const numberLabels = [questionNumberLabel(12), questionTitle(null), NO_QUESTION_NUMBER].join(' · ');
 
 export default function Page() {
   void useModalLayerOpen;
+  void useDragDismiss;
+  void focusQuestionDotQuietly;
   return (
     <ThemeProvider defaultTheme="light">
       <ToastProvider>
@@ -200,6 +216,7 @@ export default function Page() {
             <Badge tone="success">ok</Badge>
             <Button variant="primary">버튼</Button>
             <IconButton label="닫기" icon={<CloseIcon />} />
+            <GripIcon />
             <FocusRing>
               <a href="#x" className={focusRingClassName}>
                 링크
@@ -209,6 +226,11 @@ export default function Page() {
             <Textarea label="메모" />
             <Checkbox label="동의" />
             <Switch label="알림" />
+            <ChapterPicker
+              label="챕터"
+              nodes={[{ value: 'a', label: '1장', level: 1 }]}
+              value="a"
+            />
             <Select
               label="유형"
               defaultValue="MCQ"
@@ -240,6 +262,9 @@ export default function Page() {
             <CheckIcon />
             <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
+            <ChevronLeftIcon />
+            <FilterIcon />
+            <PlusIcon />
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />
@@ -326,6 +351,7 @@ export default function Page() {
           <StarIcon />
           <RetryIcon />
           <p>{readingSummary}</p>
+          <p>{numberLabels}</p>
           <HighlightableText
             label="정리 노트 본문"
             blocks={noteBlocks.map((b, i) => ({ ...b, suffix: <a href="#fn">[{i + 1}]</a> }))}

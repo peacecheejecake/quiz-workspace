@@ -59,6 +59,7 @@ import {
   waitForLatestImport,
   type Draft,
   type TruthQuestion,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import { isBlocked, reviewListUi } from '../fixtures/ux9-pages.ts';
 
@@ -549,7 +550,7 @@ test(
         .or(scope.getByRole('button', { name: /^pdf 가져오기$|^import pdf$/i }));
     await expect(importButton(main(page))).toHaveCount(0);
     // UX7-DOCS: the PDFs with questions are reviewed from 문서 관리 (DOC-01-AC09).
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
     const list = dialog.getByRole('list', { name: /문서 목록|documents/i });
@@ -786,7 +787,7 @@ test(
 
     // Move question 1 to another book chapter (saved at once, keyboard-free path: click).
     await picker(q1).click();
-    await page.getByRole('option', { name: /^1장 물의 순환/ }).click();
+    await page.getByRole('treeitem', { name: /^1장 물의 순환/ }).click();
     await expect(picker(q1)).toContainText('1장 물의 순환');
     await expect(q1.getByText(/직접 고른 챕터|chosen/i)).toBeVisible();
     await expect
@@ -816,7 +817,7 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(2);
     for (const title of [moved?.title, suggested?.title]) {
       const group = overviewUi.heatmap(page).getByRole('region', { name: title ?? '' });
-      await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+      await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(1);
     }
   },
 );
@@ -1119,11 +1120,13 @@ test(
       expect(nodes, 'nodes held by the renderer (incl. detached)').toBeLessThan(SCALE_MAX_NODES);
       await cdp.detach();
     }
-    // The picker still lists the whole outline once opened.
+    // The picker still lists the outline once opened (top level: book-ko has 4 sub-chapters).
     await chapterPickers.first().click();
-    await expect(page.getByRole('option')).toHaveCount(await bookChapterOptions(owner, run.id));
+    await expect(page.getByRole('treeitem')).toHaveCount(
+      (await bookChapterOptions(owner, run.id)) - 4,
+    );
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await expect(page.getByRole('tree')).toHaveCount(0);
     await expect(chapterPickers.first()).toBeFocused();
 
     // 전체 선택 covers the drafts on every page, not only the rendered one.

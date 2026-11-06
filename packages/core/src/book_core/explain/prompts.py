@@ -1,4 +1,4 @@
-"""The `question.ai_explain/v1` request (AIEXPL-01 "LLM 입력", C04).
+"""The `question.ai_explain/v2` request (AIEXPL-01 "LLM 입력", C04).
 
 The model answers in a line-tagged format (``book_core.explain.output``) so the worker can check
 the answer line before anything is shown, stream readable text and store the structured body:
@@ -26,7 +26,7 @@ from book_core.llm.config import Effort
 from book_core.llm.streaming import TextMessage, TextStreamRequest
 
 TASK = "question.ai_explain"
-PROMPT_VERSION = "question.ai_explain/v1"
+PROMPT_VERSION = "question.ai_explain/v2"
 DEFAULT_MAX_SOURCE_CHARS = 2000
 DEFAULT_MAX_CONTEXT_CHARS = 8000
 NO_EVIDENCE_TEXT = "문서에서 근거를 찾지 못했습니다."
@@ -103,8 +103,6 @@ def _question_block(question: ExplainQuestion) -> str:
         lines.append("정답(허용 답안): " + " / ".join(question.accepted_answers))
     if question.rubric:
         lines.append(f"채점 기준: {question.rubric}")
-    if question.explanation:
-        lines.append(f"기존 해설(사람이 씀): {question.explanation}")
     return "\n".join(lines)
 
 

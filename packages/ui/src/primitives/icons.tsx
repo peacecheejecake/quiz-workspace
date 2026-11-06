@@ -30,6 +30,15 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/** Vertical drag handle: two columns of three dots. */
+export function GripIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth="3" />
+    </BaseIcon>
+  );
+}
+
 /** Horizontal ellipsis for "더보기" action menus. */
 export function MoreIcon(props: IconProps) {
   return (
@@ -59,6 +68,24 @@ export function ChevronDownIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
       <path d="m6 9 6 6 6-6" />
+    </BaseIcon>
+  );
+}
+
+/** A plus sign (the conversation list's `새 대화`). */
+export function PlusIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </BaseIcon>
+  );
+}
+
+/** A funnel (a filter or scope control). */
+export function FilterIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M4 5h16l-6 7.5V19l-4-2v-4.5L4 5Z" />
     </BaseIcon>
   );
 }
@@ -94,6 +121,15 @@ export function ArrowLeftIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
       <path d="M19 12H5M11 6l-6 6 6 6" />
+    </BaseIcon>
+  );
+}
+
+/** An arrowhead without a shaft, pointing left (closes a search that opened sideways). */
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="m15 6-6 6 6 6" />
     </BaseIcon>
   );
 }

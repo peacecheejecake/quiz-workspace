@@ -6,6 +6,12 @@ export { Badge } from './primitives/Badge';
 export type { BadgeProps, BadgeTone } from './primitives/Badge';
 export { Button } from './primitives/Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './primitives/Button';
+export { ChapterPicker } from './primitives/ChapterPicker';
+export type {
+  ChapterPickerNode,
+  ChapterPickerOption,
+  ChapterPickerProps,
+} from './primitives/ChapterPicker';
 export { Checkbox } from './primitives/Checkbox';
 export type { CheckboxProps } from './primitives/Checkbox';
 export {
@@ -40,13 +46,17 @@ export {
   CheckIcon,
   CopyIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   CloseIcon,
+  FilterIcon,
+  GripIcon,
   HistoryIcon,
   MenuIcon,
   MinusIcon,
   MoreIcon,
+  PlusIcon,
   SearchIcon,
   ShareIcon,
   TrashIcon,
@@ -127,10 +137,13 @@ export { SplitView } from './layout/SplitView';
 export type { SplitViewOrientation, SplitViewProps } from './layout/SplitView';
 
 export {
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   deriveDotStatus,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
 } from './questions/status';
@@ -145,6 +158,7 @@ export type {
 export { QuestionMarker } from './questions/QuestionMarker';
 export type { QuestionMarkerProps } from './questions/QuestionMarker';
 export { QuestionDot } from './questions/QuestionDot';
+export { focusQuestionDotQuietly } from './questions/quiet-focus';
 export type { QuestionDotProps } from './questions/QuestionDot';
 export { QuestionHeatmap } from './questions/QuestionHeatmap';
 export type {
@@ -172,6 +186,7 @@ export type {
   HighlightBlockElement,
   RenderHighlightBlock,
 } from './reading/HighlightableText';
+export { copyableText } from './reading/dom-selection';
 export { HIGHLIGHT_MENU_TEXT, HighlightMenu } from './reading/HighlightMenu';
 export type { HighlightMenuProps } from './reading/HighlightMenu';
 export {
@@ -212,3 +227,4 @@ export {
 export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';
 
 export { useModalLayerOpen } from './internal/layer';
+export { useDragDismiss, type DragDismissOptions, type DragEdge } from './internal/swipe-dismiss';

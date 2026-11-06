@@ -132,9 +132,15 @@
 }
 
 .pageLink {
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
+  background: none;
   color: var(--color-accent);
+  font-family: inherit;
   font-size: var(--font-size-label);
+  text-decoration: underline;
+  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -160,7 +166,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   box-sizing: border-box;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-primary);
@@ -205,7 +211,7 @@
 
 .actions {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--control-gap);
   justify-items: start;
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
@@ -227,12 +233,6 @@
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-label);
-}
-
-/* Unavailable in this environment: looks disabled but stays focusable (its reason is announced). */
-.action[data-unavailable] {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 /* 문서 관리 row: "요약 중" next to the row's 요약 button. */

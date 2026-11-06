@@ -114,3 +114,9 @@
 .notices p {
   margin: 0;
 }
+
+.scopeTitle {
+  margin: 0;
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}

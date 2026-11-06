@@ -28,6 +28,7 @@ import {
   QUESTION_DOT_STATUSES,
   questionStatusLabels,
   questionTypeLabels,
+  focusQuestionDotQuietly,
   useToast,
   type HeatmapChapter,
   type QuestionDotStatus,
@@ -174,7 +175,8 @@ function dotOf(root: ParentNode, questionId: string): HTMLElement | null {
  * Focus after the practice panel closes: the dot that opened it; if that dot left the heatmap
  * (filtered out meanwhile, or a deep link outside the filters), the nearest surviving dot in the
  * heatmap order the panel was opened on, else the heatmap's tab stop, else `fallback` (a stable
- * control, e.g. the search box, for an empty heatmap). Returns the focused element.
+ * control, e.g. the search box, for an empty heatmap). Never opens the dot's preview. Returns the
+ * focused element.
  */
 export function focusAfterPanel(
   root: ParentNode,
@@ -205,7 +207,7 @@ export function focusAfterPanel(
     root.querySelector<HTMLElement>('[data-question-id][tabindex="0"]') ??
     root.querySelector<HTMLElement>('[data-question-id]') ??
     fallback;
-  target?.focus();
+  if (target) focusQuestionDotQuietly(target);
   return target;
 }
 
@@ -807,18 +809,6 @@ export function QuestionsOverview({
         >
           즐겨찾기만
         </Button>
-        <Button
-          size="sm"
-          aria-pressed={view.retry === true}
-          onClick={() => onFiltersChange({ retry: view.retry === true ? null : true })}
-        >
-          다시 풀기만
-        </Button>
-        {filtered ? (
-          <Button size="sm" variant="ghost" onClick={onResetFilters}>
-            필터 초기화
-          </Button>
-        ) : null}
       </div>
 
       {failure ? (
@@ -900,10 +890,11 @@ export function QuestionsOverview({
         onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
-        headerExtra={
+        headerExtra={({ onShowSource }) =>
           panelQuestion ? (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: panelQuestion.id,
@@ -922,7 +913,7 @@ export function QuestionsOverview({
                   : null
               }
             />
-          ) : undefined
+          ) : null
         }
         onCloseAutoFocus={(event) => {
           const requestedFocus = practiceReturnFocusRef?.current ?? null;
@@ -968,9 +959,10 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          headerExtra={(q) => (
+          headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: q.questionId,

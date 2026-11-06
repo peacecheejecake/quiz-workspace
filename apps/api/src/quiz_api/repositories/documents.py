@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
-from sqlalchemy import and_, func, insert, select, update
+from sqlalchemy import and_, bindparam, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -451,6 +451,22 @@ class DocumentRepository:
             .ext(distinct_on(question_import_runs.c.source_document_id))
         )
         return {row.source_document_id: row.id for row in rows}
+
+    def summarized_documents(
+        self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        """The documents with a stored summary of any revision (a succeeded run, what
+        `DocumentSummaryRepository.latest_summary` reads), inside the authorized workspace only."""
+        if not document_ids:
+            return set()
+        rows = self._session.execute(
+            text(
+                "select distinct document_id from public.document_summary_runs "
+                "where workspace_id = :w and status = 'succeeded' and document_id in :ids"
+            ).bindparams(bindparam("ids", expanding=True)),
+            {"w": workspace_id, "ids": list(document_ids)},
+        ).all()
+        return {row.document_id for row in rows}
 
     def question_counts(
         self, workspace_id: uuid.UUID, document_ids: Sequence[uuid.UUID]

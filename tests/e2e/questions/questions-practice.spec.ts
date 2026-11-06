@@ -55,6 +55,7 @@ import {
   seedGradedAttempt,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   startPractice,
   submitPractice,
   test,
@@ -532,9 +533,9 @@ test(
 );
 
 /**
- * Counts the page's question-content loads: server-action POSTs (`Next-Action`, the BFF relay of
- * the practice session) and any browser call to the API. Router RSC refreshes of the overview
- * are not question content.
+ * Counts the page's question-content loads: server-action POSTs (`Next-Action`), the BFF relay of
+ * the panel's opening call (UX12-OPEN) and any browser call to the API. Router RSC refreshes of the
+ * overview are not question content.
  */
 function countContentLoads(page: Page): { count: () => number; stop: () => void } {
   let n = 0;
@@ -542,6 +543,7 @@ function countContentLoads(page: Page): { count: () => number; stop: () => void 
   const onRequest = (req: Request) => {
     const url = new URL(req.url());
     if (req.method() === 'POST' && req.headers()['next-action'] !== undefined) n += 1;
+    else if (url.pathname.endsWith('/practice-open')) n += 1;
     else if (url.host === api.host) n += 1;
   };
   page.on('request', onRequest);
@@ -905,7 +907,8 @@ test(
     await expect(detail).toContainText(v1Stem);
 
     await expect(detailUi.sourcesHeading(detail)).toBeVisible();
-    const link = detail.getByRole('link', { name: /2–3쪽|pages? 2/i });
+    await detail.getByRole('button', { name: /2–3쪽|pages? 2/i }).click();
+    const link = sourcePdfUi.fullDocument(sourcePdfUi.dialog(page));
     await expect(link).toHaveAttribute(
       'href',
       `/workspaces/${ws.id}/documents/${documentId}?page=2`,
@@ -1025,7 +1028,7 @@ const MARK = {
 } as const;
 
 test(
-  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a text mark',
+  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a described mark',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('qplay01-ac12');
@@ -1072,8 +1075,7 @@ test(
       ],
       width,
     );
-    // Same border width before and after: the rows keep their place and width (the topmost row
-    // does not move at all; a mark line below a row may push the later rows down).
+    // Same border width and a reserved icon slot: the rows keep their place and width.
     const after = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
     for (const [i, box] of after.entries()) {
       expect(box.x).toBeCloseTo(before[i]?.x ?? NaN, 1);
@@ -1081,6 +1083,7 @@ test(
     }
     const top = (boxes: readonly { y: number }[]) => Math.min(...boxes.map((x) => x.y));
     expect(top(after)).toBeCloseTo(top(before), 1);
+    for (const [i, box] of after.entries()) expect(box.y).toBeCloseTo(before[i]?.y ?? NaN, 1);
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
 
@@ -1295,6 +1298,8 @@ test(
     // 375 px: the box fits the panel without horizontal scrolling.
     await page.setViewportSize({ width: 375, height: 812 });
     panel = await openPanel(page, 1);
+    // The overview preview draws the same list until the session replaces it (a detached box).
+    await expect(panelUi.options(panel)).toHaveCount(4);
     const list = itemList(panel);
     await expect(list).toBeVisible();
     const box = await list.boundingBox();

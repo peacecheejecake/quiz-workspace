@@ -99,6 +99,16 @@ class SubmittedSession:
 
 
 @dataclass(frozen=True)
+class LatestOutcome:
+    """The caller's latest submitted session with its current and first attempts."""
+
+    session: SessionRecord
+    latest_attempt_id: uuid.UUID | None
+    latest_result: AttemptResult | None
+    submitted_answer: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
 class AttemptRecord:
     id: uuid.UUID
     question_id: uuid.UUID
@@ -413,6 +423,55 @@ class PracticeRepository:
         ).one_or_none()
         return _session(row) if row is not None else None
 
+    def latest_outcome(self, question_id: uuid.UUID, user_id: uuid.UUID) -> LatestOutcome | None:
+        """`latest_submitted_session` with `latest_attempt` and `initial_attempt` in one
+        statement: opening a question must not spend three round trips on them (UX12-OPEN)."""
+        session_attempts = and_(
+            question_attempts.c.practice_session_id == practice_sessions.c.id,
+            question_attempts.c.user_id == user_id,
+        )
+        latest = (
+            select(question_attempts.c.id, question_attempts.c.result)
+            .where(session_attempts)
+            .order_by(question_attempts.c.submitted_at.desc(), question_attempts.c.id.desc())
+            .limit(1)
+            .lateral("latest_attempt")
+        )
+        initial = (
+            select(question_attempts.c.submitted_answer)
+            .where(session_attempts, question_attempts.c.grades_attempt_id.is_(None))
+            .order_by(question_attempts.c.submitted_at, question_attempts.c.id)
+            .limit(1)
+            .lateral("initial_attempt")
+        )
+        row = self._session.execute(
+            select(
+                *_SESSION_COLUMNS,
+                latest.c.id.label("latest_attempt_id"),
+                latest.c.result.label("latest_result"),
+                initial.c.submitted_answer.label("initial_answer"),
+            )
+            .select_from(
+                self._session_tables().outerjoin(latest, true()).outerjoin(initial, true())
+            )
+            .where(
+                practice_sessions.c.question_id == question_id,
+                practice_sessions.c.user_id == user_id,
+                practice_sessions.c.submitted_at.is_not(None),
+                current_session(),
+            )
+            .order_by(practice_sessions.c.submitted_at.desc(), practice_sessions.c.id.desc())
+            .limit(1)
+        ).one_or_none()
+        if row is None:
+            return None
+        return LatestOutcome(
+            session=_session(row),
+            latest_attempt_id=row.latest_attempt_id,
+            latest_result=cast(AttemptResult | None, row.latest_result),
+            submitted_answer=dict(row.initial_answer) if row.initial_answer is not None else None,
+        )
+
     def record_view(
         self, workspace_id: uuid.UUID, question_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
@@ -420,19 +479,21 @@ class PracticeRepository:
         self._session.execute(self._view_upsert(workspace_id, question_id, user_id))
 
     @staticmethod
-    def _session_select() -> Any:
-        return select(*_SESSION_COLUMNS).select_from(
-            practice_sessions.join(
-                questions,
-                and_(
-                    questions.c.id == practice_sessions.c.question_id,
-                    questions.c.workspace_id == practice_sessions.c.workspace_id,
-                ),
-            ).join(
-                question_revisions,
-                question_revisions.c.id == practice_sessions.c.question_revision_id,
-            )
+    def _session_tables() -> Any:
+        return practice_sessions.join(
+            questions,
+            and_(
+                questions.c.id == practice_sessions.c.question_id,
+                questions.c.workspace_id == practice_sessions.c.workspace_id,
+            ),
+        ).join(
+            question_revisions,
+            question_revisions.c.id == practice_sessions.c.question_revision_id,
         )
+
+    @classmethod
+    def _session_select(cls) -> Any:
+        return select(*_SESSION_COLUMNS).select_from(cls._session_tables())
 
     def open_session(
         self,

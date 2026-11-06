@@ -23,6 +23,7 @@ export type ImportRun = Schemas['ImportRun'];
 export type ImportRegistration = Schemas['ImportRegistration'];
 export type BookChapterOption = Schemas['BookChapterOption'];
 export type DraftDuplicate = Schemas['DraftDuplicate'];
+type DraftPrevious = Schemas['DraftPrevious'];
 export type ChapterMatch = NonNullable<ImportDraft['chapter_match']>;
 
 /** The book chapter an import draft is registered under (CHAPTER-MAP) and why. */
@@ -111,6 +112,8 @@ export interface ReviewDraft {
   readonly chapter?: DraftChapterInfo;
   /** PDF import drafts not registered yet: the same question exists (UX7-DEDUP). */
   readonly duplicateOf?: DraftDuplicate | null;
+  /** Re-extracted runs: what the draft replaces, null = new (UX12-REEXTRACT). */
+  readonly previous?: DraftPrevious | null;
 }
 
 /**
@@ -130,6 +133,7 @@ export interface DraftSummary extends Pick<
   | 'answerMissing'
   | 'issues'
   | 'duplicateOf'
+  | 'previous'
 > {
   /** PDF import drafts only: the chapter it registers under (null = none). */
   readonly chapter?: { readonly chapter: { readonly id: string } | null };
@@ -196,6 +200,7 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
             sourceTitle: draft.source_chapter_title ?? null,
           },
           duplicateOf: draft.duplicate_of ?? null,
+          previous: draft.previous ?? null,
         }),
   };
 }
@@ -279,6 +284,12 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
   answer_key_table_ambiguous: '정답표를 해석하기 어려워 적용하지 않은 부분이 있습니다.',
   type_uncertain: '문제 유형을 확실히 알 수 없습니다. 유형이 맞는지 확인해 주세요.',
   figure_missing: '문제에서 말하는 그림을 PDF에서 찾지 못했습니다. 원본과 비교해 확인해 주세요.',
+  reading_order_repaired: 'PDF에 인쇄된 순서로 다시 읽어 정리했습니다.',
+  table_in_stem: '표를 PDF에서 읽어 문제 내용에 넣었습니다. 병합된 칸은 원본과 다를 수 있습니다.',
+  option_count_outlier:
+    '이 문서의 다른 문제와 보기 수가 다릅니다. 원본과 비교해 보기를 확인해 주세요.',
+  options_on_next_question:
+    '보기가 앞뒤 문제에 잘못 붙었을 수 있습니다. 원본과 비교해 보기를 확인해 주세요.',
   llm_output_invalid: 'AI 보조 정리 결과를 쓸 수 없어 PDF에서 읽은 그대로 두었습니다.',
   llm_unavailable: 'AI 보조 정리를 사용할 수 없어 PDF에서 읽은 그대로 두었습니다.',
   llm_type_rejected:
@@ -289,11 +300,17 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Codes that say the optional AI assist of the extraction did not apply (provider unavailable,
- * unusable output), so the rule-based draft was kept as read from the PDF. They describe the
- * extraction, not the draft's content: shown as a note, never a reason to check the draft.
+ * Codes that describe the extraction, not the draft's content: the optional AI assist did not
+ * apply (provider unavailable, unusable output), so the rule-based draft was kept as read from
+ * the PDF, the blocks were put back in printed order, or a table went into the stem. Shown as a
+ * note, never a reason to check the draft.
  */
-const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set(['llm_unavailable', 'llm_output_invalid']);
+const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set([
+  'llm_unavailable',
+  'llm_output_invalid',
+  'reading_order_repaired',
+  'table_in_stem',
+]);
 
 /** A validation that is only a note about the extraction (not something to check). */
 export function isAssistNote(code: string): boolean {

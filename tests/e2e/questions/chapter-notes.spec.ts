@@ -195,7 +195,7 @@ async function footnoteNumbers(list: Locator): Promise<(number | null)[]> {
   const lines = await list.getByRole('listitem').allInnerTexts();
   return lines.map((line) => {
     const m = FOOTNOTE_LINE.exec(line);
-    return m ? Number(m[2]) : null;
+    return m ? Number(m[1]) : null;
   });
 }
 
@@ -338,7 +338,7 @@ test(
     await expect(ref).toBeFocused();
 
     // A footnote line opens that question's practice panel the same way.
-    const line2 = footnotes.getByRole('link').filter({ hasText: /\d+장\s*2번/ });
+    const line2 = footnotes.getByRole('link').filter({ hasText: /(?<!\d)2번/ });
     await line2.focus();
     await page.keyboard.press('Enter');
     const play = panelUi.numbered(page, 2);
@@ -382,7 +382,7 @@ test(
     const gone = footnotes.getByRole('listitem').filter({ hasText: FOOTNOTE_GONE });
     await expect(gone).toHaveCount(1);
     await expect(gone.getByRole('link')).toHaveCount(0);
-    await expect(gone).toContainText(/\d+장\s*3번/);
+    await expect(gone).toContainText(/(?<!\d)3번/);
     await expect(footnotes.getByRole('link')).toHaveCount(2);
 
     // 다시 만들기 → version 2 from the two remaining questions, no badge.
@@ -680,14 +680,14 @@ test(
       hold.release();
       await waitForNote(s.owner, s.ch1, 'succeeded');
 
-      // Feature off: create is disabled with the reason, POST is 409, stored notes still read.
+      // Feature off: no create action or reason, POST is 409, stored notes still read.
       const off = await startChapterNotesOffStack();
       try {
         await page.goto(`${off.webUrl}${notePanelPath(s.workspaceId, enCh1)}`);
         panel = noteUi.panel(page);
         await expect(panel).toBeVisible();
-        const create = noteUi.create(panel);
-        await expect(create).toHaveCount(0);
+        await expect(noteUi.create(panel)).toHaveCount(0);
+        await expect(panel.getByText(noteUi.unavailableReason)).toHaveCount(0);
         const state = await off.request<ChapterNoteState>(
           s.owner,
           'GET',

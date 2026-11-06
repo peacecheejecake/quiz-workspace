@@ -21,7 +21,7 @@ import {
   recolorHighlight,
   type HighlightTargetInput,
 } from '@/lib/highlights/client';
-import { withCreated, withUpdated } from '@/lib/highlights/model';
+import { HIGHLIGHT_TEXT, withCreated, withUpdated } from '@/lib/highlights/model';
 import type { MyHighlight } from '@/lib/notes/model';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 
@@ -108,12 +108,14 @@ export interface HighlightToolOptions {
   readonly target: HighlightTargetInput;
   /** The `HighlightableText` (its `ref`); the menu returns focus there. */
   readonly areaRef: RefObject<HTMLDivElement | null>;
-  /** A highlight was made (the explanation's "모았습니다" notice). */
+  /** A new highlight was made, not a recolor (the explanation's "모았습니다" toast). */
   readonly onCreated?: (created: MyHighlight) => void;
 }
 
 export interface HighlightTool {
   readonly onSelectRange: (selection: HighlightSelection | null) => void;
+  /** The highlight whose menu is open, for `HighlightableText`. */
+  readonly activeHighlightId: string | null;
   /** The `HighlightMenu`, rendered next to the area. */
   readonly menu: ReactNode;
 }
@@ -127,8 +129,9 @@ export function useHighlightTool({
   onCreated,
 }: HighlightToolOptions): HighlightTool {
   const [selection, setSelection] = useState<HighlightSelection | null>(null);
-  // A refused change is said next to the area (no toast: QuestionViewer has none of its own).
+  // A refused change is said next to the area.
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
   const { update, reload } = store;
   const fail = (failure: unknown) => {
     const kind = failure instanceof HighlightApiError ? failure.kind : 'failed';
@@ -176,9 +179,14 @@ export function useHighlightTool({
         returnFocusTo={areaRef}
         onClose={() => setSelection(null)}
         onAction={(action) => void act(action)}
+        onCopied={() => toast({ tone: 'success', title: HIGHLIGHT_TEXT.copied })}
       />
       {error ? <p role="alert">{error}</p> : null}
     </>
   );
-  return { onSelectRange: setSelection, menu };
+  return {
+    onSelectRange: setSelection,
+    activeHighlightId: selection?.highlightId ?? null,
+    menu,
+  };
 }

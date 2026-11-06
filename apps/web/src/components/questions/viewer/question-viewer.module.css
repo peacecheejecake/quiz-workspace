@@ -1,7 +1,9 @@
 /* QuestionViewer (QVIEW-01, docs/screens/question-viewer.md): the shared question body, the
    practice / sequence / manage / read-only modes and the range picker. Semantic tokens only. */
 
+/* Positioned: the visually hidden result line stays inside the scrolling body. */
 .body {
+  position: relative;
   display: grid;
   gap: var(--space-4);
 }
@@ -18,6 +20,7 @@
  */
 .stem {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   margin: 0;
   font-size: var(--font-size-body-lg);
@@ -39,6 +42,74 @@
 
 .option:is(:global(.qz-radio), :global(.qz-checkbox)) > :global(.text) > :global(.label) {
   font-size: var(--font-size-body-lg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: font-weight var(--qz-transition-fast);
+}
+
+/*
+ * Unselected control and hovered row (UX12-OPTIONS, design-system §4.1): a lighter control at rest;
+ * the whole row, not only the control, darkens it and bolds the text. Disabled rows do not react.
+ */
+.option:is(:global(.qz-radio), :global(.qz-checkbox))
+  > :is(:global(.circle), :global(.box)):not(
+    [data-state='checked'],
+    [data-state='indeterminate'],
+    :focus-visible
+  ) {
+  border-color: var(--color-option-control);
+}
+
+@media (hover: hover) {
+  .option:is(:global(.qz-radio), :global(.qz-checkbox)):has(> :enabled):hover
+    > :is(:global(.circle), :global(.box)):not(
+      [data-state='checked'],
+      [data-state='indeterminate'],
+      :focus-visible
+    ) {
+    border-color: var(--color-option-control-hover);
+  }
+
+  .option:is(:global(.qz-radio), :global(.qz-checkbox)):has(> :enabled):hover
+    > :global(.text)
+    > :global(.label) {
+    font-weight: var(--font-weight-semibold);
+  }
+}
+
+/* The hidden bold copy holds the row at its hovered height, so bolder text cannot move the rows. */
+.optionCopy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.optionCopy > *,
+.optionCopy::after {
+  grid-area: 1 / 1;
+}
+
+.optionCopy::after {
+  content: attr(data-copy);
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+}
+
+/* QTABLE-01: the label column fills the row, so every row has the same tracks as the header. */
+.gridOption > :global(.text) {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+/* Inset by what precedes the cells of a row: its border, padding, 24px control and gap. */
+.optionGridHead {
+  padding-inline: calc(2px + var(--space-3) + 24px + var(--space-2))
+    calc(2px + var(--space-3) + var(--space-5));
+  font-size: var(--font-size-body-lg);
+}
+
+.revisionGridHead {
+  padding-inline: calc(1px + var(--space-3));
+  font-size: var(--font-size-body-lg);
 }
 
 .choices {
@@ -57,11 +128,14 @@
 
 /*
  * One MCQ option row (UX7-QDISPLAY, QPLAY-01-AC12, design-system §4.1 "채점 결과 테두리"): the
- * 2px border is always there and transparent until the answer is graded, so a result changes only
- * its color and never the layout. The text mark carries the meaning; color only reinforces it.
+ * 2px border is always there and transparent until the answer is graded, and the end padding
+ * always keeps the room of the 16px result icon, so a result never moves or rewraps anything. The
+ * icon and the hidden description carry the meaning; color only reinforces it (UX12-OPTIONS).
  */
 .option {
-  padding: var(--space-2) var(--space-3);
+  position: relative;
+  padding-block: var(--space-2);
+  padding-inline: var(--space-3) calc(var(--space-3) + var(--space-5));
   border: 2px solid transparent;
   border-radius: var(--radius-md);
 }
@@ -78,9 +152,28 @@
   border-color: var(--color-danger);
 }
 
+/* Out of the label column, centered on the 24px first line. */
+.option:is(:global(.qz-radio), :global(.qz-checkbox)) > :global(.text) > :global(.description) {
+  position: absolute;
+  inset-block-start: calc(var(--space-2) + var(--space-1));
+  inset-inline-end: var(--space-3);
+  margin: 0;
+}
+
 .mark {
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
+  display: flex;
+}
+
+.toneCorrect .mark {
+  color: var(--color-success);
+}
+
+.toneChosen .mark {
+  color: var(--color-border-strong);
+}
+
+.toneAnswer .mark {
+  color: var(--color-danger);
 }
 
 @media (forced-colors: active) {
@@ -131,7 +224,7 @@
   margin: 0;
 }
 
-/* Result text (정답/오답/채점 대기) carries the meaning; color only reinforces it. */
+/* Visible result wording (채점 대기, non-MCQ) carries the meaning; color only reinforces it. */
 .result {
   margin: 0;
   font-weight: var(--font-weight-semibold);
@@ -139,6 +232,17 @@
 
 .result:empty {
   display: none;
+}
+
+/* An MCQ grade's focus target (UX12-OPTIONS-AC07): its sentence is hidden, these are not. */
+.answerField {
+  min-inline-size: 0;
+  border-radius: var(--radius-md);
+}
+
+.answerField:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .result:focus-visible {
@@ -194,20 +298,10 @@
   margin: 0;
 }
 
-.collected {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-label);
-}
-
-.collected:empty {
-  margin: 0;
-}
-
 .footer {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
   align-items: center;
   inline-size: 100%;
 }
@@ -221,6 +315,12 @@
   display: flex;
   gap: var(--space-2);
   margin-inline-start: auto;
+}
+
+/* Footer controls that cannot act keep focus (aria-disabled), styled like a disabled button. */
+.footer [aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 /* Revision body (manage, read-only): a revision with its answers, no answer input. */
@@ -348,7 +448,13 @@
 }
 
 .sourceLink {
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -421,7 +527,7 @@
 .stepActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 /* QuestionRangePicker */

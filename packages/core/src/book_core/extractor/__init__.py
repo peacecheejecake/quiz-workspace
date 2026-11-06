@@ -24,6 +24,8 @@ from book_core.extractor.llm_refine import (
     LLMQuestion,
     build_request,
 )
+from book_core.extractor.reading_order import reading_order
+from book_core.extractor.segment import has_inline_answer
 
 __all__ = [
     "CLASSIFIER_VERSION",
@@ -40,5 +42,7 @@ __all__ = [
     "QuestionExtractor",
     "build_request",
     "classify_content",
+    "has_inline_answer",
     "llm_requests",
+    "reading_order",
 ]

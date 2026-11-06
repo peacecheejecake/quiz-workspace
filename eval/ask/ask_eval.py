@@ -416,7 +416,6 @@ def explain_input(case: dict[str, Any]) -> ExplainQuestion:
         correct_option_ids=[f"opt-{mcq['correct']}"],
         accepted_answers=None,
         rubric=None,
-        explanation=None,
     )
 
 

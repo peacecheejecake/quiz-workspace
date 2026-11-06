@@ -76,7 +76,7 @@ book_core/
 - `mock_exam`(MOCK-SPEC 2026-11-01, [MOCK-01](screens/mock-exams.md)): 범위 후보(Heatmap 순서의 확정 문제) + 문항 수 + 변형 유형 + seed → `MockExamPlan[{source_question_id, variation_type}]`(결정적 원본 선택·유형 배정), `OPTION_SHUFFLE` 복사본(원본 revision 내용 + seed 보기 순서). LLM 유형은 묶음 생성: `pack_batches(plan, passages, budget)`(token 예산·`sources_per_call` 상한·passage 공유 원본끼리, 결정적) → 묶음 prompt `mock_exam.generate/v1`(원본 `S1…`, 묶음 안에서 한 번만 실린 passage `P1…`, 항목마다 변형 유형 지시) → 항목별로 `generation.validation`의 승인 차단 검증(`accept_for_mock_exam`), 실패 항목 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔. 결정적 fake LLM은 묶음 응답·항목 하나 실패·깨진 묶음·잘린 응답 시나리오와 호출 수 기록을 지원한다.
 
 - `ask`: 질문 + 근거(`S1…Sn`: 고정된 발행 블록 발췌) + 첨부 문제(공개 수준 `none|hint|full`에 맞는 필드만 받는 타입) + 직전 턴 → `LLMRequest`(지시: 근거만, `[S#]` 인용, `[NO_ANSWER]`, `hint`면 정답 비공개 지시); 끝난 답의 인용 검증(모르는 tag 제거·번호 다시 매김·`uncited`), 테스트용 결정적 streaming fake와 marker(ASK-01).
-- `explain`: 고정된 문제 revision(발문·보기·정답·허용 답안·채점 기준·사람 해설·출처 블록) + 근거 → `AIExplanation{correct_option_ids, summary_md, options[{option_id, why_md}], concepts_md}`; 정답 불일치 거절, 모든 보기 한 번씩 확인(1회 재요청), 인용 검증은 `ask`와 공용(AIEXPL-01).
+- `explain`: 고정된 문제 revision(발문·보기·정답·허용 답안·채점 기준·출처 블록) + 근거 → `AIExplanation{correct_option_ids, summary_md, options[{option_id, why_md}], concepts_md}`; 정답 불일치 거절, 모든 보기 한 번씩 확인(1회 재요청), 인용 검증은 `ask`와 공용(AIEXPL-01).
 - `llm`: 기존 `complete`(structured output)에 더해 text streaming(`stream_text` — delta iterator + 끝난 뒤 usage·stop reason; Anthropic Messages streaming과 fake). 메시지 원문은 예외·로그에 넣지 않는 기존 규칙 그대로.
 
 CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `core questions extract`, `core questions generate`, `core eval`.
@@ -122,7 +122,7 @@ workspace
  │                                                              ├── mock_exam_practice_session
  │                                                              └── mock_exam_attempt (모의고사 풀이, Heatmap과 무관)
  ├── practice_run (사용자별 범위 풀이 묶음, bank|mock; QVIEW)
- ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, 공유·Fork 제외)
+ ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, Fork 제외, 공유는 Owner가 켠 링크의 Owner 것만 읽기, UX12-SHARE)
  ├── ask_conversation ── ask_message ── ask_message_source (사용자별, ASK)
  ├── llm_feature_usage (ASK·AIEXPL 호출 usage, 내용 없음)
  ├── activity_event
@@ -199,7 +199,8 @@ workspace
 | POST/GET | `/api/v1/workspaces/{id}/questions` | 문제 등록·조회 |
 | GET/PATCH | `/api/v1/questions/{id}` | 문제 상세·편집 |
 | PATCH | `/api/v1/questions/{id}/my-state` | 즐겨찾기·다시 풀기 토글 |
-| POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출) |
+| POST | `/api/v1/questions/{id}/practice-open` | 풀이 panel 열기: 최신 결과 확인 후 캐시 session 재사용·결과·새 session을 한 트랜잭션으로(UX12-OPEN, 미제출 응답 정답 비노출) |
+| POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출), 범위 풀이 위치 |
 | POST | `/api/v1/practice-sessions/{id}/submit` | 답변 제출·채점 |
 | POST | `/api/v1/practice-sessions/{id}/self-grade` | 주관식·서술형 자기평가 |
 | GET | `/api/v1/questions/{id}/attempts` | 풀이 이력(합쳐진 중복의 attempt 포함, 항목별 `question_id`, UX7-DEDUP) |
@@ -213,6 +214,7 @@ workspace
 | POST | `/api/v1/workspaces/{id}/question-imports` | 문제 PDF 가져오기(준비 완료된 모든 PDF, UX6-UPLOAD) |
 | GET | `/api/v1/question-imports/{id}/drafts` | 가져온 문제 검토(초안별 등록 챕터 추천·선택, 교재 챕터 목록 — CHAPTER-MAP; `offset`/`limit`(≤200)이면 한 페이지와 `total`, `include_chapters=false`이면 챕터 목록 생략 — QIMP-PAGING) |
 | GET | `/api/v1/question-imports/{id}/draft-summaries` | 모든 초안의 요약(본문·보기·정답·해설 없음: id·version·순서·번호·유형·검토 상태·등록 여부·승인 가능·정답 없음·검증 코드·등록 챕터 id·중복 `duplicate_of`(UX7-DEDUP))과 교재 챕터 목록 — 검토 화면의 선택·개수·등록용(QIMP-PAGING) |
+| POST | `/api/v1/question-imports/{id}/re-extract` | `다시 추출`(UX12-REEXTRACT): 같은 revision에 새 run과 새 초안, 저장된 파싱 결과 재사용, 등록된 문제 불변, `Idempotency-Key`, 문서당 진행 중 run 하나(409 `import-running`) |
 | POST | `/api/v1/question-imports/{id}/publish` | 승인한 문제만 등록(`approve: true`면 선택한 초안을 승인과 함께 등록, 거절 목록 반환) |
 | POST | `/api/v1/question-imports/{id}/registrations` | 선택한 초안 전체를 서버에서 승인·등록(`question.import_register` job, QIMP-JOB) |
 | GET | `/api/v1/question-imports/{id}/registrations/{registration_id}` | 서버 측 등록 진행(처리/전체)·거절 목록 |
@@ -251,7 +253,7 @@ workspace
 | POST | `/api/v1/questions/{id}/ai-explanation/regenerate` | 다시 만들기(편집 권한, revision당 하루 3번) |
 | GET | `/api/v1/ai-explanations/{id}/stream` | AI 해설 SSE |
 | GET | `/api/v1/questions/{id}/related-sources` | 제출 후 관련 본문(`practice_session_id` 제출 확인 또는 `view=detail`; 없으면 API 안에서 검색해 저장, LLM 없음 — RELSRC-01) |
-| GET | `/api/v1/questions/{id}/source-region` · `/api/v1/mock-exam-questions/{id}/source-region` | 문제 원문 보기(QSRC-01): 가져오기 출처(`question_sources.import_run_id` 있음) 위치의 문서·쪽·bbox 합집합만, 정답·글 없음, 구성원 누구나, 없으면 404. PDF는 기존 `GET /documents/{id}/source-url` 중계 |
+| GET | `/api/v1/questions/{id}/source-region` · `/api/v1/mock-exam-questions/{id}/source-region` | 문제 원문 보기(QSRC-01): 가져오기 출처(`question_sources.import_run_id` 있음) 위치의 문서·쪽·bbox 합집합과 문제 그림 `figures`(UX12-REEXTRACT)만, 정답·글 없음, 구성원 누구나, 없으면 404. PDF는 기존 `GET /documents/{id}/source-url` 중계 |
 | GET/POST | `/api/v1/mock-exam-questions/{id}/ai-explanation` · `/ai-explanation/regenerate` · `/related-sources`, GET `/api/v1/mock-ai-explanations/{id}/stream` | 모의고사 문제의 AI 해설·SSE·관련 본문(`mock_practice_session_id` 제출 확인; 삭제된 모의고사·빠진 문제 404; 공유 API 없음 — AIEXPL-01-C09·RELSRC-01-C07, ASK-SYNC) |
 | GET | `/api/v1/jobs/{id}` | 비동기 작업 상태 |
 | GET | `/api/v1/jobs/{id}/events` | SSE 진행 상황 |

@@ -20,10 +20,13 @@ import {
 import { IDLE, type BlockEditState } from '@/lib/documents/block-edit';
 import type { ContentBlock } from '@/lib/documents/editor-api';
 import { blockPage } from '@/lib/documents/outline';
+import { tableGrid } from '@/lib/documents/table-grid';
 import { answerLines, optionLabel, QUESTION_TYPE_LABELS } from '@/lib/documents/document-questions';
 import { blockPageSpan, type PageGroup, type QuestionItem } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 
 export interface TextBlockEditorProps {
   /** The revision's blocks grouped by page (lib/documents/text-groups pageGroups). */
@@ -52,21 +55,23 @@ const TYPE_LABELS: Readonly<Record<ContentBlock['type'], string>> = {
 
 function BlockContent({ block }: { readonly block: ContentBlock }) {
   if (block.type === 'table' && block.table) {
-    const { rows, header_rows: headerRows } = block.table;
+    const headerRows = block.table.header_rows;
     return (
       <div className={styles.tableScroll}>
         <table className={styles.table}>
           <tbody>
-            {rows.map((row, r) => (
+            {tableGrid(block.table).map((row, r) => (
               // Table rows and cells have no ids; their position is their identity.
               <tr key={r}>
-                {row.map((cell, c) =>
+                {row.map(({ col, text, rowSpan, colSpan }) =>
                   r < headerRows ? (
-                    <th key={c} scope="col">
-                      {cell}
+                    <th key={col} scope="col" rowSpan={rowSpan} colSpan={colSpan}>
+                      {text}
                     </th>
                   ) : (
-                    <td key={c}>{cell}</td>
+                    <td key={col} rowSpan={rowSpan} colSpan={colSpan}>
+                      {text}
+                    </td>
                   ),
                 )}
               </tr>
@@ -272,6 +277,7 @@ function QuestionCard({
   const title = question.number !== null ? `${question.number}번 문제` : '문제';
   const holdsCurrent = currentBlockId !== null && blocks.some((b) => b.block_id === currentBlockId);
   const first = blocks[0];
+  const grid = optionGrid(question.stem, question.options);
   return (
     <div
       role="group"
@@ -300,13 +306,25 @@ function QuestionCard({
           ) : null}
         </span>
       </div>
-      <StemText stem={question.stem} className={styles.questionStem} />
+      <StemText stem={grid?.stem ?? question.stem} className={styles.questionStem} />
+      {grid ? <OptionGridHead grid={grid} numbered className={styles.optionGridHead} /> : null}
       {question.options.length > 0 ? (
         <ol className={styles.optionList} aria-label="보기">
           {question.options.map((option, index) => (
             <li key={option.id} className={styles.option}>
-              <span className={styles.optionLabel}>{optionLabel(index)}</span>
-              <span>{option.text}</span>
+              {grid ? (
+                <OptionCells
+                  grid={grid}
+                  index={index}
+                  number={optionLabel(index)}
+                  numberClassName={styles.optionLabel}
+                />
+              ) : (
+                <>
+                  <span className={styles.optionLabel}>{optionLabel(index)}</span>
+                  <span>{option.text}</span>
+                </>
+              )}
             </li>
           ))}
         </ol>
@@ -315,6 +333,7 @@ function QuestionCard({
         <Button
           size="sm"
           variant="ghost"
+          borderless
           aria-expanded={answerOpen}
           aria-controls={`${id}-answer`}
           onClick={() => setAnswerOpen((open) => !open)}
@@ -324,6 +343,7 @@ function QuestionCard({
         <Button
           size="sm"
           variant="ghost"
+          borderless
           aria-expanded={showSource}
           aria-controls={`${id}-source`}
           onClick={() => setSourceOpen((open) => !open)}

@@ -30,6 +30,7 @@ from book_core.llm.streaming import (
     TextStreamEnd,
     TextStreamEvent,
     TextStreamRequest,
+    TextStreamUsage,
 )
 
 logger = logging.getLogger("book_core.llm")
@@ -129,6 +130,7 @@ class AnthropicTextStreamClient:
                 if isinstance(message.get("id"), str):
                     request_id = message["id"]
                 usage = _merge_usage(usage, message.get("usage"))
+                yield TextStreamUsage(usage)
             elif kind == "content_block_delta":
                 delta = event.get("delta")
                 if isinstance(delta, dict) and delta.get("type") == "text_delta":

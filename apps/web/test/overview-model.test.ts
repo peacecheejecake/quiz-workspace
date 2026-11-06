@@ -48,16 +48,11 @@ describe('placeQuestions / heatmapChapters', () => {
     expect(placed.map((p) => [p.item.question_id, p.number, p.chapterKey])).toEqual([
       ['a', '12', C2],
       ['b', '4', C1],
-      // Unnumbered: position within the chapter.
-      ['c', '1', 'none'],
+      // Unnumbered: no number, never a position.
+      ['c', null, 'none'],
       ['d', '7', 'none'],
     ]);
-    expect(placed.map(placedTitle)).toEqual([
-      '3장 12번 문제',
-      '부록 4번 문제',
-      '챕터 없음 1번 문제',
-      '챕터 없음 7번 문제',
-    ]);
+    expect(placed.map(placedTitle)).toEqual(['12번 문제', '4번 문제', '번호 없음', '7번 문제']);
     const groups = heatmapChapters(placed);
     expect(groups.map((g) => [g.id, g.title, g.number, g.questions.length])).toEqual([
       [C2, 'Attention', 3, 1],
@@ -114,7 +109,7 @@ describe('findPlaced', () => {
       chapters,
       items: [item('a', C2, 12), item('c', null, null), item('d', null, null)],
     };
-    expect(findPlaced(all, 'd')).toMatchObject({ number: '2', chapterTitle: '챕터 없음' });
+    expect(findPlaced(all, 'd')).toMatchObject({ number: null, chapterTitle: '챕터 없음' });
     expect(findPlaced(all, 'zz')).toBeNull();
   });
 });

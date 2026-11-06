@@ -2,6 +2,7 @@
 // (src/lib/documents/bff.ts), which attaches the session's access token server-side; FastAPI
 // enforces the workspace scope and the published-revision filter.
 import type { Problem, Schemas } from '@quiz/api-client';
+import type { ChapterPickerNode } from '@quiz/ui';
 
 export type SearchMode = Schemas['SearchRequest']['mode'] & string;
 export type SearchItem = Schemas['SearchItem'];
@@ -130,6 +131,7 @@ async function call<T>(
 export interface SearchClient {
   search(workspaceId: string, q: SearchQuery, signal?: AbortSignal): Promise<SearchResponse>;
   /** Chapters (top-level outline nodes) of the document's published revision. */
+  /** Every outline node of the document in reading order, sub-chapters included. */
   chapters(documentId: string, signal?: AbortSignal): Promise<OutlineItem[]>;
   /** One canonical block of a given revision (the hit's published revision). */
   block(
@@ -138,6 +140,15 @@ export interface SearchClient {
     revisionId: string,
     signal?: AbortSignal,
   ): Promise<ContentBlock>;
+}
+
+/** The outline tree in pre-order: `chapter_ids` takes any node and covers its whole subtree. */
+export function flattenOutline(items: readonly OutlineItem[]): OutlineItem[] {
+  return items.flatMap((item) => [item, ...flattenOutline(item.children)]);
+}
+
+export function outlinePickerNodes(items: readonly OutlineItem[]): ChapterPickerNode[] {
+  return items.map((item) => ({ value: item.id, label: item.title, level: item.level }));
 }
 
 export function createSearchClient(
@@ -153,8 +164,10 @@ export function createSearchClient(
         now,
       ),
     chapters: async (documentId, signal) =>
-      (await call<{ items: OutlineItem[] }>(fetchImpl, outlinePath(documentId), { signal }, now))
-        .items,
+      flattenOutline(
+        (await call<{ items: OutlineItem[] }>(fetchImpl, outlinePath(documentId), { signal }, now))
+          .items,
+      ),
     block: async (documentId, blockId, revisionId, signal) =>
       (
         await call<{ block: ContentBlock }>(

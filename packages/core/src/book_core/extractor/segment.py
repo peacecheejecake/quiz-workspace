@@ -1,7 +1,9 @@
 """Deterministic, rule-based pre-extraction of a question paper (no LLM).
 
-Walks the parsed blocks in reading order, split into lines (Docling emits one block per printed
-line, the ideal fixture documents one block per question), and segments:
+Walks blocks in the order it is given, split into lines (Docling emits one block per printed line,
+the ideal fixture documents one block per question). Docling's body order is not the printed
+order, so callers pass ``reading_order(blocks)``, and every position here (``block_indices``,
+``SourceLine.block_index``) indexes that list. It segments:
 
 - questions by numbering (``1.``, ``1번``, ``문 1.``, ``Q1.``), or a bare number (``01 ...``) on a
   heading line or a line with a question cue (``?``, ``시오``, an answer blank ``( )``); a bare
@@ -33,6 +35,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
+from book_core.export import md_table
 from book_core.question.labels import (
     CIRCLED_DIGITS,
     answer_option_keys,
@@ -40,6 +43,7 @@ from book_core.question.labels import (
     has_item_label,
     leading_item_families,
     split_option_line,
+    split_pipe_blocks,
 )
 from book_core.structure.numbering import NumberingKind, parse_numbering
 
@@ -140,8 +144,16 @@ class RawQuestion:
     def stem(self) -> str:
         """The stem lines joined by spaces (a wrapped line goes on), except that each printed
         stem item (``(가) ...``, ``ㄱ. ...``) starts its own line, after a blank line below the
-        question sentence (questions.md §4 11)."""
-        return break_stem_items(" ".join(p for p in self.stem_parts if p).strip())
+        question sentence, and a table stands apart by blank lines (questions.md §4 11)."""
+        text = ""
+        after_table = False
+        for part in self.stem_parts:
+            if not part:
+                continue
+            table = split_pipe_blocks(part) == [(True, part)]
+            text += ("\n\n" if table or after_table else " ") + part if text else part
+            after_table = table
+        return break_stem_items(text.strip())
 
     @property
     def figure_labels(self) -> list[str]:
@@ -355,24 +367,102 @@ def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry
     return entries, orientation == "ambiguous"
 
 
+OptionRow = list[tuple[str, str]]
+
+
+def _starts_with_label(cell: str) -> bool:
+    return bool(cell) and cell[0] in CIRCLED_DIGITS
+
+
+def _is_bare_label(cell: str) -> bool:
+    return len(cell) == 1 and _starts_with_label(cell)
+
+
+def _label_column_row(row: Sequence[str]) -> OptionRow:
+    """One option per row: the first cell's label (``①``, ``①xxx``); the cells beside it are its
+    text as printed, even when they refer to labels (``①, ②``)."""
+    found = split_option_line(row[0]) if row and _starts_with_label(row[0]) else None
+    if not found or len(found) != 1:
+        return []
+    label, text = found[0]
+    return [(label, " | ".join(c for c in (text, *row[1:]) if c))]
+
+
+def _row_options(row: Sequence[str]) -> OptionRow:
+    """``(label, text)`` of the options a table row prints side by side: every cell that starts
+    with a circled label opens one (``①``, ``①xxx``, ``① x ② y``). The cells after a label, up to
+    the next one, are its text, joined as printed (`` | ``). A row whose first cell has no label
+    holds none."""
+    if not row or not _starts_with_label(row[0]):
+        return []
+    labels: list[str] = []
+    parts: list[list[str]] = []
+    for cell in row:
+        if cell and cell[0] in CIRCLED_DIGITS:
+            for label, text in split_option_line(cell) or []:
+                labels.append(label)
+                parts.append([text] if text else [])
+        elif cell:
+            parts[-1].append(cell)
+    return [(label, " | ".join(cells)) for label, cells in zip(labels, parts, strict=True)]
+
+
+def _has_label_column(rows: Sequence[Sequence[str]]) -> bool:
+    """Two or more rows open with a label alone, and those labels are not one of several label
+    cells per row (``| ① | 갑 | ② | 을 |``): the first column holds the option labels."""
+    labelled = [row for row in rows if _starts_with_label(row[0])]
+    return (
+        len(labelled) >= 2
+        and all(_is_bare_label(row[0]) for row in labelled)
+        and not all(any(_is_bare_label(cell) for cell in row[1:]) for row in labelled)
+    )
+
+
+def _reads_every_row(rows: Sequence[Sequence[str]], found: Sequence[OptionRow]) -> bool:
+    """Every row that opens with a label gave options: accepting a reading drops no row."""
+    return all(
+        options or not _starts_with_label(row[0]) for row, options in zip(rows, found, strict=True)
+    )
+
+
+def _is_option_run(found: Sequence[OptionRow], *, continues: bool) -> bool:
+    """The labels run on without a gap from ①, at least two; the table that continues options
+    split over pages needs one, from any label."""
+    labels = sorted(CIRCLED_DIGITS.index(label) for row in found for label, _ in row)
+    first = labels[0] if continues and labels else 0
+    return len(labels) >= (1 if continues else 2) and labels == list(
+        range(first, first + len(labels))
+    )
+
+
 def _table_options(
-    block: Block, index: int, *, min_rows: int = 2
+    block: Block, index: int, *, continues: bool = False
 ) -> tuple[list[str], list[RawOption]]:
-    """``(header parts, options)`` of a table whose rows start with circled option labels (at
-    least ``min_rows``); ``([], [])`` for any other table. Cells are joined as printed
-    (`` | ``)."""
+    """``(header parts, options)`` of an option table, ``([], [])`` for any other table. A label
+    column keeps the cells beside it as content; other tables are read cell by cell, and a table
+    that fails that reading (labels repeat in the cells) is tried by its first column. A reading
+    must account for every row that opens with a label, or the table stays in the stem. Cells that
+    merely mention a label are not options."""
     if block.table is None:
         return [], []
     rows = [[cell.strip() for cell in row] for row in block.table.rows]
-    labelled = [i for i, row in enumerate(rows) if len(row[0]) == 1 and row[0] in CIRCLED_DIGITS]
-    if len(labelled) < min_rows:
+    by_column = [_label_column_row(row) for row in rows]
+    by_cell = [_row_options(row) for row in rows]
+    readings = [by_column, by_cell] if _has_label_column(rows) else [by_cell, by_column]
+    found = next(
+        (
+            reading
+            for reading in readings
+            if _reads_every_row(rows, reading) and _is_option_run(reading, continues=continues)
+        ),
+        None,
+    )
+    if found is None:
         return [], []
+    labelled = [i for i, row in enumerate(found) if row]
     line = SourceLine(text=block.text, block=block, block_index=index)
     header = [" | ".join(c for c in row if c) for row in rows[: labelled[0]]]
-    options = [
-        RawOption(label=rows[i][0], text=" | ".join(c for c in rows[i][1:] if c), lines=[line])
-        for i in labelled
-    ]
+    options = [RawOption(label=x, text=text, lines=[line]) for row in found for x, text in row]
     return [h for h in header if h], options
 
 
@@ -406,6 +496,11 @@ def _inline_answer(text: str) -> str | None:
         return None
     answer = match.group("ans").strip().rstrip(".").strip()
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
+
+
+def has_inline_answer(text: str) -> bool:
+    """A line of ``text`` is a printed answer (``정답: ②``): what ends a question's own region."""
+    return any(_inline_answer(line) is not None for line in text.split("\n") if line.strip())
 
 
 def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str) -> bool:
@@ -545,12 +640,18 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 # (even a single row) continues the options; only the first one's header rows
                 # belong to the stem.
                 continues = bool(current.options)
-                header, table_options = _table_options(block, index, min_rows=1 if continues else 2)
+                header, table_options = _table_options(block, index, continues=continues)
                 if table_options:
                     if not continues:
                         current.stem_parts += header
                         current.stem_lines += [table_options[0].lines[0]] if header else []
                     current.options += table_options
+                elif block.table is not None:
+                    table = md_table(block)
+                    current.stem_parts.append(table)
+                    current.stem_lines.append(
+                        SourceLine(text=table, block=block, block_index=index)
+                    )
             continue
 
         for text in lines:

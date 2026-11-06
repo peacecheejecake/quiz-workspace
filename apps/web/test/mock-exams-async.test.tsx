@@ -16,7 +16,6 @@ import type {
 import type { MockExam } from '../src/components/questions/mock-exams/mock-exam-model';
 
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  openPracticeSessionAction: vi.fn(),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(async () => ({ ok: false, kind: 'notFound', message: 'bank' })),
   setMyStateAction: vi.fn(),

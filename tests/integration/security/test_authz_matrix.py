@@ -109,6 +109,7 @@ RULES: dict[str, Rule | str] = {
     "listMyQuestionAttempts": READ,
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
+    "openQuestionPractice": PRACTICE,  # UX12-OPEN
     "listMyWorkspaceAttempts": READ,
     # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
     "createPracticeRun": RUN_CREATE,
@@ -124,6 +125,7 @@ RULES: dict[str, Rule | str] = {
     "listQuestionImportDraftSummaries": READ,
     "publishQuestionImportDrafts": EDIT,
     "retryQuestionImport": EDIT,
+    "reextractQuestionImport": EDIT,
     "registerQuestionImportDrafts": EDIT,
     "getQuestionImportRegistration": READ,
     "deleteQuestion": EDIT,
@@ -180,10 +182,12 @@ RULES: dict[str, Rule | str] = {
     "getQuestionAiExplanation": READ,
     "createQuestionAiExplanation": EXPLAIN_CREATE,
     "regenerateQuestionAiExplanation": EDIT,
+    "cancelQuestionAiExplanation": EDIT,  # or its requester: UX12-EXPLCANCEL contract tests
     "streamQuestionAiExplanation": READ,
     "getMockExamQuestionAiExplanation": EDIT_READ,
     "createMockExamQuestionAiExplanation": EDIT,
     "regenerateMockExamQuestionAiExplanation": EDIT,
+    "cancelMockExamQuestionAiExplanation": EDIT,
     "streamMockExamQuestionAiExplanation": EDIT_READ,
     "selfGradeMockPracticeSession": OWN_WRITE,
     # UX9-HL-B personal highlights (reads are the caller's rows only; HILITE-01-C01)
@@ -234,6 +238,9 @@ RULES: dict[str, Rule | str] = {
     "getSharedChapterNote": SHARED,
     "getSharedQuestionPreview": SHARED,
     "getSharedQuestionAiExplanation": SHARED,
+    # UX12-SHARE: 404 while `include_owner_records` is off (test_share_attacks.py)
+    "listSharedOwnerAttempts": SHARED,
+    "listSharedOwnerHighlights": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
@@ -340,6 +347,11 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "regenerateQuestionAiExplanation": {"view": "detail"},
         "createMockExamQuestionAiExplanation": {"view": "manage"},
         "regenerateMockExamQuestionAiExplanation": {"view": "manage"},
+        "cancelQuestionAiExplanation": {"view": "detail", "explanation_id": ids["explanation_id"]},
+        "cancelMockExamQuestionAiExplanation": {
+            "view": "manage",
+            "explanation_id": ids["mock_explanation_id"],
+        },
     }
     return bodies.get(op_id)
 

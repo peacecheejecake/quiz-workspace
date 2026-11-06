@@ -31,7 +31,7 @@ export function WorkspaceSwitcher({ current, workspaces }: WorkspaceSwitcherProp
     <div className={styles.switcher}>
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className={styles.switcherTrigger}>
+          <Button variant="ghost" borderless size="sm" className={styles.switcherTrigger}>
             <span className="qz-visually-hidden">Workspace 전환, 현재: </span>
             <span className={styles.switcherName}>{current.name}</span>
             <span aria-hidden="true">▾</span>

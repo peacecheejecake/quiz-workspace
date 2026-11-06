@@ -8,6 +8,7 @@ import {
   PracticeReturnProvider,
   usePracticeReturn,
 } from '../src/components/practice-return/practice-return-provider';
+import { publishVerifiedUser } from '../src/lib/auth/verified-user-events';
 
 const nav = vi.hoisted(() => ({
   path: '/settings/security',
@@ -20,7 +21,8 @@ const identityNavigate = vi.hoisted(() => vi.fn());
 vi.mock('../src/lib/auth/identity-navigation', () => ({ navigateForIdentity: identityNavigate }));
 const ownerId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 const runApi = vi.hoisted(() => ({ getRun: vi.fn(), getItem: vi.fn() }));
-const auth = vi.hoisted(() => ({ callback: (_event: string): void => undefined }));
+type AuthCallback = (event: string, session?: { user: { id: string } } | null) => void;
+const auth = vi.hoisted(() => ({ callback: (() => undefined) as AuthCallback }));
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.path,
   useSearchParams: () => new URLSearchParams(nav.search),
@@ -29,7 +31,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
     auth: {
-      onAuthStateChange: (callback: (event: string) => void) => {
+      onAuthStateChange: (callback: AuthCallback) => {
         auth.callback = callback;
         return { data: { subscription: { unsubscribe: vi.fn() } } };
       },
@@ -71,6 +73,9 @@ afterEach(() => {
   lookup.mockReset();
   runApi.getRun.mockReset();
   runApi.getItem.mockReset();
+  identityNavigate.mockReset();
+  vi.useRealTimers();
+  publishVerifiedUser(null);
 });
 it('UX11-RETURN-AC02 validates the last target before navigating', async () => {
   lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
@@ -86,6 +91,24 @@ it('UX11-RETURN-AC03 dismisses the control until another activity', () => {
   fireEvent.click(screen.getByText('activity'));
   fireEvent.click(screen.getByRole('button', { name: '복귀 버튼 닫기' }));
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  fireEvent.click(screen.getByText('activity'));
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+});
+it('UX12-GESTURE-AC08 a swipe down dismisses like the close button', () => {
+  const finger = (target: Window | Element, type: string, clientY: number) => {
+    const init = { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 0, clientY };
+    fireEvent(target, Object.assign(new Event(type, { bubbles: true }), init));
+  };
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const button = screen.getByRole('button', { name: '보던 문제로 돌아가기' });
+  finger(button, 'pointerdown', 0);
+  finger(window, 'pointermove', 100);
+  expect(button.parentElement?.style.translate).toBe('0px 100px');
+  act(() => finger(window, 'pointerup', 100));
+  fireEvent.click(button);
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  expect(nav.push).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('activity'));
   expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
 });
@@ -231,16 +254,20 @@ it('UX11-RETURN-AC04 fences a changed server identity on focus without an auth e
   );
   expect(nav.push).not.toHaveBeenCalled();
 });
-it('UX11-RETURN-AC04 keeps target suspended through identity outage and restores it for same owner', async () => {
+it('UX11-RETURN-AC04 keeps the page and target through an identity outage and restores buffered activity', async () => {
   const fetcher = vi
     .fn()
     .mockRejectedValueOnce(new Error('offline'))
     .mockResolvedValueOnce(new Response(JSON.stringify({ id: ownerId }), { status: 200 }));
   vi.stubGlobal('fetch', fetcher);
   setup();
+  await act(async () => {
+    fireEvent.focus(window);
+    await Promise.resolve();
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
   fireEvent.click(screen.getByText('activity'));
-  fireEvent.focus(window);
-  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
   fireEvent.focus(window);
   await waitFor(() =>
@@ -379,7 +406,7 @@ it('UX11-RETURN-AC04 automatically recovers a transient identity outage without 
     fireEvent.focus(window);
     await Promise.resolve();
   });
-  expect(document.body).toHaveAttribute('data-identity-pending');
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
   await act(async () => {
     await vi.advanceTimersByTimeAsync(5000);
   });
@@ -467,14 +494,252 @@ it('UX11-RETURN-AC04 repeated A to B to A to B transitions each require a fresh 
   await transition(ownerId, other);
 });
 
-it('UX11-RETURN-AC04 shows identity feedback on an open practice URL during an outage', async () => {
-  nav.search = `practice=${questionId}`;
+function deferredIdentity() {
+  const replies: ((response: Response) => void)[] = [];
+  const fetcher = vi.fn(
+    () =>
+      new Promise<Response>((done) => {
+        replies.push(done);
+      }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  return {
+    fetcher,
+    reply: (id: string | null) =>
+      act(async () => replies.shift()?.(new Response(JSON.stringify({ id }), { status: 200 }))),
+  };
+}
+const returnButton = () => screen.getByRole('button', { name: '보던 문제로 돌아가기' });
+
+it.each(['focus', 'pageshow'])(
+  'UX11-RETURN-AC04 a same-user %s never hides the page or unmounts the control',
+  async (trigger) => {
+    const identity = deferredIdentity();
+    setup();
+    fireEvent.click(screen.getByText('activity'));
+    const button = returnButton();
+    fireEvent(window, new Event(trigger));
+    expect(identity.fetcher).toHaveBeenCalledTimes(1);
+    expect(document.body).not.toHaveAttribute('data-identity-pending');
+    expect(returnButton()).toBe(button);
+    expect(screen.queryByRole('status')).toBeNull();
+    await identity.reply(ownerId);
+    expect(document.body).not.toHaveAttribute('data-identity-pending');
+    expect(returnButton()).toBe(button);
+    expect(screen.queryByRole('status')).toBeNull();
+  },
+);
+
+it('UX11-RETURN-AC04 the return click keeps the control mounted and only marks it busy', async () => {
+  lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
+  const identity = deferredIdentity();
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const button = returnButton();
+  fireEvent.click(button);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  expect(returnButton()).toBe(button);
+  expect(button).toBeDisabled();
+  await identity.reply(ownerId);
+  await waitFor(() =>
+    expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
+  );
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+});
+
+it('UX11-RETURN-AC04 a return click during an outage reports a temporary failure and keeps the target', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => new Response(null, { status: 503 })),
   );
   setup();
+  fireEvent.click(screen.getByText('activity'));
+  fireEvent.click(returnButton());
+  expect(await screen.findByText(/다시 시도/)).toBeInTheDocument();
+  expect(returnButton()).toBeEnabled();
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  expect(nav.push).not.toHaveBeenCalled();
+});
+
+it('UX11-RETURN-AC04 buffers activity during a silent check and applies it for the same owner', async () => {
+  const identity = deferredIdentity();
+  setup();
   fireEvent.focus(window);
-  expect(await screen.findByRole('status')).toHaveTextContent('계정을 확인하고 있습니다');
+  fireEvent.click(screen.getByText('activity'));
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  await identity.reply(ownerId);
+  expect(returnButton()).toBeVisible();
+});
+
+it('UX11-RETURN-AC04 a route change during a silent check does not hide the page', async () => {
+  const identity = deferredIdentity();
+  const view = setup();
+  fireEvent.focus(window);
+  nav.path = `/workspaces/${workspaceId}`;
+  view.rerender(
+    <PracticeReturnProvider userId={ownerId}>
+      <Activity />
+    </PracticeReturnProvider>,
+  );
+  await waitFor(() => expect(identity.fetcher).toHaveBeenCalledTimes(2));
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  await identity.reply(ownerId);
+  await identity.reply(ownerId);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+});
+
+it('UX11-RETURN-AC04 hides the page as soon as a silent check confirms another account', async () => {
+  const other = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  const identity = deferredIdentity();
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  fireEvent.focus(window);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  await identity.reply(other);
+  expect(document.body).toHaveAttribute('data-identity-pending');
+  expect(identityNavigate).toHaveBeenCalledWith(other);
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('UX11-RETURN-AC04 hides the page as soon as a silent check confirms sign-out', async () => {
+  const identity = deferredIdentity();
+  setup();
+  fireEvent.focus(window);
+  await identity.reply(null);
+  expect(document.body).toHaveAttribute('data-identity-pending');
+  expect(identityNavigate).toHaveBeenCalledWith(null);
+});
+
+it('UX11-RETURN-AC04 a same-user SIGNED_IN from a tab return stays silent', async () => {
+  const identity = deferredIdentity();
+  setup();
+  act(() => auth.callback('SIGNED_IN', { user: { id: ownerId } }));
+  expect(identity.fetcher).toHaveBeenCalledTimes(1);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  await identity.reply(ownerId);
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+});
+
+it.each([
+  ['SIGNED_OUT', null],
+  ['SIGNED_IN', { user: { id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee' } }],
+  ['SIGNED_IN', null],
+])(
+  'UX11-RETURN-AC04 %s without the same user hides the page until the server confirms',
+  async (event, session) => {
+    const identity = deferredIdentity();
+    setup();
+    act(() => auth.callback(event, session));
+    expect(document.body).toHaveAttribute('data-identity-pending');
+    await identity.reply(ownerId);
+    expect(document.body).not.toHaveAttribute('data-identity-pending');
+  },
+);
+
+it('UX11-RETURN-AC04 a later focus cannot downgrade an unresolved auth-event check', async () => {
+  const fetcher = vi.fn(async () => new Response(null, { status: 503 }));
+  vi.stubGlobal('fetch', fetcher);
+  setup();
+  act(() => auth.callback('SIGNED_OUT'));
+  await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+  fireEvent.focus(window);
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+  await act(async () => Promise.resolve());
+  expect(document.body).toHaveAttribute('data-identity-pending');
+  fetcher.mockImplementation(
+    async () => new Response(JSON.stringify({ id: ownerId }), { status: 200 }),
+  );
+  fireEvent.focus(window);
+  await waitFor(() => expect(document.body).not.toHaveAttribute('data-identity-pending'));
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('UX11-RETURN-AC04 shows a small notice only after ten seconds of failed silent checks', async () => {
+  vi.useFakeTimers();
+  nav.search = `practice=${questionId}`;
+  const fetcher = vi.fn(async () => new Response(null, { status: 503 }));
+  vi.stubGlobal('fetch', fetcher);
+  setup();
+  await act(async () => {
+    fireEvent.focus(window);
+    await vi.advanceTimersByTimeAsync(9_900);
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('status')).toBeNull();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(200);
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('연결');
+  expect(screen.getByRole('status')).not.toHaveTextContent('계정을 확인하고 있습니다');
+  expect(document.body).not.toHaveAttribute('data-identity-pending');
+  fetcher.mockImplementation(
+    async () => new Response(JSON.stringify({ id: ownerId }), { status: 200 }),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5_000);
+  });
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('UX11-RETURN-AC04 shows the notice over an open modal during an outage', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
+  const { ModalDialog } = await import('@quiz/ui');
+  render(
+    <PracticeReturnProvider userId={ownerId}>
+      <ModalDialog open onOpenChange={() => undefined} title="Modal">
+        <p>content</p>
+      </ModalDialog>
+    </PracticeReturnProvider>,
+  );
+  await act(async () => {
+    fireEvent.focus(window);
+    await vi.advanceTimersByTimeAsync(10_100);
+  });
+  expect(screen.getByText(/연결/)).toBeInTheDocument();
+});
+
+it('UX11-RETURN-AC04 keeps a visible notice in the accessibility tree when a modal opens', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
+  const { ModalDialog } = await import('@quiz/ui');
+  const tree = (open: boolean) => (
+    <PracticeReturnProvider userId={ownerId}>
+      <ModalDialog open={open} onOpenChange={() => undefined} title="Modal">
+        <p>content</p>
+      </ModalDialog>
+    </PracticeReturnProvider>
+  );
+  const view = render(tree(false));
+  await act(async () => {
+    fireEvent.focus(window);
+    await vi.advanceTimersByTimeAsync(10_100);
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('연결');
+  await act(async () => {
+    view.rerender(tree(true));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(screen.getByRole('dialog', { name: 'Modal' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('연결');
+  expect(screen.getByRole('status').closest('[aria-hidden="true"]')).toBeNull();
+});
+
+it('UX11-RETURN-AC04 an auth-event outage keeps the page hidden and explains why at once', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
+  setup();
+  act(() => auth.callback('SIGNED_OUT'));
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(await screen.findByRole('status')).toHaveTextContent('연결');
   expect(document.body).toHaveAttribute('data-identity-pending');
 });

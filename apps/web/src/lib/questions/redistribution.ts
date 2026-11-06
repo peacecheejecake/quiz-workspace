@@ -4,7 +4,9 @@
 // the session's access token server-side; FastAPI decides everything (editors of an active
 // workspace, the targets, the chapter each question still has). Unit-tested.
 import type { Schemas } from '@quiz/api-client';
+import type { ChapterPickerNode } from '@quiz/ui';
 import type { RangeGroup } from '@/components/questions/viewer/range-model';
+import { chapterPickerNodes } from './chapter-picker';
 import { displayStem } from './display-stem';
 import { NO_CHAPTER_KEY } from './overview-placement';
 
@@ -24,11 +26,6 @@ export const REDIST_PROBLEMS = {
   notConfirmed: 'urn:quiz-workspace:problem:question-not-confirmed',
 } as const;
 
-/** "1장 3번"; a question without a chapter reads "챕터 없음 3번" (the list's own label). */
-export function rowNumber(q: Pick<RedistributionQuestion, 'chapter_id' | 'label'>): string {
-  return q.chapter_id === null ? `${NO_CHAPTER_TITLE} ${q.label}` : q.label;
-}
-
 function preview(text: string): string {
   return displayStem(text).replace(/\s+/g, ' ').trim();
 }
@@ -42,7 +39,7 @@ export function redistributionGroups(list: RedistributionList): RangeGroup[] {
       .filter((q) => q.chapter_id === chapter.id)
       .map((q) => ({
         id: q.question_id,
-        number: rowNumber(q),
+        number: q.label,
         preview: preview(q.stem_preview),
         type: q.question_type,
         ...(q.chapter_source === 'manual' ? { badge: MANUAL_BADGE } : {}),
@@ -72,6 +69,21 @@ export function targetOptions(list: RedistributionList): TargetOption[] {
       })),
     ),
   ];
+}
+
+/** The tree of `옮길 챕터`; `챕터 없음` comes first as a fixed choice. */
+export function targetPickerNodes(list: RedistributionList): ChapterPickerNode[] {
+  return chapterPickerNodes(
+    list.targets.flatMap((doc) =>
+      doc.chapters.map((c) => ({
+        id: c.id,
+        title: c.title,
+        level: c.depth,
+        documentId: doc.document_id,
+        documentTitle: doc.document_title,
+      })),
+    ),
+  );
 }
 
 export function targetChapterId(value: string): string | null {

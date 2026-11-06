@@ -18,6 +18,7 @@ export const IMPORT_PROBLEMS = {
   idempotencyKeyReused: 'urn:quiz-workspace:problem:idempotency-key-reused',
   documentNotReady: 'urn:quiz-workspace:problem:document-not-ready',
   importNotRetryable: 'urn:quiz-workspace:problem:import-not-retryable',
+  importRunning: 'urn:quiz-workspace:problem:import-running',
   staleDraft: 'urn:quiz-workspace:problem:stale-draft',
   draftPublished: 'urn:quiz-workspace:problem:draft-published',
   draftNotApproved: 'urn:quiz-workspace:problem:draft-not-approved',
@@ -33,6 +34,7 @@ export type ImportFailureKind =
   | 'notFound'
   | 'documentNotReady'
   | 'notRetryable'
+  | 'importRunning'
   | 'staleDraft'
   | 'draftPublished'
   | 'draftNotApproved'
@@ -50,6 +52,7 @@ export const IMPORT_FAILURE_MESSAGES: Readonly<Record<ImportFailureKind, string>
   notFound: '가져오기 작업이나 초안을 찾을 수 없습니다. 삭제되었거나 접근 권한이 없습니다.',
   documentNotReady: 'PDF 처리가 아직 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.',
   notRetryable: '이 가져오기 작업은 다시 시도할 수 없는 상태입니다. 목록을 새로 불러왔습니다.',
+  importRunning: '이 PDF는 이미 추출 중입니다. 진행 상황을 이어서 보여 드립니다.',
   staleDraft:
     '다른 곳에서 초안이 먼저 바뀌었습니다. 최신 초안을 불러왔으니 내용을 확인한 뒤 다시 승인해 주세요.',
   draftPublished:
@@ -86,6 +89,8 @@ export function classifyImportFailure(status: number, body: unknown): ImportFail
         return 'documentNotReady';
       case IMPORT_PROBLEMS.importNotRetryable:
         return 'notRetryable';
+      case IMPORT_PROBLEMS.importRunning:
+        return 'importRunning';
       case IMPORT_PROBLEMS.staleDraft:
         return 'staleDraft';
       case IMPORT_PROBLEMS.draftPublished:
@@ -121,6 +126,7 @@ export const IMPORT_BFF_PATHS = {
   draftSummaries: (importId: string) => `/api/question-imports/${enc(importId)}/draft-summaries`,
   publish: (importId: string) => `/api/question-imports/${enc(importId)}/publish`,
   retry: (importId: string) => `/api/question-imports/${enc(importId)}/retry`,
+  reextract: (importId: string) => `/api/question-imports/${enc(importId)}/re-extract`,
   registrations: (importId: string) => `/api/question-imports/${enc(importId)}/registrations`,
   registration: (importId: string, jobId: string) =>
     `/api/question-imports/${enc(importId)}/registrations/${enc(jobId)}`,
@@ -145,7 +151,12 @@ export interface ImportClient {
   draftSummaries(
     importId: string,
     signal?: AbortSignal,
-  ): Promise<{ items: ImportDraftSummary[]; chapters: BookChapterOption[] }>;
+  ): Promise<{
+    items: ImportDraftSummary[];
+    chapters: BookChapterOption[];
+    /** Re-extracted runs: earlier numbers with no draft here (UX12-REEXTRACT). */
+    missingPrevious: number[];
+  }>;
   /** One page of drafts with their content (no chapter list); `total` counts the run's drafts. */
   draftPage(
     importId: string,
@@ -154,6 +165,8 @@ export interface ImportClient {
     signal?: AbortSignal,
   ): Promise<{ items: ImportDraft[]; total: number }>;
   retryImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
+  /** A new run with fresh drafts on the same revision (`다시 추출`, UX12-REEXTRACT). */
+  reextractImport(importId: string, idempotencyKey: string): Promise<ImportRun>;
   updateDraft(draftId: string, body: DraftUpdateBody): Promise<ImportDraft>;
   publish(
     importId: string,
@@ -235,11 +248,16 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
         )
       ).items,
     draftSummaries: async (importId, signal) => {
-      const body = await call<{ items: ImportDraftSummary[]; chapters?: BookChapterOption[] }>(
-        IMPORT_BFF_PATHS.draftSummaries(importId),
-        { signal },
-      );
-      return { items: body.items, chapters: body.chapters ?? [] };
+      const body = await call<{
+        items: ImportDraftSummary[];
+        chapters?: BookChapterOption[];
+        missing_previous?: number[];
+      }>(IMPORT_BFF_PATHS.draftSummaries(importId), { signal });
+      return {
+        items: body.items,
+        chapters: body.chapters ?? [],
+        missingPrevious: body.missing_previous ?? [],
+      };
     },
     draftPage: async (importId, offset, limit, signal) => {
       const body = await call<{ items: ImportDraft[]; total: number }>(
@@ -250,6 +268,8 @@ export function createImportClient(fetchImpl: FetchLike = (...a) => fetch(...a))
     },
     retryImport: (importId, idempotencyKey) =>
       call(IMPORT_BFF_PATHS.retry(importId), { method: 'POST', idempotencyKey }),
+    reextractImport: (importId, idempotencyKey) =>
+      call(IMPORT_BFF_PATHS.reextract(importId), { method: 'POST', idempotencyKey }),
     updateDraft: (draftId, body) =>
       call(IMPORT_BFF_PATHS.draft(draftId), { method: 'PATCH', body: JSON.stringify(body) }),
     publish: async (importId, drafts) =>

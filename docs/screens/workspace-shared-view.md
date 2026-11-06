@@ -13,6 +13,7 @@
 - **문서 보기 개선 (DOCVIEW 2026-11-01):** 공유 문서 화면은 DOC-02의 viewer 부품을 쓰므로 연속 스크롤 PDF·PDF↔원문 동기화·쪽별 묶음·확정된 가져온 문제의 문제 형식(정답·해설은 접힘, 발행 문제 범위)이 같다([DOC-02-AC07–AC09·AC11](documents-editor.md)). 배치(보기 설정 막대·docked 목차 panel·함께 보기/원본/변환본·좌우/상하 분할·위치 바꾸기, 이 브라우저에 기억)도 DOC-02와 같다([DOCVIEW-01](documents-viewer-layout.md), AC12; DOCVIEW-PORT 2026-11-02에 이전 목차 panel·폭 조정 구분선을 대신함). 편집 UI는 계속 없다. 이 화면의 기존 AC는 바뀌지 않는다.
 - **통합 `QuestionViewer` (MOCK-SPEC 2026-11-01):** 게스트의 문제 미리보기(정리 노트 각주에서 여는 것 포함)는 공통 `QuestionViewer`의 `read-only` 방식(non-modal — **UX9-SPEC 사용자 결정 2026-11-02부터 modal**, 발행 문제·정답·해설, 저장 없음)이 된다([QVIEW-01](question-viewer.md) 호출 위치 6). 게스트에게 모의고사(MOCK-01)와 범위 풀이(`문제 풀기`)는 없다. 이 화면의 기존 AC는 바뀌지 않는다.
 - **AI 질문·AI 해설·관련 본문 (ASK-SPEC 2026-11-01 사용자 결정, ASK-SYNC 2026-11-02):** 게스트에게 AI 질문(ASK-01)은 없다(`?panel=ask` 무시, API 401/404). 공유 문제 미리보기(QuestionViewer `read-only`)는 이미 만든 최신 AI 해설(AIEXPL-01)을 읽기 전용으로 보인다(만들기 없음). 이미 저장된 관련 본문(RELSRC-01)도 읽기 전용으로 보인다(계산 없음). 모의고사가 게스트에게 없으므로 모의고사 문제의 것도 없다. 이 화면의 기존 AC는 바뀌지 않는다.
+- **공유 범위 (UX12-SHARE, 사용자 결정 2026-11-06):** Owner가 링크마다 요약·정리 노트·AI 해설을 뺄 수 있고, 옵션을 켠 링크에서는 Owner의 풀이 이력·하이라이트를 읽기 전용으로 본다([UX12-SHARE](ux12-share-scope.md), [공유 명세 §12](../workspace-sharing.md)). AC04의 "Owner 개인 기록" 차단은 그 옵션이 꺼진 링크(기본)의 규칙이다.
 
 ## 수용 기준
 
@@ -40,7 +41,7 @@
 
 - Given 해당 화면에 필요한 사용자/링크 상태
 - When 사용자가 기능을 수행하거나 직접 API를 호출
-- Then 다른 Workspace ID, 미발행 revision, Owner 개인 기록·비공개 데이터의 direct API 요청이 차단된다.
+- Then 다른 Workspace ID, 미발행 revision, Owner 개인 기록·비공개 데이터의 direct API 요청이 차단된다. Owner 개인 기록은 `include_owner_records`가 꺼진 링크(기본)에서 차단되고, 켠 링크의 범위는 UX12-SHARE-AC07·AC08이 정한다.
 
 ### WS-VIEW-01-AC05
 

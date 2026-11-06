@@ -34,6 +34,15 @@ export function AskIcon(props: IconProps) {
   );
 }
 
+/** A filled square: `답변 중지`. */
+export function StopIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="7" y="7" width="10" height="10" rx="1" fill="currentColor" />
+    </Base>
+  );
+}
+
 /** An arrow up: `보내기`. */
 export function SendIcon(props: IconProps) {
   return (

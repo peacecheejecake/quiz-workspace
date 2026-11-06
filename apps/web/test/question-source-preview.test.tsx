@@ -20,7 +20,7 @@ vi.mock('@quiz/ui', async (original) => ({
   usePairedSheet: () => sheetMode.value,
 }));
 
-const { QuestionSourcePreview } =
+const { QuestionFigures, QuestionSourceButton, QuestionSourceDialog, useQuestionSource } =
   await import('../src/components/questions/viewer/question-source-preview');
 const { fetchSourceRegions, fitRegion, sourceRegionPath, tooltipFit } =
   await import('../src/lib/questions/source-region');
@@ -36,6 +36,20 @@ const REGION = {
   page: 1,
   bbox: { x0: 50, y0: 100, x1: 250, y1: 200 },
 };
+
+type Target = Parameters<typeof useQuestionSource>[0];
+
+/** What every viewer renders of a question's source. */
+function QuestionSourcePreview({ target }: { readonly target: Target }) {
+  const source = useQuestionSource(target);
+  return (
+    <>
+      <QuestionSourceButton source={source} />
+      <QuestionSourceDialog source={source} />
+      <QuestionFigures source={source} />
+    </>
+  );
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -63,7 +77,13 @@ describe('QSRC-01 region client', () => {
     const target = { kind: 'question', id: ID } as const;
     expect(
       await fetchSourceRegions(target, undefined, () => Promise.resolve(ok({ regions: [REGION] }))),
-    ).toEqual([REGION]);
+    ).toEqual({ regions: [REGION], figures: [] });
+    const flatFigure = { ...REGION, bbox: { x0: 1, y0: 1, x1: 1, y1: 9 } };
+    expect(
+      await fetchSourceRegions(target, undefined, () =>
+        Promise.resolve(ok({ regions: [REGION], figures: [REGION, flatFigure] })),
+      ),
+    ).toEqual({ regions: [REGION], figures: [REGION] });
     expect(
       await fetchSourceRegions(target, undefined, () =>
         Promise.resolve(new Response('{}', { status: 404 })),
@@ -208,5 +228,128 @@ describe('QSRC-01 tooltip budget', () => {
     const fit = tooltipFit(3, 375, 400);
     expect(2 * 17 + 2 * 12 + 3 * (24 + fit.maxHeight)).toBeLessThanOrEqual(400 - 32);
     expect(fit.maxWidth).toBeLessThanOrEqual(375 - 32);
+  });
+});
+
+describe('UX12-SRCMENU shared source state', () => {
+  const MENU = { name: '메뉴' };
+  const OTHER = '22222222-2222-4222-8222-222222222222';
+
+  /** A panel whose header control opens the dialog the way the 더보기 menu does. */
+  function Host({ id }: { readonly id: string | null }) {
+    const source = useQuestionSource(id ? { kind: 'question', id } : null);
+    const { onShowSource } = source;
+    return (
+      <div role="dialog" aria-label="문제" data-testid="host">
+        {onShowSource ? (
+          <button type="button" onClick={(event) => onShowSource(event.currentTarget)}>
+            메뉴
+          </button>
+        ) : null}
+        <QuestionSourceDialog source={source} />
+      </div>
+    );
+  }
+
+  it('offers no control without a region', async () => {
+    stubFetch(() => new Response('{}', { status: 404 }));
+    render(<Host id={ID} />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByRole('button', MENU)).toBeNull();
+  });
+
+  it('makes the panel around the trigger inert while open', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+    expect(screen.getByTestId('host').hasAttribute('inert')).toBe(true);
+  });
+
+  it('closes and reads the region again when the question changes', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const fetchMock = stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const view = render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+
+    view.rerender(<Host id={OTHER} />);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull());
+    await screen.findByRole('button', MENU);
+    expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toContain(
+      `/api/questions/${OTHER}/source-region`,
+    );
+  });
+
+  it('a closing panel keeps the region, and reopening does not reopen the dialog', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const fetchMock = stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const view = render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+
+    view.rerender(<Host id={null} />);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull());
+    expect(screen.getByRole('button', MENU)).toBeTruthy();
+
+    const requests = fetchMock.mock.calls.length;
+    view.rerender(<Host id={ID} />);
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(requests + 1));
+    await screen.findByRole('button', MENU);
+    expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull();
+  });
+});
+
+describe('UX12-REEXTRACT figures', () => {
+  const target = { kind: 'question', id: ID } as const;
+  const body = (figures: unknown[]) =>
+    new Response(JSON.stringify({ question_id: ID, regions: [REGION], figures }), { status: 200 });
+  const isPdf = (url: string) => String(url).includes('source-url');
+
+  function stubObserver() {
+    const observers: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observers.push(callback);
+        }
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    return () =>
+      observers.at(-1)?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+  }
+
+  it('asks for the PDF only when the figures enter the viewport', async () => {
+    const enter = stubObserver();
+    const fetchMock = stubFetch((url) =>
+      isPdf(url) ? new Response('{}', { status: 503 }) : body([REGION]),
+    );
+    render(<QuestionSourcePreview target={target} />);
+    await screen.findByRole('group', { name: '문제 그림' });
+    expect(fetchMock.mock.calls.some(([url]) => isPdf(url))).toBe(false);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // pdf.js does not load in jsdom: opening the PDF fails, which shows that it was started.
+    enter();
+    expect(await screen.findByRole('alert')).toHaveTextContent('그림을 불러오지 못했습니다');
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeInTheDocument();
+  });
+
+  it('renders nothing and fetches no PDF without figures', async () => {
+    stubObserver();
+    const fetchMock = stubFetch(() => body([]));
+    render(<QuestionSourcePreview target={target} />);
+    await screen.findByRole('button', { name: '문제 원문 보기' });
+    expect(screen.queryByRole('group', { name: '문제 그림' })).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => isPdf(url))).toBe(false);
   });
 });

@@ -21,6 +21,7 @@ import {
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('@/components/documents/editor/pdf-viewer', () => ({ PdfViewer: () => null }));
 vi.mock('next/link', () => ({
   default: ({
     href,
@@ -328,14 +329,7 @@ describe("content search (the home's 본문 search)", () => {
 
     const panel = await screen.findByRole('dialog', { name: '본문 발췌' });
     expect(panel).toHaveAttribute('aria-modal', 'true');
-    const link = within(panel).getByRole('link', { name: 'PDF에서 보기' });
-    await waitFor(() =>
-      expect(link).toHaveAttribute(
-        'href',
-        `/workspaces/${WS}/documents/${DOC}?page=5&block=p2&revision=${REV}`,
-      ),
-    );
-    expect(panel).toHaveTextContent('5쪽');
+    await waitFor(() => expect(panel).toHaveTextContent('5쪽'));
     expect(client.block).toHaveBeenCalledWith(DOC, 'p2', REV, expect.anything());
 
     // Modal (UX9): the search behind it is hidden from assistive technology; 이전/다음 결과

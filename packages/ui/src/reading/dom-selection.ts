@@ -17,6 +17,18 @@ export function rangeText(range: Range): string {
   return fragment.textContent ?? '';
 }
 
+/**
+ * What copying `selection` yields: a reading region's `onCopy` writes `rangeText`, and everywhere
+ * else the browser copies its own rendering of the selection, line breaks included.
+ */
+export function copyableText(selection: Selection): string {
+  if (selection.rangeCount === 0) return '';
+  const range = selection.getRangeAt(0);
+  const start = range.startContainer;
+  const element = start instanceof Element ? start : start.parentElement;
+  return element?.closest('.qz-highlightable') ? rangeText(range) : selection.toString();
+}
+
 function blockElements(region: Element): HTMLElement[] {
   return [...region.querySelectorAll<HTMLElement>(`[${BLOCK_ATTR}]`)];
 }
@@ -83,7 +95,8 @@ function restoreRange(range: Range | null): () => void {
       return;
     }
     selection.removeAllRanges();
-    selection.addRange(range);
+    // A copy: the live selection must never change the remembered range.
+    selection.addRange(range.cloneRange());
   };
 }
 

@@ -153,7 +153,7 @@
 //             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
 //             (toggle button "상태 필터", collapsed by default); no status summary or legend since
 //             UX3c and no question count line since UX4.
-//   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
+//   QPLAY-01  modal dialog named by the question title (`12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
 //             option text in displayed order; textbox "답안" (short/essay); button "제출"; the
@@ -188,14 +188,15 @@ export interface TruthQuestion {
     readonly accepted_answers: readonly string[] | null;
   } | null;
   readonly page: number;
+  readonly figure: { readonly caption: string } | null;
 }
 
 export interface QuestionPaper extends PdfFile {
   readonly questions: readonly TruthQuestion[];
 }
 
-export function questionPaper(): QuestionPaper {
-  const truth = JSON.parse(readFileSync(join(PDF_DIR, 'questions-ko.truth.json'), 'utf8')) as {
+export function questionPaper(fixture = 'questions-ko'): QuestionPaper {
+  const truth = JSON.parse(readFileSync(join(PDF_DIR, `${fixture}.truth.json`), 'utf8')) as {
     file: string;
     sha256: string;
     questions: TruthQuestion[];
@@ -765,17 +766,13 @@ export async function createNumberedQuestions(
   return out;
 }
 
-/** Imports questions-ko.pdf through the public API (A4); returns the run and its drafts (A13). */
+/** Imports a question paper through the public API (A4); returns the run and its drafts (A13). */
 export async function importPaperDrafts(
   owner: Member,
   workspaceId: string,
+  paper: QuestionPaper = questionPaper(),
 ): Promise<{ run: ImportRun; drafts: Draft[] }> {
-  const { documentId, jobId } = await uploadPdf(
-    owner,
-    workspaceId,
-    questionPaper(),
-    'question_paper',
-  );
+  const { documentId, jobId } = await uploadPdf(owner, workspaceId, paper, 'question_paper');
   await waitForJob(owner, jobId);
   const run = await startImport(owner, workspaceId, documentId);
   await waitForJob(owner, run.job_id);
@@ -822,11 +819,13 @@ export function questionNumberName(n: number): RegExp {
   return new RegExp(`(?<!\\d)${n}번 문제|question ${n}(?!\\d)`, 'i');
 }
 
+/** Any dot's accessible name: `3장 12번 문제, …`, or `3장 번호 없음, …` without a number. */
+export const QUESTION_DOT_NAME = /\d+번 문제|번호 없음|question \d+/i;
+
 export const overviewUi = {
   heatmap: (page: Page) => main(page).getByRole('group', { name: /문제 heatmap|heatmap/i }),
   /** The question markers (chapter headers also hold a `<장 제목> 정리 노트` button, CHNOTE-01). */
-  dots: (page: Page) =>
-    overviewUi.heatmap(page).getByRole('button', { name: /\d+번 문제|question \d+/i }),
+  dots: (page: Page) => overviewUi.heatmap(page).getByRole('button', { name: QUESTION_DOT_NAME }),
   dot: (page: Page, n: number) =>
     overviewUi.heatmap(page).getByRole('button', { name: questionNumberName(n) }),
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
@@ -841,7 +840,7 @@ export const overviewUi = {
 };
 
 export const panelUi = {
-  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|question \d/i }),
+  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|번호 없음|question \d/i }),
   numbered: (page: Page, n: number) => page.getByRole('dialog', { name: questionNumberName(n) }),
   close: (panel: Locator) => panel.getByRole('button', { name: /패널 닫기|^닫기$|^close/i }),
   favoriteOn: (panel: Locator) =>
@@ -878,11 +877,14 @@ export const panelUi = {
     page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
 
-type PanelManageItem = 'answers' | 'history' | 'edit' | 'generate' | 'archive' | 'delete';
+type PanelManageItem =
+  'answers' | 'history' | 'source' | 'edit' | 'generate' | 'archive' | 'delete';
 export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
   /** UX7-BANK-2: the read items of both menus (문제 관리 and 문제 정보). */
   answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
   history: /^(수정 이력·출처|revisions and sources)$/i,
+  /** UX12-SRCMENU: only when the question has a source region. */
+  source: /^(원문 보기|show source)$/i,
   edit: /^(편집|edit)$/i,
   /** Retired by QGEN-RM: only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,

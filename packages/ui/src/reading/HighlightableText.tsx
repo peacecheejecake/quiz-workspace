@@ -63,6 +63,8 @@ export interface HighlightableTextProps {
   onSelectRange?: (selection: HighlightSelection | null) => void;
   /** A highlight was pressed (click, tap, Enter on a focused mark). */
   onHighlightPress?: (id: string) => void;
+  /** The highlight whose menu is open: pressing it again closes the menu (`onSelectRange(null)`). */
+  activeHighlightId?: string | null;
   /** Arranges the blocks; default: one `<p>` per block in order. */
   renderLayout?: (renderBlock: RenderHighlightBlock) => ReactNode;
   className?: string;
@@ -205,6 +207,7 @@ export function HighlightableText({
   readOnly = false,
   onSelectRange,
   onHighlightPress,
+  activeHighlightId,
   renderLayout,
   className,
   ref,
@@ -229,12 +232,14 @@ export function HighlightableText({
     press.current = onHighlightPress;
   });
 
-  const pointer = useRef<{ down: boolean; type: SelectionSource; x: number; y: number }>({
-    down: false,
-    type: 'mouse',
-    x: 0,
-    y: 0,
-  });
+  const pointer = useRef<{
+    down: boolean;
+    type: SelectionSource;
+    x: number;
+    y: number;
+    /** The press started on the highlight whose menu is open. */
+    onOpenMark: boolean;
+  }>({ down: false, type: 'mouse', x: 0, y: 0, onOpenMark: false });
   const reported = useRef<HighlightSelection | null>(null);
   const touchTimer = useRef<number | undefined>(undefined);
 
@@ -293,6 +298,7 @@ export function HighlightableText({
         event.clientY - pointer.current.y,
       );
       const pressable = event.type === 'pointerup' && moved <= PRESS_SLOP_PX;
+      const { onOpenMark } = pointer.current;
       // The selection settles after the pointerup (double click selects a word).
       window.setTimeout(() => {
         const selection = readSelection(region, touch ? 'touch' : 'mouse');
@@ -305,6 +311,12 @@ export function HighlightableText({
         // No selection: a click or a tap on a highlight opens its menu (touch parity).
         const mark = target?.closest<HTMLElement>('mark[data-highlight-id][data-pressable]');
         if (pressable && mark && region.contains(mark)) {
+          // The open highlight again: its menu stays closed. The press counted as an outside press
+          // and may have closed the menu already; this also forgets the pick.
+          if (onOpenMark) {
+            emit(null);
+            return;
+          }
           const pressed = pressSelection(mark, 'press');
           if (pressed) {
             press.current?.(pressed.highlightId ?? '');
@@ -353,13 +365,17 @@ export function HighlightableText({
   }, [currentId, scrollToCurrentMatch]);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    const target = event.target as Element;
+    const markId = target.closest('mark[data-highlight-id]')?.getAttribute('data-highlight-id');
     pointer.current = {
       down: true,
       type: event.pointerType === 'touch' ? 'touch' : 'mouse',
       x: event.clientX,
       y: event.clientY,
+      // Read now: a mouse press closes the menu before the pointer comes up.
+      onOpenMark: markId != null && markId === activeHighlightId,
     };
-    const blockEl = (event.target as Element).closest(`[${BLOCK_ATTR}]`);
+    const blockEl = target.closest(`[${BLOCK_ATTR}]`);
     const index = blocks.findIndex((b) => b.id === blockEl?.getAttribute(BLOCK_ATTR));
     if (index !== -1) setActive(index);
   }

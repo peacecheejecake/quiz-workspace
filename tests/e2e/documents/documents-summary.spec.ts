@@ -34,6 +34,7 @@ import {
   questionPaper,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   snippet,
   uploadPdf,
   waitForJob,
@@ -229,12 +230,13 @@ test(
     await expect(panel).toBeHidden();
     await expect(opener).toBeFocused();
 
-    // A key point's page link opens DOC-02 at that page.
+    // A key point's page link opens the 원본 PDF dialog; 전체 문서 보기 DOC-02 at that page.
     await opener.click();
     await expect(summaryUi.overallHeading(panel)).toBeVisible();
     const link = summaryUi.pageLinks(summaryUi.keyPoints(panel).first()).first();
     const target = await linkedPage(link);
     await link.click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === `/workspaces/${ws.id}/documents/${doc.documentId}` &&
@@ -408,7 +410,7 @@ test(
 );
 
 test(
-  'DOCSUM-01-AC05 with the feature off create is disabled with a reason and publishing starts no run',
+  'DOCSUM-01-AC05 with the feature off only stored summaries are offered and publishing starts no run',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('docsum01-ac05');
@@ -421,9 +423,9 @@ test(
     try {
       await page.goto(`${off.webUrl}${summaryPanelPath(ws.id, without.documentId)}`);
       let panel = summaryUi.panel(page);
-      await expect(panel).toBeVisible();
-      const create = summaryUi.createButton(panel);
-      await expect(create).toHaveCount(0);
+      await expect(summaryUi.empty(panel)).toBeVisible();
+      await expect(summaryUi.createButton(panel)).toHaveCount(0);
+      await expect(panel.getByText(summaryUi.unavailableReason)).toHaveCount(0);
 
       const state = await off.request<SummaryState>(
         owner,

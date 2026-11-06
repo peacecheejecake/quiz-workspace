@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.util
+import itertools
 import threading
 from io import BytesIO
 from pathlib import Path
@@ -40,6 +41,7 @@ from docling_core.types.doc.document import DoclingDocument
 from docling_core.types.doc.items.node import DocItem
 from docling_core.types.doc.items.picture.picture import PictureItem
 from docling_core.types.doc.items.table.table import TableItem
+from docling_core.types.doc.items.table.table_data import TableCell
 from docling_core.types.doc.items.text import (
     FormulaItem,
     ListItem,
@@ -56,6 +58,7 @@ from book_core.contracts import (
     ParsedDocument,
     SourceLocation,
     TableContent,
+    TableSpan,
 )
 from book_core.parser._blocks import (
     COORD_DECIMALS,
@@ -68,7 +71,7 @@ from book_core.parser._blocks import (
 from book_core.parser.base import ParserError, ParserOptions, sha256_hex
 from book_core.structure.numbering import NumberingKind, is_bare_label, parse_numbering
 
-ADAPTER_VERSION = 2
+ADAPTER_VERSION = 3
 """Bump when the Docling -> contract mapping changes output for the same Docling version."""
 
 _DROPPED_TEXT_LABELS = frozenset({DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER})
@@ -315,6 +318,26 @@ def _split_text(item: TextItem, spans: list[Span]) -> list[str] | None:
     return parts if all(parts) else None
 
 
+def _table_spans(grid: list[list[TableCell]]) -> tuple[TableSpan, ...] | None:
+    """Merged cells of Docling's grid, which holds one cell object in every position it covers.
+
+    A span the grid does not show whole (past the edge, or partly overwritten by an overlapping
+    cell) is left out: its text stays repeated, as it is without spans.
+    """
+    spans: list[TableSpan] = []
+    for r, row in enumerate(grid):
+        for c, cell in enumerate(row):
+            merged = cell.row_span > 1 or cell.col_span > 1
+            if not merged or (cell.start_row_offset_idx, cell.start_col_offset_idx) != (r, c):
+                continue
+            covered = itertools.product(range(r, r + cell.row_span), range(c, c + cell.col_span))
+            if all(i < len(grid) and j < len(row) and grid[i][j] is cell for i, j in covered):
+                spans.append(
+                    TableSpan(row=r, col=c, row_span=cell.row_span, col_span=cell.col_span)
+                )
+    return tuple(spans) or None
+
+
 def _table(item: TableItem) -> TableContent | None:
     grid = item.data.grid
     rows = tuple(tuple(normalize_text(cell.text) for cell in row) for row in grid)
@@ -325,7 +348,7 @@ def _table(item: TableItem) -> TableContent | None:
         if not any(cell.column_header for cell in row):
             break
         header_rows += 1
-    return TableContent(rows=rows, header_rows=header_rows)
+    return TableContent(rows=rows, header_rows=header_rows, spans=_table_spans(grid))
 
 
 def _draft(

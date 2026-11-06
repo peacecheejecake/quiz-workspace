@@ -61,9 +61,10 @@
 
 .titleButton {
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   font-weight: var(--font-weight-semibold);
@@ -74,6 +75,12 @@
 
 .titleButton:hover {
   text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .titleButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .titleButton:focus-visible,
@@ -95,7 +102,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .itemActions > *,
@@ -111,7 +118,7 @@
 
 .renameActions {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .header {
@@ -251,7 +258,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .preview {
@@ -265,11 +272,17 @@
   overflow-wrap: anywhere;
 }
 
+.previewGridHead {
+  padding-inline-start: var(--space-5);
+}
+
 .previewOptions {
   display: grid;
   gap: var(--space-1);
   margin: 0;
   padding-inline-start: var(--space-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .notice {

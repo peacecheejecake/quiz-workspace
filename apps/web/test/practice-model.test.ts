@@ -9,6 +9,7 @@ import {
   neighbors,
   optionMark,
   optionTone,
+  resultIsVisuallyHidden,
   resultMessage,
   submitBody,
   toggleOption,
@@ -72,6 +73,14 @@ describe('result wording', () => {
     expect(resultMessage('pending', 'correct')).toMatch(/정답/);
     expect(resultMessage('correct', null)).toBe('정답입니다.');
     expect(resultMessage('incorrect', null)).toBe('오답입니다.');
+  });
+
+  it('UX12-OPTIONS hides only an MCQ grade sentence', () => {
+    expect(resultIsVisuallyHidden('MCQ', 'correct')).toBe(true);
+    expect(resultIsVisuallyHidden('MCQ', 'incorrect')).toBe(true);
+    expect(resultIsVisuallyHidden('MCQ', 'pending')).toBe(false);
+    expect(resultIsVisuallyHidden('SHORT_ANSWER', 'correct')).toBe(false);
+    expect(resultIsVisuallyHidden('ESSAY', 'pending')).toBe(false);
   });
 
   it('marks revealed options in text, not by color alone', () => {

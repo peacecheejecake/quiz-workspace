@@ -9,14 +9,19 @@
 // FloatingSidePanel named "문제 원문" (left of the question panel from 868px, else a full-screen
 // sheet that owns one history entry so Back closes only the sheet). Viewing is not practice: no
 // attempt, no heatmap state, no URL change.
+// UX12-SRCMENU: every viewer holds `useQuestionSource` itself, so the menu's `원문 보기`, the body
+// button and the figures share one region and one opened PDF.
+// UX12-REEXTRACT: `QuestionFigures` draws the question's images above its options and asks for the
+// PDF when they enter the viewport; a question without figures still fetches none.
 import { Button, FloatingSidePanel, PreviewTooltip, usePairedSheet } from '@quiz/ui';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { loadPdfjs, openPdf, type PdfDocument, type PdfLoadingTask } from '@/lib/documents/pdfjs';
 import {
   fetchSourceRegions,
   tooltipFit,
+  type QuestionRegions,
   type SourceRegion,
   type SourceRegionTarget,
 } from '@/lib/questions/source-region';
@@ -26,18 +31,12 @@ import styles from './question-source-preview.module.css';
 export const SOURCE_BUTTON_LABEL = '문제 원문 보기';
 const LOADING_TEXT = '원문을 불러오는 중입니다';
 const FAILURE_TEXT = '원문을 불러오지 못했습니다';
+const FIGURE_FAILURE_TEXT = '그림을 불러오지 못했습니다';
 
-export interface QuestionSourcePreviewProps {
-  /** The bank question (practice, sequence(bank), manage) or mock exam question. */
-  readonly target: SourceRegionTarget;
-  /** The host is a centered modal dialog (문제 상세): the 원문 dialog stacks above it. */
-  readonly aboveModals?: boolean;
-}
-
-/** Shown in the question body header of every mode that has a region; nothing without one. */
-export function QuestionSourcePreview(props: QuestionSourcePreviewProps) {
-  // A new question starts over (region, PDF, open dialog): changing the position closes it.
-  return <Preview key={`${props.target.kind}:${props.target.id}`} {...props} />;
+/** Handed to a viewer's `headerExtra`: null while the question has no region to show. */
+export interface QuestionSourceControls {
+  /** `trigger`: where focus goes back when the dialog closes (it also finds the host panel). */
+  readonly onShowSource: ((trigger: HTMLElement | null) => void) | null;
 }
 
 type PdfState =
@@ -96,18 +95,45 @@ function useRegionPdf(regions: readonly SourceRegion[] | null) {
     update({ status: 'error' });
   }, [release, update]);
 
-  useEffect(() => release, [release]);
+  useEffect(
+    () => () => {
+      release();
+      update(IDLE);
+    },
+    [regions, release, update],
+  );
   return { state, start, fail };
 }
 
-function Preview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
-  const { kind, id } = target;
-  const [regions, setRegions] = useState<readonly SourceRegion[] | null>(null);
+export type QuestionSource = ReturnType<typeof useQuestionSource>;
+
+const NO_FIGURES: readonly SourceRegion[] = [];
+
+/**
+ * The region, PDF and dialog state of the question shown. A new target starts over and closes the
+ * dialog. `null` (the host panel is animating out) closes it but keeps the region, so the panel's
+ * body does not jump; opening the question again reads the region again.
+ */
+export function useQuestionSource(target: SourceRegionTarget | null) {
+  const kind = target?.kind;
+  const id = target?.id;
+  const key = target ? `${target.kind}:${target.id}` : null;
+  const [found, setFound] = useState<QuestionRegions | null>(null);
+  const regions = found?.regions ?? null;
+  const [open, setOpen] = useState(false);
+  const [shownKey, setShownKey] = useState(key);
+  if (key !== shownKey) {
+    setShownKey(key);
+    setOpen(false);
+    if (key !== null) setFound(null);
+  }
+
   useEffect(() => {
+    if (!kind || !id) return undefined;
     const controller = new AbortController();
     fetchSourceRegions({ kind, id }, controller.signal).then(
-      (found) => {
-        if (!controller.signal.aborted) setRegions(found);
+      (result) => {
+        if (!controller.signal.aborted) setFound(result);
       },
       () => undefined,
     );
@@ -115,13 +141,18 @@ function Preview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
   }, [kind, id]);
 
   const pdf = useRegionPdf(regions);
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  // The button or menu trigger that opened the dialog: focus returns to it, and the panel around it
+  // is the host.
+  const anchor = useRef<HTMLElement | null>(null);
   const sheet = usePairedSheet();
   // The history entry a full-screen sheet owns (AC04: Back closes the sheet, the URL is kept).
   const pushed = useRef(false);
+  useEffect(() => {
+    pushed.current = false;
+  }, [key]);
 
-  const openDialog = () => {
+  const show = (trigger: HTMLElement | null) => {
+    anchor.current = trigger;
     pdf.start();
     setOpen(true);
   };
@@ -132,13 +163,13 @@ function Preview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
     window.history.pushState(window.history.state, '', window.location.href);
     pushed.current = true;
   }, [open, sheet]);
-  const closeDialog = () => {
+  const close = useCallback(() => {
     setOpen(false);
     if (pushed.current) {
       pushed.current = false;
       window.history.back();
     }
-  };
+  }, []);
   useEffect(() => {
     if (!open) return undefined;
     const onPopState = () => {
@@ -159,83 +190,168 @@ function Preview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
-      closeDialog();
+      close();
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [open]);
+  }, [open, close]);
 
   // While the dialog is open the host panel (the question panel, 문제 상세) stays visible but
   // inert (design-system §5.6); Radix only hides it from assistive technology.
   useEffect(() => {
     if (!open) return undefined;
-    const host = buttonRef.current?.closest<HTMLElement>('[role="dialog"]');
+    const host = anchor.current?.closest<HTMLElement>('[role="dialog"]');
     if (!host) return undefined;
     host.setAttribute('inert', '');
     return () => host.removeAttribute('inert');
   }, [open]);
 
+  return {
+    regions,
+    figures: found?.figures ?? NO_FIGURES,
+    open,
+    pdf,
+    anchor,
+    show,
+    close,
+    onShowSource: regions ? show : null,
+  };
+}
+
+/** The body header's text button; nothing without a region. */
+export function QuestionSourceButton({ source }: { readonly source: QuestionSource }) {
+  const { regions, open, pdf, show } = source;
+  const buttonRef = useRef<HTMLButtonElement>(null);
   if (!regions) return null;
-  const retry = () => pdf.start();
   return (
-    <>
-      <div className={styles.row}>
-        <PreviewTooltip
-          disabled={open}
-          onOpenChange={(opened) => {
-            if (opened) pdf.start();
-          }}
-          content={<TooltipContent regions={regions} pdf={pdf} />}
-        >
-          <Button
-            ref={buttonRef}
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={SOURCE_BUTTON_LABEL}
-            onClick={openDialog}
-          >
-            {SOURCE_BUTTON_LABEL}
-          </Button>
-        </PreviewTooltip>
-      </div>
-      <FloatingSidePanel
-        open={open}
-        onOpenChange={(next) => {
-          if (!next) closeDialog();
+    <div className={styles.row}>
+      <PreviewTooltip
+        disabled={open}
+        onOpenChange={(opened) => {
+          if (opened) pdf.start();
         }}
-        paired
-        aboveModals={aboveModals}
-        title="문제 원문"
-        closeLabel="닫기"
-        onCloseAutoFocus={(event) => {
-          const button = buttonRef.current;
-          if (!button?.isConnected) return;
-          event.preventDefault();
-          button.focus();
-        }}
+        content={<TooltipContent regions={regions} pdf={pdf} />}
       >
-        <div className={styles.dialogBody}>
-          {pdf.state.status === 'error' ? (
-            <div role="alert" className={styles.failure}>
-              <p>{FAILURE_TEXT}</p>
-              <Button onClick={retry}>다시 시도</Button>
-            </div>
-          ) : pdf.state.status === 'ready' ? (
-            <PdfRegions
-              regions={regions}
-              documents={pdf.state.documents}
-              fit="container"
-              onFailed={pdf.fail}
-            />
-          ) : (
-            <p role="status" className={styles.message}>
-              {LOADING_TEXT}
-            </p>
-          )}
+        <Button
+          ref={buttonRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={SOURCE_BUTTON_LABEL}
+          onClick={() => show(buttonRef.current)}
+        >
+          {SOURCE_BUTTON_LABEL}
+        </Button>
+      </PreviewTooltip>
+    </div>
+  );
+}
+
+/** The question's images (UX12-REEXTRACT-AC04): nothing without any, no PDF until in view. */
+export function QuestionFigures({ source }: { readonly source: QuestionSource }): ReactNode {
+  const { figures, pdf } = source;
+  const { start, state, fail } = pdf;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const hasFigures = figures.length > 0;
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!hasFigures || !element) return undefined;
+    if (typeof IntersectionObserver === 'undefined') {
+      start();
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      start();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasFigures, start]);
+  if (!hasFigures) return null;
+  return (
+    <div ref={rootRef} role="group" aria-label="문제 그림" className={styles.questionFigures}>
+      {state.status === 'ready' ? (
+        <PdfRegions
+          regions={figures}
+          documents={state.documents}
+          fit="container"
+          onFailed={fail}
+          variant="figure"
+        />
+      ) : state.status === 'error' ? (
+        <div role="alert" className={styles.failure}>
+          <p>{FIGURE_FAILURE_TEXT}</p>
+          <Button type="button" onClick={start}>
+            다시 시도
+          </Button>
         </div>
-      </FloatingSidePanel>
-    </>
+      ) : (
+        <>
+          {figures.map(({ document_id, page, bbox }) => (
+            <div
+              key={`${document_id}:${page}:${bbox.x0}:${bbox.y0}`}
+              className={styles.figurePlaceholder}
+              style={{ aspectRatio: `${bbox.x1 - bbox.x0} / ${bbox.y1 - bbox.y0}` }}
+            />
+          ))}
+          <span role="status" className="qz-visually-hidden">
+            그림을 불러오는 중입니다
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The paired "문제 원문" panel; rendered once for both entry points. */
+export function QuestionSourceDialog({
+  source,
+  aboveModals = false,
+}: {
+  readonly source: QuestionSource;
+  /** The host is a centered modal dialog (문제 상세): the 원문 dialog stacks above it. */
+  readonly aboveModals?: boolean;
+}) {
+  const { regions, open, pdf, anchor, close } = source;
+  if (!regions) return null;
+  return (
+    <FloatingSidePanel
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+      paired
+      aboveModals={aboveModals}
+      title="문제 원문"
+      closeLabel="닫기"
+      onCloseAutoFocus={(event) => {
+        const trigger = anchor.current;
+        if (!trigger?.isConnected) return;
+        event.preventDefault();
+        trigger.focus();
+      }}
+    >
+      <div className={styles.dialogBody}>
+        {pdf.state.status === 'error' ? (
+          <div role="alert" className={styles.failure}>
+            <p>{FAILURE_TEXT}</p>
+            <Button onClick={pdf.start}>다시 시도</Button>
+          </div>
+        ) : pdf.state.status === 'ready' ? (
+          <PdfRegions
+            regions={regions}
+            documents={pdf.state.documents}
+            fit="container"
+            onFailed={pdf.fail}
+          />
+        ) : (
+          <p role="status" className={styles.message}>
+            {LOADING_TEXT}
+          </p>
+        )}
+      </div>
+    </FloatingSidePanel>
   );
 }
 

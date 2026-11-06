@@ -37,7 +37,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from quiz_api.api.question_overview import NO_CHAPTER_TITLE, chapter_number
 from quiz_api.auth import CurrentUser
 from quiz_api.authz import (
     AccessRepository,
@@ -160,7 +159,7 @@ HighlightTarget = Annotated[
 
 class HighlightQuestion(BaseModel):
     question_id: uuid.UUID
-    number_label: str = Field(description="`<n>장 <번호>번` (the Heatmap's numbering).")
+    number_label: str = Field(description="`<번호>번` or `번호 없음` (the printed number).")
     stem_preview: str = Field(description="First 40 characters of the current stem.")
 
 
@@ -291,20 +290,14 @@ class _Context:
         self.texts[text.question_id] = text
         self._pinned.add(text.question_id)
 
-    def add_group(
-        self, chapter_id: uuid.UUID | None, title: str | None, ordered: list[QuestionText]
-    ) -> None:
-        number: int | None = None
-        if chapter_id is not None:
-            number = chapter_number(self._repo.chapter_lineage([chapter_id]).get(chapter_id, []))
-        heading = title if title is not None else NO_CHAPTER_TITLE
+    def add_group(self, ordered: list[QuestionText]) -> None:
         for position, q in enumerate(ordered, start=1):
             if q.question_id not in self._pinned:
                 self.texts[q.question_id] = q
             self.positions[q.question_id] = position
             self.labels[q.question_id] = HighlightQuestion(
                 question_id=q.question_id,
-                number_label=question_label(number, heading, q.question_number, position),
+                number_label=question_label(q.question_number),
                 stem_preview=stem_preview(q.stem),
             )
 
@@ -316,20 +309,13 @@ class _Context:
                 continue
             group = self._repo.group_of(self.workspace_id, qid)
             ordered = self._repo.heatmap_group(self.workspace_id, group.chapter_id)
-            self.add_group(group.chapter_id, group.chapter_title, ordered)
+            self.add_group(ordered)
             if qid not in self.labels:  # a draft or archived question: not in its group
-                number: int | None = None
-                if group.chapter_id is not None:
-                    lineage = self._repo.chapter_lineage([group.chapter_id])
-                    number = chapter_number(lineage.get(group.chapter_id, []))
-                heading = group.chapter_title or NO_CHAPTER_TITLE
                 if qid not in self._pinned:
                     self.texts[qid] = text
                 self.labels[qid] = HighlightQuestion(
                     question_id=qid,
-                    number_label=question_label(
-                        number, heading, text.question_number, len(ordered) + 1
-                    ),
+                    number_label=question_label(text.question_number),
                     stem_preview=stem_preview(text.stem),
                 )
 
@@ -461,7 +447,7 @@ def list_chapter_highlights(
         key=lambda r: (-(r.note_version or 0), *_position_key(ctx, r))  # newest version first
     )
     ordered = repo.heatmap_group(workspace_id, chapter.id)
-    ctx.add_group(chapter.id, chapter.title, ordered)
+    ctx.add_group(ordered)
     items = [ctx.present(r) for r in note_rows]
     items += _explanation_items(repo, ctx, user.id, ordered)
     return HighlightList(items=items)
@@ -484,7 +470,7 @@ def list_chapterless_highlights(
     """The caller's explanation highlights of the "챕터 없음" Heatmap group."""
     ctx = _Context(repo, access.workspace_id)
     ordered = repo.heatmap_group(access.workspace_id, None)
-    ctx.add_group(None, None, ordered)
+    ctx.add_group(ordered)
     return HighlightList(items=_explanation_items(repo, ctx, user.id, ordered))
 
 

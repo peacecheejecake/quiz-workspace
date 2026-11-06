@@ -215,9 +215,9 @@ def start_fork(
     """Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).
 
     Needs the user's Bearer JWT and the share session cookie of this link, and the link must
-    allow forking. Copies the published documents, questions, answers and explanations; never
-    drafts, other people's progress, activity or share links. 202 with the fork; poll
-    `GET /me/forks/{id}`.
+    allow forking. Copies the published documents, questions, answers and explanations, plus the
+    notes, AI explanations and summaries the link includes; never drafts, anyone's progress or
+    highlights, activity or share links. 202 with the fork; poll `GET /me/forks/{id}`.
     """
     if not allowed_origin(request):
         raise HTTPException(status_code=403, detail="Origin not allowed.")
@@ -267,6 +267,7 @@ def start_fork(
             user_id=user.id,
             name=body.name,
             snapshot=snapshot,
+            include=link.fork_include(),
         )
     except ForkTooLargeError:
         raise _too_large() from None

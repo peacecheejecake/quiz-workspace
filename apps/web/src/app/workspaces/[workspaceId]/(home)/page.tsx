@@ -64,6 +64,7 @@ export default async function Page({
         hasQuestions={data.hasQuestions}
         documents={docs.documents}
         documentsLoadFailed={docs.failed}
+        summaryAvailable={docs.summaryAvailable}
         screenIds={{
           documents: 'DOC-01',
           search: 'SEARCH-01',

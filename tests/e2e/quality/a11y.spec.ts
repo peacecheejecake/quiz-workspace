@@ -613,7 +613,7 @@ test(
 
     // FloatingSidePanel (modal since UX9, HOMEDLG-01) unmounts from its close button.
     await page.goto(homePath(ws.id));
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const panel = homeUi.documentsDialog(page);
     await expect(panel).toBeVisible();
     await panel.getByRole('button', { name: /문서 관리 닫기|close/i }).click();

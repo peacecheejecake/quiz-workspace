@@ -30,7 +30,9 @@
 //      ExplanationState = {available: bool, can_create: bool, can_regenerate: bool,
 //      explanation: Explanation | null}; `available` = this environment can create (feature on
 //      and an LLM, the fake under APP_ENV=test); `can_create` = available, active workspace and
-//      no live (queued/running/succeeded) explanation for the key; `can_regenerate` = editor of an
+//      no live (queued/running/succeeded) explanation for the key; `can_cancel` (UX12-EXPLCANCEL) =
+//      one is being made, the workspace is active and the caller requested it or is an owner/
+//      editor; `can_regenerate` = editor of an
 //      active workspace and a succeeded explanation. `explanation` = the newest non-superseded
 //      row of the current revision's key (any status; EXPL-B: a current success wins over a later
 //      failed regeneration), or null.
@@ -96,10 +98,10 @@
 //   panel "n번 문제", range/mock run modal, "문제 상세" dialog, `manage(mock)` "문제 k", share
 //   panel), after the result/explanation and before the footer. Never before a submission in
 //   practice/sequence. States: button "AI 해설" + text "문제와 정답, 관련 교재 구절이 AI
-//   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, open);
-//   running: text "AI 해설을 만드는 중" with [aria-busy="true"]; one status announcement "AI 해설을
-//   만드는 중입니다" at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
-//   생성", notice "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.", the body
+//   서비스로 전송됩니다."; cached: the h3 is a disclosure button "AI 해설" (aria-expanded, open;
+//   UX12-EXPL); running: text "작성중..." with [aria-busy="true"]; one status announcement
+//   "작성중..." at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
+//   생성", notice "AI가 만든 해설입니다. 정답이 기준이며, 틀릴 수 있습니다.", the body
 //   (each option's text with its why line), footnote button "[1]" (name "[1]" or "출처 1"), list
 //   "출처" with rows "[1] <문서> · <장> · p.<n>" (each a button opening the "본문 발췌" panel with
 //   "PDF에서 보기" → DOC-02 at that page), meta "<시각> · 버전 k" (k ≥ 2), button "다시 만들기"
@@ -107,12 +109,12 @@
 //   the reason + button "다시 시도"; reasons: llm_unavailable → "AI 서비스에 연결하지 못했습니다.
 //   잠시 후 다시 시도하세요.", explanation_answer_mismatch → "정답과 맞지 않는 해설이 나와 보여 주지
 //   않았습니다. 다시 시도하세요.", 429 → "잠시 후 다시 시도하세요 (n초)", regenerate cap → "오늘은 이
-//   문제의 해설을 더 다시 만들 수 없습니다." (wording assumed), feature off → "이 환경에서는 AI 해설을
-//   사용할 수 없습니다.", archived → "보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.".
+//   문제의 해설을 더 다시 만들 수 없습니다." (wording assumed), feature off → no button and no
+//   reason (UX12-AIOFF-AC04), archived → "보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.".
 //   Share panel: disclosure "AI 해설" only when one exists; no create/regenerate/status/version.
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -182,6 +184,12 @@ export class ExplHold {
   release(): void {
     mkdirSync(holdDir(), { recursive: true });
     writeFileSync(join(holdDir(), `${this.token}.release`), '');
+  }
+
+  /** The next call of the fake stops at the barrier again (a regeneration after a seed). */
+  rearm(): void {
+    rmSync(join(holdDir(), `${this.token}.release`), { force: true });
+    rmSync(join(holdDir(), `${this.token}.held`), { force: true });
   }
 }
 
@@ -266,6 +274,8 @@ export interface ExplanationState {
   readonly available: boolean;
   readonly can_create: boolean;
   readonly can_regenerate: boolean;
+  readonly can_cancel: boolean;
+  readonly cancelled_id: string | null;
   readonly explanation: Explanation | null;
 }
 
@@ -455,6 +465,14 @@ function uuid(value: string): string {
   return `'${value}'`;
 }
 
+/** `<status>|<error code>` of a bank explanation, for what no API shows (a cancelled row). */
+export function explanationRow(explanationId: string): string {
+  return psqlOne(
+    `select status || '|' || coalesce(error_code, '') ` +
+      `from public.question_ai_explanations where id = ${uuid(explanationId)}`,
+  );
+}
+
 /**
  * The newest practice session of `userId` on a bank question (`question`) or a mock exam question
  * (`mock`), waited for until one exists.
@@ -542,11 +560,11 @@ export async function stackRequest<T = unknown>(
 
 export const EXPL_TEXT = {
   sendNotice: /문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다|sent to an AI service/i,
-  working: /AI 해설을 만드는 중|making the AI explanation/i,
-  started: /AI 해설을 만드는 중입니다|making the AI explanation/i,
+  working: /작성중\.\.\.|making the AI explanation/i,
+  started: /작성중\.\.\.|making the AI explanation/i,
   ready: /AI 해설이 준비되었습니다|AI explanation is ready/i,
-  aiNotice:
-    /AI가 만든 해설입니다\. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
+  cancelled: /취소했습니다|cancelled/i,
+  aiNotice: /AI가 만든 해설입니다\. 정답이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
   unavailable:
     /AI 서비스에 연결하지 못했습니다\. 잠시 후 다시 시도하세요|could not reach the AI service/i,
   mismatch:
@@ -572,13 +590,19 @@ export const explUi = {
   region: (scope: Locator) => scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
   heading: (scope: Locator) =>
     scope.getByRole('heading', { name: /^(AI 해설|AI explanation)$/i, level: 3 }),
+  /** The toolbar's button; the disclosure heading has the same name and an `aria-expanded`. */
   create: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설|make (an )?AI explanation)$/i }),
+    scope
+      .getByRole('button', { name: /^(AI 해설|make (an )?AI explanation)$/i })
+      .and(scope.locator(':not([aria-expanded])')),
+  /** The disclosure heading of a finished explanation. */
   show: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설 보기|show (the )?AI explanation)$/i }),
+    scope
+      .getByRole('button', { name: /^(AI 해설|AI explanation)$/i })
+      .and(scope.locator('[aria-expanded]')),
   /** The share panel's read-only disclosure. */
   sharedToggle: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설( 보기)?|AI explanation)$/i }),
+    scope.getByRole('button', { name: /^(AI 해설|AI explanation)$/i }),
   busy: (area: Locator) => area.locator('[aria-busy="true"]').or(area.getByText(EXPL_TEXT.working)),
   badge: (area: Locator) => area.getByText(/^(AI 생성|AI generated)$/i),
   notice: (area: Locator) => area.getByText(EXPL_TEXT.aiNotice),
@@ -587,6 +611,7 @@ export const explUi = {
   sources: (area: Locator) =>
     area.getByRole('list', { name: /^(출처|sources)$/i }).getByRole('listitem'),
   regenerate: (area: Locator) => area.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
+  cancel: (area: Locator) => area.getByRole('button', { name: /^(취소|cancel)$/i }),
   askAbout: (area: Locator) => area.getByRole('button', { name: /^(AI 질문하기|ask (the )?AI)$/i }),
   alert: (area: Locator) => area.getByRole('alert'),
   retry: (area: Locator) => area.getByRole('button', { name: /^(다시 시도|try again)$/i }),
@@ -604,7 +629,7 @@ export async function recordAnnouncements(page: Page): Promise<{ read: () => Pro
     const scan = () => {
       for (const el of document.querySelectorAll('[role="status"]')) {
         const text = (el.textContent ?? '').trim();
-        if (!/AI 해설|AI explanation/i.test(text)) continue;
+        if (!/AI 해설|작성중|AI explanation/i.test(text)) continue;
         if (seen.at(-1) !== text) seen.push(text);
       }
     };

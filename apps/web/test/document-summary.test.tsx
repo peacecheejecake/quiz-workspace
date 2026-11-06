@@ -166,9 +166,14 @@ describe('summary panel model', () => {
   });
 
   it('marks an environment without summaries and documents that cannot be summarized', () => {
-    expect(summaryPanelModel(state({ available: false }), { canEdit: true }).unavailable).toBe(
-      true,
-    );
+    expect(summaryPanelModel(state({ available: false }), { canEdit: true })).toMatchObject({
+      empty: true,
+      createInEmpty: false,
+    });
+    const failed = state({ available: false, run: run({ status: 'failed' }) });
+    expect(summaryPanelModel(failed, { canEdit: true }).retry).toBe(false);
+    const stored = state({ available: false, summary: SUMMARY, enabled: false });
+    expect(summaryPanelModel(stored, { canEdit: true }).auto).toEqual({ on: false, action: null });
     const paper = summaryPanelModel(state(), { canEdit: true, questionPaper: true });
     expect(paper).toMatchObject({ notice: '문제지는 요약하지 않습니다.', createInEmpty: false });
     const processing = summaryPanelModel(state({ published_revision_id: null }), {
@@ -497,20 +502,28 @@ describe('DocumentSummaryPanel', () => {
 
   it('UX10-AI-AC01 hides summary creation when unavailable', async () => {
     const { panel, client } = renderPanel(state({ available: false }));
-    await within(panel).findByText('이 환경에서는 AI 요약을 사용할 수 없습니다.');
+    await within(panel).findByText('아직 요약이 없습니다.');
     expect(within(panel).queryByRole('button', { name: '요약 만들기' })).toBeNull();
+    expect(within(panel).queryByText(/AI\s+서비스로 전송됩니다|사용할 수 없습니다/)).toBeNull();
     expect(client.create).not.toHaveBeenCalled();
   });
 
-  it('shows the summary with collapsed chapters and page links into DOC-02', async () => {
+  it('shows the summary with collapsed chapters and page links to the source dialog', async () => {
     const user = userEvent.setup();
     const { panel } = renderPanel(state({ summary: SUMMARY, enabled: true, run: run() }));
     expect(await within(panel).findByRole('heading', { level: 3, name: '전체 요약' })).toBeTruthy();
     expect(within(panel).getByText(/발행본 기준 · 장 2개$/)).toBeTruthy();
-    const link = within(within(panel).getByRole('list', { name: '핵심' })).getByRole('link', {
-      name: '2–3쪽 열기',
-    });
-    expect(link.getAttribute('href')).toBe(`/workspaces/${WS}/documents/${DOC}?page=2`);
+    await user.click(
+      within(within(panel).getByRole('list', { name: '핵심' })).getByRole('button', {
+        name: '2–3쪽 열기',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: '원본 PDF' });
+    expect(within(dialog).getByRole('link', { name: '전체 문서 보기' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WS}/documents/${DOC}?page=2`,
+    );
+    await user.click(within(dialog).getByRole('button', { name: '원본 닫기' }));
     const chapter = within(panel).getByRole('button', { name: /^1장 물의 순환 p\.2–3/ });
     expect(chapter.getAttribute('aria-expanded')).toBe('false');
     await user.click(chapter);

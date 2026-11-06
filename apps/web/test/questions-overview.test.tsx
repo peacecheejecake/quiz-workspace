@@ -3,7 +3,7 @@
 // (which opens a practice session = the view); closing it removes the param and returns focus to
 // the dot — also when the panel was opened by a deep link. Hovering never opens a session.
 import './dom-setup';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { useSyncExternalStore } from 'react';
@@ -31,29 +31,26 @@ vi.mock('next/navigation', () => ({
     new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
 }));
 
-const openPracticeSessionAction = vi.fn();
+const openPracticeSession = vi.fn();
 const setMyStateAction = vi.fn();
 const lookupOverviewQuestionAction = vi.fn();
 const submitPracticeAction = vi.fn();
 const selfGradePracticeAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  latestPracticeAction: vi.fn(async () => ({
-    ok: true,
-    data: {
-      session: null,
-      previous_revision: false,
-      reset_epoch: 0,
-      active_revision_id: '88888888-8888-4888-8888-888888888888',
-      latest_attempt_id: null,
-    },
-  })),
   resetPracticeAction: vi.fn(),
   submitPracticeAction: (...a: unknown[]) => submitPracticeAction(...a),
   selfGradePracticeAction: (...a: unknown[]) => selfGradePracticeAction(...a),
-  openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
   setMyStateAction: (...a: unknown[]) => setMyStateAction(...a),
   lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
 }));
+vi.mock('../src/lib/questions/practice-open-client', async () => {
+  const { fakePracticeOpen } = await import('./practice-open-fake');
+  return {
+    openQuestionPractice: fakePracticeOpen({
+      open: (...a: unknown[]) => openPracticeSession(...a),
+    }),
+  };
+});
 
 // UX7-BANK: the question editor and delete of the panel's 문제 관리 menu (QPLAY-01-AC07/AC08).
 const getQuestionAction = vi.fn();
@@ -195,7 +192,7 @@ const onFiltersChange = vi.fn();
 const realPushState = window.history.pushState.bind(window.history);
 
 beforeEach(() => {
-  openPracticeSessionAction.mockReset();
+  openPracticeSession.mockReset();
   setMyStateAction.mockReset();
   lookupOverviewQuestionAction.mockReset();
   submitPracticeAction.mockReset();
@@ -209,7 +206,7 @@ beforeEach(() => {
   getQuestionRevisionAction.mockReset();
   questionEditorContextAction.mockResolvedValue({ chapters: [], documents: [] });
   lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
-  openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
+  openPracticeSession.mockImplementation((_ws: string, qid: string) =>
     Promise.resolve(session(Number(qid.slice(-2)))),
   );
   realPushState(null, '', PATH);
@@ -227,12 +224,14 @@ const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
 
-describe('UX10-HOME-AC02 status filter', () => {
+describe('UX12-FILTER-AC01 status filter', () => {
   it('is always visible with all statuses selected', async () => {
     const user = userEvent.setup();
     onFiltersChange.mockReset();
     render(<Screen />);
     const group = screen.getByRole('group', { name: '상태 필터' });
+    expect(within(group).queryByRole('button', { name: '다시 풀기만' })).toBeNull();
+    expect(within(group).queryByRole('button', { name: '필터 초기화' })).toBeNull();
     const retry = within(group).getByRole('button', { name: '다시 풀기' });
     expect(retry).toHaveAttribute('aria-pressed', 'true');
     await user.click(retry);
@@ -248,12 +247,12 @@ describe('QuestionsOverview practice panel', () => {
     render(<Screen />);
     await user.click(dot(2));
 
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
     await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
-    expect(openPracticeSessionAction).toHaveBeenCalledTimes(1);
-    expect(openPracticeSessionAction.mock.calls[0]?.slice(0, 2)).toEqual([WS, id(2)]);
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
+    expect(openPracticeSession.mock.calls[0]?.slice(0, 2)).toEqual([WS, id(2)]);
     // The view shows on the dot right away (the background is aria-hidden while the modal is open).
     await waitFor(() =>
       expect(document.querySelector(`[data-question-id="${id(2)}"]`)).toHaveAttribute(
@@ -272,7 +271,7 @@ describe('QuestionsOverview practice panel', () => {
     const user = userEvent.setup();
     realPushState(null, '', `${PATH}?question=${id(3)}`);
     render(<Screen />);
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '3번 문제' });
     await user.click(within(panel).getByRole('button', { name: '패널 닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(dot(3)).toHaveFocus();
@@ -282,7 +281,7 @@ describe('QuestionsOverview practice panel', () => {
     const user = userEvent.setup();
     render(<Screen />);
     await user.click(dot(1));
-    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await screen.findByRole('dialog', { name: '1번 문제' });
     await act(async () => {
       realPushState(null, '', PATH);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -292,7 +291,7 @@ describe('QuestionsOverview practice panel', () => {
       realPushState(null, '', `${PATH}?question=${id(1)}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    expect(await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: '1번 문제' })).toBeVisible();
   });
 
   it('favorite in the panel header turns the dot into a star at once', async () => {
@@ -309,7 +308,7 @@ describe('QuestionsOverview practice panel', () => {
     });
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
     expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
     expect(setMyStateAction).toHaveBeenCalledWith(WS, id(1), { is_favorite: true }, 0);
@@ -324,7 +323,7 @@ describe('QuestionsOverview practice panel', () => {
     render(<Screen />);
     await user.hover(dot(1));
     await user.unhover(dot(1));
-    expect(openPracticeSessionAction).not.toHaveBeenCalled();
+    expect(openPracticeSession).not.toHaveBeenCalled();
     expect(window.location.search).toBe('');
   });
 });
@@ -333,7 +332,7 @@ describe('QuestionsOverview review fixes', () => {
   it('a deep link outside the filtered list opens from the server-resolved question', async () => {
     realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
     render(<Screen data={only(1, 3)} requested={outsidePlaced(2)} />);
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '2번 문제' });
     await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
     expect(lookupOverviewQuestionAction).not.toHaveBeenCalled();
   });
@@ -345,7 +344,7 @@ describe('QuestionsOverview review fixes', () => {
       realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    expect(await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: '2번 문제' })).toBeVisible();
     expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(2));
   });
 
@@ -379,7 +378,7 @@ describe('QuestionsOverview review fixes', () => {
 
     await navigateTo('?favorite=true');
     await navigateTo(`?favorite=true&question=${id(2)}`);
-    expect(await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' })).toBeVisible();
+    expect(await screen.findByRole('dialog', { name: '2번 문제' })).toBeVisible();
     expect(lookupOverviewQuestionAction).toHaveBeenCalledTimes(2);
   });
 
@@ -405,7 +404,7 @@ describe('QuestionsOverview review fixes', () => {
     const user = userEvent.setup();
     const { rerender } = render(<Screen />);
     await user.click(dot(2));
-    await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await screen.findByRole('dialog', { name: '2번 문제' });
     // The question leaves the (favorites) list while the panel is open.
     rerender(<Screen data={only(1, 3)} />);
     await user.keyboard('{Escape}');
@@ -417,7 +416,7 @@ describe('QuestionsOverview review fixes', () => {
     const user = userEvent.setup();
     const { rerender } = render(<Screen />);
     await user.click(dot(1));
-    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await screen.findByRole('dialog', { name: '1번 문제' });
     rerender(<Screen data={only()} />);
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -429,7 +428,7 @@ describe('QuestionsOverview review fixes', () => {
     setMyStateAction.mockRejectedValue(new TypeError('Failed to fetch'));
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
     await waitFor(() =>
       expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument(),
@@ -470,26 +469,66 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     const user = userEvent.setup();
     render(<Screen />);
     await user.click(dot(1));
-    let panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    let panel = await screen.findByRole('dialog', { name: '1번 문제' });
     expect(within(panel).getByRole('button', { name: '이전 문제' })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
-    panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    panel = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
-    panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    panel = await screen.findByRole('dialog', { name: '3번 문제' });
     const next = within(panel).getByRole('button', { name: '다음 문제' });
     expect(next).toHaveAttribute('aria-disabled', 'true');
     await user.click(next);
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(3));
-    // Each question opened its own session (= its own view).
-    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(3));
+    // Each question it stopped on opened its own session (= its own view).
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(3));
 
     await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
-    await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+  });
+
+  it('UX12-OPEN-AC08 a direct open posts at once, without the navigation pause', async () => {
+    render(<Screen />);
+    fireEvent.click(dot(1));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1), { timeout: 100 });
+  });
+
+  it('UX12-OPEN-AC08 rapid next opens only the question it stops on', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    // Both clicks run in one task, so no timer can fire between them.
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+
+    await screen.findByRole('dialog', { name: '3번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(dotStatus(3)).toBe('viewed'));
+    expect(openPracticeSession.mock.calls.map((call) => call[1])).toEqual([id(1), id(3)]);
+    expect(dotStatus(2)).not.toBe('viewed');
+  });
+
+  it('UX12-OPEN-AC08 closing during the pause opens nothing', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: /닫기/ }));
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
+    expect(dotStatus(2)).not.toBe('viewed');
   });
 
   it('submits the chosen option id, reveals the answer only then and refreshes on close', async () => {
@@ -499,7 +538,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     );
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     const submit = within(panel).getByRole('button', { name: '제출' });
     await waitFor(() => expect(within(panel).getByRole('radio')).toBeInTheDocument());
     expect(submit).toBeDisabled();
@@ -522,7 +561,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
 
   it('a pending essay waits for the self-grade, which settles the dot', async () => {
     const user = userEvent.setup();
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -536,7 +575,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     });
     render(<Screen />);
     await user.click(dot(2));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '2번 문제' });
     await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
     await user.click(within(panel).getByRole('button', { name: '제출' }));
 
@@ -565,7 +604,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o1'] }));
     render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '다시 풀기 표시' }));
     await within(panel).findByRole('button', { name: '다시 풀기 해제' });
     await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
@@ -584,7 +623,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     });
     render(<Screen />);
     await user.click(dot(3));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '3번 문제' });
     await user.click(await within(panel).findByRole('radio', { name: '보기 하나' }));
     await user.click(within(panel).getByRole('button', { name: '제출' }));
     await waitFor(() => expect(within(panel).getByRole('alert')).toHaveTextContent('일시적인'));
@@ -595,7 +634,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
 
 describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
   function twoOptions(stem: string, multi = false) {
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -622,7 +661,7 @@ describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
     submitPracticeAction.mockResolvedValue(submitted('incorrect', { correct_option_ids: ['o2'] }));
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     const group = await within(panel).findByRole('radiogroup', { name: '보기' });
     expect(within(panel).getByText('보기')).toHaveClass('qz-visually-hidden');
     expect(within(panel).getByText('빈칸 ( )에 들어갈 말은?')).toBeInTheDocument();
@@ -651,7 +690,7 @@ describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
     submitPracticeAction.mockResolvedValue(submitted('correct', { correct_option_ids: ['o3'] }));
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await within(panel).findAllByRole('checkbox');
     expect(within(panel).getByRole('group')).toHaveAccessibleName('보기 — 정답을 모두 고르세요');
     expect(within(panel).getByText('옳은 것을 모두 고르시오.')).toBeInTheDocument();
@@ -674,7 +713,7 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     document.querySelector(`[data-question-id="${id(n)}"]`)?.getAttribute('aria-label') ?? '';
 
   function essaySessions() {
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -701,7 +740,7 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     const user = userEvent.setup();
     render(<Screen />);
     await user.click(dot(1));
-    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await screen.findByRole('dialog', { name: '1번 문제' });
     await waitFor(() => expect(dotStatus(1)).toBe('viewed'));
     expect(routerRefresh).not.toHaveBeenCalled();
     await act(async () => {
@@ -716,9 +755,9 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     const user = userEvent.setup();
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
-    const second = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const second = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(routerRefresh).not.toHaveBeenCalled();
     await user.click(within(second).getByRole('button', { name: '패널 닫기' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -732,7 +771,7 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     setMyStateAction.mockResolvedValue(myState(2, {}));
     render(<Screen />);
     await user.click(dot(2));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '2번 문제' });
     await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
     await user.click(within(panel).getByRole('button', { name: '제출' }));
     await waitFor(() => expect(dotLabel(2)).toMatch(/채점 대기/));
@@ -755,7 +794,7 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     setMyStateAction.mockReturnValue(new Promise((resolve) => (answer = resolve)));
     render(<Screen />);
     await user.click(dot(3));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '3번 문제' });
     await user.type(await within(panel).findByRole('textbox', { name: '답안' }), '증발');
     await user.click(within(panel).getByRole('button', { name: '제출' }));
     await waitFor(() => expect(dotLabel(3)).toMatch(/채점 대기/));
@@ -810,11 +849,11 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
     updateQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(2, '고친 본문') });
     render(<Screen />);
     await user.click(dot(2));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '2번 문제' });
     await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
     // Opening the panel never reads the question with its answers.
     expect(getQuestionAction).not.toHaveBeenCalled();
-    expect(openPracticeSessionAction).toHaveBeenCalledTimes(1);
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
 
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
     await user.click(await screen.findByRole('menuitem', { name: '편집' }));
@@ -834,7 +873,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
       '88888888-8888-4888-8888-888888888888',
     ]);
     // The panel stays on the question and opens a session of the new revision.
-    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
   });
 
@@ -843,7 +882,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
     deleteQuestionAction.mockResolvedValue({ ok: true, data: null });
     render(<Screen />);
     await user.click(dot(3));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '3번 문제' });
 
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
     await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
@@ -870,7 +909,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
     });
     render(<Screen />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
     await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
     const confirm = await screen.findByRole('alertdialog');
@@ -885,7 +924,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
       const user = userEvent.setup();
       render(<Screen readOnly={readOnly} />);
       await user.click(dot(1));
-      const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      const panel = await screen.findByRole('dialog', { name: '1번 문제' });
       expect(within(panel).queryByRole('button', { name: '문제 관리' })).toBeNull();
     },
   );
@@ -899,8 +938,8 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       getQuestionAction.mockResolvedValue({ ok: true, data: fullQuestion(2) });
       render(<Screen readOnly={readOnly} />);
       await user.click(dot(2));
-      const panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
-      const sessions = openPracticeSessionAction.mock.calls.length;
+      const panel = await screen.findByRole('dialog', { name: '2번 문제' });
+      const sessions = openPracticeSession.mock.calls.length;
       expect(getQuestionAction).not.toHaveBeenCalled();
       const label = readOnly ? '문제 정보' : '문제 관리';
       await user.click(within(panel).getByRole('button', { name: label }));
@@ -918,7 +957,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       await user.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 상세' })).toBeNull());
       // No new session, no submission: the practice is untouched.
-      expect(openPracticeSessionAction).toHaveBeenCalledTimes(sessions);
+      expect(openPracticeSession).toHaveBeenCalledTimes(sessions);
       expect(submitPracticeAction).not.toHaveBeenCalled();
       expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
     },
@@ -953,7 +992,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
     });
     render(<Screen readOnly="viewer" />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await user.click(within(panel).getByRole('button', { name: '문제 정보' }));
     await user.click(screen.getByRole('menuitem', { name: '수정 이력·출처' }));
     const detail = await screen.findByRole('dialog', { name: '문제 상세' });
@@ -980,7 +1019,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
     const onQuestionsChanged = vi.fn();
     render(<Screen onQuestionsChanged={onQuestionsChanged} />);
     await user.click(dot(3));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '3번 문제' });
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
     await user.click(await screen.findByRole('menuitem', { name: '보관' }));
     let confirm = await screen.findByRole('alertdialog', { name: '문제를 보관할까요?' });
@@ -1050,14 +1089,14 @@ describe(
   { timeout: 20_000 },
   () => {
     const sessionsFor = (n: number) =>
-      openPracticeSessionAction.mock.calls.filter((c) => c[1] === id(n)).length;
+      openPracticeSession.mock.calls.filter((c) => c[1] === id(n)).length;
 
     it('QPLAY-01-AC08 browser Back to a deleted question never reopens it from the local state', async () => {
       const user = userEvent.setup();
       deleteQuestionAction.mockResolvedValue({ ok: true, data: null });
       render(<Screen />);
       await user.click(dot(3));
-      let panel = await screen.findByRole('dialog', { name: '챕터 없음 3번 문제' });
+      let panel = await screen.findByRole('dialog', { name: '3번 문제' });
       await waitFor(() => expect(within(panel).getByText('문제 3 본문')).toBeInTheDocument());
       await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
       await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
@@ -1073,7 +1112,7 @@ describe(
       await act(async () => {
         await new Promise((r) => setTimeout(r, 50));
       });
-      expect(screen.queryByRole('dialog', { name: '챕터 없음 3번 문제' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: '3번 문제' })).toBeNull();
       expect(screen.queryByRole('button', { name: '제출' })).toBeNull();
       expect(sessionsFor(3)).toBe(1);
 
@@ -1083,7 +1122,7 @@ describe(
         window.dispatchEvent(new PopStateEvent('popstate'));
       });
       await user.click(dot(1));
-      panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      panel = await screen.findByRole('dialog', { name: '1번 문제' });
       expect(panel).toBeVisible();
     });
 
@@ -1094,7 +1133,7 @@ describe(
       updateQuestionAction.mockReturnValue(new Promise((resolve) => (finishSave = resolve)));
       render(<Screen />);
       await user.click(dot(1));
-      let panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      let panel = await screen.findByRole('dialog', { name: '1번 문제' });
       await waitFor(() => expect(within(panel).getByText('문제 1 본문')).toBeInTheDocument());
 
       await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
@@ -1105,7 +1144,7 @@ describe(
       await user.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 편집' })).toBeNull());
       await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
-      panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+      panel = await screen.findByRole('dialog', { name: '2번 문제' });
       await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
       expect(sessionsFor(2)).toBe(1);
 
@@ -1118,7 +1157,7 @@ describe(
       // ...and question 1's cached session of the old revision is gone: back to it opens a new one.
       expect(sessionsFor(1)).toBe(1);
       await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
-      await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+      await screen.findByRole('dialog', { name: '1번 문제' });
       await waitFor(() => expect(sessionsFor(1)).toBe(2));
     });
   },
@@ -1176,7 +1215,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     const user = userEvent.setup();
     render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     return { user, panel };
   }
 
@@ -1201,7 +1240,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     const before = snapshot(retry);
     const seen = new Set<string>();
     const observer = new MutationObserver(() => {
-      const now = within(panel).queryByRole('button', { name: /다시 풀기/ });
+      const now = within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ });
       seen.add(now === retry ? snapshot(retry) : 'remounted');
     });
     observer.observe(panel, { subtree: true, attributes: true, childList: true });
@@ -1289,7 +1328,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.'),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
     expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(1));
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
@@ -1415,7 +1454,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     const user = userEvent.setup();
     const { rerender } = render(<Screen data={correctOverview} filters={EMPTY_OVERVIEW_FILTERS} />);
     await user.click(dot(1));
-    const panel = await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
     await refuseRetry(user, panel);
     await user.click(toggles(panel).favorite); // held[1]: the save is in flight
     await act(async () => release({ ok: true, data: outsidePlaced(1) }));
@@ -1477,17 +1516,17 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       });
     realPushState(null, '', `${PATH}?favorite=true&question=${id(2)}`);
     render(<Screen data={only(1, 3)} requested={outsidePlaced(2)} />);
-    let panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    let panel = await screen.findByRole('dialog', { name: '2번 문제' });
     await user.click(within(panel).getByRole('button', { name: '즐겨찾기 추가' }));
     expect(within(panel).getByRole('button', { name: '즐겨찾기 해제' })).toBeInTheDocument();
     await navigate(`?favorite=true&question=${id(1)}`);
-    await screen.findByRole('dialog', { name: '챕터 없음 1번 문제' });
+    await screen.findByRole('dialog', { name: '1번 문제' });
     await act(async () =>
       held[0]?.resolve({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
     );
     expect(await screen.findByText(/일시적인 오류/)).toBeInTheDocument();
     await navigate(`?favorite=true&question=${id(2)}`);
-    panel = await screen.findByRole('dialog', { name: '챕터 없음 2번 문제' });
+    panel = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(within(panel).getByRole('button', { name: '즐겨찾기 추가' })).toBeInTheDocument();
   });
 });

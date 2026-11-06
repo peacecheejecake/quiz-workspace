@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
-from book_core.contracts import BBox, BlockType, ParsedDocument
+from book_core.contracts import BBox, BlockType, ParsedDocument, TableContent, TableSpan
 from book_core.parser import ParserError, ParserOptions, PdfParser, docling_adapter
 from book_core.parser.docling_adapter import (
     DoclingParser,
+    _table,
     document_from_docling,
     text_layer_pages,
 )
@@ -54,6 +55,18 @@ def _cell(text: str, row: int, col: int, *, header: bool = False) -> TableCell:
         start_col_offset_idx=col,
         end_col_offset_idx=col + 1,
         column_header=header,
+    )
+
+
+def _merged(text: str, row: int, col: int, row_span: int, col_span: int) -> TableCell:
+    return TableCell(
+        text=text,
+        row_span=row_span,
+        col_span=col_span,
+        start_row_offset_idx=row,
+        end_row_offset_idx=row + row_span,
+        start_col_offset_idx=col,
+        end_col_offset_idx=col + col_span,
     )
 
 
@@ -204,6 +217,40 @@ def test_table_grid_and_captions(parsed: ParsedDocument) -> None:
     ids = [b.id for b in parsed.blocks]
     assert ids.index(table.caption_block_id) == ids.index(table.id) - 1
     assert ids.index(image.caption_block_id) == ids.index(image.id) + 1
+
+
+def _content(*cells: TableCell, rows: int = 3, cols: int = 3) -> TableContent | None:
+    data = TableData(num_rows=rows, num_cols=cols, table_cells=list(cells))
+    return _table(DoclingDocument(name="synthetic").add_table(data=data))
+
+
+def test_merged_cells_become_spans_over_the_repeated_grid() -> None:
+    table = _content(_merged("head", 0, 0, 1, 3), _merged("side", 1, 0, 2, 1), _cell("x", 1, 1))
+    assert table is not None
+    assert table.rows == (("head",) * 3, ("side", "x", ""), ("side", "", ""))
+    assert table.spans == (
+        TableSpan(row=0, col=0, col_span=3),
+        TableSpan(row=1, col=0, row_span=2),
+    )
+
+
+def test_a_table_without_merged_cells_has_no_spans() -> None:
+    table = _content(_cell("a", 0, 0), _cell("b", 1, 1))
+    assert table is not None
+    assert table.spans is None
+
+
+def test_a_span_the_grid_does_not_show_whole_stays_repeated() -> None:
+    """Docling clips and overwrites overlapping cells; such a span must not fail the parse."""
+    past_the_edge = _content(_merged("wide", 0, 1, 1, 3), rows=1, cols=3)
+    assert past_the_edge is not None
+    assert past_the_edge.rows == (("", "wide", "wide"),)
+    assert past_the_edge.spans is None
+
+    overlapped = _content(_merged("big", 0, 0, 2, 2), _merged("over", 1, 1, 2, 2))
+    assert overlapped is not None
+    assert overlapped.rows == (("big", "big", ""), ("big", "over", "over"), ("", "over", "over"))
+    assert overlapped.spans == (TableSpan(row=1, col=1, row_span=2, col_span=2),)
 
 
 def test_cross_page_item_is_split_per_page_by_char_spans(parsed: ParsedDocument) -> None:

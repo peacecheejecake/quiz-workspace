@@ -9,7 +9,8 @@
 import './dom-setup';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -20,23 +21,20 @@ import type { AskLauncher } from '../src/components/ask/ask-launcher';
 
 const openSession = vi.fn<(ws: string, q: string, key: string) => Promise<unknown>>();
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  latestPracticeAction: vi.fn(async () => ({
-    ok: true,
-    data: {
-      session: null,
-      previous_revision: false,
-      reset_epoch: 0,
-      active_revision_id: '77777777-7777-4777-8777-777777777777',
-      latest_attempt_id: null,
-    },
-  })),
   resetPracticeAction: vi.fn(),
-  openPracticeSessionAction: (ws: string, q: string, key: string) => openSession(ws, q, key),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(),
   setMyStateAction: vi.fn(),
   lookupOverviewQuestionAction: vi.fn(),
 }));
+vi.mock('../src/lib/questions/practice-open-client', async () => {
+  const { fakePracticeOpen } = await import('./practice-open-fake');
+  return {
+    openQuestionPractice: fakePracticeOpen({
+      open: (ws: string, q: string, key: string) => openSession(ws, q, key),
+    }),
+  };
+});
 vi.mock('../src/components/questions/viewer/separate-retry', () => ({
   SeparateRetry: ({
     onGraded,
@@ -585,7 +583,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     );
     const panel = screen.getByRole('dialog');
     expect(panel).toHaveAttribute('aria-modal', 'true');
-    expect(await within(panel).findByRole('heading', { name: '3장 12번' })).toBeInTheDocument();
+    expect(await within(panel).findByRole('heading', { name: '12번' })).toBeInTheDocument();
     // The stem is on screen already while the run and the session still load (a placeholder that
     // the loaded body then replaces): a findByText match on it can be detached by the next render
     // before the assertion runs. Wait for the loaded body (the 제출 button) first, then read it.
@@ -815,7 +813,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(within(panel).getByRole('button', { name: '시작' })).toBeDisabled();
     expect(within(panel).getByText('풀 문제를 고르세요')).toBeInTheDocument();
     await user.click(within(panel).getByRole('button', { name: '1장 물 펼치기' }));
-    const first = within(panel).getByRole('checkbox', { name: '1장 1번 · 발문 1 · 객관식' });
+    const first = within(panel).getByRole('checkbox', { name: '1번 · 발문 1 · 객관식' });
     await user.click(first);
     expect(all).toHaveAttribute('aria-checked', 'mixed');
     expect(within(panel).getByText('선택 1문제')).toBeInTheDocument();

@@ -17,7 +17,7 @@
 //
 // NOT in the docs (UX9.0 assumptions, to confirm or change in UX9-REDIST-B):
 //   R1 GET …/chapter-redistribution/questions → 200 {items: [{question_id, chapter_id,
-//      question_number, question_type, label ("1장 3번"), stem_preview, chapter_source}],
+//      question_number, question_type, label ("3번"), stem_preview, chapter_source}],
 //      chapters: [{id: string|null, title}] (Heatmap order, "챕터 없음" last), targets:
 //      [{document_id, document_title, chapters: [{id, title, depth}]}]} — no answers.
 //   R2 POST …/preview → 200 {items: [{question_id, number_label, stem_preview, current_chapter:
@@ -40,8 +40,8 @@
 //   reason text otherwise). Modal FloatingSidePanel (role=dialog, aria-modal="true") named
 //   "챕터 재분배" with close button "챕터 재분배 닫기"; `?panel=chapter-redistribution`.
 //   List step: the QuestionRangePicker (fixtures/range-picker.ts), rows carry the text badge
-//   "직접 정함" for `manual`; combobox "옮길 챕터" (option "챕터 없음" first, then chapters by
-//   document); button "이동 (n)" with reason texts "옮길 문제를 고르세요" / "옮길 챕터를
+//   "직접 정함" for `manual`; combobox "옮길 챕터" (tree popover, UX12-PICKER: "챕터 없음"
+//   first, then chapters, by document with several books); button "이동 (n)" with reason texts "옮길 문제를 고르세요" / "옮길 챕터를
 //   고르세요" (aria-describedby); checkbox "직접 정한 챕터도 다시 추천"; button "자동 추천 보기"
 //   with the scope text "선택한 n문제" / "전체 문제". Empty: "옮길 확정 문제가 없습니다".
 //   Preview step: back button/link "목록으로"; summary text "바뀔 문제 k개 · 그대로 u개 · 추천
@@ -56,7 +56,7 @@ import { execFileSync } from 'node:child_process';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { ApiResponse } from './api.ts';
 import { localDbAdminUrl } from './local-env.ts';
-import { main } from './workspace-ui.ts';
+import { HOME_MENU_NAME, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 export const REDIST_PANEL = 'chapter-redistribution';
@@ -170,7 +170,7 @@ function escape(text: string): string {
 export const redistUi = {
   menuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(챕터 재분배|redistribute chapters)$/i }),
   dialog: (page: Page) =>
     page.getByRole('dialog', { name: /^(챕터 재분배|redistribute chapters)$/i }),
@@ -181,7 +181,7 @@ export const redistUi = {
   manualBadge: (scope: Locator) => scope.getByText(/^(직접 정함|set by hand|manual)$/i),
   /** A question checkbox row by a unique stem fragment. */
   questionByStem: (dialog: Locator, stem: string) =>
-    dialog.getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+    dialog.getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
   /** The element holding a question row (checkbox + badge); `has` is relative to the row. */
   rowByStem: (dialog: Locator, stem: string) =>
     dialog
@@ -189,7 +189,7 @@ export const redistUi = {
       .filter({
         has: dialog
           .page()
-          .getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+          .getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
       })
       .last(),
   target: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(옮길 챕터|move to)/i }),
@@ -260,7 +260,7 @@ export function summaryText(parts: {
 
 /** Opens `문제` › `챕터 재분배` with the keyboard (Enter, arrows) and returns the dialog. */
 export async function openRedistributionByKeyboard(page: Page): Promise<Locator> {
-  const button = main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i });
+  const button = main(page).getByRole('button', { name: HOME_MENU_NAME });
   const item = redistUi.menuItem(page);
   // Right after a navigation the page may still be settling (hydration, a late history write):
   // a menu that lost its focus meanwhile is closed with Escape and opened again, keyboard only.
@@ -316,6 +316,15 @@ export async function tabTo(page: Page, target: Locator, max = 60): Promise<void
 /** Chooses `option` in a focused select / combobox with the keyboard only. */
 export async function keyboardChoose(page: Page, select: Locator, option: string): Promise<void> {
   await expect(select).toBeFocused();
+  // UX12-PICKER: the filter takes the title (a typed key moves there from the tree), Enter picks.
+  if ((await select.getAttribute('aria-haspopup')) === 'dialog') {
+    await page.keyboard.press('Enter');
+    await page.getByRole('tree').waitFor();
+    await page.keyboard.type(option);
+    await page.getByRole('tree').getByRole('treeitem', { name: option, exact: true }).waitFor();
+    await page.keyboard.press('Enter');
+    return;
+  }
   const native = (await select.evaluate((el) => el.tagName)) === 'SELECT';
   if (native) {
     for (let i = 0; i < 40; i++) {
@@ -350,19 +359,8 @@ export async function expectNoHorizontalScroll(page: Page, scope: Locator): Prom
   expect(own, 'panel has no horizontal scroll').toBeLessThanOrEqual(0);
 }
 
-/** Picks `option` in the `옮길 챕터` select (native select or a Radix listbox). */
+/** Picks a top-level `option` in the `옮길 챕터` tree popover (UX12-PICKER). */
 export async function chooseTarget(page: Page, dialog: Locator, option: string): Promise<void> {
-  const select = redistUi.target(dialog);
-  if ((await select.evaluate((el) => el.tagName)) === 'SELECT') {
-    const label = await select.evaluate(
-      (el, text) =>
-        [...(el as HTMLSelectElement).options].find((o) => o.text.trim().startsWith(text))?.text ??
-        '',
-      option,
-    );
-    await select.selectOption({ label });
-  } else {
-    await select.click();
-    await page.getByRole('option', { name: new RegExp(`^\\s*${escape(option)}`) }).click();
-  }
+  await redistUi.target(dialog).click();
+  await page.getByRole('tree').getByRole('treeitem', { name: option, exact: true }).click();
 }

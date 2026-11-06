@@ -13,6 +13,11 @@
     GET  /shared/{shareId}/questions              CONFIRMED questions, answers included
     GET  /shared/{shareId}/questions/{questionId} one CONFIRMED question
 
+Scope (UX12-SHARE, docs/workspace-sharing.md §12): `include_notes`, `include_ai_explanations`,
+`include_summary` and `include_owner_records` are read with the link on every request; a route
+whose flag is off answers the same 404 as a random id. The owner's records live in
+`quiz_api.api.shared_owner_records`.
+
 Share session (`quiz_api.share_sessions`): `quiz_share_session` cookie, `HttpOnly; Secure;
 SameSite=Lax; Path=/api/v1/shared/{shareId}`, `Max-Age` = SHARE_SESSION_TTL_SECONDS (≤ 8 h). It
 is a separate capability, never a Supabase login and never a membership: the member API answers
@@ -34,8 +39,9 @@ Exchange: an allowlisted `Origin` is required (403 otherwise; CSRF), then the pe
 rate limit (429 + Retry-After), then unknown id / wrong secret / unusable link → the same 404
 share-unavailable body (constant-time digest comparison; no existence oracle).
 
-Never exposed: drafts and unpublished revisions, per-user study state, attempts, practice
-sessions, owner identity (ids, email), share-link secrets or digests, Storage keys or signed URLs.
+Never exposed: drafts and unpublished revisions, per-user study state, attempts (outside the
+owner records a link opts in to), practice sessions, owner identity (ids, email), share-link
+secrets or digests, Storage keys or signed URLs.
 Every response is `Cache-Control: private, no-store`, `Referrer-Policy: no-referrer`,
 `X-Robots-Tag: noindex, nofollow` (`NoStoreMiddleware`). The secret and the cookie value are never
 logged; the access log records the path only.
@@ -151,6 +157,12 @@ class SharedDocumentSummary(BaseModel):
 class SharedWorkspace(BaseModel):
     workspace: SharedWorkspaceInfo
     allow_fork: bool = Field(description="Signed-in guests may fork (WS-VIEW-01-AC06).")
+    include_notes: bool = Field(description="Chapter notes are part of this link.")
+    include_ai_explanations: bool = Field(description="AI explanations are part of this link.")
+    include_summary: bool = Field(description="Document summaries are part of this link.")
+    include_owner_records: bool = Field(
+        description="The owner's attempts and highlights can be read through this link."
+    )
     expires_at: datetime | None = Field(description="When the link expires; null: never.")
     documents: list[SharedDocumentSummary] = Field(
         description="Documents with a published revision, oldest first."
@@ -450,6 +462,10 @@ def get_shared_workspace(link: Shared, search_repo: SearchRepo) -> SharedWorkspa
     return SharedWorkspace(
         workspace=SharedWorkspaceInfo(name=link.workspace_name, archived=link.archived),
         allow_fork=link.allow_fork,
+        include_notes=link.include_notes,
+        include_ai_explanations=link.include_ai_explanations,
+        include_summary=link.include_summary,
+        include_owner_records=link.include_owner_records,
         expires_at=link.expires_at,
         documents=[
             SharedDocumentSummary(
@@ -548,7 +564,9 @@ def get_shared_document_summary(
     """The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a
     succeeded summary of the revision the guest reads now. An older revision's summary, a run in
     progress or failed, and anything of other workspaces answer the same 404 as a random id; no
-    run, usage, cost or error data."""
+    run, usage, cost or error data. A link without summaries answers that same 404."""
+    if not link.include_summary:
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
     doc = _shared_document(search_repo, link, document_id)
     stored = summaries.latest_summary(doc.id, doc.revision_id)
     summaries.rollback()

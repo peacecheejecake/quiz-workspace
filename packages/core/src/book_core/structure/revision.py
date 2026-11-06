@@ -123,6 +123,8 @@ def build_revision(
 
 def _edited_table(block: Block, text: str) -> TableContent:
     rows = tuple(tuple(cell.strip() for cell in line.split("|")) for line in text.split("\n"))
+    if block.table is not None and rows == block.table.rows:
+        return block.table  # same cells, same merges
     header_rows = block.table.header_rows if block.table is not None else 0
     try:
         return TableContent(rows=rows, header_rows=min(header_rows, len(rows)))

@@ -4,6 +4,13 @@
  * properties, so the px literals mirror --breakpoint-md / --breakpoint-lg; test/breakpoints.test.ts
  * fails if any width query in the kit drifts from those tokens.
  */
+
+/* Virtual keyboard offsets; `useKeyboardInset` sets them only while a keyboard covers the page. */
+:root {
+  --qz-keyboard-inset: 0px;
+  --qz-keyboard-offset-top: 0px;
+}
+
 .qz-app-shell {
   min-height: 100dvh;
   background: var(--color-canvas);
@@ -30,7 +37,7 @@
   > .header {
     position: sticky;
     z-index: calc(var(--z-popover) - 1);
-    top: 0;
+    top: var(--qz-keyboard-offset-top);
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -93,7 +100,7 @@
 
     > .body > .sidebar {
       position: sticky;
-      top: var(--app-header-height);
+      top: calc(var(--app-header-height) + var(--qz-keyboard-offset-top));
       box-sizing: border-box;
       display: block;
       flex: 0 0 var(--app-sidebar-width);
@@ -157,7 +164,7 @@
   > .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: var(--control-gap);
   }
 }
 
@@ -216,10 +223,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-}
-
-button.qz-back-link {
-  border: 1px solid var(--color-border);
 }
 
 /* BackLink: ghost-button-like arrow + label. */

@@ -1,47 +1,5 @@
 /* RELSRC-01 관련 본문 area. Semantic tokens only; every state is text (never colour alone). */
 
-.area {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  overflow-wrap: anywhere;
-}
-
-.heading {
-  margin: 0;
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-}
-
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-height: 24px;
-  padding: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--color-border);
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.body {
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.body[hidden] {
-  display: none;
-}
-
 .hint {
   margin: 0;
   color: var(--color-text-secondary);
@@ -94,7 +52,7 @@
   min-height: 24px;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   background: none;
   color: var(--color-text-primary);
   font: inherit;
@@ -139,7 +97,12 @@
   display: inline-flex;
   align-items: center;
   min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
 }

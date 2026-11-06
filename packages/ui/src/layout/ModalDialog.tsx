@@ -20,7 +20,7 @@ import { useOverscrollGuard } from '../internal/overscroll-guard';
 import { handlesOwnEscape } from '../internal/own-escape';
 import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
-import { useSwipeDismiss } from '../internal/swipe-dismiss';
+import { useDragDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '../primitives/icons';
 
@@ -102,7 +102,15 @@ export function ModalDialog({
   // One stacking order with the panels (UX9, HOMEDLG-01): the layer opened later is on top,
   // whether a centered dialog or a side panel.
   const layer = useFloatingLayer(isOpen, undefined, false, true);
-  const swipe = useSwipeDismiss(contentRef, layer.rank, true, 'bottom', () => changeOpen(false));
+  const swipe = useDragDismiss({
+    surface: contentRef,
+    rank: layer.rank,
+    edges: ['bottom'],
+    close: () => {
+      if (dirty || registry.dirty) return false;
+      changeOpen(false);
+    },
+  });
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirty && !registry.dirty, () =>
     changeOpen(false),
   );

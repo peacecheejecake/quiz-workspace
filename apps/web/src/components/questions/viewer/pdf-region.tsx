@@ -6,6 +6,7 @@
 // search, download or open link, and no text layer: nothing outside the region (an answer key, the
 // neighbouring question) is in the DOM, and the canvas is exactly region-sized. The PDF bytes
 // arrive through the source-url relay (QuestionSourcePreview), as for the DOC-02 viewer.
+// `figure` (UX12-REEXTRACT): the question's images above its options, numbered, without `p.<n>`.
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { canvasRatio } from '@/lib/documents/pdf-layout';
 import type { PdfDocument, PdfRenderTask } from '@/lib/documents/pdfjs';
@@ -20,7 +21,11 @@ export interface PdfRegionsProps {
   readonly fit: { readonly maxWidth: number; readonly maxHeight: number } | 'container';
   /** A page could not be drawn. */
   readonly onFailed: () => void;
+  readonly variant?: 'source' | 'figure';
 }
+
+/** Tallest inline figure (CSS px): a tall image must not push the options away. */
+const FIGURE_MAX_HEIGHT = 320;
 
 /** Width of the element, following resizes (0 until measured). */
 function useWidth(ref: RefObject<HTMLElement | null>, enabled: boolean): number {
@@ -38,23 +43,39 @@ function useWidth(ref: RefObject<HTMLElement | null>, enabled: boolean): number 
   return width;
 }
 
-export function PdfRegions({ regions, documents, fit, onFailed }: PdfRegionsProps) {
+export function PdfRegions({
+  regions,
+  documents,
+  fit,
+  onFailed,
+  variant = 'source',
+}: PdfRegionsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const measured = useWidth(rootRef, fit === 'container');
   const maxWidth = fit === 'container' ? measured : fit.maxWidth;
-  const maxHeight = fit === 'container' ? null : fit.maxHeight;
+  const containerHeight = variant === 'figure' ? FIGURE_MAX_HEIGHT : null;
+  const maxHeight = fit === 'container' ? containerHeight : fit.maxHeight;
   return (
     <div ref={rootRef} className={styles.regions}>
       {maxWidth > 0
-        ? regions.map((region) => {
+        ? regions.map((region, index) => {
             const doc = documents.get(region.document_id);
             if (!doc) return null;
+            const { x0, y0 } = region.bbox;
             return (
-              <figure key={`${region.document_id}:${region.page}`} className={styles.figure}>
-                <figcaption className={styles.pageLabel}>p.{region.page}</figcaption>
+              <figure
+                key={`${region.document_id}:${region.page}:${x0}:${y0}`}
+                className={styles.figure}
+              >
+                {variant === 'source' ? (
+                  <figcaption className={styles.pageLabel}>p.{region.page}</figcaption>
+                ) : null}
                 <RegionCanvas
                   doc={doc}
                   region={region}
+                  label={
+                    variant === 'source' ? `문제 원문 p.${region.page}` : `문제 그림 ${index + 1}`
+                  }
                   maxWidth={maxWidth}
                   maxHeight={maxHeight}
                   onFailed={onFailed}
@@ -70,12 +91,14 @@ export function PdfRegions({ regions, documents, fit, onFailed }: PdfRegionsProp
 function RegionCanvas({
   doc,
   region,
+  label,
   maxWidth,
   maxHeight,
   onFailed,
 }: {
   readonly doc: PdfDocument;
   readonly region: SourceRegion;
+  readonly label: string;
   readonly maxWidth: number;
   readonly maxHeight: number | null;
   readonly onFailed: () => void;
@@ -131,7 +154,7 @@ function RegionCanvas({
     <div
       className={styles.image}
       role="img"
-      aria-label={`문제 원문 p.${page}`}
+      aria-label={label}
       style={{ width: `${width}px`, aspectRatio: `${bbox.x1 - bbox.x0} / ${bbox.y1 - bbox.y0}` }}
     >
       <canvas ref={canvasRef} className={styles.canvas} aria-hidden="true" />

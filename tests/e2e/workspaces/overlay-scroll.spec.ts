@@ -20,6 +20,7 @@
 // scroller a tall filler, so the page and the overlay can always scroll however little data the
 // per-test workspace holds.
 import type { Locator, Page } from '@playwright/test';
+import { askUi } from '../fixtures/ask.ts';
 import {
   createQuestion,
   expect,
@@ -36,26 +37,35 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 const PHONE = { viewport: { width: 390, height: 664 }, hasTouch: true } as const;
 
-/** Makes the page taller than the viewport and scrolls it to `y`. */
+/**
+ * Opens the home once its header is final: `AI 질문` mounts after the ask state loads and, on a
+ * phone, wraps the header onto a new row, which would move a page already scrolled by 44px.
+ */
+async function openSettledHome(page: Page, workspaceId: string): Promise<void> {
+  await page.goto(overviewPath(workspaceId));
+  await expect(homeUi.documentsButton(page)).toBeVisible();
+  await expect(askUi.headerButton(page)).toBeVisible();
+}
+
+/**
+ * Makes the page taller than the viewport and scrolls it to `y`. The spacer goes inside the home:
+ * below it the sticky line would scroll away, and a click on it would scroll the page back.
+ */
 async function makePageScrollable(page: Page, y = 400): Promise<void> {
   await page.evaluate((top) => {
     const spacer = document.createElement('div');
     spacer.setAttribute('aria-hidden', 'true');
     spacer.style.height = '4000px';
-    document.body.append(spacer);
+    const home = document.querySelector('[data-home-toolbar]')?.parentElement;
+    (home ?? document.body).append(spacer);
     window.scrollTo(0, top);
   }, y);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
 }
 
-/**
- * Opens 문서 관리 from the home without moving the page: the `문서 n` button may be scrolled out of
- * view, and a real click would first scroll it back (the test moving the page, not the overlay).
- */
+/** Opens 문서 관리 from the home: the `문서 N` button is sticky, so this never moves the page. */
 async function openDocumentsInPlace(page: Page): Promise<Locator> {
-  const button = homeUi.documentsButton(page);
-  await button.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
-  await button.dispatchEvent('click');
+  await homeUi.openDocuments(page);
   const dialog = homeUi.documentsDialog(page);
   await expect(dialog).toBeVisible();
   return dialog;
@@ -205,7 +215,6 @@ async function expectSwipesContained(
   const scroller = await overlayScroller(dialog);
 
   expectContained(await swipe(page, header, -160, undefined, browserName));
-  expectContained(await swipe(page, header, 160, undefined, browserName));
 
   await scrollTo(scroller, 'bottom');
   expectContained(await swipe(page, scroller, -160, scroller, browserName));
@@ -214,6 +223,9 @@ async function expectSwipesContained(
 
   await scrollTo(scroller, 'middle');
   expectOverlayScrolls(await swipe(page, scroller, -160, scroller, browserName));
+
+  // Last: pulling the header down dismisses the overlay (UX12 DESIGN-3).
+  expectContained(await swipe(page, header, 160, undefined, browserName));
 }
 
 test.describe('phone (touch)', () => {
@@ -241,8 +253,7 @@ test.describe('phone (touch)', () => {
       const owner = await workspaceFactory.member('ux9-scroll-ac02');
       const ws = await workspaceFactory.create(owner);
       await signInAs(page, owner.user);
-      await page.goto(overviewPath(ws.id));
-      await expect(homeUi.documentsButton(page)).toBeVisible();
+      await openSettledHome(page, ws.id);
       await makePageScrollable(page);
       const dialog = await openDocumentsInPlace(page);
       await expectSwipesContained(page, dialog, browserName);
@@ -260,7 +271,7 @@ test.describe('phone (touch)', () => {
         ...mcqInput('UX9 스크롤 문제: 알맞은 것을 고르시오.', ['가', '나', '다', '라'], 1),
       });
       await signInAs(page, owner.user);
-      await page.goto(overviewPath(ws.id));
+      await openSettledHome(page, ws.id);
       await makePageScrollable(page);
       await overviewUi.dot(page, 1).click();
       const panel = page
@@ -279,8 +290,7 @@ test(
     const owner = await workspaceFactory.member('ux9-scroll-ac04');
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
-    await page.goto(overviewPath(ws.id));
-    await expect(homeUi.documentsButton(page)).toBeVisible();
+    await openSettledHome(page, ws.id);
     await makePageScrollable(page);
     const dialog = await openDocumentsInPlace(page);
     const scroller = await overlayScroller(dialog);

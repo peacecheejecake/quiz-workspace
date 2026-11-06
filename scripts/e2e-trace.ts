@@ -115,6 +115,66 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX10-PLAY.0': ['UX10-PLAY'],
   'UX10-HOME.0': ['UX10-HOME'],
   'UX11-RETURN': ['UX11-RETURN'],
+  'UX12-PLAY.0': ['UX12-PLAY'],
+  'UX12-HOME.0': ['UX12-HOME'],
+  // UX12 HOME-4: the sticky 문서 N · 풀기 line and the single 문서 N menu (D-7).
+  'UX12-HEADER.0': ['UX12-HEADER'],
+  // UX12 HOME-5: the search and filter line under the sticky line (D-7).
+  'UX12-FILTER.0': ['UX12-FILTER'],
+  // UX12 HILITE-1 (2026-11-06): selection kept under the highlight menu, press again to close.
+  'UX12-HILITE.0': ['UX12-HILITE'],
+  // UX12 DESIGN-2: tooltip safe margin and closing a popper by pressing its trigger again.
+  'UX12-DESIGN.0': ['UX12-POPPERS'],
+  // UX12 EXTRACT-2 (2026-11-06): a draft question's source blocks are highlighted whole.
+  'UX12-EXTRACT.0': ['UX12-EXTRACT'],
+  'UX12-NUMBER.0': ['UX12-NUMBER'],
+  // UX12 DESIGN-1: which buttons may drop the boundary, hover backgrounds, compact button rows.
+  'UX12-CONTROLS.0': ['UX12-CONTROLS'],
+  // UX12 EXPL-1 (2026-11-06): AI 해설 toolbar, shared disclosure heading, 작성중... text.
+  'UX12-EXPL.0': ['UX12-EXPL'],
+  // UX12 EXPL-3 (2026-11-06): cancelling an AI explanation being made.
+  'UX12-EXPLCANCEL.0': ['UX12-EXPLCANCEL'],
+  // UX12 VIEW-2: option hover, result icons, study toggles without a fill, option line breaks.
+  'UX12-OPTIONS.0': ['UX12-OPTIONS'],
+  // UX12 HOME-2: no leftover AI buttons, notices or reasons where the LLM is off (D-14).
+  'UX12-AIOFF.0': ['UX12-AIOFF'],
+  // UX12 HOME-3: `AI에게 묻기` in the 본문 검색 page header.
+  'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
+  // UX12 ASK: the conversation list's FAB, the floating composer and the answer labels (D-10).
+  'UX12-ASK.0': ['UX12-ASK'],
+  // UX12 VIEW-1: sequence arrows, footer 다시 풀기·초기화, panel body back to the top.
+  'UX12-VIEW.0': ['UX12-VIEW'],
+  // UX12 VIEW-3: drag handle for the editor's options, multi-line option input.
+  'UX12-QEDIT.0': ['UX12-QEDIT'],
+  // UX12 VIEW-6: pending mark on page links; DOC-02 keeps its 404 (no loading boundary).
+  'UX12-NAV.0': ['UX12-NAV'],
+  // UX12 DESIGN-3: surfaces follow the finger and leave with inertia; the return bar swipes away.
+  'UX12-GESTURE.0': ['UX12-GESTURE'],
+  // UX12 EXTRACT-8 (2026-11-06): merged table cells in the document view.
+  'UX12-SPANS.0': ['UX12-SPANS'],
+  // UX12 EXTRACT-3..5 (2026-11-06): tables in stems and options shown as columns.
+  'QTABLE.0': ['QTABLE-01'],
+  // UX12 VIEW-4: `원문 보기` in the question panel's menu; the body button stays.
+  'UX12-SRCMENU.0': ['UX12-SRCMENU'],
+  // UX12 VIEW-5: one `practice-open` call instead of two server actions.
+  'UX12-OPEN.0': ['UX12-OPEN'],
+  // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
+  'UX12-GLASS.0': ['UX12-GLASS'],
+  // UX12 DOCS-2: source page links open the 원본 PDF dialog in place (D-13).
+  'UX12-SOURCE.0': ['UX12-SOURCE'],
+  // UX12 SHELL-3/4/6 (D-5, D-6): theme control, drag auto-copy, the static help page.
+  'UX12-SETTINGS.0': ['UX12-SETTINGS', 'UX12-HELP'],
+  // UX12 SHELL-5: header, panels and the AI 질문 composer stay in view over the virtual keyboard.
+  'UX12-KEYBOARD.0': ['UX12-KEYBOARD'],
+  // UX12 SHARE-1 + SHARE-2: per-link scope switches and the owner's records, read only (D-9).
+  'UX12-SHARE.0': ['UX12-SHARE'],
+  // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
+  'UX12-PICKER.0': ['UX12-PICKER'],
+  // UX12 VIEW-7: <제목> passages in stems, each in its own box, with item lines.
+  'UX12-PASSAGE.0': ['UX12-PASSAGE'],
+  // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.
+  // UX12 EXTRACT-7: question figures from the PDF above the options.
+  'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
 };
 
 const LEADING_ID = new RegExp(

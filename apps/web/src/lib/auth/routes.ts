@@ -7,7 +7,13 @@ export const RESET_PASSWORD_PATH = '/reset-password';
 export const ACCOUNT_SECURITY_PATH = '/settings/security';
 
 /** Areas that require a verified session. */
-export const PROTECTED_PREFIXES = ['/workspaces', '/documents', '/questions', '/settings'] as const;
+export const PROTECTED_PREFIXES = [
+  '/workspaces',
+  '/documents',
+  '/questions',
+  '/settings',
+  '/help',
+] as const;
 
 /**
  * Sign-in/sign-up entry pages a signed-in user is bounced away from. `/reset-password` (needs the

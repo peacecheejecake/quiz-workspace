@@ -90,6 +90,7 @@ import {
   searchUi,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   startPractice,
   submitPractice,
   type Member,
@@ -305,11 +306,12 @@ test(
       expect.stringMatching(EXPL_TEXT.ready),
     ]);
 
-    // [1] → 본문 발췌 → PDF에서 보기 opens DOC-02 at that page.
+    // [1] → 본문 발췌 → PDF에서 보기 → 전체 문서 보기 opens DOC-02 at that page.
     await explUi.footnote(area, 1).first().click();
     const excerpt = searchUi.excerptPanel(page);
     await expect(excerpt).toBeVisible();
     await searchUi.openInPdf(excerpt).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${s.workspaceId}/documents/${s.documentId}`,
     );
@@ -700,13 +702,13 @@ test(
       await limited.stop();
     }
 
-    // Feature off: the reason instead of a button; existing explanations still read.
+    // Feature off: neither a button nor a reason; existing explanations still read.
     const off = await startExplanationsOffStack();
     try {
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId)}`);
       let { panel } = await openAndSubmit(page, 7, correctText(withoutExpl), RESULT_TEXT.correct);
-      await expect(explUi.area(panel).getByText(EXPL_TEXT.disabled)).toBeVisible();
-      await expect(explUi.create(explUi.area(panel))).toHaveCount(0);
+      await expect(panel.getByText(EXPL_TEXT.disabled)).toHaveCount(0);
+      await expect(explUi.create(panel)).toHaveCount(0);
       await panelUi.close(panel).click();
       panel = await openPanel(page, 6);
       await expect(result(panel)).toContainText(RESULT_TEXT.correct);
@@ -835,7 +837,7 @@ test(
     await runUi.selectAll(run).check();
     await runUi.start(run).click();
     run = runUi.panel(page);
-    await expect(runUi.title(run, 1, 1)).toBeVisible();
+    await expect(runUi.title(run, 1)).toBeVisible();
     await runUi.option(run, correctText(q1)).check();
     await runUi.submit(run).click();
     await expect(runUi.result(run)).toContainText(RESULT_TEXT.correct);
@@ -848,10 +850,10 @@ test(
     expect(runExplanationId).not.toBe('');
     bankExplanations.set(q1.id, runExplanationId);
     await runUi.next(run).click();
-    await expect(runUi.title(run, 1, 2)).toBeVisible();
+    await expect(runUi.title(run, 2)).toBeVisible();
     await expect(explUi.area(run)).toHaveCount(0); // not submitted yet
     await runUi.previous(run).click();
-    await expect(runUi.title(run, 1, 1)).toBeVisible();
+    await expect(runUi.title(run, 1)).toBeVisible();
     area = explUi.area(run);
 
     await expectDone(area);

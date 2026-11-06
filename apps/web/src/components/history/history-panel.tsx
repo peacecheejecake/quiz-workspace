@@ -255,6 +255,7 @@ function HistoryPanelBody({ workspaceId, viewerId }: HistoryPanelProps) {
         <Button
           size="sm"
           variant="ghost"
+          borderless
           className={styles.more}
           loading={loadingMore}
           onClick={() => void loadMore()}

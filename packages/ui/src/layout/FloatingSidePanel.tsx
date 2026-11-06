@@ -22,7 +22,7 @@ import { containOverscroll } from '../internal/overscroll-guard';
 import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
-import { useSwipeDismiss } from '../internal/swipe-dismiss';
+import { panelEdges, useDragDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from '../primitives/icons';
 
@@ -74,6 +74,8 @@ export interface FloatingSidePanelProps {
    * `sequence`: each new question).
    */
   titleRef?: Ref<HTMLHeadingElement>;
+  /** Header slot before the title, outside its accessible name (e.g. a back button). */
+  headerStart?: ReactNode;
   /** Header slot between the title and the close button (e.g. favorite / retry toggles). */
   headerActions?: ReactNode;
   /** Footer slot (submit, self-grade, next/previous, loading/error status). */
@@ -155,6 +157,11 @@ export interface FloatingSidePanelProps {
    */
   raiseKey?: string | number;
   /**
+   * Changing this brings the body back to its top (e.g. the panel shows another question).
+   * `undefined` leaves the scroll position alone.
+   */
+  scrollKey?: string | number | undefined;
+  /**
    * Non-modal only: stays in the accessibility tree while a modal panel is open on top (a modal
    * hides everything else from assistive technology, but keeps `aria-live` regions; `off` adds no
    * announcements). For a panel whose state the modal changes, e.g. the 정리 노트 panel that
@@ -185,6 +192,7 @@ export function FloatingSidePanel({
   title,
   description,
   titleRef,
+  headerStart,
   headerActions,
   footer,
   closeLabel = '닫기',
@@ -203,6 +211,7 @@ export function FloatingSidePanel({
   onOpenerResolved,
   onCloseAutoFocus,
   raiseKey,
+  scrollKey,
   staysExposedUnderModal = false,
   aboveModals = false,
   className,
@@ -244,14 +253,17 @@ export function FloatingSidePanel({
     onOpenChange?.(next);
   };
   const layer = useFloatingLayer(isOpen, raiseKey, aboveModals, modal);
-  const swipe = useSwipeDismiss(
-    contentRef,
-    layer.rank,
-    modal,
-    side === 'end' ? 'right' : 'left',
-    () => handleOpenChange(false),
-  );
   const registry = useDirtyRegistry();
+  const swipe = useDragDismiss({
+    surface: contentRef,
+    rank: layer.rank,
+    enabled: modal,
+    edges: () => panelEdges(side, window.innerWidth),
+    close: () => {
+      if (dirtyProp || registry.dirty) return false;
+      handleOpenChange(false);
+    },
+  });
   useModalStackEntry(modal && isOpen, () => handleOpenChange(false));
   useEffect(watchOpeners, []);
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirtyProp && !registry.dirty, () =>
@@ -387,6 +399,8 @@ export function FloatingSidePanel({
             <LayerProvider value={layer.zIndex}>
               <DirtyProvider value={registry.report}>
                 <div className="header" onPointerDown={swipe}>
+                  {modal ? <span className="grabber" aria-hidden="true" /> : null}
+                  {headerStart ? <div className="start">{headerStart}</div> : null}
                   <div className="heading">
                     <Dialog.Title
                       ref={titleRef}
@@ -409,7 +423,9 @@ export function FloatingSidePanel({
                     <IconButton label={closeLabel} icon={<CloseIcon />} />
                   </Dialog.Close>
                 </div>
-                <ScrollRegion className="body">{children}</ScrollRegion>
+                <ScrollRegion className="body" scrollKey={scrollKey}>
+                  {children}
+                </ScrollRegion>
                 {footer ? <div className="footer">{footer}</div> : null}
               </DirtyProvider>
             </LayerProvider>

@@ -6,6 +6,7 @@ import type { Schemas } from '@quiz/api-client';
 import { DocumentApiError, errorFromResponse } from './errors';
 
 export type DocumentSummary = Schemas['DocumentSummary'];
+export type DocumentList = Schemas['DocumentList'];
 export type DocumentDetail = Schemas['DocumentDetail'];
 export type DocumentType = DocumentSummary['document_type'];
 /** 교재 / 문제지 / 교재+문제 (UX6-UPLOAD); null while an `auto` upload is not classified yet. */
@@ -33,7 +34,7 @@ export interface DocumentsClient {
     signal?: AbortSignal,
   ): Promise<UploadIntent>;
   completeUpload(uploadId: string, sha256: string, signal?: AbortSignal): Promise<UploadCompleted>;
-  listDocuments(workspaceId: string, signal?: AbortSignal): Promise<DocumentSummary[]>;
+  listDocuments(workspaceId: string, signal?: AbortSignal): Promise<DocumentList>;
   deleteDocument(documentId: string): Promise<void>;
   /** `종류 변경` (DOC-01-AC08): a question kind also starts the extraction when there is none. */
   updateDocumentKind(documentId: string, kind: DocumentKind): Promise<DocumentDetail>;
@@ -89,9 +90,7 @@ export function createDocumentsClient(
         body: JSON.stringify({ upload_id: uploadId, sha256 }),
         signal,
       }),
-    listDocuments: async (workspaceId, signal) =>
-      (await call<{ items: DocumentSummary[] }>(BFF_PATHS.documents(workspaceId), { signal }))
-        .items,
+    listDocuments: (workspaceId, signal) => call(BFF_PATHS.documents(workspaceId), { signal }),
     deleteDocument: (documentId) => call(BFF_PATHS.document(documentId), { method: 'DELETE' }),
     updateDocumentKind: (documentId, kind) =>
       call(BFF_PATHS.document(documentId), {

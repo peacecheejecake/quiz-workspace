@@ -247,6 +247,14 @@ test(
     // Other workspace ids: 404 like ids that never existed.
     const missing = await session.get(`/questions/${RANDOM_ID}`);
     expect(missing.status).toBe(404);
+    // Owner records: the link's option is off by default, so the routes answer the same 404
+    // (with the option on, UX12-SHARE-AC07/AC08 set the scope).
+    expect(link.include_owner_records).toBe(false);
+    for (const path of ['/owner-attempts', '/owner-highlights']) {
+      const records = await session.get(path);
+      expect(records.status, path).toBe(404);
+      expect(stableProblem(records), path).toEqual(stableProblem(missing));
+    }
     const cross = await session.get(`/questions/${foreign.id}`);
     expect(cross.status).toBe(404);
     expect(stableProblem(cross)).toEqual(stableProblem(missing));

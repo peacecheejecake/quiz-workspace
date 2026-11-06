@@ -10,7 +10,7 @@
 // `ContentSearchResults` the results under the 본문 search form.
 // Question papers are never searched (UX7-SEARCH-2: the server leaves them out, and the document
 // filter lists books only).
-import { Badge, Button, EmptyState, RadioGroup, Select } from '@quiz/ui';
+import { Badge, Button, ChapterPicker, EmptyState, RadioGroup, Select } from '@quiz/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loginRedirectPath } from '@/lib/auth/routes';
@@ -18,6 +18,7 @@ import {
   createSearchClient,
   SEARCH_MODES,
   SearchApiError,
+  outlinePickerNodes,
   type OutlineItem,
   type SearchClient,
   type SearchItem,
@@ -47,6 +48,7 @@ export interface SearchDocumentOption {
 }
 
 const ALL = '__all__';
+const ALL_SECTIONS = [{ value: ALL, label: '전체 장' }];
 
 type Results =
   | { readonly status: 'idle' }
@@ -384,13 +386,10 @@ export function ContentSearchOptions({
   readonly documentsLoadFailed?: boolean;
 }) {
   const { chapters } = search;
-  const chapterOptions =
-    chapters.status === 'ready'
-      ? [
-          { value: ALL, label: '전체 장' },
-          ...chapters.items.map((c) => ({ value: c.id, label: c.title, textValue: c.title })),
-        ]
-      : [{ value: ALL, label: '전체 장' }];
+  const chapterNodes = useMemo(
+    () => outlinePickerNodes(chapters.status === 'ready' ? chapters.items : []),
+    [chapters],
+  );
   const chapterPlaceholder =
     chapters.status === 'loading'
       ? '장 목록을 불러오는 중…'
@@ -426,9 +425,12 @@ export function ContentSearchOptions({
             documentsLoadFailed ? '문서 목록을 불러오지 못해 전체 문서에서 검색합니다.' : undefined
           }
         />
-        <Select
+        <ChapterPicker
           label="장"
-          options={chapterOptions}
+          filterLabel="장 찾기"
+          emptyText="찾는 장이 없습니다"
+          leading={ALL_SECTIONS}
+          nodes={chapterNodes}
           value={chapterValue}
           placeholder={chapterPlaceholder}
           disabled={chapters.status !== 'ready'}

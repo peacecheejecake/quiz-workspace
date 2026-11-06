@@ -3,8 +3,8 @@
 // The summary itself (DOCSUM-01 "레이아웃 및 컴포넌트"), shared by the member panel and the share
 // guest's panel: the meta line "<발행 시각> 발행본 기준 · 장 n개", `전체 요약` (h3) with its body and
 // `핵심` list, and `장별 요약` (h3) with one disclosure per top-level chapter (title + page range,
-// collapsed at first). Key points end with a page link (`p.12–14`, named "12–14쪽 열기") into the
-// document view the caller chooses. Bodies are the Markdown subset rendered as React elements;
+// collapsed at first). Key points end with a page link (`p.12–14`, named "12–14쪽 열기"): the member
+// panel opens it in place (UX12-SOURCE), a share guest goes to the shared document. Bodies are the Markdown subset rendered as React elements;
 // nothing from the model is ever inserted as HTML or used as a URL.
 import { ChevronDownIcon } from '@quiz/ui';
 import Link from 'next/link';
@@ -12,6 +12,7 @@ import { Fragment, useId, useState, type ReactNode } from 'react';
 import {
   pageLinkLabel,
   pageRangeText,
+  type PageRange,
   parseSummaryMarkdown,
   summaryMetaLine,
   type ChapterSummary,
@@ -23,11 +24,15 @@ import styles from './summary.module.css';
 
 export interface SummaryContentViewProps {
   readonly content: SummaryContent;
-  /** The document view at `page` (DOC-02, or the shared document for a guest). */
-  readonly pageHref: (page: number) => string;
+  /** The shared document at `page`, for a guest. */
+  readonly pageHref?: (page: number) => string;
+  /** The member panel's 원본 PDF dialog at `page`. */
+  readonly onOpenPage?: (page: number) => void;
 }
 
-export function SummaryContentView({ content, pageHref }: SummaryContentViewProps) {
+type PageLinks = Pick<SummaryContentViewProps, 'pageHref' | 'onOpenPage'>;
+
+export function SummaryContentView({ content, ...links }: SummaryContentViewProps) {
   const overallId = useId();
   const chaptersId = useId();
   return (
@@ -37,7 +42,7 @@ export function SummaryContentView({ content, pageHref }: SummaryContentViewProp
         <h3 id={overallId} className={styles.heading}>
           전체 요약
         </h3>
-        <UnitBody unit={content.document} pageHref={pageHref} />
+        <UnitBody unit={content.document} links={links} />
       </section>
       <section className={styles.section} aria-labelledby={chaptersId}>
         <h3 id={chaptersId} className={styles.heading}>
@@ -49,7 +54,7 @@ export function SummaryContentView({ content, pageHref }: SummaryContentViewProp
           <ul className={styles.chapters}>
             {content.chapters.map((chapter) => (
               <li key={chapter.section_key}>
-                <ChapterDisclosure chapter={chapter} pageHref={pageHref} />
+                <ChapterDisclosure chapter={chapter} links={links} />
               </li>
             ))}
           </ul>
@@ -61,10 +66,10 @@ export function SummaryContentView({ content, pageHref }: SummaryContentViewProp
 
 function ChapterDisclosure({
   chapter,
-  pageHref,
+  links,
 }: {
   readonly chapter: ChapterSummary;
-  readonly pageHref: (page: number) => string;
+  readonly links: PageLinks;
 }) {
   const [open, setOpen] = useState(false);
   const regionId = useId();
@@ -86,19 +91,13 @@ function ChapterDisclosure({
         <ChevronDownIcon className={styles.chevron} aria-hidden="true" />
       </button>
       <div id={regionId} className={styles.chapterBody} hidden={!open}>
-        {open ? <UnitBody unit={chapter} pageHref={pageHref} /> : null}
+        {open ? <UnitBody unit={chapter} links={links} /> : null}
       </div>
     </div>
   );
 }
 
-function UnitBody({
-  unit,
-  pageHref,
-}: {
-  readonly unit: SummaryUnit;
-  readonly pageHref: (page: number) => string;
-}) {
+function UnitBody({ unit, links }: { readonly unit: SummaryUnit; readonly links: PageLinks }) {
   const keyPointsId = useId();
   if (!unit.summary_md.trim() && unit.key_points.length === 0) {
     return <p className={styles.note}>요약할 본문이 없습니다.</p>;
@@ -118,13 +117,7 @@ function UnitBody({
                 {point.pages ? (
                   <>
                     {' '}
-                    <Link
-                      href={pageHref(point.pages.from)}
-                      className={`${styles.pageLink} qz-focus-ring`}
-                      aria-label={pageLinkLabel(point.pages)}
-                    >
-                      {pageRangeText(point.pages)}
-                    </Link>
+                    <PageLink pages={point.pages} links={links} />
                   </>
                 ) : null}
               </li>
@@ -133,6 +126,31 @@ function UnitBody({
         </>
       ) : null}
     </div>
+  );
+}
+
+function PageLink({ pages, links }: { readonly pages: PageRange; readonly links: PageLinks }) {
+  const { pageHref, onOpenPage } = links;
+  const className = `${styles.pageLink} qz-focus-ring`;
+  const label = pageLinkLabel(pages);
+  if (onOpenPage) {
+    return (
+      <button
+        type="button"
+        className={className}
+        aria-label={label}
+        aria-haspopup="dialog"
+        onClick={() => onOpenPage(pages.from)}
+      >
+        {pageRangeText(pages)}
+      </button>
+    );
+  }
+  if (!pageHref) return <span>{pageRangeText(pages)}</span>;
+  return (
+    <Link href={pageHref(pages.from)} className={className} aria-label={label}>
+      {pageRangeText(pages)}
+    </Link>
   );
 }
 

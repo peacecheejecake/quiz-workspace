@@ -21,6 +21,7 @@ import {
   expectReadOnlyQuestionMenu,
   homePath,
   homeUi,
+  QUESTION_MENU_ORDER,
   JOB_TIMEOUT_MS,
   importPath,
   importUi,
@@ -288,6 +289,63 @@ test(
 );
 
 test(
+  'DOC-01-AC05 the step list keeps its box while the percent appears and grows to 100 %',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    // A narrow row: a wide one caps the steps anyway, so only here the percent could squeeze them.
+    await page.setViewportSize({ width: 375, height: 800 });
+    const owner = await workspaceFactory.member('doc01-ac05-steps');
+    const ws = await workspaceFactory.create(owner);
+    const target = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await openLibrary(page, owner, ws.id);
+    const row = docUi.item(page, BOOK_TITLE);
+    await expect(docUi.ready(row)).toBeVisible();
+
+    // As in the test above: fake adapters finish in seconds, so the library's own list request
+    // gets the target's job state replaced by each state under test.
+    let job: Record<string, unknown> = { status: 'queued', stage: null, progress: null };
+    await page.route(
+      (url) => url.pathname === `/api/workspaces/${ws.id}/documents`,
+      async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const body = (await response.json()) as { items: Record<string, unknown>[] };
+        for (const item of body.items) {
+          if (item.id !== target) continue;
+          const now = new Date().toISOString();
+          item.status = 'processing';
+          item.processing_job = {
+            id: crypto.randomUUID(),
+            created_at: now,
+            started_at: now,
+            ...job,
+          };
+        }
+        await route.fulfill({ response, json: body });
+      },
+    );
+
+    // Another upload through the UI: once its job ends the library re-reads the list.
+    await chooseFile(page, book('book-en').path);
+    await expect(docUi.ready(docUi.item(page, /book-en/))).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+
+    const steps = row.getByRole('list', { name: /진행 단계|steps/i }).locator('..');
+    await expect(row.getByText(/처리 대기 중|queued/i)).toBeVisible();
+    const queued = await steps.boundingBox();
+
+    // The polled list moves the row on.
+    job = { status: 'running', stage: 'parsing', progress: 0 };
+    await expect(row.getByText('0%', { exact: true })).toBeVisible();
+    expect(await steps.boundingBox()).toEqual(queued);
+
+    job = { status: 'running', stage: 'publishing', progress: 100 };
+    await expect(row.getByText('100%', { exact: true })).toBeVisible();
+    expect(await steps.boundingBox()).toEqual(queued);
+  },
+);
+
+test(
   'DOC-01-AC04 cancelling an upload in progress leaves no document behind',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
@@ -331,7 +389,7 @@ test(
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*2$/); // 교재 + 교재+문제; not the 문제지
-    await button.click();
+    await homeUi.openDocuments(page);
     await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
@@ -396,7 +454,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
     await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*0$/);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
 
@@ -491,7 +549,7 @@ test(
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*1$/);
-    await button.click();
+    await homeUi.openDocuments(page);
     const paperRow = docUi.item(page, /questions-ko/);
     const bookRow = docUi.item(page, /book-ko/);
     await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
@@ -565,16 +623,10 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // The 문제 menu has no PDF 관리 item any more.
-    await homeUi.questionMenuButton(page).click();
+    // The menu has no PDF 관리 item any more.
+    await homeUi.openMenu(page);
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(직접 추가|add question)$/i,
-      // UX7-DEDUP (QOV-01-AC16).
-      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
-      // CHREDIST-01 (UX9-REDIST-W).
-      /^(챕터 재분배|redistribute chapters)$/i,
-      // UX7-BANK-2 (QOV-01-AC15).
-      /^(보관·초안 문제|archived and draft questions)$/i,
+      ...QUESTION_MENU_ORDER,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

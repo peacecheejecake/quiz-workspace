@@ -1,7 +1,8 @@
 // QOV-01 heatmap filters as URL query state (docs/questions.md §7), using the overview API's own
 // parameter names so the URL and the API query mirror each other:
 //   ?chapter=<id>|none &type=MCQ|SHORT_ANSWER|ESSAY &q=<text> &status=<s>(repeatable)
-//   &favorite=true|false &retry=true|false
+//   &favorite=true|false
+// Links from before UX12-FILTER may say `retry=true|false`: it reads as the `retry` status.
 // `question=<id>` (the open practice panel, QPLAY-01) lives in the same URL but is not a filter.
 // Pure parse/serialize; unknown or malformed values fall back to "no filter".
 import { QUESTION_DOT_STATUSES, type QuestionDotStatus, type QuestionType } from '@quiz/ui';
@@ -14,7 +15,6 @@ export interface OverviewFilters {
   /** Statuses to keep, in legend order; empty = no statuses. */
   readonly status: readonly QuestionDotStatus[];
   readonly favorite: boolean | null;
-  readonly retry: boolean | null;
 }
 
 export const EMPTY_OVERVIEW_FILTERS: OverviewFilters = {
@@ -23,7 +23,6 @@ export const EMPTY_OVERVIEW_FILTERS: OverviewFilters = {
   q: '',
   status: QUESTION_DOT_STATUSES,
   favorite: null,
-  retry: null,
 };
 
 export const OVERVIEW_SEARCH_MAX = 200;
@@ -62,6 +61,12 @@ export function parseOverviewFilters(params: Params): OverviewFilters {
   const values = all(params, 'status');
   const wanted = new Set(values);
   const known = QUESTION_DOT_STATUSES.filter((s) => wanted.has(s));
+  // Legend order, duplicates dropped: one canonical URL per filter set.
+  const status =
+    values.length === 0 || (known.length === 0 && !wanted.has('none'))
+      ? QUESTION_DOT_STATUSES
+      : known;
+  const retry = bool(first(params, 'retry'));
   return {
     chapter:
       chapter === NO_CHAPTER
@@ -71,13 +76,8 @@ export function parseOverviewFilters(params: Params): OverviewFilters {
           : null,
     type: type && TYPES.has(type) ? (type as QuestionType) : null,
     q: (first(params, 'q') ?? '').trim().slice(0, OVERVIEW_SEARCH_MAX),
-    // Legend order, duplicates dropped: one canonical URL per filter set.
-    status:
-      values.length === 0 || (known.length === 0 && !wanted.has('none'))
-        ? QUESTION_DOT_STATUSES
-        : known,
+    status: retry === null ? status : status.filter((s) => (s === 'retry') === retry),
     favorite: bool(first(params, 'favorite')),
-    retry: bool(first(params, 'retry')),
   };
 }
 
@@ -92,7 +92,6 @@ export function overviewFilterParams(filters: OverviewFilters): URLSearchParams 
     for (const s of filters.status) params.append('status', s);
   }
   if (filters.favorite !== null) params.set('favorite', String(filters.favorite));
-  if (filters.retry !== null) params.set('retry', String(filters.retry));
   return params;
 }
 
@@ -140,7 +139,6 @@ export function overviewApiQuery(filters: OverviewFilters): {
   q?: string;
   status?: (QuestionDotStatus | 'none')[];
   favorite?: boolean;
-  retry?: boolean;
 } {
   return {
     ...(filters.chapter ? { chapter: filters.chapter } : {}),
@@ -152,6 +150,5 @@ export function overviewApiQuery(filters: OverviewFilters): {
         ? { status: [...filters.status] }
         : {}),
     ...(filters.favorite !== null ? { favorite: filters.favorite } : {}),
-    ...(filters.retry !== null ? { retry: filters.retry } : {}),
   };
 }

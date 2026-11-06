@@ -397,6 +397,19 @@ describe('selection (QIMP-BULK)', () => {
     expect(selectAllState(drafts, toggleAll(drafts, rejected, true))).toBe(true);
   });
 
+  it('UX12-EXTRACT: a repaired reading order is a note; layout warnings are to check', () => {
+    expect(isAssistNote('reading_order_repaired')).toBe(true);
+    expect(isAssistNote('table_in_stem')).toBe(true);
+    expect(isAssistNote('option_count_outlier')).toBe(false);
+    expect(isAssistNote('options_on_next_question')).toBe(false);
+    const list = [
+      rd('a', 0, { issues: [{ code: 'reading_order_repaired', severity: 'warning' }] }),
+      rd('b', 1, { issues: [{ code: 'option_count_outlier', severity: 'warning' }] }),
+      rd('c', 2, { issues: [{ code: 'options_on_next_question', severity: 'warning' }] }),
+    ];
+    expect(selectAllScope(list).map((d) => d.id)).toEqual(['a']);
+  });
+
   it('QIMP-SELECT-FIX: an AI assist note alone keeps a draft in "전체 선택"', () => {
     const unavailable = { code: 'llm_unavailable', severity: 'warning' } as const;
     const list = [

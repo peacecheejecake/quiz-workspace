@@ -3,6 +3,7 @@
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import type { ReactElement } from 'react';
 import { useLayerStyle } from '../internal/layer';
+import { POPPER_COLLISION_PADDING } from '../primitives/tooltip-delay';
 import { MarkerShape } from './QuestionMarker';
 import {
   questionStatusPhrases,
@@ -46,7 +47,7 @@ export function QuestionPreviewPopover({
   ...question
 }: QuestionPreviewPopoverProps) {
   const layerStyle = useLayerStyle();
-  const title = questionTitle(question);
+  const title = questionTitle(question.questionNumber);
   const type = questionTypeLabels[question.questionType];
   const phrases = questionStatusPhrases(question);
   return (
@@ -57,7 +58,7 @@ export function QuestionPreviewPopover({
           <RadixTooltip.Content
             side={side}
             sideOffset={6}
-            collisionPadding={8}
+            collisionPadding={POPPER_COLLISION_PADDING}
             className="qz-popover glass-surface qz-question-preview"
             style={layerStyle}
             // No aria-label: Radix then mirrors the whole content (type, title, status phrases,
@@ -69,9 +70,7 @@ export function QuestionPreviewPopover({
               <span aria-hidden="true"> · </span>
               <span>{title}</span>
             </p>
-            {question.chapterNumber !== undefined && question.chapterNumber !== '' ? (
-              <p className="chapter">{question.chapterTitle}</p>
-            ) : null}
+            <p className="chapter">{question.chapterTitle}</p>
             <p className="status">
               <MarkerShape
                 status={question.status}

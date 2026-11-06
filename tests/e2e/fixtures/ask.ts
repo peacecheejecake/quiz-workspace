@@ -117,10 +117,10 @@
 //   List view: list "대화 목록" of rows (button named by the title; menu button "<title> 메뉴" →
 //   menuitem "삭제"); empty text "Workspace 문서에 대해 물어보세요.". Conversation view: role=log
 //   "대화" holding one `article` per message — user messages named "내 질문", answers named "AI
-//   답변" (aria-busy while streaming); an answer has the text "AI 생성", the notice "AI가 문서를
+//   답변" (aria-busy while streaming); an answer has the notice (UX12-ASK: no badge) "AI가 문서를
 //   근거로 만든 답입니다. 틀릴 수 있으니 출처를 확인하세요.", footnote buttons "출처 n: <문서 제목>
 //   p.<쪽>", list "출처" (buttons "[n] <문서 제목> · <장> · p.<쪽>"), buttons "복사" · "도움이 안 됨"
-//   (popover with radios 출처와 다름 · 지어낸 내용 · 정답을 알려 줌 · 기타) · "다시 생성" / "다시 시도"
+//   (popover with radios 출처와 다름 · 지어낸 내용 · 정답을 알려 줌 · 기타) · "다시 시도" (failed, stopped)
 //   · "이전 답 보기" / "다음 답 보기" with the text "답 k/n", and progress text "근거를 찾는 중" /
 //   "답을 쓰는 중". Input: textbox "질문" (placeholder "문서에 대해 질문하세요"), counter "n/1,000",
 //   button "보내기" (while streaming "답변 중지"). Attachment chip: group "첨부한 문제" with the
@@ -963,8 +963,25 @@ export async function openAskPanel(page: Page): Promise<Locator> {
   return panel;
 }
 
+/** On the conversation list, opens a new conversation with the FAB; returns the question input. */
+export async function openComposer(panel: Locator): Promise<Locator> {
+  const input = askUi.input(panel);
+  await expect(input.or(askUi.newButton(panel)).first()).toBeVisible();
+  if (!(await input.isVisible())) await askUi.newButton(panel).click();
+  await expect(input).toBeVisible();
+  return input;
+}
+
+/** From a conversation: back to the list, then the FAB (the screen has no `새 대화`, D-10). */
+export async function startNewConversation(panel: Locator): Promise<void> {
+  await askUi.listButton(panel).click();
+  await askUi.newButton(panel).click();
+  await expect(askUi.input(panel)).toBeVisible();
+}
+
 /** Types `question` into the panel and presses Enter; returns the newest answer article. */
 export async function ask(panel: Locator, question: string): Promise<Locator> {
+  await openComposer(panel);
   const before = await askUi.answers(panel).count();
   await askUi.input(panel).fill(question);
   await askUi.input(panel).press('Enter');

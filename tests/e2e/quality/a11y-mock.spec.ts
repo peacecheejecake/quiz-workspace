@@ -226,8 +226,8 @@ test(
       await expect(mockUi.variations(dialog)).toHaveCount(4);
       await settle(page);
       await expectAccessible(page, 'mock exam create, options step');
-      await mockUi.title(dialog).fill('접근성 점검');
       await mockUi.variation(dialog, 'PARAPHRASE').check();
+      await mockUi.title(dialog).fill('접근성 점검');
       await mockUi.next(dialog).click();
       await expect(picker.selectAll(dialog)).toBeVisible();
       await expect(mockUi.make(dialog)).toBeDisabled();
@@ -461,7 +461,7 @@ test(
     await runUi.chapter(panel, CH2).check();
     await runUi.start(panel).click();
     panel = runUi.panel(page);
-    await expect(runUi.title(panel, 2, 1)).toBeVisible();
+    await expect(runUi.title(panel, 1)).toBeVisible();
     await expect(runUi.submit(panel)).toBeVisible();
     await settle(page);
     await expectAccessible(page, 'range run, a position before submitting');
@@ -471,7 +471,7 @@ test(
     await expect(runUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
     await expectAccessible(page, 'range run, a graded position with the answer');
     await runUi.next(panel).click();
-    await expect(runUi.title(panel, 2, 2)).toBeVisible();
+    await expect(runUi.title(panel, 2)).toBeVisible();
     await goToResults(panel); // the last position is left without an answer
     await expect(
       runUi.summary(panel, { correct: 0, incorrect: 1, pending: 0, skipped: 1 }),
@@ -537,7 +537,7 @@ test(
     const panel = runUi.panel(page);
 
     for (const [i, q] of [first, second].entries()) {
-      await expect(runUi.title(panel, 2, i + 1)).toBeFocused();
+      await expect(runUi.title(panel, i + 1)).toBeFocused();
       const correct = q.revision.options.find((o) =>
         (q.revision.correct_option_ids ?? []).includes(o.id),
       );
