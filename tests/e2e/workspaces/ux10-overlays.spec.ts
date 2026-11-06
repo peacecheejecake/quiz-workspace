@@ -41,11 +41,21 @@ test(
       );
       const controls = page.locator('.qz-button, .qz-icon-button');
       expect(await controls.count()).toBeGreaterThan(0);
+      // UX12-CONTROLS: only icon ghost and `borderless` buttons may drop the boundary.
       const invisible = await controls.evaluateAll(
         (items) =>
           items.filter((element) => {
             const css = getComputedStyle(element);
+            const toggle =
+              element.hasAttribute('aria-pressed') ||
+              ['on', 'off'].includes(element.getAttribute('data-state') ?? '');
+            const allowed =
+              element.getAttribute('data-variant') === 'ghost' &&
+              !toggle &&
+              (element.classList.contains('qz-icon-button') ||
+                element.hasAttribute('data-borderless'));
             return (
+              !allowed &&
               css.backgroundColor === 'rgba(0, 0, 0, 0)' &&
               (css.borderStyle === 'none' || css.borderColor === 'rgba(0, 0, 0, 0)')
             );

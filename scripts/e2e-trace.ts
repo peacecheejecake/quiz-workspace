@@ -121,6 +121,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-HILITE.0': ['UX12-HILITE'],
   // UX12 DESIGN-2: tooltip safe margin and closing a popper by pressing its trigger again.
   'UX12-DESIGN.0': ['UX12-POPPERS'],
+  // UX12 DESIGN-1: which buttons may drop the boundary, hover backgrounds, compact button rows.
+  'UX12-CONTROLS.0': ['UX12-CONTROLS'],
 };
 
 const LEADING_ID = new RegExp(
