@@ -95,6 +95,12 @@
 | DESIGN-3 제스처 | modal 스와이프 + 관성, 복귀 bar 스와이프 | `swipe-dismiss.ts`를 `useDragDismiss`로 재작성. CSS `translate` 추적, release 속도로 WAAPI 퇴장, 거부되면 복귀, `data-swiped`로 Radix 퇴장 애니메이션 끔. 방향: 768px 미만은 아래, 넓으면 side 방향, 중앙 dialog는 아래. drawer 추가, header 전체에서 시작 | 현재 close-on-release만 있다. 중앙 dialog가 폰에서 left로 판정되는 버그와 제목 글자에서 시작 안 되는 버그를 함께 고친다. UX10-UI AC03·04, UX11 AC03 개정. D-2 | L·SHELL-1 |
 | DESIGN-4 Glass | gradation 색상 | `.glass-surface`에 테마별 gradient 층 추가. 모바일 sheet의 `background` shorthand가 gradient를 지우므로 수정. PDF 위 표면은 제외 | design-system §3. 양 테마 대비 test. D-3 | M·DESIGN-1 |
 
+### 4.1a DESIGN 추가 — 유리 레이어와 버튼(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| DESIGN-5 유리·버튼 | 투명도, 유리 위 버튼, 아이콘 버튼 테두리, hover, Heatmap 확대, header gradation | 유리 floating layer를 더 투명하게 한다. 유리 위 버튼은 `보던 문제로 돌아가기`와 목록 항목의 배경을 지우고, 해설처럼 영역이 구분돼야 하는 곳은 회색에서 흰색으로 바꾼다. 아이콘만 있는 버튼의 테두리를 지운다. 모든 버튼에 hover 색을 넣는다. Heatmap cell hover 확대를 키운다. global header의 gradation을 뺀다 | M·DESIGN-1, 3 |
+
 ### 4.2 SHELL — 앱 셸·세션·설정
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -115,6 +121,12 @@
 | HOME-3 본문 검색 | AI에게 묻기를 header로, 본문 없으면 입력 disabled | `PageHeader actions`로 이동, `extraAction` 제거. Input `disabled` + `aria-describedby` | ASK-01, SEARCH-02-AC04, search.md | S·HOME-2와 순서 조정 |
 | HOME-4 Header | 문서 검색·문서 관리 dropdown 이동, `문서 N` 버튼화, sticky | `question-menu.tsx` trigger를 `문서 N ▾`로, 풀기 왼쪽 배치. 메뉴: 문서 관리·본문 검색 / 직접 추가·중복 정리·재분배 / 보관·초안. sticky는 `.home`을 grid에서 flex로 바꿔야 동작한다. dot에 `scroll-margin-top` | UX10-HOME-AC01, SEARCH-02 AC01, QOV-01 AC11. `fixtures/workspace-ui.ts` 공통화(스펙 약 20개 영향). D-7 | L·없음 |
 | HOME-5 검색·필터 줄 | 검색 아이콘 펼침, 필터 popover, 레이블 삭제, 칩 삭제 | `question-search.tsx` 재작성. `grid-template-columns 0fr→1fr` + opacity, 닫힌 input `inert`, `ChevronLeftIcon`·`FilterIcon` 추가. 필터 활성 표시 필수. `다시 풀기만`은 `다시 풀기` 상태 칩과 같은 값이라 삭제해도 기능 손실이 없다. `?retry=true`는 `status=retry`로 변환. **빈 결과의 필터 초기화는 유지**(없으면 탈출 경로가 없다) | UX10-HOME-AC02 폐기, SEARCH-01 AC09·12. D-7 | L·HOME-4 |
+
+### 4.3a HOME 추가 — 상태 필터(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| HOME-6 상태 필터 | 로딩 문구 위치, 필터 동작, 툴바 배치 | `문제를 불러오는 중입니다.`를 상태 필터 아래로 옮긴다. `즐겨찾기만`을 켜면 미열람을 비활성으로 한다. `즐겨찾기만`은 켜져도 배경 없이 글자와 테두리만 primary다. 상태 필터를 필터 툴팁 안으로 옮기고, 검색·필터 버튼을 `모의고사` 버튼 오른쪽에 간격을 두고 둔다 | M·MOCKUX-4 |
 
 ### 4.4 VIEW — 문제 보기·편집
 
@@ -253,7 +265,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -351,4 +363,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-7 | 10 | 진행 | |
 | MOCKUX-8 | 10 | 진행 | |
+| DESIGN-5 | 10 | 진행 | |
+| HOME-6 | 10 | 진행 | |
 | ASK-3 | 10 | 진행 | |
