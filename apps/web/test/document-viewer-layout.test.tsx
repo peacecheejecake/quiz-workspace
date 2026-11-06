@@ -178,6 +178,112 @@ describe('DocumentViewerLayout', () => {
     vi.useRealTimers();
   });
 
+  describe('UX12-PDFPREVIEW chrome', () => {
+    const chromeOf = (root: HTMLElement) => root.querySelector('[class*="chrome"]');
+    const pdfBody = () => screen.getByText('PDF 본문');
+    const press = (target: Element, init: PointerEventInit = {}) =>
+      fireEvent(
+        target,
+        new PointerEvent('pointerdown', {
+          bubbles: true,
+          pointerType: 'touch',
+          pointerId: 1,
+          isPrimary: true,
+          clientX: 100,
+          clientY: 300,
+          ...init,
+        }),
+      );
+    const release = (target: Element, init: PointerEventInit = {}) =>
+      fireEvent(
+        target,
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          pointerType: 'touch',
+          pointerId: 1,
+          isPrimary: true,
+          clientX: 100,
+          clientY: 300,
+          ...init,
+        }),
+      );
+    const hidden = () => {
+      const rendered = render(<Harness />);
+      act(() => vi.advanceTimersByTime(3000));
+      return chromeOf(rendered.container);
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      if (!('PointerEvent' in window)) {
+        class PointerEventStub extends MouseEvent {
+          readonly pointerId: number;
+          readonly pointerType: string;
+          constructor(type: string, init: PointerEventInit = {}) {
+            super(type, init);
+            this.pointerId = init.pointerId ?? 1;
+            this.pointerType = init.pointerType ?? 'mouse';
+          }
+        }
+        vi.stubGlobal('PointerEvent', PointerEventStub);
+      }
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('UX12-PDFPREVIEW-AC07 the chrome is a glass surface', () => {
+      const { container } = render(<Harness />);
+      expect(chromeOf(container)).toHaveClass('glass-surface');
+    });
+
+    it('UX12-PDFPREVIEW-AC09 a tap on the page toggles the chrome', () => {
+      const chrome = hidden();
+      expect(chrome).toHaveAttribute('data-hidden');
+      press(pdfBody());
+      release(pdfBody());
+      expect(chrome).not.toHaveAttribute('data-hidden');
+      press(pdfBody());
+      release(pdfBody());
+      expect(chrome).toHaveAttribute('data-hidden');
+    });
+
+    it('UX12-PDFPREVIEW-AC09 a scroll, a pinch, a mouse and the other pane do not toggle it', () => {
+      const chrome = hidden();
+      press(pdfBody());
+      release(pdfBody(), { clientY: 340 });
+      expect(chrome).toHaveAttribute('data-hidden');
+
+      press(pdfBody());
+      fireEvent(pdfBody(), new PointerEvent('pointercancel', { bubbles: true, pointerId: 1 }));
+      release(pdfBody());
+      expect(chrome).toHaveAttribute('data-hidden');
+
+      press(pdfBody(), { pointerType: 'mouse' });
+      release(pdfBody(), { pointerType: 'mouse' });
+      expect(chrome).toHaveAttribute('data-hidden');
+
+      press(pdfBody());
+      press(pdfBody(), { pointerId: 2, isPrimary: false });
+      release(pdfBody());
+      expect(chrome).toHaveAttribute('data-hidden');
+
+      const text = screen.getByLabelText('블록 텍스트');
+      press(text);
+      release(text);
+      expect(chrome).toHaveAttribute('data-hidden');
+    });
+
+    it('UX12-PDFPREVIEW-AC09 a long press does not toggle it', () => {
+      const chrome = hidden();
+      press(pdfBody());
+      act(() => vi.advanceTimersByTime(700));
+      release(pdfBody());
+      expect(chrome).toHaveAttribute('data-hidden');
+    });
+  });
+
   it('UX10-DOC-AC04 keeps chrome visible while focused or a menu is open', () => {
     vi.useFakeTimers();
     const { container, unmount } = render(<Harness />);

@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { devices, type Locator, type Page } from '@playwright/test';
 import { askPath, askThroughApi, askUi, PASSAGES, seedAskBook } from '../fixtures/ask.ts';
+import { boxOf, viewerUi } from '../fixtures/document-viewer.ts';
 import { goToResults, openRangePicker, runUi } from '../fixtures/practice-runs.ts';
 import {
   correctText,
@@ -38,6 +39,7 @@ import {
   signInAs,
   sourcePdfUi,
   test,
+  uploadReadyBook,
   type Member,
   type Question,
 } from '../fixtures/test.ts';
@@ -311,3 +313,107 @@ test.describe('UX12-PDFPREVIEW-AC06 phone', () => {
     },
   );
 });
+
+async function openBook(
+  page: Page,
+  workspaceFactory: Parameters<typeof seedQuestionSource>[0],
+  label: string,
+): Promise<Locator> {
+  const owner = await workspaceFactory.member(unique(label));
+  const ws = await workspaceFactory.create(owner);
+  const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+  await signInAs(page, owner.user);
+  await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+  await expect(viewerUi.settingsBar(page)).toBeVisible();
+  await expect(viewerUi.pane(page, 'pdf').getByRole('img').first()).toBeVisible();
+  return viewerUi.settingsBar(page).locator('..');
+}
+
+const TOOLBAR = /^(PDF 보기 도구|pdf tools)$/i;
+const SHOW_TOOLS = /^(보기 도구 표시|show view tools)$/i;
+const IDLE_TIMEOUT = { timeout: 6000 };
+
+test(
+  'UX12-PDFPREVIEW-AC07 the PDF header is a glass surface the page blurs behind',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await page.setViewportSize(DESKTOP);
+    const chrome = await openBook(page, workspaceFactory, 'pdfpreview-ac07');
+    await expect(chrome.getByRole('toolbar', { name: TOOLBAR })).toBeVisible();
+    const look = await chrome.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        blur: style.backdropFilter || style.getPropertyValue('-webkit-backdrop-filter'),
+        color: style.backgroundColor,
+      };
+    });
+    expect(look.blur).toContain('blur');
+    expect(look.color, 'the page shows through').toMatch(/rgba\(|color\(.* \/ /);
+  },
+);
+
+test(
+  'UX12-PDFPREVIEW-AC08 moving to the top edge brings the hidden header back without moving the PDF',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await page.setViewportSize(DESKTOP);
+    const chrome = await openBook(page, workspaceFactory, 'pdfpreview-ac08');
+    const pdf = viewerUi.pane(page, 'pdf');
+    const shown = await boxOf(pdf);
+    await page.mouse.move(600, 400);
+    await expect(chrome).toHaveAttribute('data-hidden', 'true', IDLE_TIMEOUT);
+    expect(await boxOf(pdf)).toEqual(shown);
+    await page.mouse.move(600, 8);
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    expect(await boxOf(pdf)).toEqual(shown);
+  },
+);
+
+test.describe('UX12-PDFPREVIEW-AC09 touch', () => {
+  test.use({ hasTouch: true });
+
+  test(
+    'UX12-PDFPREVIEW-AC09 tapping the page toggles the header and a scroll does not',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      await page.setViewportSize({ width: 834, height: 1112 });
+      const chrome = await openBook(page, workspaceFactory, 'pdfpreview-ac09');
+      await expect(chrome).toHaveAttribute('data-hidden', 'true', IDLE_TIMEOUT);
+      const pdf = await boxOf(viewerUi.pane(page, 'pdf'));
+      const point = { x: pdf.x + pdf.width / 2, y: pdf.y + pdf.height / 2 };
+      await page.touchscreen.tap(point.x, point.y);
+      await expect(chrome).not.toHaveAttribute('data-hidden');
+      await page.touchscreen.tap(point.x, point.y);
+      await expect(chrome).toHaveAttribute('data-hidden', 'true');
+    },
+  );
+});
+
+test(
+  'UX12-PDFPREVIEW-AC10 keyboard focus brings the hidden header back',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await page.setViewportSize(DESKTOP);
+    const chrome = await openBook(page, workspaceFactory, 'pdfpreview-ac10');
+    await page.mouse.move(600, 400);
+    await expect(chrome).toHaveAttribute('data-hidden', 'true', IDLE_TIMEOUT);
+    await page.getByRole('button', { name: SHOW_TOOLS }).focus();
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+    await viewerUi.expandOutline(page).focus();
+    await expect(chrome).not.toHaveAttribute('data-hidden');
+  },
+);
+
+test(
+  'UX12-PDFPREVIEW-AC11 with reduced motion the header appears and hides without a transition',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.setViewportSize(DESKTOP);
+    const chrome = await openBook(page, workspaceFactory, 'pdfpreview-ac11');
+    const seconds = await chrome.evaluate(
+      (element) => getComputedStyle(element).transitionDuration,
+    );
+    expect(seconds.split(',').every((value) => Number.parseFloat(value) < 0.001)).toBe(true);
+  },
+);
