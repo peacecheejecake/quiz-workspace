@@ -22,6 +22,7 @@ export const SCREENS = [
   { id: 'AUTH-06', name: '새 비밀번호 설정', path: '/reset-password' },
   { id: 'AUTH-07', name: '인증 오류 안내', path: '/auth/error' },
   { id: 'ACCOUNT-01', name: '계정 보안 설정', path: '/settings/security' },
+  { id: 'UX12-SETTINGS', name: '설정', path: '/settings/preferences' },
   { id: 'WS-01', name: 'Workspace 목록', path: '/workspaces' },
   {
     id: 'DOC-01',

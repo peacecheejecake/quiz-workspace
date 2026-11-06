@@ -14,6 +14,7 @@ import {
   type ThemePreference,
 } from '@quiz/ui';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { signOutAction } from '@/lib/auth/actions';
 import styles from './user-menu.module.css';
@@ -61,8 +62,11 @@ function ThemeControl() {
 // compact account icon button (the email stays in its accessible name "계정 <email>" and title).
 // The menu always shows the full email, wrapped instead of truncated.
 export function UserMenu({ email }: { email: string | undefined }) {
+  const [open, setOpen] = useState(false);
+  // The header survives moves inside one layout, so a link has to close the menu itself.
+  const close = () => setOpen(false);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
@@ -81,7 +85,20 @@ export function UserMenu({ email }: { email: string | undefined }) {
       <PopoverContent aria-label="계정 메뉴" align="end" className={styles.content}>
         {email ? <p className={styles.email}>{email}</p> : null}
         <ThemeControl />
-        <Link href="/settings/security" className="qz-button qz-focus-ring" data-variant="ghost">
+        <Link
+          href="/settings/preferences"
+          className="qz-button qz-focus-ring"
+          data-variant="ghost"
+          onClick={close}
+        >
+          설정
+        </Link>
+        <Link
+          href="/settings/security"
+          className="qz-button qz-focus-ring"
+          data-variant="ghost"
+          onClick={close}
+        >
           계정 보안 설정
         </Link>
         <SignOutButton variant="ghost" />

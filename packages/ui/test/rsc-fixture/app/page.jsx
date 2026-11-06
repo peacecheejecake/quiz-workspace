@@ -108,6 +108,7 @@ import {
   drawableHighlights,
   exactHighlight,
   FIND_IN_NOTE_LIMIT,
+  copyableText,
   findInNote,
   foldForSearch,
   HIGHLIGHT_COLORS,
@@ -134,6 +135,8 @@ import {
 for (const value of [PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS]) {
   if (typeof value !== 'number') throw new Error('kit constants must be plain numbers in RSC');
 }
+
+if (typeof copyableText !== 'function') throw new Error('copyableText must be a plain function');
 
 const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.

@@ -1,6 +1,6 @@
 // UX12-SETTINGS (docs/screens/ux12-settings.md): the 시스템/라이트/다크 control in the user menu
 // (quiz-theme cookie, stamped by the server) and the per-browser drag auto-copy setting.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { noteUi, notePanelPath } from '../fixtures/chapter-notes.ts';
 import {
   copiedTexts,
@@ -56,6 +56,9 @@ async function enableAutoCopy(page: Page): Promise<void> {
   await autoCopySwitch(page).click();
   await expect(autoCopySwitch(page)).toBeChecked();
 }
+
+/** Double-clicks the word at the start of a block, whose box is wider than its text. */
+const doubleClickWord = (target: Locator) => target.dblclick({ position: { x: 6, y: 12 } });
 
 async function expectNothingCopied(page: Page): Promise<void> {
   await page.waitForTimeout(SETTLE_MS);
@@ -156,7 +159,7 @@ test.describe('UX12-SETTINGS', () => {
     await expect(page).toHaveURL(new RegExp(`${PREFERENCES}$`));
     await expect(autoCopySwitch(page)).not.toBeChecked();
 
-    await pageTitle(page).dblclick();
+    await doubleClickWord(pageTitle(page));
     expect(await selectionText(page)).not.toBe('');
     await expectNothingCopied(page);
   });
@@ -170,14 +173,14 @@ test.describe('UX12-SETTINGS', () => {
     await enableAutoCopy(page);
 
     // No reload needed: the hook lives in the shell around this very page.
-    await pageTitle(page).dblclick();
+    await doubleClickWord(pageTitle(page));
     await expect.poll(() => copiedTexts(page)).toHaveLength(1);
     expect((await copiedTexts(page))[0]?.trim()).toBe((await selectionText(page)).trim());
     await expect(copiedToast(page).first()).toBeVisible();
 
     await page.reload();
     await expect(autoCopySwitch(page)).toBeChecked();
-    await pageTitle(page).dblclick();
+    await doubleClickWord(pageTitle(page));
     await expect.poll(() => copiedTexts(page)).toHaveLength(1);
 
     // Repeated selections keep one toast.
@@ -241,7 +244,7 @@ test.describe('UX12-SETTINGS', () => {
       editable.setAttribute('data-e2e-editable', '');
       document.querySelector('main')?.prepend(editable);
     });
-    await page.locator('[data-e2e-editable]').dblclick();
+    await doubleClickWord(page.locator('[data-e2e-editable]'));
     expect(await selectionText(page)).not.toBe('');
     await expectNothingCopied(page);
   });
@@ -258,7 +261,7 @@ test.describe('UX12-SETTINGS', () => {
     await page.goto(notePanelPath(s.workspaceId, s.ch1));
     const panel = noteUi.panel(page);
     await expect(panel).toBeVisible();
-    await dragSelect(highlightUi.noteBody(panel), '핵심 용어를', '묻는다.');
+    await dragSelect(highlightUi.noteBody(panel), '핵심 용어를 묻는다.');
 
     await expect.poll(() => copiedTexts(page)).toHaveLength(1);
     const [copied] = await copiedTexts(page);
