@@ -22173,7 +22173,7 @@
     },
     "/api/v1/questions/{question_id}/practice-open": {
       "post": {
-        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead.",
+        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.",
         "operationId": "openQuestionPractice",
         "parameters": [
           {

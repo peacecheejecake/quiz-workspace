@@ -812,7 +812,7 @@ def open_question_practice(
     latest result, then reuse the cached session, show that result or open a session. Only a new
     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
     user and question, so no separate key lock is taken. A key seen again replays its session
-    while it is open: once submitted, the latest result answers instead."""
+    while it is open: once submitted, the latest result answers instead, or 409 without one."""
     body = body or PracticeOpenBody()
     epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
     if reset_since_start:
@@ -886,6 +886,13 @@ def open_question_practice(
                 return replayed
             if (result := latest_result()) is not None:
                 return result
+            # No result to show (the question has a new revision). The key's record cannot be
+            # replaced, so opening here would add a session on every retry; a new key opens one.
+            raise ProblemException(
+                409,
+                ProblemType.PRACTICE_SESSION_SUBMITTED,
+                detail="This practice session was already submitted. Start a new one to retry.",
+            )
     out = response(_open_session(practice, question, user.id, epoch))
     if idempotency_key is not None:
         idempotency.save(

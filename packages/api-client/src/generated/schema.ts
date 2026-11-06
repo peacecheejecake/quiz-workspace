@@ -1516,7 +1516,7 @@ export type paths = {
      *     latest result, then reuse the cached session, show that result or open a session. Only a new
      *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
      *     user and question, so no separate key lock is taken. A key seen again replays its session
-     *     while it is open: once submitted, the latest result answers instead.
+     *     while it is open: once submitted, the latest result answers instead, or 409 without one.
      */
     post: operations['openQuestionPractice'];
     delete?: never;

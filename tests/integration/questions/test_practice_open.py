@@ -153,6 +153,24 @@ def test_ux12_open_ac04_a_replayed_key_never_revives_a_submitted_session(seed: A
     assert replayed["result"]["id"] == second["id"]
 
 
+def test_ux12_open_ac04_a_submitted_key_after_a_revision_change_opens_nothing(seed: Any) -> None:
+    owner, _, q = _mcq(seed, "ux12-open-replay-revision")
+    key = uuid.uuid4().hex
+    first = open_practice(owner, q["id"], key=key)["session"]
+    assert choose(owner, first["id"], "opt-1") == "correct"
+    body = seed.mcq(_stem("새 문제"), ["a", "b", "c"], 0)
+    owner.ok("PATCH", f"/questions/{q['id']}", {**body, "base_revision_id": q["revision"]["id"]})
+
+    for _ in range(2):
+        retried = open_call(owner, q["id"], key=key)
+        assert retried.status_code == 409, retried.text
+        assert retried.json()["type"].endswith("practice-session-submitted")
+
+    fresh = open_practice(owner, q["id"], key=uuid.uuid4().hex)
+    assert fresh["session"]["question_revision_id"] != q["revision"]["id"]
+    assert fresh["previous_revision"] is True
+
+
 def test_ux12_open_ac04_another_body_with_one_key_is_rejected(seed: Any) -> None:
     owner, _, q = _mcq(seed, "ux12-open-key-reused")
     key = uuid.uuid4().hex

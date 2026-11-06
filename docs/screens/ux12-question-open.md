@@ -67,7 +67,7 @@ Heatmap에서 처음 여는 문제는 `POST /api/questions/{id}/practice-open` �
 
 ### UX12-OPEN-AC04
 
-`practice-open`은 멱등이다. 같은 `Idempotency-Key`의 재전송과 동시 요청은 session 하나만 연다. key가 다시 와도 제출된 session을 미제출로 되살리지 않는다. 재사용 조건이 하나라도 어긋난 `cached_session_id`(남의 session, 지난 revision, 제출됨, 범위 풀이, 새 attempt가 생김)는 재사용되지 않는다.
+`practice-open`은 멱등이다. 같은 `Idempotency-Key`의 재전송과 동시 요청은 session 하나만 연다. key가 다시 와도 제출된 session을 미제출로 되살리지 않는다. 그 사이 문제가 수정되어 보여 줄 결과가 없으면 새 session을 열지 않고 409 `practice-session-submitted`를 돌려준다(새 key로 다시 연다). 재사용 조건이 하나라도 어긋난 `cached_session_id`(남의 session, 지난 revision, 제출됨, 범위 풀이, 새 attempt가 생김)는 재사용되지 않는다.
 
 ### UX12-OPEN-AC05
 
