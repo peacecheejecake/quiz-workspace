@@ -134,6 +134,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-AIOFF.0': ['UX12-AIOFF'],
   // UX12 HOME-3: `AI에게 묻기` in the 본문 검색 page header.
   'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
+  // UX12 ASK: the conversation list's FAB, the floating composer and the answer labels (D-10).
+  'UX12-ASK.0': ['UX12-ASK'],
 };
 
 const LEADING_ID = new RegExp(

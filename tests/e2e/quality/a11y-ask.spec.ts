@@ -306,7 +306,9 @@ test(
     const panel = askUi.panel(page);
     await expect(panel).toBeVisible();
     await expect.poll(() => panel.evaluate((el) => el.contains(document.activeElement))).toBe(true);
-    await keyTo(page, askUi.input(panel));
+    await keyTo(page, askUi.newButton(panel));
+    await page.keyboard.press('Enter');
+    await expect(askUi.input(panel)).toBeFocused();
     await page.keyboard.type(QUESTION);
     await page.keyboard.press('Enter');
     const answer = askUi.answers(panel).last();

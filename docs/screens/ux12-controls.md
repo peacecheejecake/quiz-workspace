@@ -9,7 +9,7 @@
 ## 규칙
 
 - **경계 없는 버튼은 두 종류뿐이다.** 아이콘 ghost 버튼(`IconButton` ghost, toggle 제외)과 `borderless` prop을 준 ghost 텍스트 버튼이다. 기능 CSS의 버튼은 제목·접기/펼치기·아이콘 전용 손잡이만 경계를 없앤다.
-- **`borderless`는** 뒤로가기, 프로필·Workspace 전환 등 header trigger, 접기/펼치기, `더 보기`, 목록 항목 제목 버튼에만 쓴다. 그 밖의 ghost 텍스트 버튼(`새 대화`, `질문 범위` 등)은 경계를 유지한다.
+- **`borderless`는** 뒤로가기, 프로필·Workspace 전환 등 header trigger, 접기/펼치기, `더 보기`, 목록 항목 제목 버튼에만 쓴다. 그 밖의 ghost 텍스트 버튼(AI 질문의 `복사`, `도움이 안 됨` 등)은 경계를 유지한다.
 - **나머지 컨트롤은 경계를 유지한다.** primary, secondary, toggle(`aria-pressed`, `data-state="on|off"`), tab, 입력 등 form 컨트롤이다.
 - **크기는 바뀌지 않는다.** 경계를 없앤 버튼도 1px 투명 테두리를 유지한다(`button.qz-back-link`는 링크와 같은 테두리 없음).
 - **hover 배경이 경계를 대신한다.** 경계 없는 버튼과 제목 버튼·링크는 `@media (hover: hover)`에서 `--color-state-hover` 배경을 얻는다.
@@ -25,7 +25,7 @@
 **Text 버튼·링크 경계 없음:** 프로필 버튼과 뒤로가기 링크, 본문 검색의 `설정` 버튼은 기본 상태에서 보이는 테두리가 없다.
 
 ### UX12-CONTROLS-AC03
-**나머지 경계 유지:** light·dark 모두, 화면의 `Button`·`IconButton` 중 기본 상태에 배경과 테두리가 모두 없는 것은 아이콘 ghost 또는 `borderless`뿐이다. `새 대화` 같은 일반 ghost 텍스트 버튼과 tab은 테두리가 보인다.
+**나머지 경계 유지:** light·dark 모두, 화면의 `Button`·`IconButton` 중 기본 상태에 배경과 테두리가 모두 없는 것은 아이콘 ghost 또는 `borderless`뿐이다. `복사` 같은 일반 ghost 텍스트 버튼과 tab은 테두리가 보인다. AI 질문의 `새 대화`와 `질문 범위`는 UX12-ASK에서 FAB와 아이콘 버튼이 되었다.
 
 ### UX12-CONTROLS-AC04
 **Hover 배경:** 경계 없는 kit 버튼, 목록 제목 링크, 본문 검색 `설정` 버튼에 pointer를 올리면 `--color-state-hover` 배경이 생긴다.

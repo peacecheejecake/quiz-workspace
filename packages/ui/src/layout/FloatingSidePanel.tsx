@@ -74,6 +74,8 @@ export interface FloatingSidePanelProps {
    * `sequence`: each new question).
    */
   titleRef?: Ref<HTMLHeadingElement>;
+  /** Header slot before the title, outside its accessible name (e.g. a back button). */
+  headerStart?: ReactNode;
   /** Header slot between the title and the close button (e.g. favorite / retry toggles). */
   headerActions?: ReactNode;
   /** Footer slot (submit, self-grade, next/previous, loading/error status). */
@@ -185,6 +187,7 @@ export function FloatingSidePanel({
   title,
   description,
   titleRef,
+  headerStart,
   headerActions,
   footer,
   closeLabel = '닫기',
@@ -387,6 +390,7 @@ export function FloatingSidePanel({
             <LayerProvider value={layer.zIndex}>
               <DirtyProvider value={registry.report}>
                 <div className="header" onPointerDown={swipe}>
+                  {headerStart ? <div className="start">{headerStart}</div> : null}
                   <div className="heading">
                     <Dialog.Title
                       ref={titleRef}

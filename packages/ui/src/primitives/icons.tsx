@@ -63,6 +63,24 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+/** A plus sign (the conversation list's `새 대화`). */
+export function PlusIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </BaseIcon>
+  );
+}
+
+/** A funnel (a filter or scope control). */
+export function FilterIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M4 5h16l-6 7.5V19l-4-2v-4.5L4 5Z" />
+    </BaseIcon>
+  );
+}
+
 export function MinusIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>
