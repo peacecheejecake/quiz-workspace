@@ -9,6 +9,7 @@
 | UX10-AI | AI 가용성·저장 해설 | 공통 AI 화면 | [ux10-ai.md](ux10-ai.md) |
 | UX12-HOME | Heatmap 미리보기·셀 크기 | Workspace 홈 | [ux12-home.md](ux12-home.md) |
 | UX12-EXTRACT | 초안 문제 전체 표시 | 문서 보기 | [ux12-extract.md](ux12-extract.md) |
+| UX12-EXPL | AI 해설 도구 줄·접기·생성 안내 | 공통 문제 표시 | [ux12-explanations.md](ux12-explanations.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |

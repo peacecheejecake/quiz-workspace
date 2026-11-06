@@ -434,7 +434,7 @@ test(
     const detail = detailUi.dialog(page);
     await expect(detail).toBeVisible();
     await expect(relatedUi.rows(await expandRelated(detail)).first()).toBeVisible();
-    // The shared explanation is cached: 문제 상세 offers `AI 해설 보기`.
+    // The shared explanation is cached: 문제 상세 shows the open disclosure.
     await expect(explUi.show(explUi.area(detail))).toHaveAttribute('aria-expanded', 'true');
     await expectDone(explUi.area(detail));
     await settle(page);

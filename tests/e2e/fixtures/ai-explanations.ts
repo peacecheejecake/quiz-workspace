@@ -96,9 +96,9 @@
 //   panel "n번 문제", range/mock run modal, "문제 상세" dialog, `manage(mock)` "문제 k", share
 //   panel), after the result/explanation and before the footer. Never before a submission in
 //   practice/sequence. States: button "AI 해설" + text "문제와 정답, 관련 교재 구절이 AI
-//   서비스로 전송됩니다."; cached: disclosure button "AI 해설 보기" (aria-expanded, open);
-//   running: text "AI 해설을 만드는 중" with [aria-busy="true"]; one status announcement "AI 해설을
-//   만드는 중입니다" at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
+//   서비스로 전송됩니다."; cached: the h3 is a disclosure button "AI 해설" (aria-expanded, open;
+//   UX12-EXPL); running: text "작성중..." with [aria-busy="true"]; one status announcement
+//   "작성중..." at the start and one "AI 해설이 준비되었습니다" at the end; done: badge text "AI
 //   생성", notice "AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.", the body
 //   (each option's text with its why line), footnote button "[1]" (name "[1]" or "출처 1"), list
 //   "출처" with rows "[1] <문서> · <장> · p.<n>" (each a button opening the "본문 발췌" panel with
@@ -542,8 +542,8 @@ export async function stackRequest<T = unknown>(
 
 export const EXPL_TEXT = {
   sendNotice: /문제와 정답, 관련 교재 구절이 AI 서비스로 전송됩니다|sent to an AI service/i,
-  working: /AI 해설을 만드는 중|making the AI explanation/i,
-  started: /AI 해설을 만드는 중입니다|making the AI explanation/i,
+  working: /작성중\.\.\.|making the AI explanation/i,
+  started: /작성중\.\.\.|making the AI explanation/i,
   ready: /AI 해설이 준비되었습니다|AI explanation is ready/i,
   aiNotice:
     /AI가 만든 해설입니다\. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
@@ -572,13 +572,19 @@ export const explUi = {
   region: (scope: Locator) => scope.getByRole('region', { name: /^(AI 해설|AI explanation)$/i }),
   heading: (scope: Locator) =>
     scope.getByRole('heading', { name: /^(AI 해설|AI explanation)$/i, level: 3 }),
+  /** The toolbar's button; the disclosure heading has the same name and an `aria-expanded`. */
   create: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설|make (an )?AI explanation)$/i }),
+    scope
+      .getByRole('button', { name: /^(AI 해설|make (an )?AI explanation)$/i })
+      .and(scope.locator(':not([aria-expanded])')),
+  /** The disclosure heading of a finished explanation. */
   show: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설 보기|show (the )?AI explanation)$/i }),
+    scope
+      .getByRole('button', { name: /^(AI 해설|AI explanation)$/i })
+      .and(scope.locator('[aria-expanded]')),
   /** The share panel's read-only disclosure. */
   sharedToggle: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(AI 해설( 보기)?|AI explanation)$/i }),
+    scope.getByRole('button', { name: /^(AI 해설|AI explanation)$/i }),
   busy: (area: Locator) => area.locator('[aria-busy="true"]').or(area.getByText(EXPL_TEXT.working)),
   badge: (area: Locator) => area.getByText(/^(AI 생성|AI generated)$/i),
   notice: (area: Locator) => area.getByText(EXPL_TEXT.aiNotice),
@@ -604,7 +610,7 @@ export async function recordAnnouncements(page: Page): Promise<{ read: () => Pro
     const scan = () => {
       for (const el of document.querySelectorAll('[role="status"]')) {
         const text = (el.textContent ?? '').trim();
-        if (!/AI 해설|AI explanation/i.test(text)) continue;
+        if (!/AI 해설|작성중|AI explanation/i.test(text)) continue;
         if (seen.at(-1) !== text) seen.push(text);
       }
     };
