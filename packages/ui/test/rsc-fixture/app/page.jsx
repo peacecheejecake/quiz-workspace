@@ -138,7 +138,7 @@ for (const value of [PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS])
 
 if (typeof copyableText !== 'function') throw new Error('copyableText must be a plain function');
 
-const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet];
+const hooks = [useTheme, useToast, useUnsavedChanges, usePairedSheet, useDragDismiss];
 // Need function props (onOpen / onPressedChange), so a Client Component has to render them.
 const interactive = [
   QuestionDot,
