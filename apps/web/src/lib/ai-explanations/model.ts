@@ -10,7 +10,6 @@ import type {
 export const EXPL_TEXT = {
   title: 'AI 해설',
   create: 'AI 해설',
-  show: 'AI 해설 보기',
   working: 'AI 해설을 만드는 중',
   started: 'AI 해설을 만드는 중입니다',
   ready: 'AI 해설이 준비되었습니다',
