@@ -610,7 +610,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       '내 선택',
     );
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();
-    expect(within(panel).getByRole('button', { name: '다음' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '다음 문제' })).toBeInTheDocument();
   });
 
   it('UX12-RUNBAR-AC01 sequence: the arrows of the Heatmap path, no emphasis after a result', async () => {
@@ -749,7 +749,23 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
 
   it('UX11-RETURN-AC01 updates bank retry-flag eligibility after a separate grade without changing run result', async () => {
     const user = userEvent.setup();
-    const client = fakeClient();
+    const client = fakeClient({
+      getItem: vi.fn(async () => ({
+        ok: true as const,
+        data: item({
+          attempt: {
+            attempt_id: graded.attempt_id,
+            result: 'correct',
+            submitted_answer: { selected_option_ids: ['o1'], answer_text: null },
+            correct_option_ids: ['o1'],
+            accepted_answers: null,
+            explanation: REVISION.explanation,
+            rubric: null,
+          },
+          session_state: 'graded',
+        }),
+      })),
+    });
     render(
       <QuestionViewer
         mode="sequence"

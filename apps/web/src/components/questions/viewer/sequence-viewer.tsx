@@ -9,10 +9,11 @@ import { GroupedResults } from './grouped-results';
 //            resolves the range into a fixed, ordered run (QVIEW-01-C01/C02).
 //   solve    one position at a time: the title names the question ("12번"; mock "문제 k") and
 //            takes focus on every move, a progress bar with "n문제 중 k번째" (also announced), the
-//            QuestionBody, `제출` → result + answers + explanation, `다음` / `결과 보기`, `이전`,
-//            `건너뛰기`. A submitted position shows its answer and result read-only (one submission
-//            per position; `처음부터 다시` starts a new run). Opening a position opens its practice
-//            session, which records the view; nothing before a submission carries an answer (C03).
+//            QuestionBody, `제출` → result + answers + explanation, `이전 문제`, `다음 문제` (also
+//            skips an open position), `결과 보기` last. A submitted position shows its answer and
+//            result read-only (one submission per position; `처음부터 다시` starts a new run).
+//            Opening a position opens its practice session, which records the view; nothing
+//            before a submission carries an answer (C03).
 //   results  "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w", the per-position results (a row reopens that
 //            position read-only), `처음부터 다시` (a new run of the same questions and order
 //            setting) and `닫기`.
@@ -81,7 +82,6 @@ import {
   type GradeResult,
   type PracticeAnswer,
 } from './practice-model';
-import { NavButton } from './nav-button';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
 import {
   QuestionBody,
@@ -89,6 +89,7 @@ import {
   type AnswerQuestion,
   type RevealedAnswers,
 } from './question-body';
+import { AnotherTryButton, QuestionNav } from './question-footer';
 import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
 import {
@@ -1044,7 +1045,6 @@ function useSolveStep({
   const toResults = () => {
     if (!holding) onNavigate({ step: 'results', runId: view.runId }, 'replace');
   };
-  const forward = () => (last ? toResults() : go(position + 1));
 
   const revealed: RevealedAnswers | null = work.outcome ?? item?.attempt ?? null;
   const answered = revealed !== null;
@@ -1240,43 +1240,30 @@ function useSolveStep({
         <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
       {item?.available && item.question_id && run && !archived ? (
-        <Button
-          disabled={holding}
-          onClick={() =>
+        <AnotherTryButton
+          // A position skipped in a finished run can no longer be submitted: nothing to wait for.
+          available={!holding && !pendingSessionId && (answered || finished)}
+          onTry={() =>
             setRetryTarget({ key: `${runId}:${position}`, questionId: item.question_id ?? '' })
           }
+        />
+      ) : null}
+      {last ? (
+        <Button
+          variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
+          disabled={holding}
+          onClick={toResults}
         >
-          다시 풀기
+          결과 보기
         </Button>
       ) : null}
-      <nav className={styles.nav} aria-label="문제 이동">
-        <NavButton
-          direction="previous"
-          label="이전"
-          unavailable={position <= 1 || holding}
-          onClick={() => go(position - 1)}
-        />
-        {/* Always a way forward, also while the position loads (it is skipped then). */}
-        {total === null ? null : last ? (
-          <Button
-            variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
-            disabled={holding}
-            onClick={toResults}
-          >
-            결과 보기
-          </Button>
-        ) : !item || !run || canAnswer ? (
-          <NavButton direction="next" label="건너뛰기" unavailable={holding} onClick={forward} />
-        ) : (
-          <NavButton
-            direction="next"
-            label="다음"
-            variant="primary"
-            unavailable={holding}
-            onClick={forward}
-          />
-        )}
-      </nav>
+      {/* Always a way forward, also while the position loads (it is skipped then). */}
+      <QuestionNav
+        previousUnavailable={position <= 1 || holding}
+        nextUnavailable={total === null || last || holding}
+        onPrevious={() => go(position - 1)}
+        onNext={() => go(position + 1)}
+      />
     </>
   );
 
