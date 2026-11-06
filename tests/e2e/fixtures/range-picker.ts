@@ -37,7 +37,7 @@ export const rangePickerUi = {
     rangePickerUi
       .group(scope, `${chapter}장 `)
       .getByRole('checkbox', { name: new RegExp(`^${n}번 · `) }),
-  questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+번 · / }),
+  questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^(\d+번|번호 없음) · / }),
   selected: (scope: Locator, n: number) =>
     scope.getByText(new RegExp(`선택 ${n}문제(?!\\d)|(?<!\\d)${n} selected`, 'i')),
   filterToggle: (scope: Locator) =>

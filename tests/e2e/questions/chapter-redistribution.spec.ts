@@ -70,6 +70,7 @@ import {
   type Problem,
   type Question,
   type QuestionInput,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 
@@ -169,7 +170,7 @@ async function expectGroupSize(page: Page, title: string, n: number): Promise<vo
     await expect(group).toHaveCount(0);
     return;
   }
-  await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(n);
+  await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(n);
 }
 
 /** Asks the server to move `ids` as the viewer / archived owner would: every call refused. */

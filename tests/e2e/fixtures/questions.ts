@@ -822,11 +822,13 @@ export function questionNumberName(n: number): RegExp {
   return new RegExp(`(?<!\\d)${n}번 문제|question ${n}(?!\\d)`, 'i');
 }
 
+/** Any dot's accessible name: `3장 12번 문제, …`, or `3장 번호 없음, …` without a number. */
+export const QUESTION_DOT_NAME = /\d+번 문제|번호 없음|question \d+/i;
+
 export const overviewUi = {
   heatmap: (page: Page) => main(page).getByRole('group', { name: /문제 heatmap|heatmap/i }),
   /** The question markers (chapter headers also hold a `<장 제목> 정리 노트` button, CHNOTE-01). */
-  dots: (page: Page) =>
-    overviewUi.heatmap(page).getByRole('button', { name: /\d+번 문제|question \d+/i }),
+  dots: (page: Page) => overviewUi.heatmap(page).getByRole('button', { name: QUESTION_DOT_NAME }),
   dot: (page: Page, n: number) =>
     overviewUi.heatmap(page).getByRole('button', { name: questionNumberName(n) }),
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
@@ -841,7 +843,7 @@ export const overviewUi = {
 };
 
 export const panelUi = {
-  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|question \d/i }),
+  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|번호 없음|question \d/i }),
   numbered: (page: Page, n: number) => page.getByRole('dialog', { name: questionNumberName(n) }),
   close: (panel: Locator) => panel.getByRole('button', { name: /패널 닫기|^닫기$|^close/i }),
   favoriteOn: (panel: Locator) =>

@@ -152,9 +152,9 @@ describe('selectionHighlights of a draft question (UX12-EXTRACT-AC01)', () => {
     expect(
       selectionHighlights(page[2], jumpTo('b', 'title-1', 'body-1'), page, groups, [draft]),
     ).toEqual(whole);
-    expect(selectionHighlights(page[4], jumpTo('c', 'title-2', 'option'), page, groups, [draft])).toEqual(
-      whole,
-    );
+    expect(
+      selectionHighlights(page[4], jumpTo('c', 'title-2', 'option'), page, groups, [draft]),
+    ).toEqual(whole);
   });
 
   it('marks the whole question from a block selected in the text', () => {
@@ -199,9 +199,9 @@ describe('selectionHighlights of a draft question (UX12-EXTRACT-AC01)', () => {
       { page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } },
     ]);
     const confirmed = { id: 'q', blockIds: ids } as unknown as DocumentQuestion;
-    expect(selectionHighlights(spanning[4], null, spanning, pageGroups(spanning, [confirmed]))).toEqual(
-      [...whole, { page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } }],
-    );
+    expect(
+      selectionHighlights(spanning[4], null, spanning, pageGroups(spanning, [confirmed])),
+    ).toEqual([...whole, { page: 38, bbox: { x0: 120, y0: 100, x1: 300, y1: 300 } }]);
   });
 
   it('prefers the confirmed question when a block belongs to both', () => {
