@@ -2,7 +2,7 @@
 
 Pipeline (questions.md §6): printed reading order (``reading_order``) -> rule-based
 pre-extraction (numbering, options, figures, answer key, page/bbox provenance) -> optional LLM
-refinement per question (``questions.extract/v4``, structured output, own source text only) ->
+refinement per question (``questions.extract/v5``, structured output, own source text only) ->
 structural validation -> drafts with ``review_status=pending``, ``origin=pdf_import`` and
 validation issues.
 

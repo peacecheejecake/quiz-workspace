@@ -244,7 +244,7 @@ def has_item_label(text: str) -> bool:
     return bool(_item_tokens(text))
 
 
-def stem_item_starts(text: str) -> list[int]:
+def stem_item_starts(text: str, *, require_lead: bool = True) -> list[int]:
     """Offsets of the printed item labels of the stem's item list, ``[]`` without one.
 
     ``text`` is one paragraph. A list is the label tokens of one family, all in one format, that
@@ -252,7 +252,8 @@ def stem_item_starts(text: str) -> list[int]:
     ``⑴`` ``⑵``), at least two. Any other token of that family in the paragraph (a missing,
     skipped or swapped label, another format) means no list at all: ``(가) … (다) … (나) …``
     is left alone. Text before the first item must end like a question sentence (``?``, ``.``,
-    ``:``, ``)``, ``」``, ``>``, an answer blank ``( )``).
+    ``:``, ``)``, ``」``, ``>``, an answer blank ``( )``), unless ``require_lead`` is off: after a
+    passage the last item needs no sentence end (questions.md §4 12).
     """
     tokens = _item_tokens(text)
     # Both endpoints of a printed range are references, not item starts.
@@ -271,7 +272,7 @@ def stem_item_starts(text: str) -> list[int]:
         if [ordinal for *_, ordinal in run] != list(range(1, len(run) + 1)):
             continue
         head = text[: run[0][0]].strip()
-        if head and _BEFORE_FIRST_ITEM.search(head) is None:
+        if require_lead and head and _BEFORE_FIRST_ITEM.search(head) is None:
             continue
         return [start for start, *_ in run]
     return []
@@ -281,13 +282,169 @@ def break_stem_items(text: str) -> str:
     """``text`` with each stem item on its own line and a blank line between the question
     sentence and the first item (``stem_item_starts``); unchanged without an item list. Only the
     text around a pipe table is read: its cells are never items, and it stands apart from that
-    text by blank lines."""
+    text by blank lines. Passages (``<제목> ...``, questions.md §4 12) stand apart the same way,
+    each heading and item on its own line."""
     segments = split_pipe_blocks(text)
     if not any(is_table for is_table, _ in segments):
+        return _break_text(text)
+    broken: list[str] = []
+    after_table = False
+    for is_table, segment in segments:
+        broken.append(segment if is_table else _break_text(segment, after_table=after_table))
+        after_table = after_table or is_table
+    return "\n\n".join(broken)
+
+
+def _break_text(text: str, *, after_table: bool = False) -> str:
+    parts = _passage_parts(text, after_table=after_table)
+    if parts is None:
         return _break_items(text)
-    return "\n\n".join(
-        segment if is_table else _break_items(segment) for is_table, segment in segments
-    )
+    lead, passages, rest = parts
+    blocks = ["\n".join([heading, *_passage_lines(body)]) for heading, body in passages]
+    if lead:
+        blocks.insert(0, lead)
+    if rest:
+        blocks.append(_break_text(rest))
+    return "\n\n".join(blocks)
+
+
+# ------------------------------------------------------------------------------------------
+# Passages (questions.md §4 12, UX12-PASSAGE): ``<제목>`` blocks after the question sentence.
+# `apps/web` mirrors these rules in `stem-passages.ts`; tests/fixtures/stem-passages.json holds
+# their shared cases.
+
+# ``<...>``, ``〈...〉``, the fullwidth ``<...>`` or ``[...]``, on one line, 40 characters at most,
+# then a blank and content.
+_PASSAGE_HEADING = re.compile(
+    r"""(?<!\S)(?:
+        <[^\s<>](?:[^<>\r\n]{0,38}[^\s<>])?>
+      | 〈[^\s〈〉](?:[^〈〉\r\n]{0,38}[^\s〈〉])?〉
+      | \uff1c[^\s\uff1c\uff1e](?:[^\uff1c\uff1e\r\n]{0,38}[^\s\uff1c\uff1e])?\uff1e
+      | \[[^\s\[\]](?:[^\[\]\r\n]{0,38}[^\s\[\]])?\]
+    )(?=\s+\S)""",
+    re.VERBOSE,
+)
+# A particle word after the bracket (``<보기> 에 대한``): the bracket is a mention.
+_PASSAGE_PARTICLE = re.compile(
+    r"(?:은|는|이|가|을|를|의|에|에서|에게|와|과|로|으로|도|만|및|중)(?=[\s,.]|$)"
+)
+_BLANK_LINE = re.compile(r"\r?\n(?:[^\S\r\n]*\r?\n)+")
+_PASSAGE_BULLETS = "∙•·ㆍ"
+_SENTENCE_END = re.compile(r"[.!?。\uff01\uff1f][)\uff09\"'\u2019”」』]*\s*$")
+_AT_LINE_START = re.compile(r"\n[^\S\r\n]*$")
+_ENDS_QUESTION = re.compile(r"[?\uff1f](?:\s*[(\uff08]\s*[)\uff09])*\s*$")
+# ``이름 : 값`` right after a `` - ``; ``10:30`` is no name.
+_NAME_VALUE = re.compile(r"\s*[^\n∙•·ㆍ:\uff1a-]{1,30}(?<!\d)[:\uff1a]\s*\S")
+_PASSAGE_MARKER = re.compile(r"[∙•·ㆍ]|(?<!\S)-(?=\s)")
+
+
+def _passage_headings(text: str, *, after_table: bool) -> list[tuple[int, int]]:
+    """``(start, end)`` of the headings of the passages that run on from the first one."""
+    found: list[tuple[int, int]] = []
+    for match in _PASSAGE_HEADING.finditer(text):
+        start, end = match.span()
+        following = text[end:].lstrip()
+        if _PASSAGE_PARTICLE.match(following):
+            continue
+        bullet_next = following[:1] in tuple(_PASSAGE_BULLETS)
+        if match.group().startswith("[") and not bullet_next:
+            continue
+        if not found:
+            lead = text[:start].strip()
+            if _BEFORE_FIRST_ITEM.search(lead) if lead else after_table:
+                found.append((start, end))
+            continue
+        body = text[found[-1][1] : start]
+        if not body.strip():
+            continue
+        blank = _BLANK_LINE.search(body)
+        if blank and body[blank.start() :].strip():
+            break
+        if blank or _AT_LINE_START.search(body) or _SENTENCE_END.search(body) or bullet_next:
+            found.append((start, end))
+    return found
+
+
+def _passage_parts(
+    text: str, *, after_table: bool
+) -> tuple[str, list[tuple[str, str]], str] | None:
+    """``(lead, [(heading, body), ...], rest)`` of the passages in ``text``, ``None`` without one.
+    ``after_table``: the text follows a table, so nothing need come before the first heading."""
+    headings = _passage_headings(text, after_table=after_table)
+    if not headings:
+        return None
+    tail = len(text) - len(text[headings[-1][1] :].lstrip())
+    blank = _BLANK_LINE.search(text, tail)
+    tail_end = blank.start() if blank else len(text)
+    items = stem_item_starts(text[tail:tail_end], require_lead=False)
+    end = tail + items[0] if items else tail_end
+    # A heading with no body is no passage: ``<보기>`` right above an item list.
+    if end == tail:
+        headings.pop()
+    if not headings:
+        return None
+    ends = [start for start, _ in headings[1:]] + [end]
+    bodies = [text[h_end:b_end] for (_, h_end), b_end in zip(headings, ends, strict=True)]
+    if any(_ENDS_QUESTION.search(body) for body in bodies):
+        return None
+    passages = [
+        (text[start:h_end], body.strip())
+        for (start, h_end), body in zip(headings, bodies, strict=True)
+    ]
+    return text[: headings[0][0]].strip(), passages, text[end:].strip()
+
+
+def _passage_marker_starts(body: str) -> list[int]:
+    """Offsets of the item markers of a stripped passage body, only at item boundaries."""
+    starts: list[int] = []
+    named: set[int] = set()
+    bullet: str | None = None
+    for match in _PASSAGE_MARKER.finditer(body):
+        start = match.start()
+        char = match.group()
+        before = body[:start]
+        after = body[start + 1 :]
+        if not after.strip():
+            continue
+        if before and not _AT_LINE_START.search(before):
+            if not before[-1].isspace():
+                continue
+            if char == "-":
+                if re.match(r"\s*\d", after):
+                    continue
+                if not _SENTENCE_END.search(before):
+                    if not _NAME_VALUE.match(after):
+                        continue
+                    named.add(start)
+            else:
+                if re.search(r"\d\s*$", before) and re.match(r"\s*\d", after):
+                    continue
+                opens = bullet is None and (
+                    _SENTENCE_END.search(before) or re.search(r"[:\uff1a]\s*$", before)
+                )
+                if char != bullet and not opens:
+                    continue
+        if char != "-" and bullet is None:
+            bullet = char
+        starts.append(start)
+
+    # Sub-items come in groups: a lone `` - 이름 : 값`` is a range, ``월요일 - 금요일 : 휴무``.
+    def in_group(i: int) -> bool:
+        return (i > 0 and body[starts[i - 1]] == "-") or (
+            i + 1 < len(starts) and body[starts[i + 1]] == "-"
+        )
+
+    return [s for i, s in enumerate(starts) if s not in named or in_group(i)]
+
+
+def _passage_lines(body: str) -> list[str]:
+    """A passage body as lines: the text before the first item, then one line per item."""
+    starts = _passage_marker_starts(body)
+    if not starts:
+        return [body]
+    lines = [body[a:b].strip() for a, b in zip(starts, [*starts[1:], len(body)], strict=True)]
+    intro = body[: starts[0]].strip()
+    return [intro, *lines] if intro else lines
 
 
 def _break_items(text: str) -> str:
