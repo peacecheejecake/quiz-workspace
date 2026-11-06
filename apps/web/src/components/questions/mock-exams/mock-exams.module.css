@@ -348,15 +348,24 @@
   flex-basis: 100%;
 }
 
-/* UX12 MOCKLIST: the list's floating 추가 button. Zero-height sticky row, so it overlays the list
-   bottom-right while scrolling; the list keeps room under its last row. */
+/* UX12 MOCKLIST: the list's floating 추가 button. The list view fills the scrolling body
+   (`listBody`), and the zero-height sticky row after the list is pushed to its bottom, so the
+   button sits at the dialog's bottom-right corner for a short list too and stays there while a
+   long one scrolls; the list keeps room under its last row. */
+.listBody {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .fab {
   position: sticky;
-  bottom: var(--space-4);
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   z-index: 1;
   display: flex;
   justify-content: flex-end;
   height: 0;
+  margin-top: auto;
   overflow: visible;
 }
 
@@ -370,7 +379,7 @@
 }
 
 .listWithFab {
-  padding-bottom: calc(44px + var(--space-6));
+  padding-bottom: calc(44px + var(--space-6) + env(safe-area-inset-bottom, 0px));
 }
 
 /* The footer's reason text sits at the start, the buttons stay at the end (UX12-MOCKFORM3). */

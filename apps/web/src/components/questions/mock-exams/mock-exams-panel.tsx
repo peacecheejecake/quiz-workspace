@@ -550,7 +550,10 @@ export function MockExamsPanel({
       closeLabel="모의고사 닫기"
       mobileLayout="full"
     >
-      <div className={styles.body} data-screen-id={screenId}>
+      <div
+        className={view.view === 'list' ? `${styles.body} ${styles.listBody}` : styles.body}
+        data-screen-id={screenId}
+      >
         {view.view !== 'list' && view.view !== 'create' ? (
           // Mounted before the form's steps in the same fixed area, so it stays above them.
           <FloatingPanelPinned>
