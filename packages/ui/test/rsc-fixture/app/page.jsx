@@ -59,6 +59,7 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   QuestionDot,
   focusQuestionDotQuietly,

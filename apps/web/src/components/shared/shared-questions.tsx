@@ -6,7 +6,7 @@
 // options, the correct answer, the explanation and the source pages.
 // There is no answer input, favourite, retry or edit control, and opening a question records
 // nothing (the shared API has no write route at all).
-import { Button, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
+import { Button, NO_QUESTION_NUMBER, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SharedAiExplanation } from '@/components/questions/ai-explanation/shared-ai-explanation';
@@ -124,7 +124,7 @@ export function SharedQuestions({
       ) : null}
       {items.length > 0 ? (
         <ul className={styles.questionList} aria-label="문제 목록">
-          {items.map((q, index) => (
+          {items.map((q) => (
             <li key={q.id} className={styles.questionItem}>
               <button
                 type="button"
@@ -134,7 +134,9 @@ export function SharedQuestions({
                 aria-current={q.id === openId || undefined}
                 onClick={() => setOpenId(q.id)}
               >
-                <span className={styles.questionNumber}>{q.question_number ?? index + 1}</span>
+                <span className={styles.questionNumber}>
+                  {q.question_number ?? NO_QUESTION_NUMBER}
+                </span>
                 <span className={styles.questionStem}>{displayStem(q.revision.stem)}</span>
                 <span className={styles.questionMeta}>
                   {QUESTION_TYPE_LABELS[q.question_type]} · {q.chapter?.title ?? NO_CHAPTER_TITLE}
