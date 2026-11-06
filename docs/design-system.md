@@ -594,7 +594,7 @@ packages/
 - [ ] 모달 focus trap 및 닫힌 뒤 focus 원위치 복구
 - [ ] light/dark contrast, forced-colors, reduced-motion 확인
 - [ ] CSS blur 미지원 시 불투명한 fallback surface 유지
-- [ ] PDF 읽기 영역을 glass blur로 가리지 않음
+- [ ] PDF 읽기 영역을 glass blur로 가리지 않음(PDF viewer가 있는 동안 `.glass-surface`는 단색이다, UX12 DESIGN-5)
 - [ ] Storybook 상태 예제와 스크린샷 회귀 테스트 포함
 - [ ] pointer target WCAG 2.2 최소 기준 확인
 

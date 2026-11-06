@@ -33,6 +33,16 @@
   }
 }
 
+/*
+ * No glass over a PDF (design-system §1): menus, toasts and the return bar float over the reading
+ * area, and they are portalled away from it, so the rule keys on the page holding a PDF viewer.
+ */
+:root:has([data-pdf-reading]) .glass-surface {
+  background: var(--color-glass-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .glass-surface {
     background: var(--color-glass-solid);

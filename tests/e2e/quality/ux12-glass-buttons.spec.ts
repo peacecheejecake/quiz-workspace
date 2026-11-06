@@ -3,6 +3,7 @@
 // visual suite's job. This suite runs against the production build, where the blur was lost.
 import type { Locator, Page } from '@playwright/test';
 import { askUi, openAskPanel } from '../fixtures/ask.ts';
+import { seedViewerSettings, viewerUi } from '../fixtures/document-viewer.ts';
 import {
   chooseWorkspaceAction,
   createQuestion,
@@ -16,6 +17,7 @@ import {
   signInAs,
   test,
   uniqueWorkspaceName,
+  uploadReadyBook,
   wsUi,
   type E2EFixtures,
 } from '../fixtures/test.ts';
@@ -44,18 +46,15 @@ function surfaceOf(locator: Locator) {
 }
 
 /** The token's value resolved by the browser, comparable to a computed background. */
-function tokenColor(page: Page, token: string, scope?: Locator): Promise<string> {
-  const resolve = (host: Element, name: string) => {
+function tokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
     const probe = document.createElement('div');
     probe.style.background = `var(${name})`;
-    host.append(probe);
+    document.body.append(probe);
     const color = getComputedStyle(probe).backgroundColor;
     probe.remove();
     return color;
-  };
-  return scope
-    ? scope.evaluate(resolve, token)
-    : page.evaluate((name) => resolve(document.body, name), token);
+  }, token);
 }
 
 async function openOverview(
@@ -301,5 +300,27 @@ test(
     const composer = panel.locator('.glass-surface').filter({ has: page.getByRole('textbox') });
     await expect(composer).toHaveCount(1);
     expect((await surfaceOf(composer)).blur).toMatch(BLUR);
+  },
+);
+
+test(
+  'UX12-GLASSBTN-AC10 floating layers are opaque without blur while a PDF is on screen',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('ux12-gb-10');
+    const ws = await workspaceFactory.create(owner);
+    const documentId = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await seedViewerSettings(page, { mode: 'both' });
+    await signInAs(page, owner.user);
+    await page.goto(`/workspaces/${ws.id}/documents/${documentId}`);
+    await expect(viewerUi.settingsBar(page)).toBeVisible();
+    await expect(page.getByRole('group', { name: /PDF 페이지 영역/ })).toBeVisible();
+
+    const trigger = page.getByRole('button', { name: /^(텍스트 내보내기|export text)$/i });
+    await trigger.click();
+    const menu = await surfaceOf(page.getByRole('menu'));
+    expect(menu.color).toMatch(OPAQUE);
+    expect(menu.image).toBe('none');
+    expect(menu.blur).toBe('none');
   },
 );

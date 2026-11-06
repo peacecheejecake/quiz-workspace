@@ -14,6 +14,7 @@
 
 - **표면:** `--color-glass` alpha는 light `.7`, dark `.65`, `--glass-gradient` alpha는 light `.2`, dark `.05`, `--glass-blur`는 24px이다. 새 테마별 값 `--glass-brightness`(light 1.3, dark .7)가 blur한 배경을 표면 쪽 밝기로 밀어 글자 대비를 지킨다.
 - **Fallback:** reduced transparency·blur 미지원·모바일 sheet·full-screen paired dialog·태블릿 PDF 위 목차는 지금처럼 불투명 `--color-glass-solid`이고 blur가 없다.
+- **PDF 위:** PDF viewer가 화면에 있는 동안 모든 `glass-surface`는 gradient와 blur 없는 `--color-glass-solid`다. DOC-02 데스크톱의 side panel은 목차(inset, PDF를 덮지 않음)뿐이지만, 복귀 bar(`--z-side-panel` - 1, viewer는 `--z-popover`)·메뉴·toast는 PDF 위에 뜬다. `PdfPageDialog`와 `원본 비교`처럼 panel 안에 PDF가 있어도 같다. 옆의 풀이 panel도 그동안 단색이다.
 - **유리 안 토큰:** `.glass-surface` 안에서 `--color-surface-muted`는 `--color-surface-raised`(light 흰색, dark `#27313E`)로, `--color-accent`는 `--color-accent-on-glass`로 바뀐다. 회색 영역을 기능별로 고치지 않고 한 줄로 흰색이 된다. primary hover는 `--color-accent-pressed`로 한 단계 내려간다.
 - **유리 위 버튼:** secondary 버튼은 채움이 없고 경계는 유지한다. hover·pressed는 그대로 채운다. 목록 항목(AI 질문 출처·각주, 모의고사 목록·문제 행)도 채움이 없다. 입력·primary·toggle은 그대로다. 비활성 입력은 채움이 없다.
 - **하단·상단 고정 영역:** panel `.footer`와 `.pinned`, 풀이 footer에는 채움이 없다. body는 footer 뒤로 지나가지 않고 위에서 잘리므로(같은 flex column) hairline 구분선만 남긴다. AI 질문 composer는 `glass-surface`다. 뒤로 메시지가 지나가므로 blur가 글자를 지운다.
@@ -86,3 +87,6 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 
 ### UX12-GLASSBTN-AC09
 **Composer:** AI 질문 composer는 glass 표면이고 blur가 적용된다.
+
+### UX12-GLASSBTN-AC10
+**PDF 위 glass 없음:** PDF가 보이는 문서 화면에서 메뉴는 불투명 단색이고 gradient와 blur가 없다.
