@@ -279,8 +279,9 @@ def test_only_confirmed_live_questions_in_bank_order(seed: Any) -> None:
     assert draft["id"] not in by_id(view)
     assert view["counts"]["total"] == 3
     assert view["chapters"] == [
-        {"id": None, "number": None, "title": "챕터 없음", "document_id": None, "question_count": 3}
-    ]
+        {"id": None, "number": None, "title": "챕터 없음", "document_id": None, "question_count": 3,
+         "level": 1, "ancestors": []}
+    ]  # fmt: skip
 
 
 def test_chapter_groups_order_numbers_and_preview(seed: Any) -> None:
@@ -311,13 +312,15 @@ def test_chapter_groups_order_numbers_and_preview(seed: Any) -> None:
     doc = view["chapters"][0]["document_id"]
     assert view["chapters"] == [
         {"id": ch1, "number": 1, "title": "Chapter 1 Basics", "document_id": doc,
-         "question_count": 2},
-        {"id": ch2, "number": 2, "title": "2장 어텐션", "document_id": doc, "question_count": 1},
+         "question_count": 2, "level": 1, "ancestors": []},
+        {"id": ch2, "number": 2, "title": "2장 어텐션", "document_id": doc, "question_count": 1,
+         "level": 1, "ancestors": []},
         {"id": sec21, "number": 2, "title": "2.1 Scaled", "document_id": doc,
-         "question_count": 1},
-        {"id": ch3, "number": None, "title": "Appendix", "document_id": doc, "question_count": 1},
+         "question_count": 1, "level": 2, "ancestors": [{"id": ch2, "title": "2장 어텐션"}]},
+        {"id": ch3, "number": None, "title": "Appendix", "document_id": doc, "question_count": 1,
+         "level": 1, "ancestors": []},
         {"id": None, "number": None, "title": "챕터 없음", "document_id": None,
-         "question_count": 1},
+         "question_count": 1, "level": 1, "ancestors": []},
     ]  # fmt: skip
     items = by_id(view)
     assert items[sec_q["id"]]["chapter_id"] == sec21
