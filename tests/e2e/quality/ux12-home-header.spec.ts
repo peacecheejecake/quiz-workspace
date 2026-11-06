@@ -63,7 +63,7 @@ const scrollTo = async (page: Page, y: number) => {
 /** Seeding 100 books is slow and only the label's width matters here. */
 const showThreeDigitCount = (page: Page) =>
   trigger(page)
-    .locator('span')
+    .locator('span span')
     .evaluate((el) => {
       el.textContent = '100';
     });
@@ -97,7 +97,7 @@ test(
   async ({ page, workspaceFactory }) => {
     await ownerHome(page, workspaceFactory, 'ux12-hdr-01');
     await expect(trigger(page)).toHaveAttribute('aria-haspopup', 'menu');
-    await expect(trigger(page).locator('svg')).toHaveCount(1);
+    await expect(trigger(page).locator('svg:visible')).toHaveCount(1);
     await expect(
       main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i }),
     ).toHaveCount(0);

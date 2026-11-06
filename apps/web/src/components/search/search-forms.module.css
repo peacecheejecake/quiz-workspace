@@ -26,7 +26,7 @@
 /* 검색 · box · 필터 on the sticky line, right of 모의고사 with a little extra gap (UX12-HOMEFILTER).
    It takes the line's free space, so the box has room to open; closed, the buttons stay left. */
 .lineForm {
-  --search-button-size: var(--control-height-md);
+  --search-button-size: var(--home-icon-size, var(--control-height-md));
 
   flex: 1 1 0;
   min-width: calc(2 * var(--search-button-size) + var(--space-1));
@@ -200,19 +200,17 @@
 /* The narrow line (workspace-home.module.css) has no room left over. */
 @media (max-width: 539px) {
   .lineForm {
-    --search-button-size: var(--control-height-sm);
-
     margin-inline-start: var(--space-1);
   }
 }
 
-/* While it is open the box has the line to itself on these widths. */
+/* The open box takes only what the line's buttons leave. */
 @media (width < 768px) {
   .lineForm:has([data-open]) {
-    --search-button-size: var(--control-height-md);
-
-    flex-basis: 100%;
-    max-width: none;
     margin-inline-start: 0;
+  }
+
+  .searchLine[data-open] {
+    column-gap: var(--space-1);
   }
 }

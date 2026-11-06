@@ -309,33 +309,41 @@ test(
   },
 );
 
+/** Every button keeps its name and stays on one row, with no page overflow. */
+async function expectOneLine(page: Page): Promise<void> {
+  const parts = await Promise.all(
+    [
+      documentsButton(page),
+      mockExams(page),
+      homeUi.questionSearchButton(page),
+      filterButton(page),
+      main(page).getByRole('button', { name: /^(AI 질문|ask ai)$/i }),
+      homeUi.historyButton(page),
+      homeUi.shareButton(page),
+    ].map(box),
+  );
+  const centers = parts.map((part) => part.y + part.height / 2);
+  for (const center of centers) expect(Math.abs(center - (centers[0] ?? 0))).toBeLessThan(1);
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+}
+
+const expectRoomyBox = (page: Page, search: Locator) =>
+  expect.poll(async () => (await box(search)).width).toBeGreaterThanOrEqual(120);
+
 test.describe('375px', () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
   test(
-    'UX12-HOMEFILTER-AC08 seven buttons fit one line, the popover fits and search takes the line',
+    'UX12-HOMEFILTER-AC08 seven buttons fit one line, the popover fits and search takes what is left',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       await ownerHome(page, workspaceFactory, 'ux12-hf-08');
       await documentsButton(page)
-        .locator('span')
+        .locator('span span')
         .evaluate((el) => {
           el.textContent = '100';
         });
-      const parts = await Promise.all(
-        [
-          documentsButton(page),
-          mockExams(page),
-          homeUi.questionSearchButton(page),
-          filterButton(page),
-          main(page).getByRole('button', { name: /^(AI 질문|ask ai)$/i }),
-          homeUi.historyButton(page),
-          homeUi.shareButton(page),
-        ].map(box),
-      );
-      const centers = parts.map((part) => part.y + part.height / 2);
-      for (const center of centers) expect(Math.abs(center - (centers[0] ?? 0))).toBeLessThan(1);
-      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
+      await expectOneLine(page);
 
       const group = await openStatusFilters(page);
       const popover = await box(homeUi.searchSettings(page, 'questions'));
@@ -347,14 +355,32 @@ test.describe('375px', () => {
       await closeSearchOptions(page, 'questions');
 
       const search = await openQuestionSearch(page);
-      await expect.poll(async () => (await box(search)).width).toBeGreaterThan(200);
+      await expectRoomyBox(page, search);
+      await expectOneLine(page);
       const [field, filter] = await Promise.all([box(search), box(filterButton(page))]);
       expect(Math.abs(field.y + field.height / 2 - (filter.y + filter.height / 2))).toBeLessThan(1);
-      expect(await pageOverflow(page)).toBeLessThanOrEqual(0);
 
-      await homeUi.questionSearchButton(page).click();
-      await expect(mockExams(page)).toBeVisible();
-      await expect(homeUi.historyButton(page)).toBeVisible();
+      const close = homeUi.questionSearchButton(page);
+      await close.click();
+      await expect(close).toBeFocused();
+      await expect(mockExams(page)).toHaveText(/모의고사/);
+      await expect(mockExams(page).getByText('모의고사')).toHaveCSS('position', 'static');
+      await expectOneLine(page);
+    },
+  );
+});
+
+test.describe('360px', () => {
+  test.use({ viewport: { width: 360, height: 667 } });
+
+  test(
+    'UX12-HOMEFILTER-AC08 the open box keeps 120px at 360px with every button on the line',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      await ownerHome(page, workspaceFactory, 'ux12-hf-08n');
+      const search = await openQuestionSearch(page);
+      await expectRoomyBox(page, search);
+      await expectOneLine(page);
     },
   );
 });
