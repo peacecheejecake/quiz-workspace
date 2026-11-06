@@ -464,6 +464,7 @@ export function SequenceViewer({
       }}
       headerActions={header}
       footer={footer ? <div className={styles.footer}>{footer}</div> : undefined}
+      scrollKey={stepKey}
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
@@ -926,9 +927,14 @@ function useSolveStep({
   const formId = useId();
   const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  const submittedHere = useRef<string | null>(null);
   useEffect(() => {
-    // The submit button leaves: keep focus in the panel, on the result.
-    if (outcomeId) resultRef.current?.focus();
+    // The submit button leaves: keep focus in the panel, on the result. Coming back to a submitted
+    // position stays at the top (UX12-VIEW-AC06).
+    if (outcomeId && outcomeId === submittedHere.current) {
+      submittedHere.current = null;
+      resultRef.current?.focus();
+    }
   }, [outcomeId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -958,6 +964,7 @@ function useSolveStep({
         return;
       }
     }
+    if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
       result.ok
         ? { busy: null, outcome: result.data }

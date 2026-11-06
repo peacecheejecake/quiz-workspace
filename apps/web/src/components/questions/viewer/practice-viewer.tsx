@@ -361,9 +361,14 @@ export function PracticeViewer({
   const formId = useId();
   const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  const submittedHere = useRef<string | null>(null);
   useEffect(() => {
-    // The submit button leaves with the answer form: keep focus in the panel on the result.
-    if (outcomeId) resultRef.current?.focus();
+    // The submit button leaves with the answer form: keep focus in the panel on the result. A
+    // question reopened with its result stays at the top (UX12-VIEW-AC05).
+    if (outcomeId && outcomeId === submittedHere.current) {
+      submittedHere.current = null;
+      resultRef.current?.focus();
+    }
   }, [outcomeId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -385,6 +390,7 @@ export function PracticeViewer({
     if (result.ok && practiceResetVersion(workspaceId, qid) === resetVersion) {
       onGraded?.(qid, result.data.result);
     }
+    if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
       result.ok ? { busy: null, outcome: result.data } : { busy: null, error: result.message },
     );
@@ -495,6 +501,8 @@ export function PracticeViewer({
       closeLabel="패널 닫기"
       onCloseAutoFocus={onCloseAutoFocus}
       footer={footer}
+      // Not on close: the panel keeps its place while it animates out.
+      scrollKey={questionId ? opening.key : undefined}
       headerActions={
         view && !readOnly ? (
           <>
