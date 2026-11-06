@@ -1915,10 +1915,10 @@ def test_labels_mentioned_in_the_question_sentence_do_not_break_the_stem() -> No
 
 
 def test_extract_prompt_asks_for_item_lines_and_accepts_them() -> None:
-    assert EXTRACT_PROMPT_VERSION == "questions.extract/v4"
+    assert EXTRACT_PROMPT_VERSION == "questions.extract/v5"
     lines = ["1. 옳은 것은? ( )", "(가) 갑은", "을이다.", "(나) 병은 정이다.", "① (가)", "② (나)"]
     ((_, request),) = llm_requests(_doc(lines))
-    assert request.prompt_version == "questions.extract/v4"
+    assert request.prompt_version == "questions.extract/v5"
     assert "each item on its own line" in (request.system or "")
     client = FakeLLMClient()
     stem = "옳은 것은? ( )\n\n(가) 갑은 을이다.\n(나) 병은 정이다."

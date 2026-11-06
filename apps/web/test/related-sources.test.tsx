@@ -16,6 +16,7 @@ vi.mock('@/lib/documents/bff', async (original) => ({
   relayToApi: relay.relayToApi,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('@/components/documents/editor/pdf-viewer', () => ({ PdfViewer: () => null }));
 
 const bank = await import('../src/app/api/questions/[questionId]/related-sources/route');
 const mock = await import('../src/app/api/mock-exam-questions/[questionId]/related-sources/route');
@@ -185,11 +186,13 @@ describe('RELSRC-01 area', () => {
     expect(within(second).queryByText('문제 출처')).toBeNull();
     expect(within(second).getByText(/p\.4–5/)).toBeInTheDocument();
     expect(first.querySelector('mark')).toHaveTextContent('가나다');
-    expect(within(first).getByRole('link', { name: 'PDF' })).toHaveAttribute(
+    expect(screen.getByRole('status')).toHaveTextContent('관련 본문 2개');
+    await userEvent.click(within(first).getByRole('button', { name: 'PDF' }));
+    const dialog = await screen.findByRole('dialog', { name: '원본 PDF' });
+    expect(within(dialog).getByRole('link', { name: '전체 문서 보기' })).toHaveAttribute(
       'href',
       expect.stringContaining('page=2'),
     );
-    expect(screen.getByRole('status')).toHaveTextContent('관련 본문 2개');
   });
 
   it('collapses and expands by the toggle, reusing the loaded list', async () => {

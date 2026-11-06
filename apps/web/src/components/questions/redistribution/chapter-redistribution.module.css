@@ -71,22 +71,6 @@
   min-width: 0;
 }
 
-.option {
-  display: inline-block;
-}
-
-.option[data-depth='2'] {
-  padding-inline-start: var(--space-3);
-}
-
-.option[data-depth='3'] {
-  padding-inline-start: var(--space-6);
-}
-
-.option[data-depth='4'] {
-  padding-inline-start: var(--space-8);
-}
-
 .summary {
   margin: 0;
   font-weight: var(--font-weight-semibold);

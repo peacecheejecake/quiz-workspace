@@ -302,10 +302,10 @@ button.segment:focus-visible {
 .viewer {
   position: fixed;
   z-index: var(--z-popover);
-  inset: 0;
+  inset: var(--qz-keyboard-offset-top) 0 auto;
   display: block;
   box-sizing: border-box;
-  height: 100dvh;
+  height: calc(100dvh - var(--qz-keyboard-offset-top) - var(--qz-keyboard-inset));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--color-surface);
 }

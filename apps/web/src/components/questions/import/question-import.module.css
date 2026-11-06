@@ -98,6 +98,12 @@
   gap: var(--space-3);
 }
 
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .selectionBar {
   display: flex;
   flex-wrap: wrap;
@@ -191,8 +197,10 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* A bounded height: the viewer scrolls itself, or it could not stay on the draft's page. */
 .compareViewer {
-  min-height: 24rem;
+  flex: none;
+  height: max(24rem, 70dvh);
 }
 
 /* CHAPTER-MAP: the chapter a draft is registered under. */

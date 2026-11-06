@@ -48,10 +48,14 @@ export interface RelayOptions {
   readonly signal?: AbortSignal;
   /** Pass a successful file response through: its `Content-Disposition` (DOC-03 export). */
   readonly attachment?: boolean;
+  /** Pass FastAPI's `Server-Timing` through and add this relay's time as `bff` (UX12-OPEN). */
+  readonly serverTiming?: boolean;
 }
 
 /** `attachment` Content-Disposition values FastAPI sends (no CR/LF, bounded). */
 const ATTACHMENT = /^attachment;[\x20-\x7e]{1,2048}$/;
+/** `Server-Timing` values FastAPI sends: durations and a statement count only. */
+const SERVER_TIMING = /^[\w;=.", ]{1,256}$/;
 
 async function readJsonBody(request: Request, maxBytes: number): Promise<string | null> {
   if (Number(request.headers.get('content-length') ?? 0) > maxBytes) return null;
@@ -69,6 +73,7 @@ async function readJsonBody(request: Request, maxBytes: number): Promise<string 
 
 /** Forwards to `{API}/api/v1{path}` as the current user; `path` must be built from validated ids. */
 export async function relayToApi(path: string, options: RelayOptions): Promise<Response> {
+  const startedAt = performance.now();
   let body: string | undefined;
   if (options.body) {
     const json = await readJsonBody(options.body, options.maxBodyBytes ?? MAX_JSON_BODY_BYTES);
@@ -115,6 +120,14 @@ export async function relayToApi(path: string, options: RelayOptions): Promise<R
   }
 
   const headers = new Headers(NO_STORE);
+  if (options.serverTiming) {
+    const timing = upstream.headers.get('server-timing');
+    const relay = `bff;dur=${(performance.now() - startedAt).toFixed(1)}`;
+    headers.set(
+      'Server-Timing',
+      timing && SERVER_TIMING.test(timing) ? `${timing}, ${relay}` : relay,
+    );
+  }
   const contentType = upstream.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
   // Rate limits (429) and maintenance (503) tell the browser when to come back.

@@ -92,6 +92,7 @@ import {
 import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
 import {
+  QuestionFigures,
   QuestionSourceButton,
   QuestionSourceDialog,
   useQuestionSource,
@@ -1194,6 +1195,7 @@ function useSolveStep({
             kind="answer"
             stem={session?.stem ?? item.stem ?? ''}
             question={shownQuestion}
+            figures={item.question_id ? <QuestionFigures source={sourcePreview} /> : null}
             answer={answer}
             disabled={!canAnswer || work.busy !== null}
             onAnswerChange={(next) => {

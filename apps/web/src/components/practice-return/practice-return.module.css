@@ -3,7 +3,7 @@
 .notice {
   position: fixed;
   z-index: calc(var(--z-side-panel) - 1);
-  bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom) + var(--qz-keyboard-inset));
   left: 50%;
   transform: translateX(-50%);
 }
@@ -11,7 +11,8 @@
 .message,
 .notice {
   bottom: calc(
-    var(--space-4) + env(safe-area-inset-bottom) + 44px + 2 * var(--space-1) + var(--space-2)
+    var(--space-4) + env(safe-area-inset-bottom) + var(--qz-keyboard-inset) + 44px + 2 *
+      var(--space-1) + var(--space-2)
   );
   max-width: calc(100vw - 2 * var(--space-4));
   padding: var(--space-1) var(--space-2);

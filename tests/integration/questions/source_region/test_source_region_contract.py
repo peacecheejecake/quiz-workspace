@@ -39,6 +39,7 @@ REGION_KEYS = {
     "question_id",
     "mock_exam_question_id",
     "regions",
+    "figures",
     "document_id",
     "document_revision_id",
     "page",
@@ -305,7 +306,8 @@ def test_qsrc_01_c01_response_names_documents_pages_and_boxes_only(seed: Any) ->
     rig = Rig(seed, "c01")
     res = region(rig.owner, rig.q1)
     body = ok(res)
-    assert set(body) == {"question_id", "regions"}, body
+    assert set(body) == {"question_id", "regions", "figures"}, body
+    assert body["figures"] == []
     assert body["question_id"] == rig.q1
     assert not keys(body) - REGION_KEYS, keys(body) - REGION_KEYS
     assert not keys(body) & (ANSWER_KEYS | TEXT_KEYS)
@@ -510,7 +512,7 @@ def test_qsrc_01_c04_mock_question_follows_its_origin_question(seed: Any) -> Non
     imported, second, plain = by_origin[rig.q1], by_origin[rig.q5], by_origin[manual["id"]]
 
     body = ok(mock_region(rig.owner, imported["id"]))
-    assert set(body) == {"mock_exam_question_id", "regions"}, body
+    assert set(body) == {"mock_exam_question_id", "regions", "figures"}, body
     assert body["mock_exam_question_id"] == imported["id"]
     assert body["regions"] == origin["regions"], "the origin question's regions"
     assert not keys(body) - REGION_KEYS
@@ -576,3 +578,182 @@ def test_qsrc_01_c05_no_new_table_and_the_pdf_relay_keeps_its_permissions(seed: 
     # The practice DTO never carries a source or region field (QPLAY-01-AC01).
     started = rig.owner.ok("POST", f"/questions/{rig.q1}/practice-sessions", {}, (201,))
     assert not [k for k in keys(started) if k in {"sources", "regions", "bbox", "locations"}]
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-REEXTRACT C05/C06: figures shown above the options
+# ---------------------------------------------------------------------------------------------
+
+
+def inside(box: dict[str, float], top: float = 4.0, height: float = 6.0) -> dict[str, float]:
+    """A box inside `box`, `top` points below its top edge."""
+    return {
+        "x0": box["x0"] + 2,
+        "y0": box["y0"] + top,
+        "x1": box["x1"] - 2,
+        "y1": box["y0"] + top + height,
+    }
+
+
+def add_block(
+    rig: Rig,
+    question_id: str,
+    page: int,
+    box: dict[str, float],
+    kind: str,
+    text: str = "",
+) -> str:
+    """A block of the paper's revision; returns its id."""
+    block = f"fig-{uuid.uuid4()}"
+    with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
+        # Past the published-revision guard: the synthetic paper prints no images.
+        conn.execute("set session_replication_role = replica")
+        conn.execute(
+            "insert into public.content_blocks (workspace_id, document_id, document_revision_id, "
+            "block_id, ordinal, block_type, text, page, provenance) "
+            "select d.workspace_id, d.id, d.active_revision_id, %s, "
+            "(select max(c.ordinal) + 1 from public.content_blocks c "
+            "where c.document_revision_id = d.active_revision_id), %s, %s, %s, %s::jsonb "
+            "from public.documents d where d.id = %s",
+            (
+                block,
+                kind,
+                text,
+                page,
+                json.dumps({"locations": [{"page": page, "bbox": box}]}),
+                rig.paper,
+            ),
+        )
+    return block
+
+
+def add_location(question_id: str, page: int, box: dict[str, float], block: str | None) -> None:
+    location: dict[str, Any] = {"page": page, "bbox": box}
+    if block is not None:
+        location["block_id"] = block
+    _admin(
+        "update public.question_sources set locations = locations || %s::jsonb "
+        "where question_id = %s and import_run_id is not null",
+        (json.dumps([location]), question_id),
+    )
+
+
+def add_figure(
+    rig: Rig, question_id: str, box: dict[str, float], kind: str = "image", page: int = 1
+) -> None:
+    add_location(question_id, page, box, add_block(rig, question_id, page, box, kind))
+
+
+def test_ux12_reextract_c05_figures_are_the_images_inside_the_question(seed: Any) -> None:
+    rig = Rig(seed, "fig-c05")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    lower, upper = inside(own, top=9), inside(own, top=2)
+    add_figure(rig, rig.q1, lower)
+    add_figure(rig, rig.q1, upper)
+    # A caption is text, even inside the question.
+    add_figure(rig, rig.q1, inside(own, top=5), kind="text")
+    # A location whose block no longer exists.
+    add_location(rig.q1, 1, inside(own, top=3), "fig-unknown")
+
+    body = ok(region(rig.owner, rig.q1))
+    assert [f["bbox"] for f in body["figures"]] == [upper, lower]
+    assert body["regions"][0]["bbox"] == own
+    for figure in body["figures"]:
+        assert set(figure) == {"document_id", "document_revision_id", "page", "bbox"}
+        assert figure["document_id"] == rig.paper
+        assert figure["page"] == 1
+    assert not keys(body) - REGION_KEYS
+    assert not keys(body) & (ANSWER_KEYS | TEXT_KEYS)
+    assert ok(region(rig.member("fig-c05-viewer"), rig.q1)) == body
+
+    _admin("update public.documents set deleted_at = now() where id = %s", (rig.paper,))
+    not_found(region(rig.owner, rig.q1))
+
+
+def test_ux12_reextract_c05_an_image_read_after_the_answer_is_not_a_figure(seed: Any) -> None:
+    """A captioned image in the explanation can attach to the question through its label: it is
+    in the question's evidence but outside the blocks read before the inline answer."""
+    rig = Rig(seed, "fig-leak")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    below = {"x0": own["x0"], "y0": own["y1"] + 20, "x1": own["x1"], "y1": own["y1"] + 60}
+    add_figure(rig, rig.q1, below)
+    overlapping = {**below, "y0": own["y1"] - 2}
+    add_figure(rig, rig.q1, overlapping)
+    add_figure(rig, rig.q1, inside(own), page=2)
+    assert ok(region(rig.owner, rig.q1))["figures"] == []
+
+
+def test_ux12_reextract_c06_publish_carries_the_figure_and_mocks_follow(seed: Any) -> None:
+    rig = Rig(seed, "fig-c06")
+    drafts = rig.owner.ok("GET", f"/question-imports/{rig.run}/drafts")["items"]
+    draft = next(d for d in drafts if truth_stem(2) in d["payload"]["stem"])
+    own = draft["payload"]["evidence"][0]["locations"][0]
+    box = inside(own["bbox"])
+    block = add_block(rig, rig.q1, own["page"], box, "image")
+    entry = {
+        "document_id": rig.paper,
+        "revision_id": draft["payload"]["evidence"][0]["revision_id"],
+        "block_ids": [block],
+        "locations": [{"page": own["page"], "bbox": box, "block_id": block}],
+    }
+    _admin(
+        "update public.question_drafts set payload = jsonb_set(payload, '{evidence}', "
+        "payload -> 'evidence' || %s::jsonb) where id = %s",
+        (json.dumps([entry]), draft["id"]),
+    )
+    fresh = rig.owner.ok("GET", f"/question-imports/{rig.run}/drafts")["items"]
+    current = next(d for d in fresh if d["id"] == draft["id"])
+    published = rig.owner.ok(
+        "POST",
+        f"/question-imports/{rig.run}/publish",
+        {"drafts": [{"draft_id": draft["id"], "version": current["version"]}], "approve": True},
+        (200,),
+    )
+    question = published["items"][0]["question_id"]
+    body = ok(region(rig.owner, question))
+    assert [f["bbox"] for f in body["figures"]] == [box]
+
+    [mock] = shuffle_exam(rig.owner, rig.ws, [question])
+    assert ok(mock_region(rig.owner, mock["id"]))["figures"] == body["figures"]
+    set_variation(mock["id"], "PARAPHRASE")
+    not_found(mock_region(rig.owner, mock["id"]))
+
+
+# ---------------------------------------------------------------------------------------------
+# QSRC-01-C06: a region never reaches an inline answer line
+# ---------------------------------------------------------------------------------------------
+
+
+def test_qsrc_01_c06_evidence_read_after_the_answer_cannot_stretch_the_region(seed: Any) -> None:
+    """A captioned image in the explanation reaches the question's evidence through a label. The
+    union with it used to span the answer line printed between the two."""
+    rig = Rig(seed, "c06-stretch")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    line = {"x0": own["x0"], "y0": own["y1"] + 4, "x1": own["x1"], "y1": own["y1"] + 16}
+    add_block(rig, rig.q1, 1, line, "text", "정답: ②")
+    below = {"x0": own["x0"], "y0": own["y1"] + 30, "x1": own["x1"], "y1": own["y1"] + 70}
+    add_figure(rig, rig.q1, below)
+
+    [only] = ok(region(rig.owner, rig.q1))["regions"]
+    assert only["bbox"] == own
+    assert only["bbox"]["y1"] <= line["y0"]
+
+
+def test_qsrc_01_c06_a_region_holding_an_answer_line_is_not_shown(seed: Any) -> None:
+    """The parser can put the last option and `정답: ②` in one block, and a question that wraps
+    between columns has a union crossing the answer: nothing is shown rather than the answer."""
+    rig = Rig(seed, "c06-holds")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    add_figure(rig, rig.q1, inside(own, top=2))
+    add_block(rig, rig.q1, 1, inside(own, top=9), "text", "④ 침전\n[정답] ②\n해설: 증발이다")
+    not_found(region(rig.owner, rig.q1))
+
+    other = ok(region(rig.owner, rig.q5))
+    assert other["regions"], "only the page with the answer line goes"
+
+
+def test_qsrc_01_c06_asking_for_the_answer_is_not_an_answer_line(seed: Any) -> None:
+    rig = Rig(seed, "c06-asking")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    add_block(rig, rig.q1, 1, inside(own), "text", "다음 중 정답을 고르시오.\n정답은 몇 개인가?")
+    assert ok(region(rig.owner, rig.q1))["regions"][0]["bbox"] == own

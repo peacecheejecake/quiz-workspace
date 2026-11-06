@@ -33,6 +33,8 @@ export interface ImportScreenData {
   readonly drafts: readonly ReviewDraft[];
   /** The workspace's book chapters: the draft chapter picker (CHAPTER-MAP). */
   readonly chapters: readonly BookChapterOption[];
+  /** Re-extracted runs: earlier numbers with no draft here (UX12-REEXTRACT). */
+  readonly missingPrevious?: readonly number[];
   /** When the run was read (ISO): a registration that ends later is reported on arrival. */
   readonly loadedAt: string;
   /** The newest run or its drafts could not be loaded (the screen offers a reload). */
@@ -111,6 +113,9 @@ export async function loadLatestImport(
     ).summaries.map(summaryOf),
     drafts,
     chapters: summaries.data.chapters ?? [],
+    ...(summaries.data.missing_previous?.length
+      ? { missingPrevious: summaries.data.missing_previous }
+      : {}),
     loadedAt,
     loadFailed: false,
   };

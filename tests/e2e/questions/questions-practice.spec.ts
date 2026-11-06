@@ -55,6 +55,7 @@ import {
   seedGradedAttempt,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   startPractice,
   submitPractice,
   test,
@@ -532,9 +533,9 @@ test(
 );
 
 /**
- * Counts the page's question-content loads: server-action POSTs (`Next-Action`, the BFF relay of
- * the practice session) and any browser call to the API. Router RSC refreshes of the overview
- * are not question content.
+ * Counts the page's question-content loads: server-action POSTs (`Next-Action`), the BFF relay of
+ * the panel's opening call (UX12-OPEN) and any browser call to the API. Router RSC refreshes of the
+ * overview are not question content.
  */
 function countContentLoads(page: Page): { count: () => number; stop: () => void } {
   let n = 0;
@@ -542,6 +543,7 @@ function countContentLoads(page: Page): { count: () => number; stop: () => void 
   const onRequest = (req: Request) => {
     const url = new URL(req.url());
     if (req.method() === 'POST' && req.headers()['next-action'] !== undefined) n += 1;
+    else if (url.pathname.endsWith('/practice-open')) n += 1;
     else if (url.host === api.host) n += 1;
   };
   page.on('request', onRequest);
@@ -905,7 +907,8 @@ test(
     await expect(detail).toContainText(v1Stem);
 
     await expect(detailUi.sourcesHeading(detail)).toBeVisible();
-    const link = detail.getByRole('link', { name: /2–3쪽|pages? 2/i });
+    await detail.getByRole('button', { name: /2–3쪽|pages? 2/i }).click();
+    const link = sourcePdfUi.fullDocument(sourcePdfUi.dialog(page));
     await expect(link).toHaveAttribute(
       'href',
       `/workspaces/${ws.id}/documents/${documentId}?page=2`,

@@ -23,6 +23,7 @@ export type ImportRun = Schemas['ImportRun'];
 export type ImportRegistration = Schemas['ImportRegistration'];
 export type BookChapterOption = Schemas['BookChapterOption'];
 export type DraftDuplicate = Schemas['DraftDuplicate'];
+type DraftPrevious = Schemas['DraftPrevious'];
 export type ChapterMatch = NonNullable<ImportDraft['chapter_match']>;
 
 /** The book chapter an import draft is registered under (CHAPTER-MAP) and why. */
@@ -111,6 +112,8 @@ export interface ReviewDraft {
   readonly chapter?: DraftChapterInfo;
   /** PDF import drafts not registered yet: the same question exists (UX7-DEDUP). */
   readonly duplicateOf?: DraftDuplicate | null;
+  /** Re-extracted runs: what the draft replaces, null = new (UX12-REEXTRACT). */
+  readonly previous?: DraftPrevious | null;
 }
 
 /**
@@ -130,6 +133,7 @@ export interface DraftSummary extends Pick<
   | 'answerMissing'
   | 'issues'
   | 'duplicateOf'
+  | 'previous'
 > {
   /** PDF import drafts only: the chapter it registers under (null = none). */
   readonly chapter?: { readonly chapter: { readonly id: string } | null };
@@ -196,6 +200,7 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
             sourceTitle: draft.source_chapter_title ?? null,
           },
           duplicateOf: draft.duplicate_of ?? null,
+          previous: draft.previous ?? null,
         }),
   };
 }

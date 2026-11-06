@@ -7,9 +7,9 @@
 // registration. Read-only users (and registered drafts) see the text only.
 //
 // Every draft has one, and a real import has hundreds of drafts over a book outline of hundreds
-// of chapters: the picker renders its options only while open (`lazyOptions`, QIMP-REVIEW-SCALE —
-// a closed Radix Select renders all of them, which took the review page to >3 GB and crashed it).
-import { Select } from '@quiz/ui';
+// of chapters: `ChapterPicker` renders the tree only while open, and all drafts share one `nodes`
+// array (QIMP-REVIEW-SCALE: a closed Radix Select with every option took the review page to >3 GB).
+import { ChapterPicker, type ChapterPickerNode } from '@quiz/ui';
 import {
   chapterHint,
   NO_DRAFT_CHAPTER,
@@ -23,22 +23,18 @@ export interface DraftChapterFieldProps {
   readonly number: number;
   readonly info: DraftChapterInfo;
   readonly options: readonly BookChapterOption[];
+  /** `options` as the tree (shared by every draft). */
+  readonly nodes: readonly ChapterPickerNode[];
   readonly readOnly: boolean;
   readonly disabled?: boolean;
   readonly onChange: (chapterId: string | null) => void;
-}
-
-function optionLabel(option: BookChapterOption, withDocument: boolean): string {
-  const indent = option.level > 1 ? '  '.repeat(option.level - 1) : '';
-  return withDocument
-    ? `${indent}${option.title} (${option.document_title})`
-    : `${indent}${option.title}`;
 }
 
 export function DraftChapterField({
   number,
   info,
   options,
+  nodes,
   readOnly,
   disabled = false,
   onChange,
@@ -52,29 +48,17 @@ export function DraftChapterField({
       </p>
     );
   }
-  const multiDocs = new Set(options.map((o) => o.document_id)).size > 1;
-  const choices = [
-    { value: NO_DRAFT_CHAPTER, label: '챕터 없음' },
-    ...options.map((o) => ({
-      value: o.id,
-      label: optionLabel(o, multiDocs),
-      textValue: o.title,
-    })),
-  ];
+  const leading = [{ value: NO_DRAFT_CHAPTER, label: '챕터 없음' }];
   if (info.chapter && !options.some((o) => o.id === info.chapter?.id)) {
-    choices.push({
-      value: info.chapter.id,
-      label: info.chapter.title,
-      textValue: info.chapter.title,
-    });
+    leading.push({ value: info.chapter.id, label: info.chapter.title });
   }
   return (
     <div className={styles.chapterField}>
-      <Select
+      <ChapterPicker
         label={`${number}번 문제 챕터`}
-        options={choices}
+        leading={leading}
+        nodes={nodes}
         value={info.chapter?.id ?? NO_DRAFT_CHAPTER}
-        lazyOptions
         disabled={disabled}
         onValueChange={(value) => onChange(value === NO_DRAFT_CHAPTER ? null : value)}
         {...(hint ? { description: hint } : {})}

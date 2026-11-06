@@ -17,10 +17,10 @@
 import {
   BackLink,
   Button,
+  ChapterPicker,
   Checkbox,
   ConfirmDialog,
   FloatingSidePanel,
-  Select,
   Skeleton,
   useUnsavedChanges,
 } from '@quiz/ui';
@@ -31,6 +31,7 @@ import {
   createRedistributionApi,
   movePlan,
   NO_CHAPTER_TITLE,
+  NO_TARGET_CHAPTER,
   NO_RECOMMENDATION_LABELS,
   previewEdited,
   previewSummary,
@@ -38,6 +39,7 @@ import {
   REDIST_FAILURE_MESSAGES,
   redistributionGroups,
   targetOptions,
+  targetPickerNodes,
   type AssignmentItem,
   type RedistFailureKind,
   type RedistributionApi,
@@ -118,12 +120,14 @@ type Notice = { readonly tone: 'status' | 'alert'; readonly text: string } | nul
 /** The fixed height of a recommendation row once the list is virtualized (px). */
 const PREVIEW_ROW_PX = 128;
 
+const TARGET_LEADING = [{ value: NO_TARGET_CHAPTER, label: NO_CHAPTER_TITLE }];
+
 const CONFIRM_DESCRIPTION =
   '옮긴 장과 새 장의 정리 노트가 최신이 아니게 됩니다. 문제 내용과 풀이 기록은 바뀌지 않습니다.';
 
 /**
  * Safari's default Tab order skips buttons (the QuestionRangePicker gives its own an explicit
- * tabIndex for the same reason): every button-like control of the dialog, the kit's Select
+ * tabIndex for the same reason): every button-like control of the dialog, the kit's picker
  * trigger and checkboxes included, and of its confirmation gets `tabindex="0"` so the keyboard
  * path reaches `옮길 챕터`, `이동` and `옮기기` there too.
  */
@@ -255,6 +259,7 @@ function RedistributionContent({
   const data = list.status === 'ready' ? list.data : null;
   const groups = useMemo(() => (data ? redistributionGroups(data) : null), [data]);
   const options = useMemo(() => (data ? targetOptions(data) : []), [data]);
+  const targetNodes = useMemo(() => (data ? targetPickerNodes(data) : []), [data]);
   const listedSelected = data ? data.items.filter((q) => selected.has(q.question_id)).length : 0;
   const plan = data ? movePlan(data, selected, target) : null;
   const targetTitle = options.find((o) => o.value === target)?.title ?? NO_CHAPTER_TITLE;
@@ -407,21 +412,14 @@ function RedistributionContent({
                 직접 옮기기
               </h3>
               <div className={styles.row}>
-                <Select
+                <ChapterPicker
                   label="옮길 챕터"
                   placeholder="챕터 고르기"
                   fieldClassName={styles.target}
-                  options={options.map((o) => ({
-                    value: o.value,
-                    textValue: o.title,
-                    label: (
-                      <span className={styles.option} data-depth={Math.min(o.depth, 4)}>
-                        {o.documentTitle ? `${o.title} · ${o.documentTitle}` : o.title}
-                      </span>
-                    ),
-                  }))}
-                  {...(target !== null ? { value: target } : { value: '' })}
-                  onValueChange={(value) => value && setTarget(value)}
+                  leading={TARGET_LEADING}
+                  nodes={targetNodes}
+                  value={target ?? ''}
+                  onValueChange={setTarget}
                 />
                 <Button
                   ref={moveRef}

@@ -18,7 +18,6 @@
 // one checkbox and "전체 선택" only the checkboxes that change — never the drafts' content (stem,
 // options, chapter picker). The screen keeps its callbacks and `renderExtra` stable for this.
 import { AlertIcon, Badge, Button, CheckIcon, Checkbox } from '@quiz/ui';
-import Link from 'next/link';
 import {
   createContext,
   memo,
@@ -69,7 +68,13 @@ export interface QuestionDraftReviewProps {
   /** Opens the source comparison for the draft (e.g. the PDF page next to it). */
   readonly onCompare?: (draft: ReviewDraft) => void;
   /** Deep link of a source page (e.g. the document viewer at `?page=`); null = plain text. */
-  readonly pageHref?: (draft: ReviewDraft, page: number) => string | null;
+  /**
+   * The draft's source page, in place (UX12-SOURCE). Pages are plain text without it, or for a
+   * draft with no document of its own or from `sourceDocumentId`.
+   */
+  readonly onOpenPage?: (draft: ReviewDraft, page: number) => void;
+  /** The document of a draft without its own, from the import run. */
+  readonly sourceDocumentId?: string | null;
   /** Extra content per draft (e.g. a generation diff), rendered under the answer. */
   readonly renderExtra?: (draft: ReviewDraft) => ReactNode;
 }
@@ -108,7 +113,8 @@ export function QuestionDraftReview({
   onSelectChange,
   onEdit,
   onCompare,
-  pageHref,
+  onOpenPage,
+  sourceDocumentId,
   renderExtra,
 }: QuestionDraftReviewProps) {
   const [store] = useState(() => new SelectionStore(selected));
@@ -127,7 +133,8 @@ export function QuestionDraftReview({
             onSelectChange={onSelectChange}
             onEdit={onEdit}
             onCompare={onCompare}
-            pageHref={pageHref}
+            onOpenPage={onOpenPage}
+            sourceDocumentId={sourceDocumentId}
             renderExtra={renderExtra}
           />
         ))}
@@ -145,7 +152,8 @@ interface DraftItemProps {
   readonly onSelectChange?: QuestionDraftReviewProps['onSelectChange'];
   readonly onEdit?: QuestionDraftReviewProps['onEdit'];
   readonly onCompare?: QuestionDraftReviewProps['onCompare'];
-  readonly pageHref?: QuestionDraftReviewProps['pageHref'];
+  readonly onOpenPage?: QuestionDraftReviewProps['onOpenPage'];
+  readonly sourceDocumentId?: string | null | undefined;
   readonly renderExtra?: QuestionDraftReviewProps['renderExtra'];
 }
 
@@ -158,7 +166,8 @@ const DraftItem = memo(function DraftItem({
   onSelectChange,
   onEdit,
   onCompare,
-  pageHref,
+  onOpenPage,
+  sourceDocumentId,
   renderExtra,
 }: DraftItemProps) {
   const n = draftNumber(draft);
@@ -264,16 +273,22 @@ const DraftItem = memo(function DraftItem({
         {draft.pages.length > 0 ? (
           <p className={styles.pages}>
             <span className={styles.noteLabel}>원본</span>
-            {draft.pages.map((page) => {
-              const href = pageHref?.(draft, page) ?? null;
-              return href ? (
-                <Link key={page} href={href} className={styles.pageLink}>
+            {draft.pages.map((page) =>
+              onOpenPage && (draft.sourceDocumentId ?? sourceDocumentId) ? (
+                <button
+                  key={page}
+                  type="button"
+                  className={styles.pageLink}
+                  aria-haspopup="dialog"
+                  data-compare-page={`${draft.id}:${page}`}
+                  onClick={() => onOpenPage(draft, page)}
+                >
                   {page}쪽
-                </Link>
+                </button>
               ) : (
                 <span key={page}>{page}쪽</span>
-              );
-            })}
+              ),
+            )}
           </p>
         ) : null}
         <div className={styles.actions}>

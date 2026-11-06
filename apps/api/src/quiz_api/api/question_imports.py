@@ -13,6 +13,11 @@
     GET   /question-imports/{id}                 any member
     POST  /question-imports/{id}/retry           editor+; a failed/cancelled run gets a new job
                                                  (same run) -> 202; `Idempotency-Key`
+    POST  /question-imports/{id}/re-extract      editor+; a new run with fresh drafts on the same
+                                                 revision (UX12-REEXTRACT): the worker reads the
+                                                 stored parse artifact, registered questions stay;
+                                                 one running run per document (409
+                                                 `import-running`); `Idempotency-Key`
     GET   /question-imports/{id}/drafts          any member; drafts in position order, each with
                                                  the book chapter it is registered under
                                                  (suggested or chosen, CHAPTER-MAP), plus the
@@ -90,6 +95,7 @@ from quiz_api.authz import (
 )
 from quiz_api.db import get_db_session
 from quiz_api.draft_chapters import ChapterChoice, DraftChapter, draft_chapters
+from quiz_api.draft_reextract import ChangedField, changed_fields
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
 from quiz_api.jobs import JobMessage, JobPublisher
@@ -174,6 +180,9 @@ class ImportRun(BaseModel):
     registration_job_id: uuid.UUID | None = Field(
         description="The newest registration (QIMP-JOB) of this run, if any: read its progress "
         "at `GET /question-imports/{id}/registrations/{registration_id}`."
+    )
+    reextract_of: uuid.UUID | None = Field(
+        default=None, description="The run this one reads again (`다시 추출`, UX12-REEXTRACT)."
     )
     created_at: datetime
     updated_at: datetime
@@ -332,6 +341,11 @@ class ImportDraft(BaseModel):
     duplicate_of: DraftDuplicate | None = Field(
         default=None, description="Import drafts not registered yet: the same question exists."
     )
+    previous: DraftPrevious | None = Field(
+        default=None,
+        description="Drafts of a re-extracted run (`다시 추출`): what the draft replaces; null "
+        "when no earlier draft has its extraction id.",
+    )
 
 
 class ImportDraftList(BaseModel):
@@ -365,6 +379,19 @@ class DraftDuplicate(BaseModel):
     )
 
 
+class DraftPrevious(BaseModel):
+    """What a re-extracted draft replaces (UX12-REEXTRACT, C04): the earlier draft with the same
+    extraction id, read through to its live CONFIRMED question when it has one. Field names only:
+    the content stays with the question and the draft."""
+
+    question_id: uuid.UUID | None = Field(description="The live CONFIRMED question, if any.")
+    revision_id: uuid.UUID | None = Field(
+        description="Its active revision (`base_revision_id` of the replace path's archive)."
+    )
+    number: int | None = Field(description="Its number, else the earlier draft's N번.")
+    changed: list[ChangedField] = Field(description="What differs; empty when nothing does.")
+
+
 class ImportDraftSummary(BaseModel):
     """A draft without its content (QIMP-PAGING): no stem, options, answers or explanation —
     only what selecting, counting and registering it needs."""
@@ -387,6 +414,9 @@ class ImportDraftSummary(BaseModel):
     duplicate_of: DraftDuplicate | None = Field(
         default=None, description="As `ImportDraft.duplicate_of` (UX7-DEDUP)."
     )
+    previous: DraftPrevious | None = Field(
+        default=None, description="As `ImportDraft.previous` (UX12-REEXTRACT)."
+    )
     block_ids: list[str] = Field(
         default_factory=list,
         description="The draft's source blocks: present only with `include_blocks=true` "
@@ -398,6 +428,10 @@ class ImportDraftSummaryList(BaseModel):
     items: list[ImportDraftSummary] = Field(description="Every draft of the run, source order.")
     chapters: list[BookChapterOption] = Field(
         default_factory=list, description="As `ImportDraftList.chapters`."
+    )
+    missing_previous: list[int] = Field(
+        default_factory=list,
+        description="Re-extracted runs: numbers of earlier drafts with no draft here.",
     )
 
 
@@ -636,6 +670,7 @@ def _run_out(run: RunRecord) -> ImportRun:
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,
+        reextract_of=run.reextract_of,
     )
 
 
@@ -770,10 +805,78 @@ def draft_duplicates(
     return out
 
 
+def draft_previous(
+    repo: QuestionImportRepository, run: RunRecord, drafts: list[DraftRecord]
+) -> tuple[dict[uuid.UUID, DraftPrevious], list[int]]:
+    """What each draft of a re-extracted run replaces, and the numbers of the earlier drafts it
+    no longer has (the second only means something for all drafts of the run). Earlier runs are
+    read newest first, so a draft compares with the newest earlier draft of its extraction id,
+    or with the live CONFIRMED question any of them was registered as."""
+    if run.reextract_of is None:
+        return {}, []
+    confirmed = {
+        q.id: q for q in QuestionDuplicateRepository(repo.session).confirmed(run.workspace_id)
+    }
+    earlier: dict[str, DraftRecord] = {}
+    registered: dict[str, Any] = {}
+    for run_id in repo.earlier_run_ids(run):
+        for record in repo.list_drafts(run_id):
+            key = parse_payload(record.payload).id
+            earlier.setdefault(key, record)
+            if record.published_question_id in confirmed:
+                registered.setdefault(key, confirmed[record.published_question_id])
+    out: dict[uuid.UUID, DraftPrevious] = {}
+    keys: set[str] = set()
+    for record in drafts:
+        parsed = parse_payload(record.payload)
+        keys.add(parsed.id)
+        content = _content(record, parsed)
+        old_draft = earlier.get(parsed.id)
+        question = registered.get(parsed.id)
+        if question is not None:
+            out[record.id] = DraftPrevious(
+                question_id=question.id,
+                revision_id=question.revision_id,
+                number=question.question_number,
+                changed=changed_fields(
+                    content,
+                    question.question_type,
+                    question.stem,
+                    [(o["id"], o["text"]) for o in question.options],
+                    question.correct_option_ids,
+                    question.accepted_answers,
+                    question.rubric,
+                ),
+            )
+        elif old_draft is not None:
+            old = _content(old_draft, parse_payload(old_draft.payload))
+            out[record.id] = DraftPrevious(
+                question_id=None,
+                revision_id=None,
+                number=_draft_number(old_draft),
+                changed=changed_fields(
+                    content,
+                    old.question_type,
+                    old.stem,
+                    old.options,
+                    old.correct_option_ids,
+                    old.accepted_answers,
+                    old.rubric,
+                ),
+            )
+    missing = sorted({_draft_number(d) for key, d in earlier.items() if key not in keys})
+    return out, missing
+
+
+def _draft_number(record: DraftRecord) -> int:
+    return record.question_number if record.question_number is not None else record.position + 1
+
+
 def _draft_out(
     record: DraftRecord,
     chapter: DraftChapter | None = None,
     duplicate: DraftDuplicate | None = None,
+    previous: DraftPrevious | None = None,
 ) -> ImportDraft:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
@@ -814,6 +917,7 @@ def _draft_out(
         chapter_match=chapter.match if chapter else None,
         source_chapter_title=chapter.source_title if chapter else None,
         duplicate_of=duplicate,
+        previous=previous,
     )
 
 
@@ -821,6 +925,7 @@ def _summary_out(
     record: DraftRecord,
     chapter: DraftChapter | None = None,
     duplicate: DraftDuplicate | None = None,
+    previous: DraftPrevious | None = None,
     *,
     include_blocks: bool = False,
 ) -> ImportDraftSummary:
@@ -839,6 +944,7 @@ def _summary_out(
         validations=[DraftIssue.model_validate(v) for v in record.validations],
         chapter_id=chapter.chapter.id if chapter and chapter.chapter else None,
         duplicate_of=duplicate,
+        previous=previous,
     )
     if include_blocks:
         summary.block_ids = list(source_pages(draft).block_ids)
@@ -1060,8 +1166,85 @@ def retry_question_import(
         raise ProblemException(
             409, ProblemType.DOCUMENT_NOT_READY, detail="The question paper was deleted."
         )
+    repo.paper(run.workspace_id, run.source_document_id)
+    if repo.working_run(run.workspace_id, run.source_document_id) is not None:
+        raise ProblemException(
+            409, ProblemType.IMPORT_RUNNING, detail="This PDF is already being extracted."
+        )
     repo.retry_run(run, user_id)
     run = _load_run(repo, run.id)
+    result = _run_out(run)
+    if idempotency_key is not None:
+        idempotency.save(
+            user_id,
+            scope,
+            idempotency_key,
+            body_hash,
+            status.HTTP_202_ACCEPTED,
+            result.model_dump(mode="json"),
+        )
+    repo.commit()
+    _publish_job(repo, publisher, run.job_id)
+    return JSONResponse(result.model_dump(mode="json"), status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post(
+    "/question-imports/{import_id}/re-extract",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ImportRun,
+    operation_id="reextractQuestionImport",
+    responses=problem_responses(409),
+)
+def reextract_question_import(
+    access: EditImport,
+    repo: ImportRepo,
+    idempotency: IdempotencyStoreDep,
+    publisher: PublisherDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """Read the run's revision again as a new run with fresh drafts (`다시 추출`,
+    UX12-REEXTRACT): the worker reads the stored parse artifact with the current extractor, and
+    nothing registered changes. 409 `import-running` while a run of the document is working,
+    409 `document-not-ready` when it was deleted or is processing."""
+    user_id = access.workspace.user_id
+    scope = f"POST /question-imports/{access.resource_id}/re-extract"
+    body_hash = request_hash({})
+    if idempotency_key is not None:
+        idempotency.lock(user_id, scope, idempotency_key)
+        stored = idempotency.find(user_id, scope, idempotency_key)
+        if stored is not None:
+            response = replay(stored, body_hash)
+            run_id = stored.body.get("id") if isinstance(stored.body, dict) else None
+            repo.rollback()
+            if run_id:
+                found = repo.get_run(uuid.UUID(str(run_id)))
+                _publish_job(repo, publisher, found.job_id if found else None)
+            return response
+
+    source = _load_run(repo, access.resource_id)
+    document_id = source.source_document_id
+    paper = repo.paper(source.workspace_id, document_id) if document_id else None
+    revision_id = source.source_document_revision_id
+    if paper is None or revision_id is None or paper.status != "ready":
+        raise ProblemException(
+            409,
+            ProblemType.DOCUMENT_NOT_READY,
+            detail="The question paper is not available.",
+        )
+    if repo.working_run(source.workspace_id, paper.id) is not None:
+        raise ProblemException(
+            409, ProblemType.IMPORT_RUNNING, detail="This PDF is already being extracted."
+        )
+    run = _load_run(
+        repo,
+        repo.create_run(
+            workspace_id=source.workspace_id,
+            actor_id=user_id,
+            document_id=paper.id,
+            revision_id=revision_id,
+            reextract_of=source.id,
+        ),
+    )
     result = _run_out(run)
     if idempotency_key is not None:
         idempotency.save(
@@ -1105,8 +1288,12 @@ def list_question_import_drafts(
     chapters = _chapters_of(repo.session, run, drafts)
     everything = repo.list_drafts(access.resource_id) if paged else drafts
     duplicates = draft_duplicates(repo.session, run.workspace_id, everything)
+    previous, _ = draft_previous(repo, run, drafts)
     return ImportDraftList(
-        items=[_draft_out(d, chapters.get(d.id), duplicates.get(d.id)) for d in drafts],
+        items=[
+            _draft_out(d, chapters.get(d.id), duplicates.get(d.id), previous.get(d.id))
+            for d in drafts
+        ],
         chapters=_chapter_options(repo, run) if include_chapters else [],
         total=repo.count_drafts(access.resource_id) if paged else len(drafts),
     )
@@ -1133,12 +1320,20 @@ def list_question_import_draft_summaries(
     drafts = repo.list_drafts(access.resource_id)
     chapters = _chapters_of(repo.session, run, drafts)
     duplicates = draft_duplicates(repo.session, run.workspace_id, drafts)
+    previous, missing = draft_previous(repo, run, drafts)
     return ImportDraftSummaryList(
         items=[
-            _summary_out(d, chapters.get(d.id), duplicates.get(d.id), include_blocks=include_blocks)
+            _summary_out(
+                d,
+                chapters.get(d.id),
+                duplicates.get(d.id),
+                previous.get(d.id),
+                include_blocks=include_blocks,
+            )
             for d in drafts
         ],
         chapters=_chapter_options(repo, run),
+        missing_previous=missing,
     )
 
 
@@ -1268,16 +1463,18 @@ def update_question_draft(
         assert updated is not None  # noqa: S101 - locked above
         chapter: DraftChapter | None = None
         duplicate: DraftDuplicate | None = None
+        previous: DraftPrevious | None = None
         if updated.import_run_id is not None:
             run = _load_run(repo, updated.import_run_id)
             chapter = _chapters_of(repo.session, run, [updated]).get(updated.id)
             duplicate = draft_duplicates(
                 repo.session, run.workspace_id, repo.list_drafts(updated.import_run_id)
             ).get(updated.id)
+            previous = draft_previous(repo, run, [updated])[0].get(updated.id)
         repo.commit()
     except (IntegrityError, DataError):
         raise _constraint_violation(repo) from None
-    return _draft_out(updated, chapter, duplicate)
+    return _draft_out(updated, chapter, duplicate, previous)
 
 
 @router.post(

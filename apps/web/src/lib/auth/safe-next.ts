@@ -11,6 +11,7 @@ export const NEXT_PATH_ALLOWLIST = [
   '/documents',
   '/questions',
   '/settings',
+  '/help',
   '/reset-password',
   '/share',
 ] as const;

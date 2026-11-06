@@ -11,7 +11,7 @@
 // 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only. Options printed
 // as a table line up in columns (`optionGrid`, QTABLE-01).
 import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
-import { useId, type Ref } from 'react';
+import { useId, type ReactNode, type Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemBlocks } from '@/components/questions/stem/stem-text';
@@ -89,6 +89,8 @@ interface AnswerBodyProps {
   readonly resultRef?: Ref<HTMLElement>;
   /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
   readonly highlighting?: ExplanationHighlighting | null;
+  /** Between the stem and the options: the question's images (UX12-REEXTRACT-AC04). */
+  readonly figures?: ReactNode;
 }
 
 function AnswerBody({
@@ -102,6 +104,7 @@ function AnswerBody({
   error = null,
   resultRef,
   highlighting = null,
+  figures = null,
 }: AnswerBodyProps) {
   const resultId = useId();
   // A hidden sentence cannot show a focus ring, so an MCQ grade focuses the options, named by it.
@@ -113,6 +116,7 @@ function AnswerBody({
   return (
     <>
       <QuestionStem stem={grid?.stem ?? stem} />
+      {figures}
       <div
         ref={hiddenResult ? focusRef : undefined}
         className={styles.answerField}
@@ -353,10 +357,18 @@ interface RevisionBodyProps {
   readonly heading: string;
   /** The explanation takes the reader's highlights (문제 상세 of a bank question, HILITE-01). */
   readonly highlighting?: ExplanationHighlighting | null;
+  /** Between the stem and the options: the question's images (UX12-REEXTRACT-AC04). */
+  readonly figures?: ReactNode;
 }
 
 /** A revision with its answers (manage, read-only): not a grading result, so no result border. */
-function RevisionBody({ revision, type, heading, highlighting = null }: RevisionBodyProps) {
+function RevisionBody({
+  revision,
+  type,
+  heading,
+  highlighting = null,
+  figures = null,
+}: RevisionBodyProps) {
   const correct = new Set(revision.correct_option_ids ?? []);
   const grid = type === 'MCQ' ? optionGrid(revision.stem, revision.options) : null;
   return (
@@ -364,6 +376,7 @@ function RevisionBody({ revision, type, heading, highlighting = null }: Revision
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
         <QuestionStem stem={grid?.stem ?? revision.stem} />
+        {figures}
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>

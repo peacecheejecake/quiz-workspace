@@ -1,5 +1,5 @@
-// Storybook stand-ins for the server actions the QuestionViewer modes call
-// (lib/questions/practice-actions.ts, lib/questions/actions.ts). packages/ui/.storybook/main.ts
+// Storybook stand-ins for the calls the QuestionViewer modes make (lib/questions/practice-actions.ts,
+// practice-open-client.ts, actions.ts). packages/ui/.storybook/main.ts
 // aliases those modules here for the viewer stories only; the app never imports this file.
 // Synthetic content only.
 import type { PracticeSession, SubmitResult } from '@/lib/questions/practice-actions';
@@ -38,16 +38,17 @@ export const STORY_RESULT: SubmitResult = {
 
 const ok = <T>(data: T) => Promise.resolve({ ok: true as const, data });
 
-export const latestPracticeAction = () =>
+export const openQuestionPractice = () =>
   ok({
-    session: null,
+    session: STORY_SESSION,
+    reused: false,
+    result: null,
     previous_revision: false,
     reset_epoch: 0,
     active_revision_id: STORY_SESSION.question_revision_id,
     latest_attempt_id: null,
   });
 export const resetPracticeAction = () => ok({ reset: true, epochs: {} });
-export const openPracticeSessionAction = () => ok(STORY_SESSION);
 export const submitPracticeAction = () => ok(STORY_RESULT);
 export const selfGradePracticeAction = () =>
   ok({ attempt_id: STORY_RESULT.attempt_id, practice_session_id: STORY_SESSION.id });

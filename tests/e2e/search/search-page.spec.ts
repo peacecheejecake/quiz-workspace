@@ -26,6 +26,7 @@ import {
   section,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   test,
   uploadPdf,
   uploadReadyBook,
@@ -217,8 +218,10 @@ test(
     await searchPageUi.nextResult(panel).click();
     await expect(panel).toContainText(secondText.slice(0, 30));
 
-    // PDF에서 보기 opens that page of the PDF; Back returns to the same search and results.
+    // PDF에서 보기 opens the 원본 PDF dialog; 전체 문서 보기 leaves for that page of the PDF and
+    // Back returns to the same search and results.
     await searchUi.openInPdf(panel).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname === `/workspaces/${ws.id}/documents/${enId}` && url.searchParams.has('page'),

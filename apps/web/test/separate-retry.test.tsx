@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { SeparateRetry } from '../src/components/questions/viewer/separate-retry';
 
-const calls = vi.hoisted(() => ({ open: vi.fn(), submit: vi.fn(), latest: vi.fn() }));
+const calls = vi.hoisted(() => ({ open: vi.fn(), submit: vi.fn() }));
 vi.mock('../src/components/questions/mock-exams/mock-exam-client', () => ({
   createMockPracticeApi: () => ({ openStandaloneSession: calls.open, submit: calls.submit }),
 }));
@@ -12,8 +12,6 @@ vi.mock('../src/lib/questions/practice-run-client', () => ({
   createPracticeRunApi: () => ({ openRetrySession: calls.open }),
 }));
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  latestPracticeAction: calls.latest,
-  openPracticeSessionAction: vi.fn(),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(),
 }));

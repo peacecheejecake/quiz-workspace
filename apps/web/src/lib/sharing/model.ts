@@ -10,6 +10,31 @@ import {
 
 export type ShareLink = Schemas['ShareLink'];
 
+/** What a link exposes beyond published documents and questions (UX12-SHARE). */
+export type ShareScope = Pick<
+  ShareLink,
+  'include_notes' | 'include_ai_explanations' | 'include_summary' | 'include_owner_records'
+>;
+
+/** A new link's scope, as the API's defaults. */
+export const DEFAULT_SHARE_SCOPE: ShareScope = {
+  include_notes: true,
+  include_ai_explanations: true,
+  include_summary: true,
+  include_owner_records: false,
+};
+
+export const SHARE_SCOPE_KEYS = Object.keys(DEFAULT_SHARE_SCOPE) as (keyof ShareScope)[];
+
+export function shareScopeOf(link: ShareLink): ShareScope {
+  return {
+    include_notes: link.include_notes,
+    include_ai_explanations: link.include_ai_explanations,
+    include_summary: link.include_summary,
+    include_owner_records: link.include_owner_records,
+  };
+}
+
 export const SHARE_LINK_INACTIVE = 'urn:quiz-workspace:problem:share-link-inactive';
 
 export type ShareFailureKind = WorkspaceFailureKind | 'inactive' | 'invalidExpiry';

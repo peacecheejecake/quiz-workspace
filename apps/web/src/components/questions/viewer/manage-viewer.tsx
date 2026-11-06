@@ -3,15 +3,16 @@
 // QuestionViewer `manage` mode (QVIEW-01 call sites 4–5, UX7-BANK-2 "문제 상세", QPLAY-01-AC09/AC10,
 // QOV-01-AC15): one question with its answers in a modal dialog over the panel or list that opened
 // it — type, status, version, the active revision with its correct options, accepted answers,
-// rubric and explanation, the source links into the PDF viewer and the revision history with a
+// rubric and explanation, the source links into the 원본 PDF dialog (UX12-SOURCE; this view shows
+// the answers already, so the whole PDF may open) and the revision history with a
 // preview of an older revision. No submit UI and nothing is recorded; the opener's own actions go
 // in `footer`, after `질문하기` (ASK-01 "문제 쪽 진입점": the question attached as `detail`, always
 // `full` — the dialog shows its answers already; only where the home's AI 질문 is available). The
 // opener reads the question (QuestionDetailDialog): its answers are never cached here.
 import { Badge, Button, ModalDialog } from '@quiz/ui';
-import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
+import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { getQuestionRevisionAction, type QuestionRevision } from '@/lib/questions/actions';
@@ -22,7 +23,12 @@ import {
 } from '@/lib/questions/form';
 import { documentTitle, formatDateTime, pageText, sourceHref } from '../labels';
 import { QuestionBody } from './question-body';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionFigures,
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+} from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 /** Which part the opener asked for: focus goes to its heading. */
@@ -68,6 +74,12 @@ export function ManageViewer({
   const historyRef = useRef<HTMLHeadingElement>(null);
   const question = load.status === 'ready' ? load.question : null;
   const asks = useAskLauncher() !== null;
+  // QSRC-01 `manage`: a registered question's imported source (a draft has none).
+  const source = useQuestionSource(
+    question && question.publication_status !== 'DRAFT'
+      ? { kind: 'question', id: question.id }
+      : null,
+  );
   return (
     <ModalDialog
       open={open}
@@ -114,15 +126,14 @@ export function ManageViewer({
               </Badge>
               <span>버전 {question.revision.version}</span>
             </div>
-            {question.publication_status !== 'DRAFT' ? (
-              // QSRC-01 `manage`: a registered question's imported source (a draft has none).
-              <QuestionSourcePreview target={{ kind: 'question', id: question.id }} aboveModals />
-            ) : null}
+            <QuestionSourceButton source={source} />
+            <QuestionSourceDialog source={source} aboveModals />
             <QuestionBody
               kind="revision"
               revision={question.revision}
               type={question.question_type}
               heading="문제"
+              figures={<QuestionFigures source={source} />}
               highlighting={
                 // HILITE-01: the reader's highlights of the current explanation (not of drafts).
                 question.publication_status !== 'DRAFT'
@@ -203,28 +214,45 @@ function Sources({
   readonly question: QuestionDetail;
   readonly documents: readonly { readonly id: string; readonly title: string }[];
 }) {
+  const [pdfPage, setPdfPage] = useState<PdfPageTarget | null>(null);
   if (question.sources.length === 0) {
     return <p className={styles.text}>연결된 출처가 없습니다.</p>;
   }
   return (
-    <ul className={styles.plainList}>
-      {question.sources.map((source, i) => {
-        const href = sourceHref(workspaceId, source);
-        const text =
-          `${documentTitle(documents, source.document_id)} ${pageText(source) ?? ''}`.trim();
-        return (
-          <li key={`${source.document_id ?? 'none'}-${i}`}>
-            {href ? (
-              <Link href={href} className={styles.sourceLink}>
-                {text}
-              </Link>
-            ) : (
-              text
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <ul className={styles.plainList}>
+        {question.sources.map((source, i) => {
+          const href = sourceHref(workspaceId, source);
+          const title = documentTitle(documents, source.document_id);
+          const text = `${title} ${pageText(source) ?? ''}`.trim();
+          const documentId = source.document_id;
+          return (
+            <li key={`${documentId ?? 'none'}-${i}`}>
+              {href && documentId ? (
+                <button
+                  type="button"
+                  className={styles.sourceLink}
+                  aria-haspopup="dialog"
+                  onClick={() =>
+                    setPdfPage({
+                      documentId,
+                      page: source.page_start ?? 1,
+                      documentHref: href,
+                      documentTitle: title,
+                    })
+                  }
+                >
+                  {text}
+                </button>
+              ) : (
+                text
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <PdfPageDialog target={pdfPage} onClose={() => setPdfPage(null)} />
+    </>
   );
 }
 

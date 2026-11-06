@@ -7,6 +7,8 @@ The API side of a fork only *records* the request, in one transaction with its j
    (exactly what the shared view shows; drafts, archived/deleted questions and import drafts are
    never pinned), each question with its source records as they are now (`question_sources` is
    replaced on edit, so sources are pinned by value and not read again at commit);
+   the link's notes / AI explanations / summary flags go into the manifest as `include`, and the
+   commit copies an item only while the link still has it on (UX12-SHARE);
 2. `create()` inserts the `workspace.fork` job (in the *source* workspace, `created_by` = the
    forking user, payload `{fork_id}`) and the PENDING fork row with the manifest, a random id
    salt and the id the new workspace will get.
@@ -34,7 +36,8 @@ from quiz_api.repositories.tables import async_jobs, workspace_forks
 FORK_JOB_TYPE = "workspace.fork"
 FORK_JOB_SCHEMA_VERSION = 1
 # 2: questions carry their pinned sources (20261018200000_workspace_fork_source_snapshot.sql).
-MANIFEST_VERSION = 2
+# 3: `include` pins the link's content flags (20261106140000_share_link_scope.sql).
+MANIFEST_VERSION = 3
 
 # `workspace_forks_manifest_size`: pg_column_size(source_snapshot_manifest) <= 4 MiB.
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
@@ -172,6 +175,7 @@ class ForkRepository:
         user_id: uuid.UUID,
         name: str,
         snapshot: Snapshot,
+        include: dict[str, bool],
     ) -> tuple[ForkRecord, ForkJob]:
         fork_id, job_id = uuid.uuid4(), uuid.uuid4()
         pinned_documents, pinned_questions = snapshot.manifest_entries()
@@ -179,6 +183,7 @@ class ForkRepository:
             "version": MANIFEST_VERSION,
             "id_salt": str(uuid.uuid4()),
             "target_workspace_id": str(uuid.uuid4()),
+            "include": include,
             "documents": pinned_documents,
             "questions": pinned_questions,
         }

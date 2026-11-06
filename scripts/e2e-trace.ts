@@ -156,8 +156,25 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'QTABLE.0': ['QTABLE-01'],
   // UX12 VIEW-4: `원문 보기` in the question panel's menu; the body button stays.
   'UX12-SRCMENU.0': ['UX12-SRCMENU'],
+  // UX12 VIEW-5: one `practice-open` call instead of two server actions.
+  'UX12-OPEN.0': ['UX12-OPEN'],
   // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
   'UX12-GLASS.0': ['UX12-GLASS'],
+  // UX12 DOCS-2: source page links open the 원본 PDF dialog in place (D-13).
+  'UX12-SOURCE.0': ['UX12-SOURCE'],
+  // UX12 SHELL-3/4/6 (D-5, D-6): theme control, drag auto-copy, the static help page.
+  'UX12-SETTINGS.0': ['UX12-SETTINGS', 'UX12-HELP'],
+  // UX12 SHELL-5: header, panels and the AI 질문 composer stay in view over the virtual keyboard.
+  'UX12-KEYBOARD.0': ['UX12-KEYBOARD'],
+  // UX12 SHARE-1 + SHARE-2: per-link scope switches and the owner's records, read only (D-9).
+  'UX12-SHARE.0': ['UX12-SHARE'],
+  // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
+  'UX12-PICKER.0': ['UX12-PICKER'],
+  // UX12 VIEW-7: <제목> passages in stems, each in its own box, with item lines.
+  'UX12-PASSAGE.0': ['UX12-PASSAGE'],
+  // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.
+  // UX12 EXTRACT-7: question figures from the PDF above the options.
+  'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
 };
 
 const LEADING_ID = new RegExp(

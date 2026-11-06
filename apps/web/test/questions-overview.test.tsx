@@ -3,7 +3,7 @@
 // (which opens a practice session = the view); closing it removes the param and returns focus to
 // the dot — also when the panel was opened by a deep link. Hovering never opens a session.
 import './dom-setup';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { useSyncExternalStore } from 'react';
@@ -31,29 +31,26 @@ vi.mock('next/navigation', () => ({
     new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
 }));
 
-const openPracticeSessionAction = vi.fn();
+const openPracticeSession = vi.fn();
 const setMyStateAction = vi.fn();
 const lookupOverviewQuestionAction = vi.fn();
 const submitPracticeAction = vi.fn();
 const selfGradePracticeAction = vi.fn();
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  latestPracticeAction: vi.fn(async () => ({
-    ok: true,
-    data: {
-      session: null,
-      previous_revision: false,
-      reset_epoch: 0,
-      active_revision_id: '88888888-8888-4888-8888-888888888888',
-      latest_attempt_id: null,
-    },
-  })),
   resetPracticeAction: vi.fn(),
   submitPracticeAction: (...a: unknown[]) => submitPracticeAction(...a),
   selfGradePracticeAction: (...a: unknown[]) => selfGradePracticeAction(...a),
-  openPracticeSessionAction: (...a: unknown[]) => openPracticeSessionAction(...a),
   setMyStateAction: (...a: unknown[]) => setMyStateAction(...a),
   lookupOverviewQuestionAction: (...a: unknown[]) => lookupOverviewQuestionAction(...a),
 }));
+vi.mock('../src/lib/questions/practice-open-client', async () => {
+  const { fakePracticeOpen } = await import('./practice-open-fake');
+  return {
+    openQuestionPractice: fakePracticeOpen({
+      open: (...a: unknown[]) => openPracticeSession(...a),
+    }),
+  };
+});
 
 // UX7-BANK: the question editor and delete of the panel's 문제 관리 menu (QPLAY-01-AC07/AC08).
 const getQuestionAction = vi.fn();
@@ -195,7 +192,7 @@ const onFiltersChange = vi.fn();
 const realPushState = window.history.pushState.bind(window.history);
 
 beforeEach(() => {
-  openPracticeSessionAction.mockReset();
+  openPracticeSession.mockReset();
   setMyStateAction.mockReset();
   lookupOverviewQuestionAction.mockReset();
   submitPracticeAction.mockReset();
@@ -209,7 +206,7 @@ beforeEach(() => {
   getQuestionRevisionAction.mockReset();
   questionEditorContextAction.mockResolvedValue({ chapters: [], documents: [] });
   lookupOverviewQuestionAction.mockResolvedValue({ ok: true, data: null });
-  openPracticeSessionAction.mockImplementation((_ws: string, qid: string) =>
+  openPracticeSession.mockImplementation((_ws: string, qid: string) =>
     Promise.resolve(session(Number(qid.slice(-2)))),
   );
   realPushState(null, '', PATH);
@@ -254,8 +251,8 @@ describe('QuestionsOverview practice panel', () => {
     expect(panel).toHaveAttribute('aria-modal', 'true');
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
     await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
-    expect(openPracticeSessionAction).toHaveBeenCalledTimes(1);
-    expect(openPracticeSessionAction.mock.calls[0]?.slice(0, 2)).toEqual([WS, id(2)]);
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
+    expect(openPracticeSession.mock.calls[0]?.slice(0, 2)).toEqual([WS, id(2)]);
     // The view shows on the dot right away (the background is aria-hidden while the modal is open).
     await waitFor(() =>
       expect(document.querySelector(`[data-question-id="${id(2)}"]`)).toHaveAttribute(
@@ -326,7 +323,7 @@ describe('QuestionsOverview practice panel', () => {
     render(<Screen />);
     await user.hover(dot(1));
     await user.unhover(dot(1));
-    expect(openPracticeSessionAction).not.toHaveBeenCalled();
+    expect(openPracticeSession).not.toHaveBeenCalled();
     expect(window.location.search).toBe('');
   });
 });
@@ -480,18 +477,58 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
     panel = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
     panel = await screen.findByRole('dialog', { name: '3번 문제' });
     const next = within(panel).getByRole('button', { name: '다음 문제' });
     expect(next).toHaveAttribute('aria-disabled', 'true');
     await user.click(next);
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(3));
-    // Each question opened its own session (= its own view).
-    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(3));
+    // Each question it stopped on opened its own session (= its own view).
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(3));
 
     await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
     await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+  });
+
+  it('UX12-OPEN-AC08 a direct open posts at once, without the navigation pause', async () => {
+    render(<Screen />);
+    fireEvent.click(dot(1));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1), { timeout: 100 });
+  });
+
+  it('UX12-OPEN-AC08 rapid next opens only the question it stops on', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    // Both clicks run in one task, so no timer can fire between them.
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+
+    await screen.findByRole('dialog', { name: '3번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(dotStatus(3)).toBe('viewed'));
+    expect(openPracticeSession.mock.calls.map((call) => call[1])).toEqual([id(1), id(3)]);
+    expect(dotStatus(2)).not.toBe('viewed');
+  });
+
+  it('UX12-OPEN-AC08 closing during the pause opens nothing', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: /닫기/ }));
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
+    expect(dotStatus(2)).not.toBe('viewed');
   });
 
   it('submits the chosen option id, reveals the answer only then and refreshes on close', async () => {
@@ -524,7 +561,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
 
   it('a pending essay waits for the self-grade, which settles the dot', async () => {
     const user = userEvent.setup();
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -597,7 +634,7 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
 
 describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
   function twoOptions(stem: string, multi = false) {
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -676,7 +713,7 @@ describe('QuestionsOverview practice panel review fixes (M5.5)', () => {
     document.querySelector(`[data-question-id="${id(n)}"]`)?.getAttribute('aria-label') ?? '';
 
   function essaySessions() {
-    openPracticeSessionAction.mockImplementation((_ws: string, qid: string) => {
+    openPracticeSession.mockImplementation((_ws: string, qid: string) => {
       const base = session(Number(qid.slice(-2)));
       return Promise.resolve({
         ...base,
@@ -816,7 +853,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
     await waitFor(() => expect(within(panel).getByText('문제 2 본문')).toBeInTheDocument());
     // Opening the panel never reads the question with its answers.
     expect(getQuestionAction).not.toHaveBeenCalled();
-    expect(openPracticeSessionAction).toHaveBeenCalledTimes(1);
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
 
     await user.click(within(panel).getByRole('button', { name: '문제 관리' }));
     await user.click(await screen.findByRole('menuitem', { name: '편집' }));
@@ -836,7 +873,7 @@ describe('UX7-BANK 문제 관리 in the practice panel', { timeout: 20_000 }, ()
       '88888888-8888-4888-8888-888888888888',
     ]);
     // The panel stays on the question and opens a session of the new revision.
-    await waitFor(() => expect(openPracticeSessionAction).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
   });
 
@@ -902,7 +939,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       render(<Screen readOnly={readOnly} />);
       await user.click(dot(2));
       const panel = await screen.findByRole('dialog', { name: '2번 문제' });
-      const sessions = openPracticeSessionAction.mock.calls.length;
+      const sessions = openPracticeSession.mock.calls.length;
       expect(getQuestionAction).not.toHaveBeenCalled();
       const label = readOnly ? '문제 정보' : '문제 관리';
       await user.click(within(panel).getByRole('button', { name: label }));
@@ -920,7 +957,7 @@ describe('UX7-BANK-2 정답·해설 보기 and 보관 in the practice panel', { 
       await user.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 상세' })).toBeNull());
       // No new session, no submission: the practice is untouched.
-      expect(openPracticeSessionAction).toHaveBeenCalledTimes(sessions);
+      expect(openPracticeSession).toHaveBeenCalledTimes(sessions);
       expect(submitPracticeAction).not.toHaveBeenCalled();
       expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
     },
@@ -1052,7 +1089,7 @@ describe(
   { timeout: 20_000 },
   () => {
     const sessionsFor = (n: number) =>
-      openPracticeSessionAction.mock.calls.filter((c) => c[1] === id(n)).length;
+      openPracticeSession.mock.calls.filter((c) => c[1] === id(n)).length;
 
     it('QPLAY-01-AC08 browser Back to a deleted question never reopens it from the local state', async () => {
       const user = userEvent.setup();

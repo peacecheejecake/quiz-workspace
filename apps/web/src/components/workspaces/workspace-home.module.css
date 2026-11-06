@@ -38,7 +38,7 @@
 .toolbar {
   position: sticky;
   z-index: calc(var(--z-popover) - 2);
-  top: var(--app-header-height);
+  top: calc(var(--app-header-height) + var(--qz-keyboard-offset-top));
   display: flex;
   flex-wrap: wrap;
   align-items: center;

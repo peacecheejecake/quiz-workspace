@@ -126,7 +126,9 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
-### 3.2 Dark theme (초안)
+### 3.2 Dark theme
+
+테마 선택(UX12 SHELL-3, 결정 D-5, [UX12-SETTINGS](screens/ux12-settings.md)): 사용자 메뉴의 `시스템`·`라이트`·`다크`, 기본 `시스템`. 고른 값은 `quiz-theme` cookie에 두고 RootLayout이 `<html data-theme>`로 찍어 보낸다(깜빡임 없음, 인라인 script 없음). `시스템`은 cookie와 `data-theme`이 모두 없고 `prefers-color-scheme` media query가 정한다.
 
 ```css
 [data-theme="dark"] {
@@ -307,6 +309,7 @@ reduced motion에서는 transition·animation이 전혀 실행되지 않으므�
 | Typography token | label `--font-size-label-xs`(11, `StepProgress` 번호 전용 — 본문·label 글자에는 쓰지 않는다)/`--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
 | Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다. 짝 dialog(QSRC-UI, §5.6): `--breakpoint-paired-panel: 868px`(= `--floating-panel-width` + 3×16px + `--paired-dialog-min-width`; 미만이면 전체 화면 sheet)와 `--paired-dialog-min-width: 320px` — §3.3 `:root` 예시에는 없고 `tokens.json`/생성 CSS에만 있다 |
 | Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
+| 가상키보드 보정 | `--qz-keyboard-inset`(layout viewport 아래쪽에서 키보드가 가리는 높이), `--qz-keyboard-offset-top`(visual viewport가 위에서 밀려난 거리). 기본 0px이고 `useKeyboardInset`이 키보드가 있는 동안만 값을 넣는다. layout viewport가 줄지 않는 iOS Safari용이며 `resizes-content`가 적용되는 브라우저에서는 0px이다([UX12-KEYBOARD](screens/ux12-keyboard.md)) |
 | Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(24/32px)은 §6 규격 그대로 |
 | Control gap (UX12 DESIGN-1) | `--control-gap` 4px. panel footer, PageHeader `actions`, 챕터 header `actions`, 버튼만 있는 기능 행의 버튼 사이 간격이다. form 필드·카드 간격에는 쓰지 않는다. 버튼 높이가 24px 이상이라 target size 기준을 지킨다 |
 | Density (v1.2.2) | 버튼 좌우 padding md 12px; 입력 세로 padding 4px; 여러 줄 입력 최소 80px; panel header 12/12/8/20px · body 16/20px · footer 8/20/12px; modal body 16/20px; popover 12px; 메뉴·Select 항목 36px; Surface padding sm 8 / md 12 / lg 20px; EmptyState 세로 24px; PageHeader 간격 12px·아래 20px·뒤로가기/breadcrumb 줄과 제목 사이 12px(UX5-UI); sidebar 12/8px; heatmap 챕터 간격 20px |
@@ -412,7 +415,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
 - 열기: `pointerenter` 뒤 `TOOLTIP_DELAY_MS`(300ms), 그 사이 pointer가 움직이면 마지막 좌표 기준. 키보드 `:focus-visible`이면 지연 없이 **요소에** 붙는다(pointer 좌표 없음). coarse pointer(touch)는 hover가 없으므로 tap이 연다(호출한 화면이 tap 동작을 정함 — 각주는 `문제 열기` 버튼을 둠).
 - 위치: 좌표에서 8px 아래·오른쪽, 화면 밖이면 뒤집기·밀기(16px 여백). 열린 뒤 pointer를 따라 움직이지 않는다(읽는 동안 흔들리지 않게).
-- 닫기: pointer가 trigger와 floating 둘 다에서 벗어나 120ms, Escape(floating만 닫음), blur, scroll 컨테이너가 scroll될 때. floating 안으로 옮겨 가는 동안은 유지된다(안에서 scroll 가능, §5.3 격리).
+- 닫기: pointer가 trigger와 floating 둘 다에서 벗어나 120ms, Escape(floating만 닫음), blur, scroll 컨테이너가 scroll될 때. floating 안으로 옮겨 가는 동안은 유지된다: floating 둘레 8px 틈은 floating으로 치므로 틈을 건너는 속도와 상관없다(안에서 scroll 가능, §5.3 격리).
 - 접근성: 비대화형이면 `role="tooltip"` + trigger의 `aria-describedby`(열린 동안), 안에 버튼이 있으면(touch) non-modal `role="dialog"` + 이름. `prefers-reduced-motion`이면 등장 애니메이션 없음. glass `Popover` 표면·`--shadow-floating`, 폭 `min(360px, 100vw - 32px)`, 최대 높이 `min(320px, 50vh)` 넘치면 안에서 scroll.
 
 ### 5.5 홈 dialog는 modal, 배치 고정 (v1.2.8, UX9-MODAL — 사용자 요청 "문서 관리, 중복 문제 정리 등도 modal로 변경하고 해당 dialog의 열고 닫힘에 따라 본문 layout이 변하지 않게", "정리 노트도 모달로 변경")
@@ -430,7 +433,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - 열린 `FloatingSidePanel`(문제 풀이 panel 등) **곁에 참고 내용을 나란히 보이는** 짝 dialog 패턴이다. 짝 dialog는 `side="start"`(문제 panel은 `end`)로 같은 modal 층의 맨 위에 쌓이고, 본 panel은 가려지지 않고 보이되 `inert`다. Escape·backdrop click은 짝 dialog만 닫고 focus는 연 버튼으로 돌아온다(§5.5의 "맨 위부터 닫기").
 - 폭 `< 768px`(`--breakpoint-md`, §4 breakpoint)와 그 위에서도 자리가 모자란 폭에서는 `mobileLayout="full"` 전체 화면 sheet가 본 panel을 덮고, 닫으면 본 panel로 돌아온다. 브라우저 Back은 sheet만 닫는다(sheet를 연 history 항목을 쓰며 URL은 바뀌지 않음).
 - 본 panel + 짝 dialog 최소 폭(320px) + 여백이 들어갈 자리가 없는 폭(500+16+16+320+16 = 868px 미만)에서는 모바일과 같은 전체 화면 sheet다(QSRC-01 사용자 결정 2026-11-04).
-- 쓰는 곳: QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
+- 쓰는 곳: [UX12-SOURCE](screens/ux12-source-panel.md) `PdfPageDialog`(원본 PDF), QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 
@@ -500,7 +503,9 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 ### Foundation
 
-`ThemeProvider`, `Tokens`, `Typography`, `Icon`, `FocusRing`, `Surface`, `GlassSurface`, `Divider`, `Button`, `IconButton`, `Badge`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `SegmentedControl`, `Tabs`, `Tooltip`, `Popover`, `Dropdown`, `Dropzone`, `Skeleton`, `ProgressBar`, `StepProgress`, `Toast`.
+`ThemeProvider`, `Tokens`, `Typography`, `Icon`, `FocusRing`, `Surface`, `GlassSurface`, `Divider`, `Button`, `IconButton`, `Badge`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `SegmentedControl`, `Tabs`, `Tooltip`, `Popover`, `Dropdown`, `Dropzone`, `Skeleton`, `ProgressBar`, `StepProgress`, `Toast`, `ChapterPicker`.
+
+`ChapterPicker` (UX12 CHAPTER-1 2026-11-06, [UX12-PICKER](screens/ux12-chapter-picker.md)): 챕터 하나를 고르는 곳은 모두 `Select`가 아니라 이 트리 popover다(여러 개를 고르는 `QuestionRangePicker`는 따로). 트리거는 `Select`와 같은 모양의 `combobox`, 내용은 `modal` kit `Popover` 안의 찾기 입력란과 `role="tree"`(순서 목록의 `level`을 스택으로 중첩, 접기/펼치기, 고른 경로 자동 펼침, 화살표·Home·End·Enter 키보드). 내용은 열린 동안에만 렌더링하므로 한 화면에 수백 개를 둘 수 있다(QIMP-REVIEW-SCALE; `nodes` 배열은 공유한다). modal `FloatingSidePanel` 안에서는 그 layer 위에 뜬다. 768px 미만은 화면 아래에 붙은 불투명 sheet(폭 100vw, 최대 70dvh, safe-area)이고 focus는 키보드를 올리지 않도록 트리 행에 간다.
 
 `ProgressBar` (v1.2.3, UX5-UI): 한 단계 작업(변형 생성·묶음 생성·등록·Fork)의 진행률은 모두 이 공통 컴포넌트다(여러 단계인 업로드·처리·가져오기는 아래 `StepProgress`, UX6-PROGRESS; `role="progressbar"`, 이름 필수, `value` 없음 = indeterminate로 `aria-valuenow` 없음). 값이 바뀌면 fill 폭이 `--duration-progress`(600ms) `--easing-standard`로 부드럽게 이어진다 — 서버가 보고하는 단계(예: 2→40→60→90%) 사이를 끊김 없이 잇기만 하고 보고되지 않은 진행률을 지어내지 않는다. `prefers-reduced-motion`에서는 transition 없이 바로 바뀐다. indeterminate는 fill이 아니라 막대 안을 천천히 지나는 반투명 줄(reduced motion에서는 멈춘 줄)이고 fill은 0%에 머문다 — 그래서 값이 생길 때(예: 준비 중 → 10%) fill이 앞으로만 움직인다(UX6-PROGRESS 2026-10-28; 이전 30% 고정 fill은 10%로 뒤로 갔다).
 

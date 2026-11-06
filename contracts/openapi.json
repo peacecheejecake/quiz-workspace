@@ -2364,6 +2364,71 @@
         "title": "DraftPayload",
         "type": "object"
       },
+      "DraftPrevious": {
+        "description": "What a re-extracted draft replaces (UX12-REEXTRACT, C04): the earlier draft with the same\nextraction id, read through to its live CONFIRMED question when it has one. Field names only:\nthe content stays with the question and the draft.",
+        "properties": {
+          "changed": {
+            "description": "What differs; empty when nothing does.",
+            "items": {
+              "enum": [
+                "type",
+                "stem",
+                "options",
+                "answer"
+              ],
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its number, else the earlier draft's N번.",
+            "title": "Number"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The live CONFIRMED question, if any.",
+            "title": "Question Id"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its active revision (`base_revision_id` of the replace path's archive).",
+            "title": "Revision Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "revision_id",
+          "number",
+          "changed"
+        ],
+        "title": "DraftPrevious",
+        "type": "object"
+      },
       "DraftPublishError": {
         "properties": {
           "field": {
@@ -3641,6 +3706,17 @@
             "title": "Position",
             "type": "integer"
           },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftPrevious"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Drafts of a re-extracted run (`다시 추출`): what the draft replaces; null when no earlier draft has its extraction id."
+          },
           "publish_errors": {
             "description": "Why it cannot be confirmed yet.",
             "items": {
@@ -3883,6 +3959,17 @@
             "title": "Position",
             "type": "integer"
           },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DraftPrevious"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As `ImportDraft.previous` (UX12-REEXTRACT)."
+          },
           "publishable": {
             "description": "Can be approved / confirmed as it is.",
             "title": "Publishable",
@@ -3974,6 +4061,14 @@
               "$ref": "#/components/schemas/ImportDraftSummary"
             },
             "title": "Items",
+            "type": "array"
+          },
+          "missing_previous": {
+            "description": "Re-extracted runs: numbers of earlier drafts with no draft here.",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Missing Previous",
             "type": "array"
           }
         },
@@ -4309,6 +4404,19 @@
             "title": "Published Count",
             "type": "integer"
           },
+          "reextract_of": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The run this one reads again (`다시 추출`, UX12-REEXTRACT).",
+            "title": "Reextract Of"
+          },
           "registration_job_id": {
             "anyOf": [
               {
@@ -4436,6 +4544,26 @@
             "title": "Id",
             "type": "string"
           },
+          "include_ai_explanations": {
+            "description": "Guests read AI explanations; forks copy them.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Guests read chapter notes; forks copy them.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "Guests read the owner's own attempts and highlights. Never forked.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Guests read document summaries; forks copy them.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "revoked_at": {
             "anyOf": [
               {
@@ -4515,6 +4643,10 @@
           "id",
           "workspace_id",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "revoked_at",
           "status",
@@ -6232,6 +6364,13 @@
       "MockQuestionSourceRegion": {
         "additionalProperties": false,
         "properties": {
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRegionItem"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
           "mock_exam_question_id": {
             "format": "uuid",
             "title": "Mock Exam Question Id",
@@ -6247,7 +6386,8 @@
         },
         "required": [
           "mock_exam_question_id",
-          "regions"
+          "regions",
+          "figures"
         ],
         "title": "MockQuestionSourceRegion",
         "type": "object"
@@ -7240,6 +7380,150 @@
           "preview"
         ],
         "title": "OverviewItem",
+        "type": "object"
+      },
+      "OwnerRecordQuestion": {
+        "properties": {
+          "number_label": {
+            "description": "`<번호>번` or `번호 없음` (the printed number).",
+            "title": "Number Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "stem_preview": {
+            "description": "First 40 characters of the current stem.",
+            "title": "Stem Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "number_label",
+          "stem_preview"
+        ],
+        "title": "OwnerRecordQuestion",
+        "type": "object"
+      },
+      "PracticeOpenBody": {
+        "additionalProperties": false,
+        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.",
+        "properties": {
+          "baseline_attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Attempt Id"
+          },
+          "cached_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Session Id"
+          },
+          "force_new": {
+            "default": false,
+            "title": "Force New",
+            "type": "boolean"
+          }
+        },
+        "title": "PracticeOpenBody",
+        "type": "object"
+      },
+      "PracticeOpened": {
+        "description": "One opening of the panel. Answers exist only under `result`: `session` is the answer-free\nopen shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).",
+        "properties": {
+          "active_revision_id": {
+            "format": "uuid",
+            "title": "Active Revision Id",
+            "type": "string"
+          },
+          "latest_attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Attempt Id"
+          },
+          "previous_revision": {
+            "description": "The latest submission was on another revision: its result is not shown.",
+            "title": "Previous Revision",
+            "type": "boolean"
+          },
+          "reset_epoch": {
+            "title": "Reset Epoch",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PracticeSessionDetail"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest submitted session of the active revision, with its outcome."
+          },
+          "reused": {
+            "description": "`session` is the cached one; nothing was written.",
+            "title": "Reused",
+            "type": "boolean"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PracticeSession"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The open session to answer."
+          },
+          "submitted_answer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted Answer"
+          }
+        },
+        "required": [
+          "reset_epoch",
+          "active_revision_id",
+          "latest_attempt_id",
+          "previous_revision",
+          "session",
+          "reused",
+          "result"
+        ],
+        "title": "PracticeOpened",
         "type": "object"
       },
       "PracticeOption": {
@@ -9008,6 +9292,13 @@
       "QuestionSourceRegion": {
         "additionalProperties": false,
         "properties": {
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRegionItem"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
           "question_id": {
             "format": "uuid",
             "title": "Question Id",
@@ -9023,7 +9314,8 @@
         },
         "required": [
           "question_id",
-          "regions"
+          "regions",
+          "figures"
         ],
         "title": "QuestionSourceRegion",
         "type": "object"
@@ -11282,6 +11574,26 @@
             "title": "Id",
             "type": "string"
           },
+          "include_ai_explanations": {
+            "description": "Guests read AI explanations; forks copy them.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Guests read chapter notes; forks copy them.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "Guests read the owner's own attempts and highlights. Never forked.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Guests read document summaries; forks copy them.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "revoked_at": {
             "anyOf": [
               {
@@ -11344,6 +11656,10 @@
           "id",
           "workspace_id",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "revoked_at",
           "status",
@@ -11374,6 +11690,26 @@
             ],
             "description": "Future instant with a UTC offset; null or absent: no expiry.",
             "title": "Expires At"
+          },
+          "include_ai_explanations": {
+            "default": true,
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "default": true,
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "default": false,
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "default": true,
+            "title": "Include Summary",
+            "type": "boolean"
           }
         },
         "title": "ShareLinkCreate",
@@ -11421,6 +11757,50 @@
               }
             ],
             "title": "Expires At"
+          },
+          "include_ai_explanations": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Ai Explanations"
+          },
+          "include_notes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Notes"
+          },
+          "include_owner_records": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Owner Records"
+          },
+          "include_summary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Summary"
           }
         },
         "title": "ShareLinkUpdate",
@@ -11632,6 +12012,177 @@
           "created_at"
         ],
         "title": "SharedExplanation",
+        "type": "object"
+      },
+      "SharedOwnerAttempt": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/OwnerRecordQuestion"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "question_type",
+          "result",
+          "submitted_at"
+        ],
+        "title": "SharedOwnerAttempt",
+        "type": "object"
+      },
+      "SharedOwnerAttemptPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedOwnerAttempt"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SharedOwnerAttemptPage",
+        "type": "object"
+      },
+      "SharedOwnerHighlight": {
+        "properties": {
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Note highlights only.",
+            "title": "Chapter Title"
+          },
+          "color": {
+            "enum": [
+              "yellow",
+              "blue",
+              "pink"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "note",
+              "explanation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnerRecordQuestion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explanation highlights only."
+          },
+          "quote": {
+            "description": "The highlighted text, as it stands in the shared text.",
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "color",
+          "quote",
+          "question",
+          "chapter_title",
+          "created_at"
+        ],
+        "title": "SharedOwnerHighlight",
+        "type": "object"
+      },
+      "SharedOwnerHighlightPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedOwnerHighlight"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A page can hold fewer than `limit` items: rows outside the share are left out.",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SharedOwnerHighlightPage",
         "type": "object"
       },
       "SharedQuestion": {
@@ -11986,6 +12537,26 @@
             "description": "When the link expires; null: never.",
             "title": "Expires At"
           },
+          "include_ai_explanations": {
+            "description": "AI explanations are part of this link.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Chapter notes are part of this link.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "The owner's attempts and highlights can be read through this link.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Document summaries are part of this link.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "workspace": {
             "$ref": "#/components/schemas/SharedWorkspaceInfo"
           }
@@ -11993,6 +12564,10 @@
         "required": [
           "workspace",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "documents"
         ],
@@ -20683,6 +21258,124 @@
         ]
       }
     },
+    "/api/v1/question-imports/{import_id}/re-extract": {
+      "post": {
+        "description": "Read the run's revision again as a new run with fresh drafts (`다시 추출`,\nUX12-REEXTRACT): the worker reads the stored parse artifact with the current extractor, and\nnothing registered changes. 409 `import-running` while a run of the document is working,\n409 `document-not-ready` when it was deleted or is processing.",
+        "operationId": "reextractQuestionImport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "import_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Import Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Reextract Question Import",
+        "tags": [
+          "question-imports"
+        ]
+      }
+    },
     "/api/v1/question-imports/{import_id}/registrations": {
       "post": {
         "description": "Approve and register the whole selection on the server (QIMPORT-01-AC07, \"선택한 문제 승인\n및 등록\"): the request records every listed draft with the version on screen and starts a\n`question.import_register` job, which registers them in batches whether or not the page stays\nopen. Same rules as `publish` with `approve: true`: the job's user (the caller) approves each\ndraft still at the sent version that can be confirmed; drafts changed since (`stale-draft`) or\nnot confirmable (`not-publishable`) are refused and left as they were; drafts registered\nalready are skipped. Idempotent per draft (a re-delivered job never registers twice).\n\nAn id that is not a draft of this import is 404 (nothing recorded). 409\n`import-registration-running` while the previous registration of this import is still queued\nor running (follow `registration_job_id`). The job re-checks the workspace on every batch: an\narchived workspace or a lost editor role stops it (`workspace_unavailable`).",
@@ -22053,6 +22746,141 @@
         ]
       }
     },
+    "/api/v1/questions/{question_id}/practice-open": {
+      "post": {
+        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.",
+        "operationId": "openQuestionPractice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PracticeOpenBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PracticeOpened"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Open Question Practice",
+        "tags": [
+          "practice"
+        ]
+      }
+    },
     "/api/v1/questions/{question_id}/practice-recent": {
       "get": {
         "operationId": "getLatestQuestionPractice",
@@ -23306,7 +24134,7 @@
     },
     "/api/v1/shared/{share_id}/documents/{document_id}/summary": {
       "get": {
-        "description": "The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a\nsucceeded summary of the revision the guest reads now. An older revision's summary, a run in\nprogress or failed, and anything of other workspaces answer the same 404 as a random id; no\nrun, usage, cost or error data.",
+        "description": "The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a\nsucceeded summary of the revision the guest reads now. An older revision's summary, a run in\nprogress or failed, and anything of other workspaces answer the same 404 as a random id; no\nrun, usage, cost or error data. A link without summaries answers that same 404.",
         "operationId": "getSharedDocumentSummary",
         "parameters": [
           {
@@ -23402,7 +24230,7 @@
     },
     "/api/v1/shared/{share_id}/forks": {
       "post": {
-        "description": "Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).\n\nNeeds the user's Bearer JWT and the share session cookie of this link, and the link must\nallow forking. Copies the published documents, questions, answers and explanations; never\ndrafts, other people's progress, activity or share links. 202 with the fork; poll\n`GET /me/forks/{id}`.",
+        "description": "Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).\n\nNeeds the user's Bearer JWT and the share session cookie of this link, and the link must\nallow forking. Copies the published documents, questions, answers and explanations, plus the\nnotes, AI explanations and summaries the link includes; never drafts, anyone's progress or\nhighlights, activity or share links. 202 with the fork; poll `GET /me/forks/{id}`.",
         "operationId": "startWorkspaceFork",
         "parameters": [
           {
@@ -23537,6 +24365,236 @@
         "summary": "Start Fork",
         "tags": [
           "forks"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/owner-attempts": {
+      "get": {
+        "description": "The owner's attempts on published questions: result and time (UX12-SHARE-AC07/AC08).",
+        "operationId": "listSharedOwnerAttempts",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedOwnerAttemptPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Owner Attempts",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/owner-highlights": {
+      "get": {
+        "description": "The owner's highlights on text a guest can read now (UX12-SHARE-AC07/AC08).",
+        "operationId": "listSharedOwnerHighlights",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedOwnerHighlightPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Owner Highlights",
+        "tags": [
+          "shared"
         ]
       }
     },
@@ -28014,7 +29072,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/share-links/{link_id}": {
       "patch": {
-        "description": "Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).\n\nA revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.",
+        "description": "Change `allow_fork`, `expires_at` and the scope flags (WS-SHARE-01-AC03, UX12-SHARE-AC01;\nallowed on archived).\n\nA revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.",
         "operationId": "updateShareLink",
         "parameters": [
           {

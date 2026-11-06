@@ -536,6 +536,10 @@ workspace_share_links = Table(
     # SHA-256 of the 32 secret bytes; never part of an API response.
     Column("token_digest", LargeBinary, nullable=False),
     Column("allow_fork", Boolean, nullable=False),
+    Column("include_notes", Boolean, nullable=False, server_default=FetchedValue()),
+    Column("include_ai_explanations", Boolean, nullable=False, server_default=FetchedValue()),
+    Column("include_summary", Boolean, nullable=False, server_default=FetchedValue()),
+    Column("include_owner_records", Boolean, nullable=False, server_default=FetchedValue()),
     _ts("expires_at"),
     _ts("revoked_at"),
     Column("rotated_from_id", Uuid),

@@ -1268,6 +1268,29 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/question-imports/{import_id}/re-extract': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reextract Question Import
+     * @description Read the run's revision again as a new run with fresh drafts (`다시 추출`,
+     *     UX12-REEXTRACT): the worker reads the stored parse artifact with the current extractor, and
+     *     nothing registered changes. 409 `import-running` while a run of the document is working,
+     *     409 `document-not-ready` when it was deleted or is processing.
+     */
+    post: operations['reextractQuestionImport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/question-imports/{import_id}/registrations': {
     parameters: {
       query?: never;
@@ -1499,6 +1522,30 @@ export type paths = {
      *     always allowed.
      */
     patch: operations['updateMyQuestionState'];
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/practice-open': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Open Question Practice
+     * @description Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the
+     *     latest result, then reuse the cached session, show that result or open a session. Only a new
+     *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
+     *     user and question, so no separate key lock is taken. A key seen again replays its session
+     *     while it is open: once submitted, the latest result answers instead, or 409 without one.
+     */
+    post: operations['openQuestionPractice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/v1/questions/{question_id}/practice-recent': {
@@ -1759,7 +1806,7 @@ export type paths = {
      * @description The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a
      *     succeeded summary of the revision the guest reads now. An older revision's summary, a run in
      *     progress or failed, and anything of other workspaces answer the same 404 as a random id; no
-     *     run, usage, cost or error data.
+     *     run, usage, cost or error data. A link without summaries answers that same 404.
      */
     get: operations['getSharedDocumentSummary'];
     put?: never;
@@ -1784,11 +1831,51 @@ export type paths = {
      * @description Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).
      *
      *     Needs the user's Bearer JWT and the share session cookie of this link, and the link must
-     *     allow forking. Copies the published documents, questions, answers and explanations; never
-     *     drafts, other people's progress, activity or share links. 202 with the fork; poll
-     *     `GET /me/forks/{id}`.
+     *     allow forking. Copies the published documents, questions, answers and explanations, plus the
+     *     notes, AI explanations and summaries the link includes; never drafts, anyone's progress or
+     *     highlights, activity or share links. 202 with the fork; poll `GET /me/forks/{id}`.
      */
     post: operations['startWorkspaceFork'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/owner-attempts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Owner Attempts
+     * @description The owner's attempts on published questions: result and time (UX12-SHARE-AC07/AC08).
+     */
+    get: operations['listSharedOwnerAttempts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/owner-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Owner Highlights
+     * @description The owner's highlights on text a guest can read now (UX12-SHARE-AC07/AC08).
+     */
+    get: operations['listSharedOwnerHighlights'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2523,7 +2610,8 @@ export type paths = {
     head?: never;
     /**
      * Update Share Link
-     * @description Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).
+     * @description Change `allow_fork`, `expires_at` and the scope flags (WS-SHARE-01-AC03, UX12-SHARE-AC01;
+     *     allowed on archived).
      *
      *     A revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.
      */
@@ -3637,6 +3725,34 @@ export type components = {
        */
       variation_type?: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT') | null;
     };
+    /**
+     * DraftPrevious
+     * @description What a re-extracted draft replaces (UX12-REEXTRACT, C04): the earlier draft with the same
+     *     extraction id, read through to its live CONFIRMED question when it has one. Field names only:
+     *     the content stays with the question and the draft.
+     */
+    DraftPrevious: {
+      /**
+       * Changed
+       * @description What differs; empty when nothing does.
+       */
+      changed: ('type' | 'stem' | 'options' | 'answer')[];
+      /**
+       * Number
+       * @description Its number, else the earlier draft's N번.
+       */
+      number: number | null;
+      /**
+       * Question Id
+       * @description The live CONFIRMED question, if any.
+       */
+      question_id: string | null;
+      /**
+       * Revision Id
+       * @description Its active revision (`base_revision_id` of the replace path's archive).
+       */
+      revision_id: string | null;
+    };
     /** DraftPublishError */
     DraftPublishError: {
       /** Field */
@@ -4227,6 +4343,8 @@ export type components = {
        * @description 0-based order in the source.
        */
       position: number;
+      /** @description Drafts of a re-extracted run (`다시 추출`): what the draft replaces; null when no earlier draft has its extraction id. */
+      previous?: components['schemas']['DraftPrevious'] | null;
       /**
        * Publish Errors
        * @description Why it cannot be confirmed yet.
@@ -4334,6 +4452,8 @@ export type components = {
        * @description 0-based order in the source.
        */
       position: number;
+      /** @description As `ImportDraft.previous` (UX12-REEXTRACT). */
+      previous?: components['schemas']['DraftPrevious'] | null;
       /**
        * Publishable
        * @description Can be approved / confirmed as it is.
@@ -4376,6 +4496,11 @@ export type components = {
        * @description Every draft of the run, source order.
        */
       items: components['schemas']['ImportDraftSummary'][];
+      /**
+       * Missing Previous
+       * @description Re-extracted runs: numbers of earlier drafts with no draft here.
+       */
+      missing_previous?: number[];
     };
     /** ImportPublishBody */
     ImportPublishBody: {
@@ -4551,6 +4676,11 @@ export type components = {
       /** Published Count */
       published_count: number;
       /**
+       * Reextract Of
+       * @description The run this one reads again (`다시 추출`, UX12-REEXTRACT).
+       */
+      reextract_of?: string | null;
+      /**
        * Registration Job Id
        * @description The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.
        */
@@ -4607,6 +4737,26 @@ export type components = {
        * @description The public share id (`/share/{id}`).
        */
       id: string;
+      /**
+       * Include Ai Explanations
+       * @description Guests read AI explanations; forks copy them.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Guests read chapter notes; forks copy them.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description Guests read the owner's own attempts and highlights. Never forked.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Guests read document summaries; forks copy them.
+       */
+      include_summary: boolean;
       /** Revoked At */
       revoked_at: string | null;
       /**
@@ -5310,6 +5460,8 @@ export type components = {
     };
     /** MockQuestionSourceRegion */
     MockQuestionSourceRegion: {
+      /** Figures */
+      figures: components['schemas']['SourceRegionItem'][];
       /**
        * Mock Exam Question Id
        * Format: uuid
@@ -5745,6 +5897,74 @@ export type components = {
        * @enum {string}
        */
       status: 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+    };
+    /** OwnerRecordQuestion */
+    OwnerRecordQuestion: {
+      /**
+       * Number Label
+       * @description `<번호>번` or `번호 없음` (the printed number).
+       */
+      number_label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Stem Preview
+       * @description First 40 characters of the current stem.
+       */
+      stem_preview: string;
+    };
+    /**
+     * PracticeOpenBody
+     * @description What the panel knows of this question: an open session it keeps in memory and the latest
+     *     attempt when that session was opened, or `force_new` for another try after a result.
+     */
+    PracticeOpenBody: {
+      /** Baseline Attempt Id */
+      baseline_attempt_id?: string | null;
+      /** Cached Session Id */
+      cached_session_id?: string | null;
+      /**
+       * Force New
+       * @default false
+       */
+      force_new?: boolean;
+    };
+    /**
+     * PracticeOpened
+     * @description One opening of the panel. Answers exist only under `result`: `session` is the answer-free
+     *     open shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).
+     */
+    PracticeOpened: {
+      /**
+       * Active Revision Id
+       * Format: uuid
+       */
+      active_revision_id: string;
+      /** Latest Attempt Id */
+      latest_attempt_id: string | null;
+      /**
+       * Previous Revision
+       * @description The latest submission was on another revision: its result is not shown.
+       */
+      previous_revision: boolean;
+      /** Reset Epoch */
+      reset_epoch: number;
+      /** @description The latest submitted session of the active revision, with its outcome. */
+      result: components['schemas']['PracticeSessionDetail'] | null;
+      /**
+       * Reused
+       * @description `session` is the cached one; nothing was written.
+       */
+      reused: boolean;
+      /** @description The open session to answer. */
+      session: components['schemas']['PracticeSession'] | null;
+      /** Submitted Answer */
+      submitted_answer?: {
+        [key: string]: unknown;
+      } | null;
     };
     /** PracticeOption */
     PracticeOption: {
@@ -6491,6 +6711,8 @@ export type components = {
     };
     /** QuestionSourceRegion */
     QuestionSourceRegion: {
+      /** Figures */
+      figures: components['schemas']['SourceRegionItem'][];
       /**
        * Question Id
        * Format: uuid
@@ -7535,6 +7757,82 @@ export type components = {
       /** Sources */
       sources: components['schemas']['ExplanationSource'][];
     };
+    /** SharedOwnerAttempt */
+    SharedOwnerAttempt: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      question: components['schemas']['OwnerRecordQuestion'];
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /**
+       * Submitted At
+       * Format: date-time
+       */
+      submitted_at: string;
+    };
+    /** SharedOwnerAttemptPage */
+    SharedOwnerAttemptPage: {
+      /** Items */
+      items: components['schemas']['SharedOwnerAttempt'][];
+      /** Next Cursor */
+      next_cursor: string | null;
+    };
+    /** SharedOwnerHighlight */
+    SharedOwnerHighlight: {
+      /**
+       * Chapter Title
+       * @description Note highlights only.
+       */
+      chapter_title: string | null;
+      /**
+       * Color
+       * @enum {string}
+       */
+      color: 'yellow' | 'blue' | 'pink';
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'note' | 'explanation';
+      /** @description Explanation highlights only. */
+      question: components['schemas']['OwnerRecordQuestion'] | null;
+      /**
+       * Quote
+       * @description The highlighted text, as it stands in the shared text.
+       */
+      quote: string;
+    };
+    /** SharedOwnerHighlightPage */
+    SharedOwnerHighlightPage: {
+      /** Items */
+      items: components['schemas']['SharedOwnerHighlight'][];
+      /**
+       * Next Cursor
+       * @description A page can hold fewer than `limit` items: rows outside the share are left out.
+       */
+      next_cursor: string | null;
+    };
     /**
      * SharedQuestion
      * @description A published question with its answer and explanation; no per-user or owner fields.
@@ -7691,6 +7989,26 @@ export type components = {
        * @description When the link expires; null: never.
        */
       expires_at: string | null;
+      /**
+       * Include Ai Explanations
+       * @description AI explanations are part of this link.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Chapter notes are part of this link.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description The owner's attempts and highlights can be read through this link.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Document summaries are part of this link.
+       */
+      include_summary: boolean;
       workspace: components['schemas']['SharedWorkspaceInfo'];
     };
     /** SharedWorkspaceInfo */
@@ -7729,6 +8047,26 @@ export type components = {
        * @description The public share id (`/share/{id}`).
        */
       id: string;
+      /**
+       * Include Ai Explanations
+       * @description Guests read AI explanations; forks copy them.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Guests read chapter notes; forks copy them.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description Guests read the owner's own attempts and highlights. Never forked.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Guests read document summaries; forks copy them.
+       */
+      include_summary: boolean;
       /** Revoked At */
       revoked_at: string | null;
       /**
@@ -7770,6 +8108,26 @@ export type components = {
        * @description Future instant with a UTC offset; null or absent: no expiry.
        */
       expires_at?: string | null;
+      /**
+       * Include Ai Explanations
+       * @default true
+       */
+      include_ai_explanations?: boolean;
+      /**
+       * Include Notes
+       * @default true
+       */
+      include_notes?: boolean;
+      /**
+       * Include Owner Records
+       * @default false
+       */
+      include_owner_records?: boolean;
+      /**
+       * Include Summary
+       * @default true
+       */
+      include_summary?: boolean;
     };
     /** ShareLinkList */
     ShareLinkList: {
@@ -7785,6 +8143,14 @@ export type components = {
       allow_fork?: boolean | null;
       /** Expires At */
       expires_at?: string | null;
+      /** Include Ai Explanations */
+      include_ai_explanations?: boolean | null;
+      /** Include Notes */
+      include_notes?: boolean | null;
+      /** Include Owner Records */
+      include_owner_records?: boolean | null;
+      /** Include Summary */
+      include_summary?: boolean | null;
     };
     /** SignedReadUrl */
     SignedReadUrl: {
@@ -13379,6 +13745,85 @@ export interface operations {
       };
     };
   };
+  reextractQuestionImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRun'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   registerQuestionImportDrafts: {
     parameters: {
       query?: never;
@@ -14286,6 +14731,89 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MyState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  openQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeOpenBody'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeOpened'];
         };
       };
       /** @description Unauthorized */
@@ -15340,6 +15868,148 @@ export interface operations {
       };
       /** @description Too Many Requests */
       429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listSharedOwnerAttempts: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedOwnerAttemptPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listSharedOwnerHighlights: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedOwnerHighlightPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

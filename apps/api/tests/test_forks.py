@@ -296,6 +296,7 @@ def test_fork_start_records_the_snapshot_publishes_the_job_and_replays_by_key(
     assert created["share_link_id"] == link.id
     assert created["user_id"] == user_id
     assert created["snapshot"] == world.snapshot_value
+    assert created["include"] == {"notes": True, "ai_explanations": True, "summary": True}
     (message,) = world.published
     assert (message.job_type, message.workspace_id, message.created_by) == (
         FORK_JOB_TYPE,
@@ -313,6 +314,21 @@ def test_fork_start_records_the_snapshot_publishes_the_job_and_replays_by_key(
     assert len(world.published) == 1
     conflict = _fork(api, link.id, auth=bearer(user_id), cookie=cookie, key=key, name="다른 이름")
     assert (conflict.status_code, _type(conflict)) == (409, ProblemType.IDEMPOTENCY_KEY_REUSED)
+
+
+def test_fork_pins_the_scope_flags_of_its_link(
+    api: TestClient, world: World, bearer: Callable[[uuid.UUID], dict[str, str]]
+) -> None:
+    link = replace(
+        world.add_link(), include_notes=False, include_summary=False, include_owner_records=True
+    )
+    world.links[link.id] = link
+    cookie = _session(api, world, link)
+    res = _fork(api, link.id, auth=bearer(uuid.uuid4()), cookie=cookie)
+    assert res.status_code == 202, res.text
+    (created,) = world.created
+    # `include_owner_records` is not pinned: personal records are never copied.
+    assert created["include"] == {"notes": False, "ai_explanations": True, "summary": False}
 
 
 def test_fork_starts_are_rate_limited_per_user(

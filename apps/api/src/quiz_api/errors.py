@@ -76,6 +76,8 @@ class ProblemType(StrEnum):
     NOTHING_TO_PUBLISH = "urn:quiz-workspace:problem:nothing-to-publish"
     # 409: only a failed or cancelled import run can be retried.
     IMPORT_NOT_RETRYABLE = "urn:quiz-workspace:problem:import-not-retryable"
+    # 409: another import of the same document is still running (UX12-REEXTRACT).
+    IMPORT_RUNNING = "urn:quiz-workspace:problem:import-running"
     # 409: a draft edit was based on an outdated version of the draft (reload and retry).
     STALE_DRAFT = "urn:quiz-workspace:problem:stale-draft"
     # 409: the draft is already published as a question; edit the question instead.

@@ -243,9 +243,9 @@ LLM_DOC = _doc("1. 표를 보고 답하시오.", TABLE, *OPTIONS)
 
 
 def test_prompt_v4_carries_the_table_and_a_verbatim_rule() -> None:
-    assert EXTRACT_PROMPT_VERSION == "questions.extract/v4"
+    assert EXTRACT_PROMPT_VERSION == "questions.extract/v5"
     ((_, request),) = llm_requests(LLM_DOC)
-    assert request.prompt_version == "questions.extract/v4"
+    assert request.prompt_version == "questions.extract/v5"
     assert GFM in request.prompt
     assert "verbatim" in (request.system or "")
 

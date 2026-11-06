@@ -15,8 +15,10 @@ import {
   classifyShareFailure,
   isShareUrl,
   SHARE_FAILURE_MESSAGES,
+  SHARE_SCOPE_KEYS,
   type ShareFailureKind,
   type ShareLink,
+  type ShareScope,
 } from './model';
 
 export type ShareActionResult =
@@ -40,6 +42,8 @@ export interface SharePolicyInput {
   readonly allowFork?: boolean;
   /** ISO instant with offset, or `null` for no expiry. */
   readonly expiresAt?: string | null;
+  /** UX12-SHARE: what the link exposes; only the flags present change. */
+  readonly scope?: Partial<ShareScope>;
 }
 
 type Outcome<T> =
@@ -120,8 +124,12 @@ function validKey(key: unknown): string | undefined {
 
 function validPolicy(input: unknown): SharePolicyInput | null {
   if (typeof input !== 'object' || input === null) return null;
-  const { allowFork, expiresAt } = input as Record<string, unknown>;
-  const policy: { allowFork?: boolean; expiresAt?: string | null } = {};
+  const { allowFork, expiresAt, scope } = input as Record<string, unknown>;
+  const policy: {
+    allowFork?: boolean;
+    expiresAt?: string | null;
+    scope?: Partial<ShareScope>;
+  } = {};
   if (allowFork !== undefined) {
     if (typeof allowFork !== 'boolean') return null;
     policy.allowFork = allowFork;
@@ -133,6 +141,18 @@ function validPolicy(input: unknown): SharePolicyInput | null {
     )
       return null;
     policy.expiresAt = expiresAt;
+  }
+  if (scope !== undefined) {
+    if (typeof scope !== 'object' || scope === null) return null;
+    const given = scope as Record<string, unknown>;
+    const flags: Partial<Record<keyof ShareScope, boolean>> = {};
+    for (const key of SHARE_SCOPE_KEYS) {
+      const value = given[key];
+      if (value === undefined) continue;
+      if (typeof value !== 'boolean') return null;
+      flags[key] = value;
+    }
+    policy.scope = flags;
   }
   return policy;
 }
@@ -188,6 +208,7 @@ export async function createShareLinkAction(
       body: {
         allow_fork: body.allowFork ?? false,
         ...(body.expiresAt !== undefined ? { expires_at: body.expiresAt } : {}),
+        ...body.scope,
       },
     }),
   );
@@ -195,7 +216,7 @@ export async function createShareLinkAction(
   return issuedResult(workspaceId, result.data);
 }
 
-/** Changes Fork permission and/or expiry of one link (owner; also while archived). */
+/** Changes Fork permission, expiry and/or scope of one link (owner; also while archived). */
 export async function updateShareLinkAction(
   workspaceId: string,
   linkId: string,
@@ -203,7 +224,8 @@ export async function updateShareLinkAction(
 ): Promise<ShareActionResult> {
   const body = validPolicy(policy);
   if (!isUuid(workspaceId) || !isUuid(linkId)) return failed('notFound');
-  if (!body || (body.allowFork === undefined && body.expiresAt === undefined)) {
+  const noScope = !body?.scope || Object.keys(body.scope).length === 0;
+  if (!body || (body.allowFork === undefined && body.expiresAt === undefined && noScope)) {
     return failed('invalid');
   }
   const result = await callApi(workspaceId, (api) =>
@@ -212,6 +234,7 @@ export async function updateShareLinkAction(
       body: {
         ...(body.allowFork !== undefined ? { allow_fork: body.allowFork } : {}),
         ...(body.expiresAt !== undefined ? { expires_at: body.expiresAt } : {}),
+        ...body.scope,
       },
     }),
   );

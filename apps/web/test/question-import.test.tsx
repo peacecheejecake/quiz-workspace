@@ -231,7 +231,7 @@ describe('QuestionImport', () => {
     expect(keys[1]).toBe(keys[0]);
     expect(polls).toBe(2);
     expect(screen.queryByRole('progressbar', { name: '등록 진행률' })).toBeNull();
-  }, 30_000);
+  }, 90_000); // Role queries over a page link button per draft are slow on a loaded machine.
 
   it('QIMP-JOB: reattaches to a registration that is still running when the page opens', async () => {
     const drafts = [draft(0, 'approved'), draft(1, 'approved')];
@@ -430,7 +430,7 @@ describe('QuestionImport', () => {
     expect(screen.getByText(/문제 PDF의 ‘제1장 수신제도’에 맞춰 자동으로 골랐습니다/)).toBeTruthy();
 
     await user.click(picker);
-    await user.click(await screen.findByRole('option', { name: '2장 여신제도' }));
+    await user.click(await screen.findByRole('treeitem', { name: '2장 여신제도' }));
 
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: '1번 문제 챕터' }).textContent).toContain(

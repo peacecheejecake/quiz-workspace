@@ -7,13 +7,16 @@ import './dom-setup';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Invalidation } from '../src/components/questions/viewer/practice-viewer';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
 import {
   answerFreeSession,
   PracticeSessionCache,
   PRACTICE_CACHE_TTL_MS,
 } from '../src/lib/questions/practice-cache';
+import { publishPracticeReset } from '../src/lib/questions/practice-reset-events';
 
 const WS = '55555555-5555-4555-8555-555555555555';
 const WS2 = '55555555-5555-4555-8555-000000000002';
@@ -141,10 +144,17 @@ const recordReturn = vi.fn();
 vi.mock('../src/components/practice-return/practice-return-provider', () => ({
   useOptionalPracticeReturn: () => ({ recordActivity: recordReturn }),
 }));
+vi.mock('../src/lib/questions/practice-open-client', async () => {
+  const { fakePracticeOpen } = await import('./practice-open-fake');
+  return {
+    openQuestionPractice: fakePracticeOpen({
+      latest: () => latest(),
+      open: (ws: string, q: string, key: string) => open(ws, q, key),
+    }),
+  };
+});
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  latestPracticeAction: () => latest(),
   resetPracticeAction: reset,
-  openPracticeSessionAction: (ws: string, q: string, key: string) => open(ws, q, key),
   submitPracticeAction: (ws: string, s: string, a: unknown) => submit(ws, s, a),
   selfGradePracticeAction: vi.fn(),
 }));
@@ -169,10 +179,12 @@ function Harness({
   workspaceId = WS,
   questionId,
   onGraded,
+  onViewed = () => undefined,
 }: {
   readonly workspaceId?: string;
   readonly questionId: string | null;
   readonly onGraded?: (id: string, result: 'correct' | 'incorrect' | 'pending') => void;
+  readonly onViewed?: (id: string) => void;
 }) {
   const q = questionId === Q1 ? question(Q1, 1) : questionId === Q2 ? question(Q2, 2) : null;
   return (
@@ -183,7 +195,7 @@ function Harness({
       readOnly={false}
       onClose={() => undefined}
       onFlagsChange={() => undefined}
-      onViewed={() => undefined}
+      onViewed={onViewed}
       onGraded={onGraded}
     />
   );
@@ -400,29 +412,59 @@ describe('QuestionViewer practice session cache', () => {
     });
   });
 
-  it('does not open a session after a pending lookup is cancelled', async () => {
+  it('ignores an opening that returns after the panel moved on', async () => {
+    const onViewed = vi.fn();
     let release: () => void = () => undefined;
     latest.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          release = () =>
-            resolve({
-              ok: true,
-              data: {
-                session: null,
-                previous_revision: false,
-                reset_epoch: 0,
-                active_revision_id: '77777777-7777-4777-8777-777777777777',
-                latest_attempt_id: null,
-              },
-            });
+          release = () => resolve({ ok: true, data: {} });
         }),
     );
-    const view = render(<Harness questionId={Q1} />);
+    const view = render(<Harness questionId={Q1} onViewed={onViewed} />);
     await waitFor(() => expect(latest).toHaveBeenCalledTimes(1));
-    view.rerender(<Harness questionId={null} />);
+    view.rerender(<Harness questionId={null} onViewed={onViewed} />);
     await act(async () => release());
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(onViewed).not.toHaveBeenCalled();
+  });
+
+  it('UX10-QVIEW-AC04 a reset closing the panel does not open the question again', async () => {
+    function Resetting() {
+      const [questionId, setQuestionId] = useState<string | null>(Q1);
+      const [invalidated, setInvalidated] = useState<Invalidation | null>(null);
+      const q = questionId ? question(Q1, 1) : null;
+      return (
+        <QuestionViewer
+          mode="practice"
+          workspaceId={WS}
+          question={q}
+          readOnly={false}
+          invalidated={invalidated}
+          onReset={(id) => setInvalidated({ questionId: id, seq: 1 })}
+          onClose={() => setTimeout(() => setQuestionId(null), 0)}
+          onFlagsChange={() => undefined}
+          onViewed={() => undefined}
+        />
+      );
+    }
+    render(<Resetting />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(open).toHaveBeenCalledTimes(1);
+    act(() => publishPracticeReset(WS, { [Q1]: 1 }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a view only for a session the server opened', async () => {
+    const onViewed = vi.fn();
+    const view = render(<Harness questionId={Q1} onViewed={onViewed} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(onViewed).toHaveBeenCalledTimes(1);
+    view.rerender(<Harness questionId={null} onViewed={onViewed} />);
+    view.rerender(<Harness questionId={Q1} onViewed={onViewed} />);
+    await screen.findByRole('button', { name: '제출' });
+    expect(onViewed).toHaveBeenCalledTimes(1);
   });
 
   it('a late duplicate open response never restores a session whose submission started', async () => {

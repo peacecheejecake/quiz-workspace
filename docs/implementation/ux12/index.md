@@ -10,7 +10,7 @@
 | 완료(제외) | 21 |
 | 남은 작업(부분 완료 포함) | 75 |
 | 큰 Task(Epic) | 12 |
-| 구현 Task | 46 |
+| 구현 Task | 47 |
 
 ## 1. 실행 규칙
 
@@ -19,7 +19,7 @@
 - **Task 수명주기:** AGENTS.md §3을 따른다. 명세 수정 → 해당 Task 직전에 RED → GREEN → 커밋 → Codex 리뷰(`HERDR_ENV=0`, 불가 시 Opus 리뷰 subagent) → main thread 재검증·merge.
 - **브랜치:** Epic 묶음마다 `feature/ux12-<topic>`, Task마다 `task/UX12-<ID>-<slug>`. 파일 범위가 겹치지 않는 Task만 병렬로, 각자 worktree에서 실행한다.
 - **점검(사용자 지시 2026-11-06, 개정):** Task가 끝나면 구현 subagent가 로컬에서 `make lint`, `make typecheck`, unit test만 돌린다. E2E와 visual은 자기 Task의 새 test만 RED → GREEN으로 확인하고, 전체 실행은 PR CI가 맡는다. PR에서 실패하면 해당 Task의 구현 subagent가 고친다.
-- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. 현재 통합 브랜치는 `feature/ux12-integration`이다.
+- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. `feature/ux12-integration`은 PR #81로 올렸고, 이후 Task는 `feature/ux12-next`에 모은다.
 - **AC 등록:** 새 AC는 `docs/screens/ux12-*.md`와 새 phase(`UX12-<EPIC>.0`)에 둔다. 이미 GREEN인 phase에 새 AC를 넣지 않는다(§7 UX9-SPEC 해석).
 - **Visual baseline:** Task마다 재생성하지 않는다. 묶음의 마지막 QA Task에서 고정 Linux Playwright 이미지로 한 번만 재생성한다. 테두리·glass 변경은 baseline 170장 대부분을 바꾼다.
 - **Migration:** timestamp는 production 적용분(`20261106110000`) 뒤여야 한다. 공유 DB 적용은 main thread만 한다.
@@ -102,7 +102,7 @@
 | SHELL-1 신원 재확인 | 재진입 문구, 복귀 버튼 깜빡임 | 원인 확인: `verifyIdentity`가 창 `focus`·`pageshow`·복귀 클릭마다 `identityPending`을 켜고, `globals.css`가 앱 전체를 `visibility: hidden`으로 만든다. **문구만 지우면 빈 화면 깜빡임이 남는다.** `silent` 모드를 추가해 계정 불일치가 확정될 때만 가린다. 활동 buffer는 유지한다 | ux11-return AC04 개정. `practice-return-provider.test.tsx` RED "same user focus → pending 없음". D-4 | M·없음 |
 | SHELL-2 복귀 bar 모양 | padding, 둥근 모서리, glass, X 테두리 | `practice-return.module.css`. 버튼 padding 축소, 외곽 padding 확대, `--radius-xl`, `glass-surface`. 높이 유지, 320px 대응. X 테두리는 DESIGN-1로 해결 | AC05 44px 유지 | S·DESIGN-1,4 |
 | SHELL-3 테마 | light/dark 버튼 | `ThemeProvider`가 kit에만 있고 앱에 안 쓰인다. `quiz-theme` cookie를 RootLayout이 읽어 `data-theme` 지정(깜빡임 없음, CSP 영향 없음). 사용자 메뉴에 시스템/라이트/다크 | design-system §3.2. 저장 유지 E2E. D-5 | M·DESIGN-1 |
-| SHELL-4 설정 | 드래그 자동 복사 | `/settings` 추가, Switch 기본 꺼짐. `useAutoCopyOnSelect`: pointer 선택만, 입력란 제외. `HighlightableText`의 선택 메뉴와 공존, 복사 내용은 `rangeText` 재사용. iOS는 clipboard 제약으로 데스크톱 우선 | 새 화면 명세. D-5 | M·SHELL-3 |
+| SHELL-4 설정 | 드래그 자동 복사 | `/settings/preferences` 추가, Switch 기본 꺼짐. `useAutoCopyOnSelect`: pointer 선택만, 입력란 제외. `HighlightableText`의 선택 메뉴와 공존, 복사 내용은 `rangeText` 재사용. iOS는 clipboard 제약으로 데스크톱 우선 | 새 화면 명세. D-5 | M·SHELL-3 |
 | SHELL-5 가상키보드 | 키보드 때 헤더·본문 고정 | `interactiveWidget: 'resizes-content'` + `useKeyboardInset`(`visualViewport`). sticky header, panel, 복귀 bar 보정 | overlay-scroll.md. Playwright로 실제 키보드를 못 띄우므로 **실기기 확인이 DoD**. iOS는 최선 노력 | M·SHELL-3 |
 | SHELL-6 도움말 | Release note / help center | 사용자 메뉴에서 여는 `도움말` 정적 페이지, 릴리스 노트는 그 한 절 | D-6 | S·SHELL-3 |
 
@@ -126,6 +126,12 @@
 | VIEW-4 원문 보기 메뉴 | 더보기 메뉴의 원문 보기 | `Preview`를 hook과 view로 분리, `headerExtra`로 전달. 본문 버튼도 유지 | QSRC-01 새 AC. 기본: 진입점 둘 다 유지 | M·VIEW-1 |
 | VIEW-5 로딩 속도 | 문제 로딩 개선 | 측정 먼저(Server-Timing, client mark). 열기마다 server action 2회가 직렬로 돈다. `POST …/practice-open` 한 트랜잭션 + BFF route로 통합. 미제출 payload 유출 test·리셋 경합 유지 | ux10/qview.md, `make contracts`. hover prefetch는 측정 뒤 결정 | L·VIEW-1 |
 | VIEW-6 탐색 반응 | breadcrumb 지연 | 코드만으로 원인 미확정. `useLinkStatus` pending 표시, `documents/[documentId]/loading.tsx` 추가. 측정 후 확정 | D-13 | S–M·없음 |
+
+### 4.4a VIEW 추가 — 제시문 구분(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 개정·test | 크기·의존 |
+|---|---|---|---|---|
+| VIEW-7 제시문 | 제시문 내 줄바꿈, 제시문 사이 구분, 제시문마다 영역 구분 | `<제목>` 형태의 제시문과 `(가)` 항목을 나누어 각각 박스로 표시한다. `∙`, `-` 항목은 줄을 나눈다. 표시 단계에서 처리해 이미 등록된 문제에도 적용하고, 추출기에도 같은 규칙을 넣는다 | QPLAY-01, questions.md §4. TS/Python parity | M·없음 |
 
 ### 4.5 EXPL — AI 해설
 
@@ -174,7 +180,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | CHAPTER-3 명세·RED | 챕터 관리 | `chapter-management.md`(CHMAN-01), DOC-02-AC02 개정, questions §14, architecture §5, workspace-sharing §11 | D-9 | M·D-9 |
 | CHAPTER-4 API | 추가·수정·삭제·이동 | migration: guard에 `chapter_edit` 경로, `documents.chapter_tree_version`, 변경 이력 source 추가. API: tree 조회, 생성, 수정, 일괄 이동(`expected_version`), 삭제(`move_questions_to`). 잠금 순서 Workspace → 문서 → 문제. 사용자 챕터 key는 `user-<uuid>`, 이전 revision 복원 시 이어받기 | pgTAP, 계약, 권한 매트릭스, fork 경합 | L·CHAPTER-3 |
 | CHAPTER-5 관리 화면 | dnd 계층 관리, drop | `문제` 메뉴 `챕터 관리`, modal panel, `@dnd-kit` + 키보드 동등 메뉴. 문제를 챕터로 끌어 놓기는 기존 `chapter-assignments` 재사용 | Chromium·WebKit touch | L·CHAPTER-1, 4 |
-| CHAPTER-6 Heatmap 계층 | 계층별로(잔여) | `OverviewChapter`에 level·조상 추가, Heatmap 접기 | D-9, baseline | M·CHAPTER-2 |
+| CHAPTER-6 필터 계층 | 계층별로(잔여) | `OverviewChapter`에 level 추가, 홈 필터 `ChapterPicker`를 계층으로 표시. Heatmap 배치는 바꾸지 않는다(사용자가 완료로 체크, D-9 미응답) | D-9 | S·CHAPTER-1 |
 
 ### 4.11 SHARE — 공유 범위
 
@@ -290,25 +296,26 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | EXTRACT-4 | 4 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, pytest 175 GREEN |
 | EXTRACT-5 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
-| EXTRACT-6 | 4 | 대기 | |
-| EXTRACT-7 | 4 | 대기 | |
+| EXTRACT-6 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, 원문 영역 정답 차단 추가, unit GREEN, WebKit·계약은 PR CI |
+| EXTRACT-7 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, 원문 영역 정답 차단 추가, unit GREEN, WebKit·계약은 PR CI |
 | DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
 | DESIGN-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
 | SHELL-2 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
 | VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
 | EXPL-3 | 5 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, migration 20261106120000 공유 DB 적용, E2E 18·계약 26 GREEN |
 | VIEW-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 더보기의 원문 보기, E2E 10·lint·typecheck·unit GREEN |
-| VIEW-5 | 5 | 대기 | |
+| VIEW-5 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, DB 왕복 19→10·요청 2→1, 체감 속도 A/B는 미측정 |
 | VIEW-6 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 링크 대기 표시, 첫 반응 약 450→14ms, 페이지 완료 시간은 변화 없음 |
-| DOCS-2 | 5 | 진행 | |
-| SHELL-3 | 6 | 대기 | |
-| SHELL-4 | 6 | 대기 | |
-| SHELL-5 | 6 | 대기 | |
-| SHELL-6 | 6 | 대기 | |
-| CHAPTER-1 | 7 | 대기 | |
-| CHAPTER-3 | 7 | 대기 | |
-| CHAPTER-4 | 7 | 대기 | |
-| CHAPTER-5 | 7 | 대기 | |
-| CHAPTER-6 | 7 | 대기 | |
-| SHARE-1 | 8 | 대기 | |
-| SHARE-2 | 8 | 대기 | |
+| DOCS-2 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 22·lint·typecheck·unit GREEN |
+| SHELL-3 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
+| SHELL-4 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
+| SHELL-5 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 실기기 확인 필요 |
+| SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
+| CHAPTER-1 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과, lint·typecheck·unit GREEN, 일부 E2E는 PR CI |
+| CHAPTER-3 | 7 | 진행 | |
+| CHAPTER-4 | 7 | 진행 | |
+| CHAPTER-5 | 7 | 진행 | |
+| CHAPTER-6 | 7 | 진행 | |
+| SHARE-1 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
+| SHARE-2 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
+| VIEW-7 | 5 | 완료 | Codex P2 3건 수정 후 재리뷰 통과, 첫 구현 E2E·화면 확인, 수정분 E2E는 PR CI |

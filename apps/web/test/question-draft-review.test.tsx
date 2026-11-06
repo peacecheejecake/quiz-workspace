@@ -67,12 +67,14 @@ const DRAFTS: ReviewDraft[] = [
 ];
 
 describe('QuestionDraftReview', () => {
-  it('renders one list item per draft with number, answer state and page links', () => {
+  it('renders one list item per draft with number, answer state and page links', async () => {
+    const onOpenPage = vi.fn();
     render(
       <QuestionDraftReview
         label="가져온 초안"
         drafts={DRAFTS}
-        pageHref={(d, page) => `/doc?page=${page}&d=${d.id}`}
+        onOpenPage={onOpenPage}
+        sourceDocumentId="doc-1"
       />,
     );
     const list = screen.getByRole('list', { name: '가져온 초안' });
@@ -83,13 +85,12 @@ describe('QuestionDraftReview', () => {
     expect(within(first).getByText('1번 문제')).toBeTruthy();
     expect(within(first).getByText('정답')).toBeTruthy();
     expect(within(first).queryByText('정답 없음')).toBeNull();
-    expect(within(first).getByRole('link', { name: '1쪽' }).getAttribute('href')).toBe(
-      '/doc?page=1&d=d1',
-    );
+    await userEvent.click(within(first).getByRole('button', { name: '1쪽' }));
+    expect(onOpenPage).toHaveBeenCalledWith(expect.objectContaining({ id: 'd1' }), 1);
 
     expect(within(third).getByText('정답 없음')).toBeTruthy();
-    expect(within(third).getByRole('link', { name: '2쪽' })).toBeTruthy();
-    expect(within(third).getByRole('link', { name: '3쪽' })).toBeTruthy();
+    expect(within(third).getByRole('button', { name: '2쪽' })).toBeTruthy();
+    expect(within(third).getByRole('button', { name: '3쪽' })).toBeTruthy();
     expect(within(third).getByText(/원본 PDF의 쪽 정보가 없습니다/)).toBeTruthy();
 
     expect(within(fifth).getByText('등록됨')).toBeTruthy();
