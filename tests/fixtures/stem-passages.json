@@ -1,0 +1,540 @@
+[
+  {
+    "name": "two passages then an item list, all on one line",
+    "stem": "다음 자료를 보고 옳은 것만 고른 것은? ( ) <물건 현황> ∙소재지 : 가람시 나무동 12 ∙보증금 : 3억원 ∙임대 기간 : 2026.6.10. ~ 2028.6.9. <보유 자산> ∙가람아파트 - 취득 정보 : 2020년 4억원 - 현재 시세 : 5억원 ∙누리상가 - 취득 정보 : 2021년 2억원 - 현재 시세 : 3억원 (가) 갑은 보증금을 돌려받는다. (나) 을은 취득세를 낸다. (다) 병은 시세를 신고한다.",
+    "normalized": "다음 자료를 보고 옳은 것만 고른 것은? ( )\n\n<물건 현황>\n∙소재지 : 가람시 나무동 12\n∙보증금 : 3억원\n∙임대 기간 : 2026.6.10. ~ 2028.6.9.\n\n<보유 자산>\n∙가람아파트\n- 취득 정보 : 2020년 4억원\n- 현재 시세 : 5억원\n∙누리상가\n- 취득 정보 : 2021년 2억원\n- 현재 시세 : 3억원\n\n(가) 갑은 보증금을 돌려받는다.\n(나) 을은 취득세를 낸다.\n(다) 병은 시세를 신고한다.",
+    "layout": {
+      "lead": ["다음 자료를 보고 옳은 것만 고른 것은?"],
+      "passages": [
+        {
+          "heading": "<물건 현황>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "소재지 : 가람시 나무동 12",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "보증금 : 3억원",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "임대 기간 : 2026.6.10. ~ 2028.6.9.",
+              "subs": []
+            }
+          ]
+        },
+        {
+          "heading": "<보유 자산>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "가람아파트",
+              "subs": [
+                {
+                  "marker": "-",
+                  "text": "취득 정보 : 2020년 4억원"
+                },
+                {
+                  "marker": "-",
+                  "text": "현재 시세 : 5억원"
+                }
+              ]
+            },
+            {
+              "marker": "∙",
+              "text": "누리상가",
+              "subs": [
+                {
+                  "marker": "-",
+                  "text": "취득 정보 : 2021년 2억원"
+                },
+                {
+                  "marker": "-",
+                  "text": "현재 시세 : 3억원"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "rest": "(가) 갑은 보증금을 돌려받는다. (나) 을은 취득세를 낸다. (다) 병은 시세를 신고한다."
+    }
+  },
+  {
+    "name": "no item list; a paragraph after a blank line stays outside",
+    "stem": "옳은 것은? <사례> ∙갑 : 하나 ∙을 : 둘\n\n위 사례에서 고르면?",
+    "normalized": "옳은 것은?\n\n<사례>\n∙갑 : 하나\n∙을 : 둘\n\n위 사례에서 고르면?",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<사례>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "을 : 둘",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "위 사례에서 고르면?"
+    }
+  },
+  {
+    "name": "prose body has no item lines",
+    "stem": "다음을 읽고 답하시오. 〈사례〉 갑은 을에게 물건을 팔았다. 을은 값을 치렀다.",
+    "normalized": "다음을 읽고 답하시오.\n\n〈사례〉\n갑은 을에게 물건을 팔았다. 을은 값을 치렀다.",
+    "layout": {
+      "lead": ["다음을 읽고 답하시오."],
+      "passages": [
+        {
+          "heading": "〈사례〉",
+          "intro": "갑은 을에게 물건을 팔았다. 을은 값을 치렀다.",
+          "lines": []
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "text before the first bullet is the passage's intro",
+    "stem": "옳은 것은? <현황> 갑의 재산이다. •집 : 한 채 •땅 : 두 필지",
+    "normalized": "옳은 것은?\n\n<현황>\n갑의 재산이다.\n•집 : 한 채\n•땅 : 두 필지",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<현황>",
+          "intro": "갑의 재산이다.",
+          "lines": [
+            {
+              "marker": "•",
+              "text": "집 : 한 채",
+              "subs": []
+            },
+            {
+              "marker": "•",
+              "text": "땅 : 두 필지",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "dash items without a parent are the passage's own items",
+    "stem": "옳은 것은? <조건> - 기간 : 3년 - 금리 : 연 2%",
+    "normalized": "옳은 것은?\n\n<조건>\n- 기간 : 3년\n- 금리 : 연 2%",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<조건>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "-",
+              "text": "기간 : 3년",
+              "subs": []
+            },
+            {
+              "marker": "-",
+              "text": "금리 : 연 2%",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "middle dot items at the start of the body; A·B stays",
+    "stem": "옳은 것은? <항목> ·서울·부산 노선 ·대전·광주 노선",
+    "normalized": "옳은 것은?\n\n<항목>\n·서울·부산 노선\n·대전·광주 노선",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<항목>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "·",
+              "text": "서울·부산 노선",
+              "subs": []
+            },
+            {
+              "marker": "·",
+              "text": "대전·광주 노선",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "square heading before a bullet",
+    "stem": "옳은 것은? [자료 1] ∙갑 : 하나 ∙을 : 둘",
+    "normalized": "옳은 것은?\n\n[자료 1]\n∙갑 : 하나\n∙을 : 둘",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "[자료 1]",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "을 : 둘",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "fullwidth heading",
+    "stem": "옳은 것은? ＜자료＞ ∙갑 : 하나 ∙을 : 둘",
+    "normalized": "옳은 것은?\n\n＜자료＞\n∙갑 : 하나\n∙을 : 둘",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "＜자료＞",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "을 : 둘",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "no sentence end before the list after a passage",
+    "stem": "옳은 것은? <자료> ∙시세 : 5억원 ㄱ. 갑 ㄴ. 을",
+    "normalized": "옳은 것은?\n\n<자료>\n∙시세 : 5억원\n\nㄱ. 갑\nㄴ. 을",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "시세 : 5억원",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "ㄱ. 갑 ㄴ. 을"
+    }
+  },
+  {
+    "name": "hyphens that are no sub-items stay on their line",
+    "stem": "옳은 것은? <운행> ∙서울 - 부산 구간은 하루 10 - 3 편이다 ∙값은 2026.1.1. - 2026.12.31. 동안 같다 ∙A-B 등급",
+    "normalized": "옳은 것은?\n\n<운행>\n∙서울 - 부산 구간은 하루 10 - 3 편이다\n∙값은 2026.1.1. - 2026.12.31. 동안 같다\n∙A-B 등급",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<운행>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "서울 - 부산 구간은 하루 10 - 3 편이다",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "값은 2026.1.1. - 2026.12.31. 동안 같다",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "A-B 등급",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "a bullet glyph between numbers or words is no item",
+    "stem": "옳은 것은? <계산> 값은 3 ∙ 4 이고 A∙B 형식이다.",
+    "normalized": "옳은 것은?\n\n<계산>\n값은 3 ∙ 4 이고 A∙B 형식이다.",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<계산>",
+          "intro": "값은 3 ∙ 4 이고 A∙B 형식이다.",
+          "lines": []
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "a mention inside a passage opens no passage",
+    "stem": "옳은 것은? <사례> 갑은 <자료> 를 읽고 <보기>에 적었다.",
+    "normalized": "옳은 것은?\n\n<사례>\n갑은 <자료> 를 읽고 <보기>에 적었다.",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<사례>",
+          "intro": "갑은 <자료> 를 읽고 <보기>에 적었다.",
+          "lines": []
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "glued mention",
+    "stem": "다음 <보기>에서 옳은 것은?",
+    "normalized": "다음 <보기>에서 옳은 것은?",
+    "layout": null
+  },
+  {
+    "name": "spaced mention before the question sentence ends",
+    "stem": "다음 <보기> 에 대한 설명으로 옳은 것은?",
+    "normalized": "다음 <보기> 에 대한 설명으로 옳은 것은?",
+    "layout": null
+  },
+  {
+    "name": "spaced mention after a sentence, question at the end",
+    "stem": "다음은 사례이다. <보기> 를 읽고 옳은 것을 고르면?",
+    "normalized": "다음은 사례이다. <보기> 를 읽고 옳은 것을 고르면?",
+    "layout": null
+  },
+  {
+    "name": "particle after a heading-like mention",
+    "stem": "다음은 사례이다. <보기> 에 대한 설명이다.",
+    "normalized": "다음은 사례이다. <보기> 에 대한 설명이다.",
+    "layout": null
+  },
+  {
+    "name": "the question sits in the body",
+    "stem": "<사례> 갑은 을에게 물건을 팔았다. 옳은 것은?",
+    "normalized": "<사례> 갑은 을에게 물건을 팔았다. 옳은 것은?",
+    "layout": null
+  },
+  {
+    "name": "no question sentence before it",
+    "stem": "<사례> 갑은 을에게 물건을 팔았다.",
+    "normalized": "<사례> 갑은 을에게 물건을 팔았다.",
+    "layout": null
+  },
+  {
+    "name": "lead does not end a sentence",
+    "stem": "다음 <사례> 갑은 을에게 팔았다.",
+    "normalized": "다음 <사례> 갑은 을에게 팔았다.",
+    "layout": null
+  },
+  {
+    "name": "square mention",
+    "stem": "옳은 것은? [표 1] 을 보고 답하시오.",
+    "normalized": "옳은 것은? [표 1] 을 보고 답하시오.",
+    "layout": null
+  },
+  {
+    "name": "empty brackets",
+    "stem": "옳은 것은? <> 갑",
+    "normalized": "옳은 것은? <> 갑",
+    "layout": null
+  },
+  {
+    "name": "math comparison",
+    "stem": "옳은 것은? a < b 이고 c > d 이다.",
+    "normalized": "옳은 것은? a < b 이고 c > d 이다.",
+    "layout": null
+  },
+  {
+    "name": "a heading with no body stays in the question paragraph",
+    "stem": "옳은 것은? <보기> (가) 갑 (나) 을",
+    "normalized": "옳은 것은? <보기>\n\n(가) 갑\n(나) 을",
+    "layout": null
+  },
+  {
+    "name": "a word range before a colon stays on the item line",
+    "stem": "옳은 것은? <근무 일정> ∙월요일 - 금요일 : 휴무 ∙토요일 : 근무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n∙월요일 - 금요일 : 휴무\n∙토요일 : 근무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "월요일 - 금요일 : 휴무",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "토요일 : 근무",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "every item with its own word range stays on one line",
+    "stem": "옳은 것은? <근무 일정> ∙월요일 - 금요일 : 휴무 ∙토요일 - 일요일 : 근무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n∙월요일 - 금요일 : 휴무\n∙토요일 - 일요일 : 근무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "월요일 - 금요일 : 휴무",
+              "subs": []
+            },
+            {
+              "marker": "∙",
+              "text": "토요일 - 일요일 : 근무",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "a word range with no item marker stays in the passage text",
+    "stem": "옳은 것은? <근무 일정> 월요일 - 금요일 : 휴무",
+    "normalized": "옳은 것은?\n\n<근무 일정>\n월요일 - 금요일 : 휴무",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<근무 일정>",
+          "intro": "월요일 - 금요일 : 휴무",
+          "lines": []
+        }
+      ],
+      "rest": ""
+    }
+  },
+  {
+    "name": "an item list before a later heading ends the passage it follows",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> ∙병 : 셋",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑 : 하나\n\n(가) 갑이다.\n(나) 을이다.\n\n<추가>\n∙병 : 셋",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "(가) 갑이다. (나) 을이다. <추가> ∙병 : 셋"
+    }
+  },
+  {
+    "name": "a bodiless heading after a passage stays out of that passage",
+    "stem": "옳은 것은? <자료> ∙갑이다. <보기> (가) 갑이다. (나) 을이다.",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑이다.\n\n<보기>\n\n(가) 갑이다.\n(나) 을이다.",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑이다.",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "<보기> (가) 갑이다. (나) 을이다."
+    }
+  },
+  {
+    "name": "a question in a heading after the item list cancels the passages",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> 왜 그런가?",
+    "normalized": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> 왜 그런가?",
+    "layout": null
+  },
+  {
+    "name": "a question closing the last item keeps the passage before the list",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. 위에서 고르면?",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑 : 하나\n\n(가) 갑이다.\n(나) 을이다. 위에서 고르면?",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "(가) 갑이다. (나) 을이다. 위에서 고르면?"
+    }
+  }
+]
