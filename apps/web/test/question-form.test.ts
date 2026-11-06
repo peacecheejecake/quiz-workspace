@@ -21,6 +21,7 @@ import {
   parseSourceSnapshot,
   removeOption,
   removeSource,
+  reorderOption,
   setMultiAnswer,
   setOptionCorrect,
   setOptionText,
@@ -103,6 +104,47 @@ describe('option ids', () => {
     expect(values.options.map((o) => o.id)).toEqual([b, d, c, 'opt-new']);
     expect(values.options.find((o) => o.id === c)?.text).toBe('다 (수정)');
     expect(contentBody(values).correct_option_ids).toEqual([b]);
+  });
+
+  it('reorderOption moves an option to the place of another, down and up', () => {
+    const values = mcq(['가', '나', '다', '라'], [0]);
+    const [a, b, c, d] = values.options.map((o) => o.id);
+    const down = reorderOption(values, a ?? '', c ?? '');
+    expect(down.options.map((o) => o.id)).toEqual([b, c, a, d]);
+    const up = reorderOption(values, d ?? '', b ?? '');
+    expect(up.options.map((o) => o.id)).toEqual([a, d, b, c]);
+  });
+
+  it('reorderOption keeps ids, texts and correct flags together, so the body grades the same', () => {
+    const values = mcq(['가', '나', '다', '라'], [0, 2]);
+    const before = contentBody(values);
+    const [a, , , d] = values.options.map((o) => o.id);
+    const moved = reorderOption(values, a ?? '', d ?? '');
+    const body = contentBody(moved);
+    expect(new Map(body.options?.map((o) => [o.id, o.text]))).toEqual(
+      new Map(before.options?.map((o) => [o.id, o.text])),
+    );
+    expect([...(body.correct_option_ids ?? [])].sort()).toEqual(
+      [...(before.correct_option_ids ?? [])].sort(),
+    );
+    expect(moved.options.find((o) => o.id === a)).toEqual(values.options.find((o) => o.id === a));
+  });
+
+  it('reorderOption leaves the form alone for the same place or an unknown id', () => {
+    const values = mcq(['가', '나'], [0]);
+    const [a] = values.options.map((o) => o.id);
+    expect(reorderOption(values, a ?? '', a ?? '')).toBe(values);
+    expect(reorderOption(values, a ?? '', 'opt-gone')).toBe(values);
+    expect(reorderOption(values, 'opt-gone', a ?? '')).toBe(values);
+  });
+
+  it('accepts line breaks in an option and treats only blank lines as empty', () => {
+    const values = mcq(['첫 줄\n둘째 줄', ' \n '], [0]);
+    const [first, blank] = values.options.map((o) => o.id);
+    const errors = validateQuestionForm(values);
+    expect(errors[optionKey(first ?? '')]).toBeUndefined();
+    expect(errors[optionKey(blank ?? '')]).toBe(MESSAGES.optionRequired(2));
+    expect(contentBody(values).options?.[0]?.text).toBe('첫 줄\n둘째 줄');
   });
 
   it('keeps server ids when editing an existing question and never re-mints them', () => {
