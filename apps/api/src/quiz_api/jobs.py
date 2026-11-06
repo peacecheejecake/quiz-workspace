@@ -9,7 +9,8 @@ period, so the job is never lost.
 
 The message is exactly what `quiz_worker.celery_app.publish_record` sends: task
 `quiz.jobs.<job_type>` on queue `quiz.jobs` (`interactive` for `ask.answer` and
-`question.ai_explain`), `task_id` = job id, one positional argument = the JSON `JobEnvelope`.
+`question.ai_explain`, `quiz.ondemand` for `mock_exam.generate`), `task_id` = job id, one
+positional argument = the JSON `JobEnvelope`.
 The argument repr is replaced so the envelope never reaches broker events or logs. These names
 are mirrored (not imported) so the API does not depend on the worker package;
 `apps/api/tests/test_jobs.py` checks they match.
@@ -34,10 +35,16 @@ DEFAULT_QUEUE = "quiz.jobs"
 # `document.parse` or summary never delays an answer the user is waiting for.
 INTERACTIVE_QUEUE = "interactive"
 INTERACTIVE_JOB_TYPES = frozenset({"ask.answer", "question.ai_explain"})
+# Jobs a person starts and watches (MOCK-01-C11): every worker process reads this queue, so a long
+# document or question extraction job in the default slot does not hold them back.
+ONDEMAND_QUEUE = "quiz.ondemand"
+ONDEMAND_JOB_TYPES = frozenset({"mock_exam.generate"})
 
 
 def queue_for(job_type: str) -> str:
-    return INTERACTIVE_QUEUE if job_type in INTERACTIVE_JOB_TYPES else DEFAULT_QUEUE
+    if job_type in INTERACTIVE_JOB_TYPES:
+        return INTERACTIVE_QUEUE
+    return ONDEMAND_QUEUE if job_type in ONDEMAND_JOB_TYPES else DEFAULT_QUEUE
 
 
 @dataclass(frozen=True)

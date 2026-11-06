@@ -61,6 +61,8 @@ public_domain = false
 # WORKER_QUEUE=interactive on the Railway service; the workflow never changes env vars. No volume:
 # ask jobs call the LLM and Qdrant and load no local weights (HF_HOME only matters for a local
 # Qwen3 embedder, which the interactive worker does not need with WORKER_EMBEDDER=workers_ai).
+# It also reads quiz.ondemand (mock exams, MOCK-01-C11): keep WORKER_MOCK_EXAMS, MOCK_EXAM_* and the
+# LLM variables equal to `worker`'s.
 [services.worker-interactive]
 image = "quiz-worker"
 dockerfile = "apps/worker/Dockerfile"

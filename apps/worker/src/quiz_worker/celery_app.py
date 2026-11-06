@@ -51,6 +51,7 @@ from quiz_worker.fork_job import LazyForkDeps, workspace_fork_definition
 from quiz_worker.jobs import ECHO_JOB
 from quiz_worker.logging_config import configure_logging, job_id_var
 from quiz_worker.mock_exam_job import LazyMockExamDeps, mock_exam_generate_definition
+from quiz_worker.mock_exam_store import JOB_TYPE as MOCK_EXAM_JOB_TYPE
 from quiz_worker.pg_store import (
     PostgresJobStore,
     create_job_store_engine,
@@ -84,10 +85,22 @@ ASK_PURGE_INTERVAL_SECONDS = 24 * 3600
 # (`WORKER_QUEUE=interactive`, quiz_worker.serve) so document jobs never delay an answer.
 INTERACTIVE_QUEUE = "interactive"
 INTERACTIVE_JOB_TYPES = frozenset({ASK_JOB_TYPE, EXPLAIN_JOB_TYPE})
+# Jobs a person starts and watches (MOCK-01-C11). Every worker process reads this queue, so a free
+# slot of either one takes them: the default process has one slot by default, and a whole book or
+# a question extraction holds it for up to two hours.
+ONDEMAND_QUEUE = "quiz.ondemand"
+ONDEMAND_JOB_TYPES = frozenset({MOCK_EXAM_JOB_TYPE})
 
 
 def queue_for(job_type: str) -> str:
-    return INTERACTIVE_QUEUE if job_type in INTERACTIVE_JOB_TYPES else DEFAULT_QUEUE
+    if job_type in INTERACTIVE_JOB_TYPES:
+        return INTERACTIVE_QUEUE
+    return ONDEMAND_QUEUE if job_type in ONDEMAND_JOB_TYPES else DEFAULT_QUEUE
+
+
+def worker_queues(*, interactive: bool) -> list[str]:
+    """The queues one worker process reads (`WORKER_QUEUE`)."""
+    return [INTERACTIVE_QUEUE if interactive else DEFAULT_QUEUE, ONDEMAND_QUEUE]
 
 
 # Job types that run under the document task time limits (whole-book parse + embedding, and
@@ -348,7 +361,8 @@ def build_celery_config(settings: WorkerSettings) -> dict[str, Any]:
         "task_time_limit": settings.task_time_limit_seconds,
         "task_default_queue": DEFAULT_QUEUE,
         "task_routes": {
-            task_name(job_type): {"queue": INTERACTIVE_QUEUE} for job_type in INTERACTIVE_JOB_TYPES
+            task_name(job_type): {"queue": queue_for(job_type)}
+            for job_type in INTERACTIVE_JOB_TYPES | ONDEMAND_JOB_TYPES
         },
         # No task arguments in the result backend or task events.
         "result_extended": False,
