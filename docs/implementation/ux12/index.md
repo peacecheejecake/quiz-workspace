@@ -312,7 +312,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | SHELL-5 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 실기기 확인 필요 |
 | SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | CHAPTER-1 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과, lint·typecheck·unit GREEN, 일부 E2E는 PR CI |
-| CHAPTER-3 | 7 | 진행 | |
+| CHAPTER-3 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
 | CHAPTER-4 | 7 | 진행 | |
 | CHAPTER-5 | 7 | 진행 | |
 | CHAPTER-6 | 7 | 진행 | |
