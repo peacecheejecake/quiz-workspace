@@ -113,6 +113,7 @@ function Harness({
         highlights={highlights}
         matches={matches}
         readOnly={readOnly}
+        activeHighlightId={selection?.highlightId}
         onSelectRange={(s) => {
           onSelection?.(s);
           setSelection(s);
@@ -435,6 +436,38 @@ describe('HILITE-01-C09 HighlightableText', () => {
     await user.click(within(open).getByRole('menuitemradio', { name: '파랑' }));
     expect(onAction).toHaveBeenCalledWith({ type: 'recolor', id: 'h1', color: 'blue' });
   });
+
+  it.each(['mouse', 'touch'] as const)(
+    'UX12-HILITE-AC02 pressing the open highlight again closes the menu (%s)',
+    async (pointerType) => {
+      const OTHER: TextHighlight = { id: 'h2', block: 's1.i0', start: 0, end: 2, color: 'blue' };
+      render(<Harness highlights={[YELLOW, OTHER]} />);
+      const press = (id: string) => {
+        const mark = document.querySelector<HTMLElement>(`mark[data-highlight-id="${id}"]`);
+        if (!mark) throw new Error(`no mark ${id}`);
+        fireEvent.pointerDown(mark, { pointerType });
+        fireEvent.pointerUp(mark, { pointerType });
+      };
+
+      press('h1');
+      await menu();
+      press('h1');
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+      await act(async () => new Promise((r) => setTimeout(r, 10)));
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+      press('h1');
+      expect(await menu()).toBeVisible();
+      // Another highlight takes the menu over instead of closing it (a mouse closes it first).
+      press('h2');
+      await waitFor(async () =>
+        expect(within(await menu()).getByRole('menuitemradio', { name: '파랑' })).toHaveAttribute(
+          'aria-checked',
+          'true',
+        ),
+      );
+    },
+  );
 
   it('HILITE-01-C09 a cancelled or moving touch on a highlight (scrolling) opens no menu', async () => {
     const onSelection = vi.fn();

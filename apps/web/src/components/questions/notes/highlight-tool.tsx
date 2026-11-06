@@ -114,6 +114,8 @@ export interface HighlightToolOptions {
 
 export interface HighlightTool {
   readonly onSelectRange: (selection: HighlightSelection | null) => void;
+  /** The highlight whose menu is open, for `HighlightableText`. */
+  readonly activeHighlightId: string | null;
   /** The `HighlightMenu`, rendered next to the area. */
   readonly menu: ReactNode;
 }
@@ -180,5 +182,9 @@ export function useHighlightTool({
       {error ? <p role="alert">{error}</p> : null}
     </>
   );
-  return { onSelectRange: setSelection, menu };
+  return {
+    onSelectRange: setSelection,
+    activeHighlightId: selection?.highlightId ?? null,
+    menu,
+  };
 }

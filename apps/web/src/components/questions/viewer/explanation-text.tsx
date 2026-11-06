@@ -65,7 +65,7 @@ function HighlightedExplanation({
   );
   const [collected, setCollected] = useState(false);
   const areaRef = useRef<HTMLDivElement>(null);
-  const { onSelectRange, menu } = useHighlightTool({
+  const { onSelectRange, activeHighlightId, menu } = useHighlightTool({
     store,
     areaRef,
     drawn,
@@ -101,6 +101,7 @@ function HighlightedExplanation({
         blocks={blocks}
         highlights={drawn}
         onSelectRange={onSelectRange}
+        activeHighlightId={activeHighlightId}
         className={`${styles.explanation} ${className ?? ''}`}
       />
       {menu}
