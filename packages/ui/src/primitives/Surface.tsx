@@ -42,8 +42,7 @@ export type GlassSurfaceProps = SurfaceBaseProps;
 /**
  * Translucent, blurred surface for floating interaction layers (top bar, panels, popovers).
  * Falls back to the opaque surface when `backdrop-filter` is unsupported or the user prefers
- * reduced transparency (`glass-surface` from @quiz/design-tokens/base.css). Never place it over
- * long-form reading content.
+ * reduced transparency (`glass-surface` from @quiz/design-tokens/base.css).
  */
 export function GlassSurface({
   padding = 'md',

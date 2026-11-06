@@ -1,5 +1,5 @@
 /* DOC-02 PDF viewer + canonical text editor. Semantic tokens only; the reading areas (PDF and
- * text) are opaque surfaces — no glass/blur over them (design-system §1, checklist). */
+ * text) are opaque surfaces; floating layers may blur over them (design-system §10). */
 
 .screen {
   display: grid;
