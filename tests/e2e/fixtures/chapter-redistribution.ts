@@ -181,7 +181,7 @@ export const redistUi = {
   manualBadge: (scope: Locator) => scope.getByText(/^(직접 정함|set by hand|manual)$/i),
   /** A question checkbox row by a unique stem fragment. */
   questionByStem: (dialog: Locator, stem: string) =>
-    dialog.getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+    dialog.getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
   /** The element holding a question row (checkbox + badge); `has` is relative to the row. */
   rowByStem: (dialog: Locator, stem: string) =>
     dialog
@@ -189,7 +189,7 @@ export const redistUi = {
       .filter({
         has: dialog
           .page()
-          .getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+          .getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
       })
       .last(),
   target: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(옮길 챕터|move to)/i }),

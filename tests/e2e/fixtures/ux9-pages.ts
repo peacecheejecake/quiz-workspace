@@ -55,6 +55,7 @@ import {
   truthQuestion,
   type Draft,
   type ImportRun,
+  QUESTION_DOT_NAME,
 } from './questions.ts';
 import { main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
@@ -357,7 +358,7 @@ export const homeBackgroundUi = {
   dots: (page: Page) =>
     homeBackgroundUi
       .heatmap(page)
-      .getByRole('button', { name: /\d+번 문제|question \d+/i, includeHidden: true }),
+      .getByRole('button', { name: QUESTION_DOT_NAME, includeHidden: true }),
   chapterGroup: (page: Page, title: string) =>
     homeBackgroundUi.heatmap(page).getByRole('region', { name: title, includeHidden: true }),
   /** The 본문 search page's result list (SEARCH-02). */

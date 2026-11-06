@@ -646,7 +646,7 @@ export const noteToolsUi = {
   results: (panel: Locator) => panel.locator('mark[data-search-result]'),
   current: (panel: Locator) => panel.locator('mark[data-search-result][data-current="true"]'),
   currentLabel: /현재 결과|current (result|match)/i,
-  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /\d+번\s*·/ }),
+  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /(\d+번|번호 없음)\s*·/ }),
   touchPreview: (page: Page) =>
     page.getByRole('dialog', { name: /문제 미리보기|question preview/i }),
   openQuestion: (scope: Locator) =>

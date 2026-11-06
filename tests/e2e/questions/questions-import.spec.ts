@@ -59,6 +59,7 @@ import {
   waitForLatestImport,
   type Draft,
   type TruthQuestion,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import { isBlocked, reviewListUi } from '../fixtures/ux9-pages.ts';
 
@@ -816,7 +817,7 @@ test(
     await expect(overviewUi.dots(page)).toHaveCount(2);
     for (const title of [moved?.title, suggested?.title]) {
       const group = overviewUi.heatmap(page).getByRole('region', { name: title ?? '' });
-      await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+      await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(1);
     }
   },
 );
