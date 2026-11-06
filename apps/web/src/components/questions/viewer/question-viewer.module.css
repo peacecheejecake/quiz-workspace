@@ -124,8 +124,10 @@
 /* Result borders use the heatmap's green and red (VIEW-RESULT 2026-11-07). Only correct answers get
    one; the border's presence versus absence, the result line and the hidden option wording carry the
    state, so the fill's lower contrast is not the only signal. */
+/* The right pick uses the primary colour (RESULT-PRIMARY); inside the glass panel `--color-accent`
+   is already the on-glass step. */
 .toneCorrect {
-  border-color: var(--color-success-fill);
+  border-color: var(--color-accent);
 }
 
 .toneAnswer {

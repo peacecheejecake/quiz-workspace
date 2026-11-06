@@ -1028,7 +1028,7 @@ const MARK = {
 } as const;
 
 test(
-  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice has no border and the correct option is red, each with a described mark',
+  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered in the primary colour, a wrong choice has no border and the correct option is red, each with a described mark',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('qplay01-ac12');
@@ -1044,7 +1044,8 @@ test(
     const [a = '', b = '', c = '', d = ''] = texts;
     const [ma = '', mb = '', mc = '', md = ''] = multi.revision.options.map((o) => o.text);
     await openOverview(page, s);
-    const success = await tokenColor(page, 'color-success-fill');
+    // Inside the glass panel `--color-accent` is the on-glass step (RESULT-PRIMARY).
+    const success = await tokenColor(page, 'color-accent-on-glass');
     const danger = await tokenColor(page, 'color-danger-fill');
     expect(new Set([success, danger, TRANSPARENT]).size).toBe(3);
 
@@ -1061,7 +1062,7 @@ test(
     await panelUi.option(panel, c).check();
     const before = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
 
-    // Correct: the chosen (correct) option is green with "정답 · 내 선택"; nothing else is marked.
+    // Correct: the chosen (correct) option has the primary-colour border with "정답 · 내 선택"; nothing else is marked.
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await expectRows(

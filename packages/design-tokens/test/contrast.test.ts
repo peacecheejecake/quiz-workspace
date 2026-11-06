@@ -113,7 +113,14 @@ const REQUIRED: Pair[] = [
       (bg): Pair => [fg, bg, NON_TEXT_MIN],
     ),
   ),
-  // Result borders in the heatmap's colors: the light fills measure 2.65 to 2.95:1 on the panel surfaces.
+  // RESULT-PRIMARY: the right pick's border is the primary colour (the on-glass step inside the panel).
+  ...(['color-accent', 'color-accent-on-glass'] as const).flatMap((fg) =>
+    (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
+      (bg): Pair => [fg, bg, NON_TEXT_MIN],
+    ),
+  ),
+  // Wrong-answer borders (danger) and the success fill (still the correct-answer border of the revision
+  // view) in the heatmap's colors: the light fills measure 2.65 to 2.95:1 on the panel surfaces.
   // RESULT-MARKS removed the check/X icons, so the allowance now rests on the 2px border being present
   // versus absent on ungraded rows and on the hidden wording (assistive tech); colour is never the only signal.
   ...(['color-success-fill', 'color-danger-fill'] as const).flatMap((fg) =>
