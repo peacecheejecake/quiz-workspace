@@ -175,6 +175,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.
   // UX12 EXTRACT-7: question figures from the PDF above the options.
   'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
+  // UX12 EXTRACT-9: structured cells beside the stem's GFM tables, and editing them as tables.
+  'UX12-STEMTABLE.0': ['UX12-STEMTABLE'],
   // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).
   'CHMAN.0': ['CHMAN-01'],
 };

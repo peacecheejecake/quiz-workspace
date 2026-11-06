@@ -25,6 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from book_core.question import StemTables
 from fastapi.exceptions import RequestValidationError
 
 QuestionType = Literal["MCQ", "SHORT_ANSWER", "ESSAY"]
@@ -56,6 +57,8 @@ class QuestionContent:
     accepted_answers: tuple[str, ...] | None
     explanation: str | None
     rubric: str | None
+    # UX12-STEMTABLE: aligned with `stem` by `aligned_stem_tables` before it gets here.
+    stem_tables: StemTables | None = None
 
     def options_json(self) -> list[dict[str, str]]:
         return [{"id": oid, "text": text} for oid, text in self.options]

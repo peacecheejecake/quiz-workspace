@@ -184,6 +184,7 @@ export function MockQuestionDialog({
                     id: question.revision.id,
                     version: question.revision.version,
                     stem: question.stem,
+                    stem_tables: question.stem_tables ?? null,
                     options: question.options,
                     correct_option_ids: question.correct_option_ids ?? null,
                     accepted_answers: question.accepted_answers ?? null,
@@ -221,7 +222,11 @@ export function MockQuestionDialog({
               </>
             ) : (
               <>
-                <StemText stem={grid?.stem ?? question.stem} className={styles.previewStem} />
+                <StemText
+                  stem={grid?.stem ?? question.stem}
+                  stemTables={question.stem_tables}
+                  className={styles.previewStem}
+                />
                 {grid ? <OptionGridHead grid={grid} className={styles.previewGridHead} /> : null}
                 {question.question_type === 'MCQ' ? (
                   <ol className={styles.previewOptions} aria-label="보기">
@@ -287,6 +292,7 @@ function formOf(question: MockExamQuestion): QuestionFormValues {
   return {
     type: question.question_type,
     stem: question.stem,
+    stemTables: question.stem_tables ?? null,
     options: question.options.map((o) => ({ id: o.id, text: o.text, correct: correct.has(o.id) })),
     multiAnswer: question.is_multi_answer,
     acceptedAnswers: (question.accepted_answers ?? []).join('\n'),
@@ -354,6 +360,7 @@ function MockQuestionEditor({
     const result = await api.editQuestion(question.id, {
       base_revision_id: question.revision.id,
       stem: body.stem,
+      stem_tables: body.stem_tables,
       options: body.options,
       correct_option_ids: body.correct_option_ids,
       is_multi_answer: body.is_multi_answer,

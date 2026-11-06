@@ -15,7 +15,9 @@ select columns_are('public', 'questions',
 select columns_are('public', 'question_revisions',
   array['id', 'workspace_id', 'question_id', 'version', 'stem', 'options', 'correct_option_ids',
         'accepted_answers', 'is_multi_answer', 'explanation', 'rubric', 'created_by',
-        'created_at']);
+        'created_at',
+        -- UX12 EXTRACT-9
+        'stem_tables']);
 select columns_are('public', 'question_sources',
   array['id', 'workspace_id', 'question_id', 'document_id', 'document_revision_id', 'page_start',
         'page_end', 'block_ids', 'locations', 'import_run_id', 'created_at']);

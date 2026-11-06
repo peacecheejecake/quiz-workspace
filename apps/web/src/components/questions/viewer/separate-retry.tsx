@@ -171,6 +171,7 @@ export function SeparateRetry({
           <QuestionBody
             kind="answer"
             stem={session.stem}
+            stemTables={session.stem_tables}
             question={session}
             figures={<QuestionFigures source={questionSource} />}
             answer={answer}

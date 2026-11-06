@@ -1154,7 +1154,7 @@ function useSolveStep({
   } else if (!shownQuestion || (sessionWanted && !session && sessionLoad?.status !== 'error')) {
     content = (
       <div aria-busy="true">
-        <QuestionStem stem={item.stem ?? ''} />
+        <QuestionStem stem={item.stem ?? ''} stemTables={item.stem_tables} />
         <p className={styles.loading}>문제를 불러오는 중입니다…</p>
       </div>
     );
@@ -1194,6 +1194,7 @@ function useSolveStep({
           <QuestionBody
             kind="answer"
             stem={session?.stem ?? item.stem ?? ''}
+            stemTables={session ? session.stem_tables : item.stem_tables}
             question={shownQuestion}
             figures={item.question_id ? <QuestionFigures source={sourcePreview} /> : null}
             answer={answer}

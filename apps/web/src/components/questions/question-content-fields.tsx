@@ -44,6 +44,7 @@ import {
   type QuestionFormValues,
   type QuestionType,
 } from '@/lib/questions/form';
+import { StemTableFields } from './stem/stem-table-editor';
 import styles from './question-bank.module.css';
 
 export interface QuestionContentFieldsProps {
@@ -89,6 +90,8 @@ export function QuestionContentFields({
         error={errors.stem}
         required
       />
+
+      <StemTableFields values={values} update={update} />
 
       {isMcq ? (
         <fieldset className={styles.fieldset}>

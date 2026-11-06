@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
+from book_core.question import stem_tables_json
 from sqlalchemy import (
     ColumnElement,
     and_,
@@ -43,6 +44,7 @@ from quiz_api.repositories.tables import (
     question_sources,
     questions,
 )
+from quiz_api.stem_tables import parse_stem_tables
 
 # Sort key for questions without a display number (int4 max): they follow numbered ones.
 UNNUMBERED = 2147483647
@@ -73,6 +75,7 @@ class RevisionRecord:
     explanation: str | None
     rubric: str | None
     created_at: datetime
+    stem_tables: list[Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +136,7 @@ class QuestionRecord:
             else None,
             explanation=rev.explanation,
             rubric=rev.rubric,
+            stem_tables=parse_stem_tables(rev.stem_tables),
         )
 
 
@@ -182,6 +186,7 @@ _REVISION_COLUMNS = (
     question_revisions.c.is_multi_answer.label("rev_is_multi_answer"),
     question_revisions.c.explanation.label("rev_explanation"),
     question_revisions.c.rubric.label("rev_rubric"),
+    question_revisions.c.stem_tables.label("rev_stem_tables"),
     question_revisions.c.created_at.label("rev_created_at"),
 )
 
@@ -238,6 +243,7 @@ def _revision(row: Any) -> RevisionRecord:
         is_multi_answer=row.rev_is_multi_answer,
         explanation=row.rev_explanation,
         rubric=row.rev_rubric,
+        stem_tables=row.rev_stem_tables,
         created_at=row.rev_created_at,
     )
 
@@ -554,6 +560,7 @@ class QuestionRepository:
                 is_multi_answer=content.is_multi_answer,
                 explanation=content.explanation,
                 rubric=content.rubric,
+                stem_tables=stem_tables_json(content.stem_tables),
                 created_by=actor_id,
             )
         )

@@ -17,6 +17,7 @@ import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-
 import { StemBlocks } from '@/components/questions/stem/stem-text';
 import type { Question } from '@/lib/questions/form';
 import { optionGrid, type OptionGrid } from '@/lib/questions/stem-table';
+import type { StemTables } from '@/lib/questions/stem-table-edit';
 import { ExplanationText, type ExplanationHighlighting } from './explanation-text';
 import {
   ANSWER_TEXT_MAX,
@@ -66,16 +67,23 @@ export function QuestionBody(props: QuestionBodyProps) {
  * paragraphs is a spacing token rather than a full empty line; labelled stem items go in the
  * 제시 항목 box between the question sentence and the options (STEM-ITEMS, QPLAY-01-AC14).
  */
-export function QuestionStem({ stem }: { readonly stem: string }) {
+export function QuestionStem({
+  stem,
+  stemTables,
+}: {
+  readonly stem: string;
+  readonly stemTables?: StemTables;
+}) {
   return (
     <div className={styles.stem}>
-      <StemBlocks stem={stem} />
+      <StemBlocks stem={stem} stemTables={stemTables} />
     </div>
   );
 }
 
 interface AnswerBodyProps {
   readonly stem: string;
+  readonly stemTables?: StemTables;
   readonly question: AnswerQuestion;
   readonly answer: PracticeAnswer;
   /** The answer cannot change (submitted, submitting, or read-only). */
@@ -95,6 +103,7 @@ interface AnswerBodyProps {
 
 function AnswerBody({
   stem,
+  stemTables,
   question,
   answer,
   disabled,
@@ -115,7 +124,7 @@ function AnswerBody({
   const grid = question.question_type === 'MCQ' ? optionGrid(stem, question.options) : null;
   return (
     <>
-      <QuestionStem stem={grid?.stem ?? stem} />
+      <QuestionStem stem={grid?.stem ?? stem} stemTables={stemTables} />
       {figures}
       <div
         ref={hiddenResult ? focusRef : undefined}
@@ -375,7 +384,7 @@ function RevisionBody({
     <>
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
-        <QuestionStem stem={grid?.stem ?? revision.stem} />
+        <QuestionStem stem={grid?.stem ?? revision.stem} stemTables={revision.stem_tables} />
         {figures}
       </section>
       {type === 'MCQ' ? (

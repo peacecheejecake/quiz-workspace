@@ -49,6 +49,7 @@ SESSION_FIELDS = {
     "revision_id",
     "question_type",
     "stem",
+    "stem_tables",
     "is_multi_answer",
     "options",
     "displayed_option_ids",

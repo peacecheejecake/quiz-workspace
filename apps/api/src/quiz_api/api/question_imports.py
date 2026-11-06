@@ -135,6 +135,14 @@ from quiz_api.repositories.question_imports import (
     RunStatus,
 )
 from quiz_api.repositories.questions import QuestionRepository
+from quiz_api.stem_tables import (
+    STEM_TABLES_DESCRIPTION,
+    STEM_TABLES_EDIT_DESCRIPTION,
+    StemTable,
+    StemTablesInput,
+    edited_stem_tables,
+    parse_stem_tables,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +247,9 @@ class DraftPayload(BaseModel):
     origin: Literal["pdf_import", "generation"]
     question_type: QuestionType
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     options: list[QuestionOption]
     correct_option_ids: list[str] | None = Field(description="null = the source has no answer.")
     accepted_answers: list[str] | None = Field(description="null = the source has no answer.")
@@ -444,6 +455,10 @@ class QuestionDraftUpdate(BaseModel):
     base_version: str = Field(max_length=64, description="`version` of the draft being edited.")
     question_type: QuestionType | None = None
     stem: str | None = Field(default=None, max_length=MAX_STEM)
+    stem_tables: StemTablesInput | None = Field(
+        default=None,
+        description=STEM_TABLES_EDIT_DESCRIPTION,
+    )
     options: list[QuestionOption] | None = Field(default=None, max_length=MAX_OPTIONS)
     correct_option_ids: list[str] | None = Field(default=None, max_length=MAX_OPTIONS)
     is_multi_answer: bool | None = None
@@ -846,6 +861,7 @@ def draft_previous(
                     question.correct_option_ids,
                     question.accepted_answers,
                     question.rubric,
+                    parse_stem_tables(question.stem_tables),
                 ),
             )
         elif old_draft is not None:
@@ -862,6 +878,7 @@ def draft_previous(
                     old.correct_option_ids,
                     old.accepted_answers,
                     old.rubric,
+                    old.stem_tables,
                 ),
             )
     missing = sorted({_draft_number(d) for key, d in earlier.items() if key not in keys})
@@ -1375,9 +1392,16 @@ def update_question_draft(
         if body.is_multi_answer is not None
         else (old.is_multi_answer and question_type == "MCQ")
     )
+    stem = body.stem if body.stem is not None else old.stem
     content = QuestionContent(
         question_type=question_type,
-        stem=body.stem if body.stem is not None else old.stem,
+        stem=stem,
+        stem_tables=edited_stem_tables(
+            stem,
+            sent="stem_tables" in sent,
+            tables=body.stem_tables,
+            stored=old.stem_tables,
+        ),
         options=tuple((o.id, o.text) for o in body.options)
         if body.options is not None
         else old.options,

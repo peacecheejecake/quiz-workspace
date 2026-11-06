@@ -3886,6 +3886,11 @@ export type components = {
       source_question_revision_id?: string | null;
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /** Validations */
       validations: components['schemas']['DraftValidation'][];
       /**
@@ -3905,7 +3910,7 @@ export type components = {
        * Changed
        * @description What differs; empty when nothing does.
        */
-      changed: ('type' | 'stem' | 'options' | 'answer')[];
+      changed: ('type' | 'stem' | 'table' | 'options' | 'answer')[];
       /**
        * Number
        * @description Its number, else the earlier draft's N번.
@@ -5361,6 +5366,11 @@ export type components = {
       source: components['schemas']['MockExamSourceRef'];
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /** Validation Issues */
       validation_issues?: components['schemas']['MockExamValidationNote'][] | null;
       /**
@@ -5390,6 +5400,11 @@ export type components = {
       rubric?: string | null;
       /** Stem */
       stem?: string | null;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.
+       */
+      stem_tables?: (components['schemas']['StemTableInput'] | null)[] | null;
     };
     /** MockExamRevisionRef */
     MockExamRevisionRef: {
@@ -5621,6 +5636,11 @@ export type components = {
       state: 'open' | 'pending_grade' | 'graded';
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /**
        * Workspace Id
        * Format: uuid
@@ -6319,6 +6339,11 @@ export type components = {
       /** Stem */
       stem: string;
       /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
+      /**
        * Workspace Id
        * Format: uuid
        */
@@ -6408,6 +6433,11 @@ export type components = {
       state: 'open' | 'pending_grade' | 'graded';
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /** Submitted At */
       submitted_at: string | null;
       /**
@@ -6607,6 +6637,11 @@ export type components = {
       sources?: components['schemas']['QuestionSourceInput'][];
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTableInput'] | null)[] | null;
     };
     /** QuestionDetail */
     QuestionDetail: {
@@ -6716,6 +6751,11 @@ export type components = {
       rubric?: string | null;
       /** Stem */
       stem?: string | null;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.
+       */
+      stem_tables?: (components['schemas']['StemTableInput'] | null)[] | null;
     };
     /**
      * QuestionLineage
@@ -6802,6 +6842,11 @@ export type components = {
        * @description The active revision's stem, unaltered.
        */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
     };
     /**
      * QuestionRange
@@ -6855,6 +6900,11 @@ export type components = {
       rubric: string | null;
       /** Stem */
       stem: string;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /** Version */
       version: number;
     };
@@ -6949,6 +6999,11 @@ export type components = {
       sources?: components['schemas']['QuestionSourceInput'][] | null;
       /** Stem */
       stem?: string | null;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.
+       */
+      stem_tables?: (components['schemas']['StemTableInput'] | null)[] | null;
     };
     /** RevisionSummary */
     quiz_api__api__documents__RevisionSummary: {
@@ -7376,6 +7431,11 @@ export type components = {
       /** Stem */
       stem: string;
       /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
+      /**
        * Workspace Id
        * Format: uuid
        */
@@ -7556,6 +7616,11 @@ export type components = {
       session_state: ('open' | 'pending_grade' | 'graded') | null;
       /** Stem */
       stem: string | null;
+      /**
+       * Stem Tables
+       * @description Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.
+       */
+      stem_tables?: (components['schemas']['StemTable'] | null)[] | null;
       /** Total */
       total: number;
     };
@@ -8405,6 +8470,50 @@ export type components = {
       document_revision_id: string | null;
       /** Page */
       page: number;
+    };
+    /**
+     * StemTable
+     * @description The cells of one pipe block of the stem, in the shape of a document table.
+     */
+    StemTable: {
+      /** Header Rows */
+      header_rows: number;
+      /**
+       * Rows
+       * @description Rectangular grid: merged cells repeat their text.
+       */
+      rows: string[][];
+      /**
+       * Spans
+       * @description Merged cells; null when there are none.
+       */
+      spans?: components['schemas']['StemTableSpan'][] | null;
+    };
+    /** StemTableInput */
+    StemTableInput: {
+      /** Header Rows */
+      header_rows: number;
+      /**
+       * Rows
+       * @description Rectangular grid: merged cells repeat their text.
+       */
+      rows: string[][];
+      /**
+       * Spans
+       * @description Merged cells; null when there are none.
+       */
+      spans?: components['schemas']['StemTableSpan'][] | null;
+    };
+    /** StemTableSpan */
+    StemTableSpan: {
+      /** Col */
+      col: number;
+      /** Col Span */
+      col_span: number;
+      /** Row */
+      row: number;
+      /** Row Span */
+      row_span: number;
     };
     /**
      * SubmitBody

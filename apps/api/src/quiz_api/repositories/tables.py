@@ -170,6 +170,7 @@ question_revisions = Table(
     Column("rubric", Text),
     Column("created_by", Uuid),
     _ts("created_at", nullable=False),
+    Column("stem_tables", JSONB(none_as_null=True)),
 )
 
 question_sources = Table(

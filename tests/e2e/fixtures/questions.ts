@@ -243,9 +243,24 @@ export interface QuestionSource {
   readonly page_end: number | null;
 }
 
+export interface StemTableCells {
+  readonly rows: readonly (readonly string[])[];
+  readonly header_rows: number;
+  readonly spans?:
+    | readonly {
+        readonly row: number;
+        readonly col: number;
+        readonly row_span: number;
+        readonly col_span: number;
+      }[]
+    | null;
+}
+
 export interface QuestionInput {
   readonly question_type: QuestionType;
   readonly stem: string;
+  /** UX12-STEMTABLE: the cells of the stem's pipe blocks. */
+  readonly stem_tables?: readonly (StemTableCells | null)[] | null;
   readonly options?: readonly QuestionOption[];
   readonly correct_option_ids?: readonly string[] | null;
   readonly is_multi_answer?: boolean;
@@ -264,6 +279,7 @@ export interface QuestionRevision {
   readonly id: string;
   readonly version: number;
   readonly stem: string;
+  readonly stem_tables?: readonly (StemTableCells | null)[] | null;
   readonly options: readonly QuestionOption[];
   readonly correct_option_ids: readonly string[] | null;
   readonly accepted_answers: readonly string[] | null;

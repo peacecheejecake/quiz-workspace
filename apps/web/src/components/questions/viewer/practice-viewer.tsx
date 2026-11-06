@@ -622,6 +622,7 @@ export function PracticeViewer({
                 <QuestionBody
                   kind="answer"
                   stem={ready.stem}
+                  stemTables={ready.stem_tables}
                   question={ready}
                   figures={<QuestionFigures source={source} />}
                   answer={work.answer}

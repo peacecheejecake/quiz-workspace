@@ -18,6 +18,7 @@
 | UX12-EXTRACT | 초안 문제 전체 표시 | 문서 보기 | [ux12-extract.md](ux12-extract.md) |
 | UX12-SPANS | 표 병합 셀 | 문서 보기 | [ux12-spans.md](ux12-spans.md) |
 | UX12-REEXTRACT | 다시 추출·문제 그림 | 문제 검토 · 공통 문제 표시 | [ux12-reextract.md](ux12-reextract.md) |
+| UX12-STEMTABLE | 발문 표의 병합 셀과 표 편집 | 공통 문제 표시 · 문제 편집 | [ux12-stemtable.md](ux12-stemtable.md) |
 | UX12-PASSAGE | 제시문 구분 | 공통 문제 표시 | [ux12-stem-passages.md](ux12-stem-passages.md) |
 | QTABLE-01 | 문제 안의 표 | 공통 문제 표시 | [question-tables.md](question-tables.md) |
 | UX12-EXPL | AI 해설 도구 줄·접기·생성 안내 | 공통 문제 표시 | [ux12-explanations.md](ux12-explanations.md) |

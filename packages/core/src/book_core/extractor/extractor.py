@@ -42,6 +42,7 @@ from book_core.contracts import (
     QuestionType,
     ReviewStatus,
     SourceEvidence,
+    TableContent,
     ValidationIssue,
 )
 from book_core.contracts.common import Identifier
@@ -69,6 +70,7 @@ from book_core.llm import (
 from book_core.question import (
     CIRCLED_DIGITS,
     HANGUL_LABELS,
+    aligned_stem_tables,
     answer_option_keys,
     canonical_key,
     has_pipe_table,
@@ -135,6 +137,7 @@ class _Candidate:
     explanation: str | None = None
     issues: list[ValidationIssue] = field(default_factory=list)
     generator: GeneratorInfo | None = None
+    stem_tables: tuple[TableContent, ...] = ()
 
 
 class QuestionExtractor:
@@ -595,6 +598,7 @@ def _pre_extract(
         accepted_answers=accepted,
         explanation=raw.explanation,
         issues=issues + answer_issues,
+        stem_tables=tuple(raw.stem_tables),
     )
 
 
@@ -895,11 +899,14 @@ def _build_draft(
         evidence=evidence,
         multi_select=candidate.multi_select,
     )
+    stem = candidate.stem.strip()
     return QuestionDraft(
         id=draft_id,
         origin=DraftOrigin.PDF_IMPORT,
         question_type=candidate.question_type,
-        stem=candidate.stem.strip(),
+        stem=stem,
+        # Against the final stem: a table the LLM rewrote must not keep the printed cells.
+        stem_tables=aligned_stem_tables(stem, candidate.stem_tables),
         options=options,
         correct_option_ids=correct,
         accepted_answers=candidate.accepted_answers,

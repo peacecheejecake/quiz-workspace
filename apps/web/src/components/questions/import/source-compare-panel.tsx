@@ -166,7 +166,11 @@ function DraftContent({ draft, page }: { draft: ReviewDraft; page?: number }) {
           {page !== undefined ? ` · 지금 보는 쪽: ${page}쪽` : null}
         </p>
       ) : null}
-      <StemText stem={grid?.stem ?? draft.stem} className={styles.compareStem} />
+      <StemText
+        stem={grid?.stem ?? draft.stem}
+        stemTables={draft.stemTables}
+        className={styles.compareStem}
+      />
       {grid ? <OptionGridHead grid={grid} trailing className={styles.compareGridHead} /> : null}
       {draft.options.length > 0 ? (
         <ol className={styles.compareOptions}>

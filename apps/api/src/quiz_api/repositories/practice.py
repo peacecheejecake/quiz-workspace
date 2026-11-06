@@ -163,6 +163,7 @@ _SESSION_COLUMNS = (
     question_revisions.c.is_multi_answer.label("rev_is_multi_answer"),
     question_revisions.c.explanation.label("rev_explanation"),
     question_revisions.c.rubric.label("rev_rubric"),
+    question_revisions.c.stem_tables.label("rev_stem_tables"),
     question_revisions.c.created_at.label("rev_created_at"),
 )
 
@@ -211,6 +212,7 @@ def _session(row: Any) -> SessionRecord:
             explanation=row.rev_explanation,
             rubric=row.rev_rubric,
             created_at=row.rev_created_at,
+            stem_tables=row.rev_stem_tables,
         ),
         practice_run_id=row.practice_run_id,
         run_position=row.run_position,

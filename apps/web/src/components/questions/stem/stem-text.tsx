@@ -17,7 +17,13 @@ import {
   type StemPassage,
   type StemPassageLayout,
 } from '@/lib/questions/stem-passages';
+import { tableGrid } from '@/lib/documents/table-grid';
 import { stemSegments, type PipeTable } from '@/lib/questions/stem-table';
+import {
+  alignedStemTables,
+  type StemCells,
+  type StemTables,
+} from '@/lib/questions/stem-table-edit';
 import tableStyles from '@/components/shared/printed-table.module.css';
 import styles from './stem-text.module.css';
 
@@ -135,6 +141,51 @@ function StemTable({ table }: { readonly table: PipeTable }) {
   );
 }
 
+/**
+ * A table with its structured cells (UX12-STEMTABLE): merged cells once. Header cells stay column
+ * headers, covering every column they span; the first row is one even if the parser marked no
+ * header, as in the GFM this replaces. One body: a span may cross from the header into the rows.
+ */
+function StructuredStemTable({ table }: { readonly table: StemCells }) {
+  const headerRows = Math.max(table.header_rows, 1);
+  return (
+    // A keyboard user scrolls the region, so it takes focus.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div role="region" aria-label="표" tabIndex={0} className={tableStyles.tableScroll}>
+      <table className={tableStyles.table}>
+        <tbody>
+          {tableGrid(table).map((row, r) => (
+            // Table rows and cells have no ids; their position is their identity.
+            <tr key={r}>
+              {row.map(({ col, text, rowSpan, colSpan }) =>
+                r < headerRows && text !== '' ? (
+                  <th key={col} scope="col" rowSpan={rowSpan} colSpan={colSpan}>
+                    {text}
+                  </th>
+                ) : (
+                  <td key={col} rowSpan={rowSpan} colSpan={colSpan}>
+                    {text}
+                  </td>
+                ),
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrintedStemTable({
+  table,
+  cells,
+}: {
+  readonly table: PipeTable;
+  readonly cells: StemCells | null | undefined;
+}) {
+  return cells ? <StructuredStemTable table={cells} /> : <StemTable table={table} />;
+}
+
 /** Text without a table: one paragraph per blank-line block, or the item box and its text. */
 function TextBlocks({
   text,
@@ -161,20 +212,26 @@ function TextBlocks({
  * blank-line block, or the question paragraphs, the passage boxes, the item box and the paragraphs
  * after it, with printed tables in place.
  */
-export function StemBlocks({ stem }: { readonly stem: string }) {
+export function StemBlocks({
+  stem,
+  stemTables,
+}: {
+  readonly stem: string;
+  readonly stemTables?: StemTables;
+}) {
   const segments = stemSegments(stem);
   if (!segments.some((segment) => segment.kind === 'table')) return <TextBlocks text={stem} />;
+  const cells = alignedStemTables(stem, stemTables);
+  const tablesBefore = (end: number) =>
+    segments.slice(0, end).filter((segment) => segment.kind === 'table').length;
   return (
     <>
       {segments.map((segment, i) => (
         <Fragment key={i}>
           {segment.kind === 'table' ? (
-            <StemTable table={segment.table} />
+            <PrintedStemTable table={segment.table} cells={cells?.[tablesBefore(i)]} />
           ) : (
-            <TextBlocks
-              text={segment.text}
-              afterTable={segments.slice(0, i).some((earlier) => earlier.kind === 'table')}
-            />
+            <TextBlocks text={segment.text} afterTable={tablesBefore(i) > 0} />
           )}
         </Fragment>
       ))}
@@ -188,14 +245,16 @@ export function StemBlocks({ stem }: { readonly stem: string }) {
  */
 export function StemText({
   stem,
+  stemTables,
   className,
 }: {
   readonly stem: string;
+  readonly stemTables?: StemTables;
   readonly className?: string;
 }) {
   const blocks = (
     <div className={className ? `${className} ${styles.stem}` : styles.stem}>
-      <StemBlocks stem={stem} />
+      <StemBlocks stem={stem} stemTables={stemTables} />
     </div>
   );
   const table = stemSegments(stem).some((segment) => segment.kind === 'table');

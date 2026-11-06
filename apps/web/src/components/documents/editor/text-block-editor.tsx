@@ -306,7 +306,11 @@ function QuestionCard({
           ) : null}
         </span>
       </div>
-      <StemText stem={grid?.stem ?? question.stem} className={styles.questionStem} />
+      <StemText
+        stem={grid?.stem ?? question.stem}
+        stemTables={question.stemTables}
+        className={styles.questionStem}
+      />
       {grid ? <OptionGridHead grid={grid} numbered className={styles.optionGridHead} /> : null}
       {question.options.length > 0 ? (
         <ol className={styles.optionList} aria-label="보기">
