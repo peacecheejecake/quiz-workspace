@@ -163,12 +163,12 @@ test(
     const startRun = async (dialog: Locator) => {
       await mockUi.add(dialog).click();
       await expect(page).toHaveURL(/[?&]mock=new/);
+      await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
+      await mockUi.next(dialog).click();
       await expect(mockUi.variations(dialog)).not.toHaveCount(0);
       for (const box of await mockUi.variations(dialog).all()) await expect(box).toBeDisabled();
       await expect(dialog.getByText(/변형 출제에는 편집 권한이 필요합니다/)).toBeVisible();
       await dialog.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-      await mockUi.next(dialog).click();
-      await dialog.getByRole('checkbox', { name: /^전체 선택|select all/i }).check();
       const request = page.waitForRequest(
         (r) => r.method() === 'POST' && /\/practice-runs$/.test(new URL(r.url()).pathname),
       );

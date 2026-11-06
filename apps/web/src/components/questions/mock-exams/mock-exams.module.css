@@ -251,10 +251,26 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.variation {
+.legendRow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-1);
+}
+
+.variationHelp {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.variationHelp dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.variationHelp dd {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
 .formRow {

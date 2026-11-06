@@ -126,7 +126,6 @@ test(
     await page.getByRole('button', { name: /^모의고사$/ }).click();
     const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await dialog.getByRole('button', { name: /^(추가|add)$/i }).click();
-    await dialog.getByRole('button', { name: /^(다음|next)$/i }).click();
     const group = dialog.getByRole('group', { name: /^(상태 필터|status filter)$/i });
     for (const label of ['안 푼 문제', '본 문제', '틀린 문제', '맞힌 문제', '다시 풀기']) {
       const chip = group.getByRole('button', { name: label, exact: true });
