@@ -1,0 +1,56 @@
+[
+  {
+    "name": "one table lines up",
+    "stem": "문장\n\n| a | b |\n| --- | --- |\n| 1 | 2 |",
+    "tables": [{ "rows": [["a", "b"], ["1", "2"]], "header_rows": 1 }],
+    "kept": [true]
+  },
+  {
+    "name": "spacing does not matter",
+    "stem": "|a|b|\n|---|---|\n|1  |  2|",
+    "tables": [{ "rows": [["a", "b"], ["1", "2"]], "header_rows": 1 }],
+    "kept": [true]
+  },
+  {
+    "name": "an escaped pipe and backslash line up",
+    "stem": "| a\\|b | c\\\\ |\n| --- | --- |\n| 1 | 2 |",
+    "tables": [{ "rows": [["a|b", "c\\"], ["1", "2"]], "header_rows": 1 }],
+    "kept": [true]
+  },
+  {
+    "name": "a line break in a cell lines up",
+    "stem": "| a<br>b | c |\n| --- | --- |\n| 1 | 2 |",
+    "tables": [{ "rows": [["a\nb", "c"], ["1", "2"]], "header_rows": 1 }],
+    "kept": [true]
+  },
+  {
+    "name": "changed text drops the entry and, with it alone, all",
+    "stem": "| a | b |\n| --- | --- |\n| 1 | 9 |",
+    "tables": [{ "rows": [["a", "b"], ["1", "2"]], "header_rows": 1 }],
+    "kept": []
+  },
+  {
+    "name": "one of two changed keeps the other",
+    "stem": "| a | b |\n| --- | --- |\n| 1 | 9 |\n\n| c |\n| --- |\n| 3 |",
+    "tables": [
+      { "rows": [["a", "b"], ["1", "2"]], "header_rows": 1 },
+      { "rows": [["c"], ["3"]], "header_rows": 1 }
+    ],
+    "kept": [false, true]
+  },
+  {
+    "name": "another block count drops all",
+    "stem": "| a | b |\n| --- | --- |\n| 1 | 2 |",
+    "tables": [
+      { "rows": [["a", "b"], ["1", "2"]], "header_rows": 1 },
+      { "rows": [["c"], ["3"]], "header_rows": 1 }
+    ],
+    "kept": []
+  },
+  {
+    "name": "a null entry stays null",
+    "stem": "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n| c |\n| --- |\n| 3 |",
+    "tables": [null, { "rows": [["c"], ["3"]], "header_rows": 1 }],
+    "kept": [false, true]
+  }
+]
