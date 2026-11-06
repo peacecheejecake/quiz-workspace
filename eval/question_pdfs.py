@@ -12,8 +12,8 @@ PDFs (and their parsed JSON) outside the repository.
 
 Orders (``--order``): ``parser`` is the order the import reads today (``ParsedDocument``, as the
 worker does); ``page-y`` sorts every page top to bottom; ``guarded`` does that on single-column
-pages and keeps the parser's order on two-column pages; ``repaired`` is ``page-y`` without the
-images wholly outside the body area (margin and header decoration).
+pages and keeps the parser's order on two-column pages; ``repaired`` is what the import reads now
+(``book_core.extractor.reading_order``); ``page-y`` and ``guarded`` stay to compare against it.
 
 Columns: ``mv_page``/``mv_up`` blocks moved to an earlier page / up within their column, ``2col``
 two-column pages, ``opts`` option-count histogram, ``gaps`` missing question numbers, ``dup``
@@ -34,9 +34,9 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from itertools import combinations, pairwise
 from pathlib import Path
-from statistics import median
 
 from book_core.contracts import BBox, Block, BlockType, ParsedDocument, SourceLocation
+from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
     RawQuestion,
     answer_entries,
@@ -138,36 +138,6 @@ def two_column_pages(blocks: Sequence[Block], widths: dict[int, float]) -> set[i
     }
 
 
-def body_area(blocks: Sequence[Block]) -> tuple[float, float, float] | None:
-    """``(left, top, right)`` of the page body: the medians over the pages of the text extent."""
-    extents: dict[int, list[float]] = {}
-    for block in blocks:
-        located = _first(block)
-        if located is None or block.type is BlockType.IMAGE:
-            continue
-        page, box = located
-        extent = extents.setdefault(page, [box.x0, box.y0, box.x1])
-        extent[0], extent[1] = min(extent[0], box.x0), min(extent[1], box.y0)
-        extent[2] = max(extent[2], box.x1)
-    if not extents:
-        return None
-    pages = extents.values()
-    return (
-        median(e[0] for e in pages),
-        median(e[1] for e in pages),
-        median(e[2] for e in pages),
-    )
-
-
-def is_decoration(block: Block, body: tuple[float, float, float] | None) -> bool:
-    """An image wholly left of, right of or above the page body."""
-    located = _first(block) if block.type is BlockType.IMAGE else None
-    if located is None or body is None:
-        return False
-    box = located[1]
-    return box.x1 <= body[0] or box.x0 >= body[2] or box.y1 <= body[1]
-
-
 def _top_down(items: list[tuple[float, float, int, Block]]) -> list[Block]:
     """Rows top to bottom, left to right within a row: a row is the blocks starting within
     ``LINE_TOLERANCE`` of its first block (a plain y sort swaps cells of one printed line)."""
@@ -186,8 +156,7 @@ def reordered(blocks: Sequence[Block], order: str, widths: dict[int, float]) -> 
     if order == "parser":
         return tuple(blocks)
     if order == "repaired":
-        body = body_area(blocks)
-        blocks = [block for block in blocks if not is_decoration(block, body)]
+        return reading_order(blocks)
     keep = two_column_pages(blocks, widths) if order == "guarded" else set()
     pages: dict[int, list[tuple[float, float, int, Block]]] = {}
     y, x = 0.0, 0.0

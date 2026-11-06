@@ -13,7 +13,9 @@ question means the same thing to all of them:
   a page with a block without a bbox (it has no position to sort by);
 - images wholly outside the body area are margin or header decoration, not question figures. They
   go in the same step on purpose: sorted but kept, they would land on the question that ends the
-  previous page and stretch its region across the page break.
+  previous page and stretch its region across the page break;
+- a single punctuation mark under ``SPECK_MAX_HEIGHT`` tall is a stray mark, not text. Sorted back
+  in, it would end up in a stem. Only the height tells: a normal-height ``)`` closes a real stem.
 
 Thresholds were measured with ``eval/question_pdfs.py``.
 """
@@ -38,6 +40,8 @@ COLUMN_MAX_CROSSING = 3
 BODY_MIN_PAGES = 4
 """Pages with text before the body area is trusted: on a short paper a median is one page's text
 extent, and a real figure beside narrower text would look like margin decoration."""
+SPECK_MAX_HEIGHT = 2.0
+"""PDF points: printed text is about 9 tall on the measured papers, a stray dot about 1."""
 
 
 class BodyArea(NamedTuple):
@@ -90,6 +94,19 @@ def is_decoration(block: Block, body: BodyArea) -> bool:
     return box.x1 <= body.left or box.x0 >= body.right or box.y1 <= body.top
 
 
+def is_speck(block: Block) -> bool:
+    """A lone punctuation mark too short to be a line of text."""
+    text = block.text.strip()
+    bbox = block.locations[0].bbox
+    return (
+        block.type is BlockType.TEXT
+        and len(text) == 1
+        and not text.isalnum()
+        and bbox is not None
+        and bbox.y1 - bbox.y0 < SPECK_MAX_HEIGHT
+    )
+
+
 def two_column_pages(blocks: Sequence[Block], middle: float) -> set[int]:
     """Pages of real column text: wide blocks wholly on each side of ``middle`` and next to nothing
     across it. Options printed 2x2 are short and sit under full-width stems, so they do not count;
@@ -122,11 +139,11 @@ def _rows(items: Sequence[tuple[BBox, int]]) -> list[int]:
 
 
 def reading_order(blocks: Sequence[Block]) -> tuple[Block, ...]:
-    """``blocks`` in printed order, without decoration images (module docstring)."""
+    """``blocks`` in printed order, without decoration images and specks (module docstring)."""
     body, pages_with_text = body_area(blocks)
-    kept = blocks
+    kept = [block for block in blocks if not is_speck(block)]
     if body is not None and pages_with_text >= BODY_MIN_PAGES:
-        kept = [block for block in blocks if not is_decoration(block, body)]
+        kept = [block for block in kept if not is_decoration(block, body)]
     columns = two_column_pages(kept, body.middle) if body is not None else set()
 
     by_page: dict[int, list[int]] = {}

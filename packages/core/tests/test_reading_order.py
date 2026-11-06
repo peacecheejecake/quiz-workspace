@@ -239,6 +239,14 @@ def test_a_short_paper_keeps_a_figure_beside_narrower_text() -> None:
     assert "figure" in ids(reading_order([*text, figure]))
 
 
+def test_a_stray_dot_is_dropped_but_a_normal_height_mark_stays() -> None:
+    dot = block("dot", 1, 134, x0=454, x1=456.5, text=".", height=1.1)
+    closing = block("closing", 1, 150, x0=453, x1=456, text=")", height=9.1)
+    letter = block("letter", 1, 170, x0=100, x1=103, text="a", height=1.1)
+    heading = block("heading", 1, 190, text=".", kind=BlockType.HEADING, height=1.1)
+    assert ids(reading_order([dot, closing, letter, heading])) == ["closing", "letter", "heading"]
+
+
 def _broken_paper() -> tuple[ParsedDocument, ParsedDocument]:
     """The same six-page paper as the parser reads it (question 1's options after question 2,
     decoration in the margin of every page) and as printed."""
