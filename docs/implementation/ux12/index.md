@@ -128,6 +128,14 @@
 |---|---|---|---|
 | HOME-6 상태 필터 | 로딩 문구 위치, 필터 동작, 툴바 배치 | `문제를 불러오는 중입니다.`를 상태 필터 아래로 옮긴다. `즐겨찾기만`을 켜면 미열람을 비활성으로 한다. `즐겨찾기만`은 켜져도 배경 없이 글자와 테두리만 primary다. 상태 필터를 필터 툴팁 안으로 옮기고, 검색·필터 버튼을 `모의고사` 버튼 오른쪽에 간격을 두고 둔다 | M·MOCKUX-4 |
 
+### 4.3b HOME·CHAPTER 추가(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| HOME-7 문서 수 | `문서 N` | 문제 PDF와 본문 PDF를 구분 없이 센 PDF 수를 보인다 | S·없음 |
+| CHAPTER-7 dropdown 스크롤 | iPadOS Safari | 챕터 dropdown 안에서 터치 스크롤이 되게 한다 | S·없음 |
+| CHAPTER-8 챕터 추가 | dropdown, 교재 없는 Workspace | 문제의 챕터 dropdown에서 새 챕터를 만들고 바로 고른다. 교재가 없는 Workspace에서도 챕터를 만들 수 있다 | L·CHAPTER-4 |
+
 ### 4.4 VIEW — 문제 보기·편집
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -194,6 +202,8 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-6 제출 전 질문 | `질문하기` 버튼 | 문제를 풀기 전에는 모의고사 풀이(`sequence(mock)`) header의 `질문하기`를 숨기고, 제출 뒤에만 보인다 | 사용자 요청(2026-11-06). 등록 문제 풀이에는 이미 없다. 서버의 `hint` 모드는 그대로 둔다 | S·MOCKUX-5 |
 | MOCKUX-7 이어 풀기 | 닫은 원본 풀이가 목록에 없음 | 모의고사 목록에 내 끝나지 않은 원본 풀이(챕터별 풀기 포함)를 `이어 풀기` 행으로 보인다. 누르면 그 묶음의 다음 미제출 문제로 연다. 끝낸 풀이는 사라진다 | 사용자 결정(2026-11-06). QVIEW-01 "끝나지 않은 묶음 목록은 v1에 없다"를 바꾼다. 다른 사람의 풀이는 보이지 않는다 | M·MOCKUX-2, 4 |
 | MOCKUX-8 단계 순서·문구 | 범위 먼저, 이름 기본값, 설명 묶기 | 1단계를 범위, 2단계를 옵션으로 바꾼다. 이름 기본값은 고른 챕터 이름이다. 안내 문구 3개를 지운다. `변형 유형` 옆 물음표 버튼 하나의 툴팁에 유형 설명을 모은다 | 사용자 요청(2026-11-06). MOCKUX-1의 step UI를 이어받는다 | M·MOCKUX-1 |
+| MOCKUX-9 보기 섞기 실행 시점 | 실행마다 새로 섞기 | `보기 섞기`는 모의고사를 실행할 때마다 문제를 보는 시점에 새로 섞고, 한 번의 실행 안에서는 유지한다. `보기 섞기`만 고르면 문제를 미리 만들지 않는다 | 사용자 요청(2026-11-06) | M·MOCKUX-4 |
+| MOCKUX-10 동시 생성 실패 | 문제 추출 중 모의고사 생성 안 됨 | 문제 추출과 모의고사 생성을 함께 돌릴 때 생성이 안 되는 원인을 찾아 고친다(추출 대기 때문인지, 생성 자체 문제인지) | 사용자 보고(2026-11-06) | M·없음 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -265,7 +275,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -365,4 +375,9 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | DESIGN-5 | 10 | 진행 | |
 | HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| MOCKUX-9 | 10 | 진행 | |
+| MOCKUX-10 | 10 | 진행 | |
+| HOME-7 | 10 | 진행 | |
+| CHAPTER-7 | 10 | 진행 | |
+| CHAPTER-8 | 10 | 진행 | |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
