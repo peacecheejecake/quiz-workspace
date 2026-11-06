@@ -172,7 +172,7 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedShuffleExam(workspaceFactory, 'ux12-shuffle-02');
-    const questions = await listMockQuestions(s.owner, s.exam.id);
+    const questions = await listMockQuestions(s.owner, s.exam.id, true);
     const run = await startRun(s.owner, s.workspaceId, s.exam, 31);
     const expected = await runOptions(s.owner, run.id, QUESTIONS);
     const first = expected[0] ?? [];

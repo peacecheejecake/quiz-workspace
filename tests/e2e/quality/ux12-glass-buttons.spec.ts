@@ -2,7 +2,7 @@
 // 2026-11-06): docs/screens/ux12-glass-buttons.md. Reads computed styles: pixel output is the
 // visual suite's job. This suite runs against the production build, where the blur was lost.
 import type { Locator, Page } from '@playwright/test';
-import { askUi, openAskPanel } from '../fixtures/ask.ts';
+import { openAskPanel, openComposer } from '../fixtures/ask.ts';
 import {
   chooseWorkspaceAction,
   createQuestion,
@@ -137,6 +137,14 @@ test(
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-03');
     const panel = await openPanel(page);
+    await panelUi.option(panel, '가').check();
+    await panelUi.submit(panel).click();
+    const again = panel.getByRole('button', { name: /^다시 풀기$|^solve again$/i });
+    await expect(again).toBeVisible();
+    await expect(again).toHaveAttribute('data-variant', 'secondary');
+    const footerButton = await surfaceOf(again);
+    expect(footerButton.color).toBe(TRANSPARENT);
+    expect(footerButton.border).not.toBe(TRANSPARENT);
     await panelUi.close(panel).click();
 
     const back = page.getByRole('button', { name: RETURN_LABEL });
@@ -152,13 +160,9 @@ test(
       .toBe(hover);
 
     await page.goto(`/workspaces/${ws.id}?panel=share`);
-    const footerButton = page
-      .locator('.qz-panel > .footer')
-      .locator('.qz-button[data-variant="secondary"]')
-      .first();
-    await expect(footerButton).toBeVisible();
-    expect((await surfaceOf(page.locator('.qz-panel > .footer'))).color).toBe(TRANSPARENT);
-    expect((await surfaceOf(footerButton)).color).toBe(TRANSPARENT);
+    const footer = page.locator('.qz-panel > .footer');
+    await expect(footer).toBeVisible();
+    expect((await surfaceOf(footer)).color).toBe(TRANSPARENT);
   },
 );
 
@@ -172,14 +176,20 @@ test(
     await panelUi.submit(panel).click();
     const explanation = panel.getByText(EXPLANATION);
     await expect(explanation).toBeVisible();
-    const area = explanation.locator('xpath=ancestor::*[contains(@class, "reveal")][1]');
+    // The nearest ancestor with a fill: the text sits in unfilled wrappers inside the area.
+    const fill = () =>
+      explanation.evaluate((element) => {
+        for (let node = element.parentElement; node; node = node.parentElement) {
+          const color = getComputedStyle(node).backgroundColor;
+          if (color !== 'rgba(0, 0, 0, 0)') return { color, panel: node.matches('.qz-panel') };
+        }
+        return null;
+      });
 
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });
       const raised = await tokenColor(page, '--color-surface-raised');
-      await expect
-        .poll(() => area.evaluate((element) => getComputedStyle(element).backgroundColor))
-        .toBe(raised);
+      await expect.poll(fill).toEqual({ color: raised, panel: false });
     }
   },
 );
@@ -294,7 +304,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     const panel = await openAskPanel(page);
-    await expect(askUi.close(panel)).toBeVisible();
+    await openComposer(panel);
     const composer = panel.locator('.glass-surface').filter({ has: page.getByRole('textbox') });
     await expect(composer).toHaveCount(1);
     expect((await surfaceOf(composer)).blur).toMatch(BLUR);

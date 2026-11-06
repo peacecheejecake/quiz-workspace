@@ -143,6 +143,7 @@ test(
     const confirm = page.getByRole('alertdialog', { name: /삭제|delete/i });
     await confirm.getByRole('button', { name: /^(삭제|delete)$/i }).click();
     await expect(docUi.item(page, /questions-ko/)).toHaveCount(0);
+    await expect(confirm).toBeHidden(); // while it animates out it is the layer Escape closes
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(count).toHaveText(/문서\s*1$/);

@@ -214,13 +214,13 @@ test(
       const header = document.querySelector('header');
       return {
         position: computed.position,
-        background: computed.backgroundColor,
+        blur: computed.backdropFilter || computed.getPropertyValue('-webkit-backdrop-filter'),
         z: Number(computed.zIndex),
         appZ: Number(header ? getComputedStyle(header).zIndex : Number.NaN),
       };
     });
     expect(style.position).toBe('sticky');
-    expect(style.background).toMatch(/^rgb\(/); // opaque: only rgba() carries an alpha
+    expect(style.blur).toMatch(/blur\(/); // glass since UX12-GLASSBTN-AC07, the marker never shows
     expect(style.z).toBeLessThan(style.appZ);
 
     // Put the first marker right behind the line: the line is what a press there hits.

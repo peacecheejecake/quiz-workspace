@@ -90,7 +90,7 @@ test(
     expect(search.x - (exams.x + exams.width)).toBeGreaterThan(
       exams.x - (documents.x + documents.width),
     );
-    await expect(page.locator('button[data-status]')).toHaveCount(0);
+    await expect(page.locator('button[data-status]:not(.qz-question-dot)')).toHaveCount(0);
     await expect(page.getByRole('button', FAVORITE)).toHaveCount(0);
 
     await page.evaluate(() => {

@@ -96,7 +96,7 @@
 
   .toolbar :global(.qz-button) {
     gap: var(--space-1);
-    padding-inline: var(--space-2);
+    padding-inline: var(--space-1);
   }
 
   .toolbar :global(.qz-icon-button),
