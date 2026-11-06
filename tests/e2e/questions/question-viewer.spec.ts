@@ -391,7 +391,7 @@ test(
     await expect(runUi.title(panel, 1)).toBeVisible();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(1, 5));
 
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await expect(page).toHaveURL(new RegExp(`[?&]practice=${ordered}(&|$)`));
     await expect(page).toHaveURL(/[?&]i=2(&|$)/);
     await expect(runUi.title(panel, 2)).toBeFocused();
@@ -514,7 +514,7 @@ test(
     await runUi.next(panel).click();
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(2, 3));
     await expect(runUi.answerText(panel)).toBeVisible();
-    await runUi.skip(panel).click(); // viewed, not answered
+    await runUi.next(panel).click(); // viewed, not answered
     await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(3, 3));
     await answerEssay(panel, `${label} 증발과 응결, 강수가 반복된다.`);
     await runUi.selfGradeCorrect(panel).click();
@@ -664,7 +664,8 @@ test(
     await runUi.next(panel).click();
     await answerMcq(panel, wrongOption(q2).text, RESULT_TEXT.incorrect);
     await runUi.next(panel).click();
-    await runUi.skip(panel).click();
+    await expect(runUi.progress(panel)).toHaveAttribute('aria-valuetext', progressText(3, 5));
+    await runUi.next(panel).click();
     await answerEssay(panel, `${label} 답 4`);
     await runUi.next(panel).click();
     await answerEssay(panel, `${label} 답 5`);
@@ -940,7 +941,7 @@ test(
     await runUi.start(panel).click();
     await expect(page).toHaveURL(/[?&]i=1(&|$)/);
     panel = runUi.panel(page);
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await runUi.showResults(panel).click();
     await expect(runUi.resultRows(panel)).toHaveCount(2);
     await runUi.resultRows(panel).nth(0).getByRole('button').first().click();

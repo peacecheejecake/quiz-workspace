@@ -14,7 +14,7 @@ linked_tests: [UX12-VIEW-AC01 … UX12-VIEW-AC06]
 
 ### UX12-VIEW-AC01
 
-범위 풀이·모의고사(`sequence`)의 `이전`·`다음`·`건너뛰기`는 풀이 panel과 같은 화살표 버튼이고(`NavButton` 공유) 높이가 `제출`과 같다. 접근성 이름은 그대로다. 첫 위치의 `이전`은 사라지지 않고 `aria-disabled`로 focus를 유지한다. 답이 있는 위치의 `다음`은 강조(primary) 그대로다. 글자 버튼 `결과 보기`는 글자를 유지하고 높이만 같다. UX10-QVIEW-AC02를 `sequence`로 넓힌다.
+범위 풀이·모의고사(`sequence`)의 `이전 문제`·`다음 문제`는 풀이 panel과 같은 화살표 버튼이고(`QuestionNav` 공유) 높이가 `제출`과 같다. 첫 위치의 `이전 문제`는 사라지지 않고 `aria-disabled`로 focus를 유지한다. 글자 버튼 `결과 보기`는 글자를 유지하고 높이만 같다. UX10-QVIEW-AC02를 `sequence`로 넓힌다. (UX12 MOCKUX-3 개정 2026-11-06: 이름과 강조는 풀이 panel을 따르고 `건너뛰기`는 없어졌다, [UX12-RUNBAR](ux12-run-buttons.md).)
 
 ### UX12-VIEW-AC02
 

@@ -419,8 +419,7 @@ test(
 
 /** Moves a range-practice position forward without answering. */
 async function advance(panel: Locator): Promise<void> {
-  const next = runUi.next(panel);
-  await ((await next.isVisible()) ? next : runUi.skip(panel)).click();
+  await runUi.next(panel).click();
 }
 
 test(

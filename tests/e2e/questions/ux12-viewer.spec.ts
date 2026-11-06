@@ -86,7 +86,7 @@ async function heightOf(locator: Locator): Promise<number | undefined> {
 }
 
 test(
-  'UX12-VIEW-AC01 sequence moves by arrow buttons as tall as 제출, keeping their names',
+  'UX12-VIEW-AC01 sequence moves by arrow buttons as tall as 제출',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-view-arrows', 2);
@@ -101,20 +101,11 @@ test(
     await expect(previous).toHaveAttribute('aria-disabled', 'true');
     await expect(previous.locator('svg')).toBeVisible();
     await expect(previous).toHaveText('');
-    const skip = runUi.skip(panel);
-    await expect(skip.locator('svg')).toBeVisible();
-    await expect(skip).toHaveText('');
-    const height = await heightOf(runUi.submit(panel));
-    expect(await heightOf(previous)).toBe(height);
-    expect(await heightOf(skip)).toBe(height);
-
-    await runUi.option(panel, firstOption(first)).check();
-    await runUi.submit(panel).click();
-    await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     const next = runUi.next(panel);
     await expect(next.locator('svg')).toBeVisible();
     await expect(next).toHaveText('');
-    await expect(next).toHaveAttribute('data-variant', 'primary');
+    const height = await heightOf(runUi.submit(panel));
+    expect(await heightOf(previous)).toBe(height);
     expect(await heightOf(next)).toBe(height);
 
     await next.click();
@@ -257,7 +248,7 @@ test(
     await keepTall(panel);
     expect(await scrollToEnd(panel)).toBeGreaterThan(0);
 
-    await runUi.skip(panel).click();
+    await runUi.next(panel).click();
     await expect(runUi.option(panel, firstOption(second))).toBeVisible();
     expect(await overflows(panel)).toBe(true);
     expect(await scrollTop(panel)).toBe(0);

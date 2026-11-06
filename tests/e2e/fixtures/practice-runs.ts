@@ -75,8 +75,8 @@
 //   Solving step: heading "1번" (mock "문제 k", focused on each change), progressbar with
 //   aria-valuetext "n문제 중 k번째" and the same text in an aria-live="polite" region, the
 //   QPLAY-01 body (radios/checkboxes named by the option text, textbox "답안", button "제출",
-//   role=status result 정답/오답/채점 대기, self-grade 맞음/틀림), footer "이전", "다음" (after a
-//   result; "결과 보기" on the last position), "건너뛰기". URL `?practice=<id>&i=<k>`.
+//   role=status result 정답/오답/채점 대기, self-grade 맞음/틀림), footer "이전 문제", "다음 문제"
+//   ("결과 보기" too on the last position). URL `?practice=<id>&i=<k>`.
 //   Results step: text "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w", list "문제별 결과" of buttons
 //   ("<번호> · <발문> · <결과 글자>"), buttons "처음부터 다시", "닫기".
 //   Notices: "이 문제는 더 이상 풀 수 없습니다.", "조건에 맞는 문제가 없습니다.", "풀이를 찾을 수
@@ -541,9 +541,9 @@ export const runUi = {
     panel.getByRole('status').filter({ hasText: /정답|오답|채점 대기|correct|pending/i }),
   selfGradeCorrect: (panel: Locator) =>
     panel.getByRole('button', { name: /^(맞음|맞았|정답으로|correct)/i }),
-  next: (panel: Locator) => panel.getByRole('button', { name: /^(다음|next)$/i }),
-  previous: (panel: Locator) => panel.getByRole('button', { name: /^(이전|previous)$/i }),
-  skip: (panel: Locator) => panel.getByRole('button', { name: /^(건너뛰기|skip)$/i }),
+  next: (panel: Locator) => panel.getByRole('button', { name: /^(다음 문제|next question)$/i }),
+  previous: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(이전 문제|previous question)$/i }),
   showResults: (panel: Locator) =>
     panel.getByRole('button', { name: /^(결과 보기|show results|see results)$/i }),
   close: (panel: Locator) =>
@@ -604,18 +604,19 @@ export async function openRangePicker(page: Page): Promise<Locator> {
 
 /**
  * Moves forward to the results step from wherever the run is: `결과 보기` when shown, otherwise
- * `다음` (a position with a result) or `건너뛰기` (an open position).
+ * `다음 문제`.
  */
 export async function goToResults(panel: Locator, maxSteps = 10): Promise<void> {
   for (let step = 0; step < maxSteps; step += 1) {
+    const progress = await runUi.progress(panel).getAttribute('aria-valuetext');
     if (await runUi.showResults(panel).isVisible()) {
       await runUi.showResults(panel).click();
       await expect(runUi.restart(panel)).toBeVisible();
       return;
     }
-    const next = runUi.next(panel);
-    const target = (await next.isVisible()) ? next : runUi.skip(panel);
-    await target.click();
+    await runUi.next(panel).click();
+    // Settled on the new position: on the last one `다음 문제` can no longer be pressed.
+    await expect(runUi.progress(panel)).not.toHaveAttribute('aria-valuetext', progress ?? '');
   }
   throw new Error('results step not reached');
 }

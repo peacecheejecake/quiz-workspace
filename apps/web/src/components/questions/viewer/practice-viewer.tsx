@@ -23,9 +23,7 @@ import {
   FavoriteToggle,
   FloatingSidePanel,
   RetryToggle,
-  Tooltip,
   questionTypeLabels,
-  useToast,
 } from '@quiz/ui';
 import {
   useEffect,
@@ -71,8 +69,8 @@ import {
   type Neighbors,
   type PracticeAnswer,
 } from './practice-model';
-import { NavButton } from './nav-button';
 import { QuestionBody, QuestionStem } from './question-body';
+import { AnotherTryButton, QuestionNav } from './question-footer';
 import {
   QuestionFigures,
   QuestionSourceButton,
@@ -188,7 +186,6 @@ function newKey(): string {
 }
 
 const NO_NEIGHBORS: Neighbors = { previous: null, next: null };
-const ANOTHER_TRY_REASON = '답안을 제출하고 채점이 끝나면 다시 풀 수 있습니다.';
 
 export function PracticeViewer({
   workspaceId,
@@ -503,24 +500,16 @@ export function PracticeViewer({
           초기화
         </Button>
       ) : null}
-      <nav className={styles.nav} aria-label="문제 이동">
-        <NavButton
-          direction="previous"
-          label="이전 문제"
-          unavailable={!neighbors.previous || !onNavigate}
-          onClick={() => {
-            if (neighbors.previous) onNavigate?.(neighbors.previous);
-          }}
-        />
-        <NavButton
-          direction="next"
-          label="다음 문제"
-          unavailable={!neighbors.next || !onNavigate}
-          onClick={() => {
-            if (neighbors.next) onNavigate?.(neighbors.next);
-          }}
-        />
-      </nav>
+      <QuestionNav
+        previousUnavailable={!neighbors.previous || !onNavigate}
+        nextUnavailable={!neighbors.next || !onNavigate}
+        onPrevious={() => {
+          if (neighbors.previous) onNavigate?.(neighbors.previous);
+        }}
+        onNext={() => {
+          if (neighbors.next) onNavigate?.(neighbors.next);
+        }}
+      />
     </div>
   ) : undefined;
 
@@ -721,50 +710,6 @@ export function StudyToggles({
           onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
         />
       ) : null}
-    </>
-  );
-}
-
-/**
- * The footer's `다시 풀기` (UX12-VIEW-AC04, D-8): always there, unavailable until this session has a
- * final result. It stays focusable (`aria-disabled`) so the tooltip reaches keyboard users and
- * pressing it does not drop focus when the new session starts. A press says why in a toast: touch
- * has no tooltip.
- */
-function AnotherTryButton({
-  available,
-  onTry,
-}: {
-  readonly available: boolean;
-  readonly onTry: () => void;
-}) {
-  const reasonId = useId();
-  const [hinted, setHinted] = useState(false);
-  const { toast, dismiss } = useToast();
-  const reasonToast = useRef<number | null>(null);
-  return (
-    <>
-      <Tooltip open={hinted && !available} onOpenChange={setHinted} content={ANOTHER_TRY_REASON}>
-        <Button
-          aria-disabled={!available || undefined}
-          aria-describedby={available ? undefined : reasonId}
-          onClick={() => {
-            if (available) {
-              onTry();
-              return;
-            }
-            if (reasonToast.current !== null) dismiss(reasonToast.current);
-            reasonToast.current = toast({ title: ANOTHER_TRY_REASON });
-          }}
-        >
-          다시 풀기
-        </Button>
-      </Tooltip>
-      {available ? null : (
-        <span id={reasonId} className="qz-visually-hidden">
-          {ANOTHER_TRY_REASON}
-        </span>
-      )}
     </>
   );
 }
