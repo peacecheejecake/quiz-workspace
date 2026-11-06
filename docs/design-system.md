@@ -8,7 +8,7 @@
 
 ## 1. 원칙
 
-1. **Content first:** 책 본문과 문제의 읽기 경험이 최우선. 장식용 그라데이션·과도한 blur·지속 애니메이션 지양.
+1. **Content first:** 책 본문과 문제의 읽기 경험이 최우선. 장식용 그라데이션·과도한 blur·지속 애니메이션 지양. 예외는 glass 표면의 옅은 `--glass-gradient` 하나다(UX12 DESIGN-4).
 2. **Glass at interaction layers:** 기본 리스트와 텍스트 페이지는 깔끔한 표면. floating panel/popover/top bar 등 겹쳐 보이는 계층에만 반투명·blur 적용.
 3. **Semantic tokens only:** 상태·의미·계층은 token을 통해 표현. 서비스 기능 코드에서 raw hex, 임의 shadow, 임의 radius 사용 금지.
 4. **Keyboard + touch parity:** 마우스 hover만으로 제공되는 기능이 있어서는 안 됨.
@@ -66,6 +66,7 @@
 | `--color-focus` | `#356CFF` | focus outline |
 | `--color-glass` | `rgba(246,248,252,.97)` | floating glass surface(아주 옅은 tint, 거의 불투명) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
+| `--glass-gradient` | `linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35))` | glass 표면의 파랑→라벤더 tint 층(UX12 DESIGN-4). `--color-glass`·모바일 sheet의 `--color-glass-solid` 위에 얹는다 |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#E7ECF0` | 보지 않은 문제 |
 | `--question-status-viewed` | `#ACB6C2` | 보기만 한 문제 |
@@ -117,6 +118,10 @@
 
 **v1.2.5 (UX-GLASS, 2026-11-01 사용자 피드백):** floating 계층(side panel·popover·menu·select·toast·top bar)의 glass를 아래 내용이 거의 보이지 않을 만큼 더 불투명하게 했다(light·dark 모두 `.9`→`.97`). tint와 blur(`--glass-blur` 16px)는 그대로이고, reduced transparency·blur 미지원·모바일 sheet fallback은 계속 같은 색의 `--color-glass-solid`다. 대비: 반투명 glass를 가장 나쁜 배경(순흑·순백) 위에 합성해도 text-primary·text-secondary가 4.5:1 이상이다(light text-secondary 최저 4.59:1; `.96`은 4.47:1로 미달, `contrast.test.ts`).
 
+**v1.3.2 (UX12 DESIGN-4, 2026-11-06 사용자 피드백, 결정 D-3):** v1.2.5의 단색 glass 위에 테마별 `--glass-gradient`(135도, 파랑→라벤더)를 `background-image` 층으로 얹는다. `--color-glass`의 `.97`과 `--glass-blur`는 그대로다. 모바일 sheet와 full-screen paired dialog는 `background-color`만 `--color-glass-solid`로 바꿔 gradient를 유지하고 불투명하다. reduced transparency, blur 미지원, PDF·본문 위 태블릿 목차 panel은 `background` shorthand로 gradient 없는 단색이다.
+
+light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라에 alpha `.35`다. light accent 글자가 glass 위에서 4.56:1뿐이라 accent 색을 낮은 alpha로 얹으면 alpha `.06`에서도 4.22~4.28:1로 AA 아래가 되고, hover 대비도 1.05~1.07로 떨어지기 때문이다. 그래서 light tint는 아주 옅다. 더 진한 tint가 필요하면 `--color-accent`를 먼저 어둡게 해야 한다. dark는 여유가 있어 `--color-accent` 계열을 alpha `.05`로 쓴다. 대비: 두 stop 모두 글자 토큰 4.5:1 이상(light accent 최저 4.52:1), text-primary·text-secondary는 순흑·순백 배경 합성에서도 4.5:1 이상, 비텍스트 3:1 이상, hover 배경과 1.1 이상(`contrast.test.ts`).
+
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(PALETTE-UNIFY 이후 light/dark 최저는 `contrast.test.ts` 참고; success 4.81+, danger 5.16+, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 체크/X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 의미를 전달한다(UX12 VIEW-2).
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
@@ -137,6 +142,7 @@
   --color-focus: #A2B3FF;
   --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1E2633;
+  --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #3A4554;
   --question-status-viewed: #8591A1;
@@ -191,6 +197,7 @@
   --color-focus: #356CFF;
   --color-glass: rgba(246,248,252,.97);
   --color-glass-solid: #F6F8FC;
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #E7ECF0;
   --question-status-viewed: #ACB6C2;
@@ -265,7 +272,9 @@
 }
 
 .glass-surface {
-  background: var(--color-glass);
+  background-color: var(--color-glass);
+  background-image: var(--glass-gradient);
+  background-origin: border-box;
   border: 1px solid var(--color-glass-stroke);
   box-shadow: var(--shadow-floating);
   backdrop-filter: blur(var(--glass-blur));
@@ -304,6 +313,7 @@ reduced motion에서는 transition·animation이 전혀 실행되지 않으므�
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
 | Content area | max-width 1440px, padding 20px(태블릿 이상, v1.2.2에서 24→20) / 16px(모바일) |
 | Border radius | 기본 10px, 떠 있는 패널 16–20px |
+| Glass gradient (UX12 DESIGN-4) | `--glass-gradient`는 색 값이 아닌 `background-image` 값이지만 테마별이라 §3.1·§3.2 표에 둔다. `.glass-surface`만 쓰고, 기능 코드는 직접 쓰지 않는다 |
 | Layering | 기본 카드 0–1, popover 20, side panel 40, modal 60, toast 70 |
 | Animation | panel enter/exit 약 180–240ms, transform+opacity, reduced-motion 대응. 컴포넌트 상태 전환(hover·active·selected·focus 배경/색)은 `--duration-state`(120ms) `--easing-standard`로 전환하고, reduced-motion에서는 즉시 변경 |
 
