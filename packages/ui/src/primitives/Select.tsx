@@ -7,6 +7,9 @@ import { useLayerStyle } from '../internal/layer';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';
 import { CheckIcon, ChevronDownIcon } from './icons';
 
+/** The release click of a tap comes right after it; one that never arrives is forgotten. */
+const RELEASE_CLICK_MS = 1000;
+
 export interface SelectOption {
   /** Non-empty value (Radix reserves the empty string for "no selection"). */
   value: string;
@@ -54,6 +57,10 @@ export interface SelectProps extends FieldOwnProps {
  * an option, without a pointermove), and iOS Safari drops the click of a cancelled touch pointerup:
  * the first tap on the open list (typically the selected option on top) did nothing. Mouse opening
  * keeps Radix's guard.
+ *
+ * Tapping the trigger of an open list closes it (UX12-POPPERS). The open list disables the page, so
+ * the tap's pointerdown lands outside and closes the list at once; that restores the page, and the
+ * same tap's release click then reaches the trigger, which must not open the list again.
  */
 export function Select({
   label,
@@ -76,6 +83,9 @@ export function Select({
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const pointerTypeRef = useRef('touch');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Until when (ms) a click on the trigger is the release of the tap that closed the list.
+  const ignoreClickUntilRef = useRef(0);
   const [innerValue, setInnerValue] = useState(defaultValue);
   const current = value ?? innerValue;
   const selectedLabel = lazyOptions
@@ -121,10 +131,18 @@ export function Select({
           aria-invalid={ids.hasError || undefined}
           aria-errormessage={ids.hasError ? ids.errorId : undefined}
           className={cx('qz-control', 'qz-select', 'qz-focus-ring', className)}
+          ref={triggerRef}
           onPointerDown={(event) => {
             pointerTypeRef.current = event.pointerType;
+            ignoreClickUntilRef.current = 0;
           }}
           onClick={(event) => {
+            const closingTap = performance.now() < ignoreClickUntilRef.current;
+            ignoreClickUntilRef.current = 0;
+            if (closingTap) {
+              event.preventDefault();
+              return;
+            }
             // Same as Radix's touch/pen path minus the recorded position (see above); the
             // prevented click skips Radix's handler. Keyboard opens on keydown, not here.
             if (pointerTypeRef.current === 'mouse') return;
@@ -148,6 +166,19 @@ export function Select({
             sideOffset={4}
             className="qz-select-content glass-surface"
             style={layerStyle}
+            onPointerDownOutside={(event) => {
+              const press = event.detail.originalEvent;
+              const box = triggerRef.current?.getBoundingClientRect();
+              const onTrigger =
+                box !== undefined &&
+                press.clientX >= box.left &&
+                press.clientX <= box.right &&
+                press.clientY >= box.top &&
+                press.clientY <= box.bottom;
+              if (press.pointerType !== 'mouse' && onTrigger) {
+                ignoreClickUntilRef.current = performance.now() + RELEASE_CLICK_MS;
+              }
+            }}
           >
             <RadixSelect.Viewport className="viewport">
               {shownOptions.map((option) => (

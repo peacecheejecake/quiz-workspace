@@ -18,6 +18,7 @@ import {
   signInAs,
   test,
   wsUi,
+  type E2EFixtures,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -156,38 +157,67 @@ test.describe('narrow viewport', () => {
   );
 });
 
+type Factory = E2EFixtures['workspaceFactory'];
+
+async function questionMenuToggles(page: Page, factory: Factory, how: Press): Promise<void> {
+  const owner = await factory.member('ux12-pop-menu');
+  const ws = await factory.create(owner);
+  await signInAs(page, owner.user);
+  await page.goto(homePath(ws.id));
+  const trigger = homeUi.questionMenuButton(page);
+  await expect(trigger).toBeVisible();
+  await expectToggles(page, trigger, homeUi.questionMenu(page), how);
+}
+
+async function listMenuToggles(page: Page, factory: Factory, how: Press): Promise<void> {
+  const owner = await factory.member('ux12-pop-list');
+  const ws = await factory.create(owner);
+  await signInAs(page, owner.user);
+  await page.goto('/workspaces');
+  const trigger = wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), ws.name));
+  await expect(trigger).toBeVisible();
+  await expectToggles(page, trigger, page.getByRole('menu'), how);
+}
+
+test(
+  'UX12-POPPERS-AC04 question menu closes on a second mouse press',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await questionMenuToggles(page, workspaceFactory, 'mouse');
+  },
+);
+
+test(
+  'UX12-POPPERS-AC04 workspace list menu closes on a second mouse press',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    await listMenuToggles(page, workspaceFactory, 'mouse');
+  },
+);
+
+test.describe('touch menus', () => {
+  test.use({ hasTouch: true });
+
+  test(
+    'UX12-POPPERS-AC05 question menu closes on a second tap',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      await questionMenuToggles(page, workspaceFactory, 'touch');
+    },
+  );
+
+  test(
+    'UX12-POPPERS-AC05 workspace list menu closes on a second tap',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      await listMenuToggles(page, workspaceFactory, 'touch');
+    },
+  );
+});
+
 for (const how of ['mouse', 'touch'] as const) {
   test.describe(`trigger re-press (${how})`, () => {
     test.use(how === 'touch' ? { hasTouch: true } : {});
-    const menuAc = how === 'mouse' ? 'UX12-POPPERS-AC04' : 'UX12-POPPERS-AC05';
-
-    test(
-      `${menuAc} question menu closes on a second press`,
-      { tag: '@infra' },
-      async ({ page, workspaceFactory }) => {
-        const owner = await workspaceFactory.member('ux12-pop-menu');
-        const ws = await workspaceFactory.create(owner);
-        await signInAs(page, owner.user);
-        await page.goto(homePath(ws.id));
-        const trigger = homeUi.questionMenuButton(page);
-        await expect(trigger).toBeVisible();
-        await expectToggles(page, trigger, homeUi.questionMenu(page), how);
-      },
-    );
-
-    test(
-      `${menuAc} workspace list menu closes on a second press`,
-      { tag: '@infra' },
-      async ({ page, workspaceFactory }) => {
-        const owner = await workspaceFactory.member('ux12-pop-list');
-        const ws = await workspaceFactory.create(owner);
-        await signInAs(page, owner.user);
-        await page.goto('/workspaces');
-        const trigger = wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), ws.name));
-        await expect(trigger).toBeVisible();
-        await expectToggles(page, trigger, page.getByRole('menu'), how);
-      },
-    );
 
     test(
       `UX12-POPPERS-AC06 user menu popover closes on a second ${how} press`,
@@ -226,14 +256,16 @@ for (const how of ['mouse', 'touch'] as const) {
         const ws = await workspaceFactory.create(owner);
         await signInAs(page, owner.user);
         await page.goto(homePath(ws.id));
-        const settings = await openSearchOptions(page, 'questions');
-        const combobox = settings.getByRole('combobox', { name: /^(유형|type)$/i });
+        const settings = await openSearchOptions(page, 'body');
+        const combobox = settings.getByRole('combobox', { name: /^(문서|document)$/i });
         await expect(combobox).toBeVisible();
         // An open Select hides the page from the accessibility tree: keep the trigger by its id.
         const trigger = page.locator(`[id="${await combobox.getAttribute('id')}"]`);
         const before = await trigger.textContent();
         await expectToggles(page, trigger, page.getByRole('listbox'), how);
         await expect(trigger).toHaveText(before ?? '');
+        // The Select's own press never dismisses the popover it lives in.
+        await expect(trigger).toBeVisible();
       },
     );
   });
