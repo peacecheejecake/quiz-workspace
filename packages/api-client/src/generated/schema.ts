@@ -3209,6 +3209,12 @@ export type components = {
       /** Filename */
       filename: string;
       /**
+       * Has Summary
+       * @description A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).
+       * @default false
+       */
+      has_summary?: boolean;
+      /**
        * Id
        * Format: uuid
        */
@@ -3255,6 +3261,11 @@ export type components = {
        * @enum {string}
        */
       status: 'uploading' | 'processing' | 'ready' | 'failed';
+      /**
+       * Summary Available
+       * @description This environment can create summaries.
+       */
+      summary_available: boolean;
       /** Title */
       title: string;
       /**
@@ -3290,6 +3301,11 @@ export type components = {
     DocumentList: {
       /** Items */
       items: components['schemas']['DocumentSummary'][];
+      /**
+       * Summary Available
+       * @description This environment can create summaries.
+       */
+      summary_available: boolean;
     };
     /**
      * DocumentProcessingJob
@@ -3350,6 +3366,12 @@ export type components = {
       document_type: 'book' | 'question_paper';
       /** Filename */
       filename: string;
+      /**
+       * Has Summary
+       * @description A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).
+       * @default false
+       */
+      has_summary?: boolean;
       /**
        * Id
        * Format: uuid

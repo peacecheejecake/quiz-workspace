@@ -1501,6 +1501,12 @@
             "title": "Filename",
             "type": "string"
           },
+          "has_summary": {
+            "default": false,
+            "description": "A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).",
+            "title": "Has Summary",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -1605,6 +1611,11 @@
             "title": "Status",
             "type": "string"
           },
+          "summary_available": {
+            "description": "This environment can create summaries.",
+            "title": "Summary Available",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1633,6 +1644,7 @@
           "last_error",
           "created_at",
           "updated_at",
+          "summary_available",
           "active_revision",
           "latest_revision"
         ],
@@ -1674,10 +1686,16 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "summary_available": {
+            "description": "This environment can create summaries.",
+            "title": "Summary Available",
+            "type": "boolean"
           }
         },
         "required": [
-          "items"
+          "items",
+          "summary_available"
         ],
         "title": "DocumentList",
         "type": "object"
@@ -1786,6 +1804,12 @@
           "filename": {
             "title": "Filename",
             "type": "string"
+          },
+          "has_summary": {
+            "default": false,
+            "description": "A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).",
+            "title": "Has Summary",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",

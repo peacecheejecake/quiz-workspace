@@ -73,6 +73,8 @@ class World(TwoStepResourceMembership):
     # UX6-UPLOAD-B: document id -> imported question count; documents in use as books;
     # started imports (document id, revision id, actor); kind changes (document id, kind)
     question_count: dict[uuid.UUID, int] = field(default_factory=dict)
+    # UX12 HOME-2: documents with a stored summary
+    summarized: set[uuid.UUID] = field(default_factory=set)
     in_use: set[uuid.UUID] = field(default_factory=set)
     started: list[tuple[uuid.UUID, uuid.UUID, uuid.UUID]] = field(default_factory=list)
     kind_changes: list[tuple[uuid.UUID, str]] = field(default_factory=list)
@@ -228,6 +230,13 @@ class World(TwoStepResourceMembership):
         return {
             d: n
             for d, n in self.question_count.items()
+            if d in document_ids and self.documents[d].workspace_id == workspace_id
+        }
+
+    def summarized_documents(self, workspace_id: uuid.UUID, document_ids: Any) -> set[uuid.UUID]:
+        return {
+            d
+            for d in self.summarized
             if d in document_ids and self.documents[d].workspace_id == workspace_id
         }
 
@@ -812,7 +821,8 @@ def test_list_get_source_url_and_soft_delete(
             "Document not found."
         )
     assert api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(owner)).json() == {
-        "items": []
+        "items": [],
+        "summary_available": False,
     }
 
 
@@ -1017,6 +1027,27 @@ def test_ux6_list_carries_kinds_and_imported_question_counts(
     assert [(d["kind"], d["kind_source"], d["question_count"]) for d in items] == [
         ("mixed", "auto", 7)
     ]
+
+
+def test_ux12_aioff_list_and_detail_tell_what_the_summary_entry_points_need(
+    api: TestClient, world: World, storage: FakeStorage, bearer: Bearer
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    plain = _uploaded(api, world, storage, bearer, owner, ws, document_type="auto")
+    stored = _uploaded(
+        api, world, storage, bearer, owner, ws, document_type="auto", filename="stored.pdf"
+    )
+    world.summarized.add(stored)
+
+    listed = api.get(f"{API}/workspaces/{ws}/documents", headers=bearer(owner)).json()
+    assert listed["summary_available"] is False
+    assert {d["id"]: d["has_summary"] for d in listed["items"]} == {
+        str(plain): False,
+        str(stored): True,
+    }
+    detail = api.get(f"{API}/documents/{stored}", headers=bearer(owner)).json()
+    assert (detail["has_summary"], detail["summary_available"]) == (True, False)
 
 
 def test_ux6_kind_change_authorization(
