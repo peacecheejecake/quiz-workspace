@@ -332,6 +332,112 @@ describe('footnotes', () => {
   });
 });
 
+describe('nested spans and every parse loop', () => {
+  const words = (value: unknown): string => {
+    if (Array.isArray(value)) return value.map(words).join('');
+    if (typeof value !== 'object' || value === null) return '';
+    const node = value as Record<string, unknown>;
+    return typeof node.text === 'string'
+      ? node.text
+      : Object.values(node)
+          .filter((v) => typeof v === 'object')
+          .map(words)
+          .join('');
+  };
+
+  /** The output reads the input's characters in order, each at most once. */
+  const isSubsequence = (output: string, input: string) => {
+    let at = 0;
+    for (const char of output) {
+      at = input.indexOf(char, at) + 1;
+      if (at === 0) return false;
+    }
+    return true;
+  };
+
+  const countOf = (value: string) => {
+    const counts = new Map<string, number>();
+    for (const char of value.replace(/\s/g, '')) counts.set(char, (counts.get(char) ?? 0) + 1);
+    return counts;
+  };
+
+  /** A seeded generator (mulberry32): a failure repeats. */
+  const random = (seed: number) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const INLINE = '* ** *** _ __ ~ ~~ ` `` [ ] ( ) ! \\ < > a 가 [1] [S1] https://a.co'.split(' ');
+  const BLOCK = [...INLINE, ' ', '  ', '\n', '\n\n', '|', '| a |', '-', '- ', '#', '# ', '> '];
+  BLOCK.push('1. ', '---', '```', '~~~', '===', '- [x] ', '| --- |', '    ');
+
+  const sample = (next: () => number, pieces: readonly string[]) =>
+    Array.from({ length: Math.floor(next() * 30) }, () => {
+      return pieces[Math.floor(next() * pieces.length)] as string;
+    }).join('');
+
+  it('resumes after a span that holds another span', () => {
+    expect(parseAnswerInline('**bold *inner* end** 뒤')).toEqual([
+      {
+        kind: 'strong',
+        children: [
+          { kind: 'text', text: 'bold ' },
+          { kind: 'em', children: [{ kind: 'text', text: 'inner' }] },
+          { kind: 'text', text: ' end' },
+        ],
+      },
+      { kind: 'text', text: ' 뒤' },
+    ]);
+    expect(show('~~취소 *안쪽* 끝~~ 뒤').textContent).toBe('취소 안쪽 끝 뒤');
+    expect(show('**굵게 ~~안쪽~~ 끝** 뒤').textContent).toBe('굵게 안쪽 끝 뒤');
+  });
+
+  it('ends on a triple span that holds another span', () => {
+    const container = show('***bold *inner* end*** 뒤');
+    expect(container.textContent).toBe('bold inner end 뒤');
+    expect(container.querySelector('strong em em')?.textContent).toBe('inner');
+  });
+
+  it('survives very deep unclosed spans', () => {
+    const deep = '*a '.repeat(20000);
+    expect(() => parseAnswerMarkdown(deep, { streaming: true })).not.toThrow();
+    expect(() => parseAnswerMarkdown(deep)).not.toThrow();
+    expect(() => parseAnswerMarkdown(`${'~~a '.repeat(20000)}`, { streaming: true })).not.toThrow();
+  });
+
+  it('keeps inline text in order and never repeats it, for random markers', () => {
+    const next = random(1);
+    for (let i = 0; i < 4000; i += 1) {
+      const input = sample(next, INLINE);
+      for (const open of [false, true]) {
+        const output = words(parseAnswerInline(input, open));
+        expect(isSubsequence(output, input), JSON.stringify({ input, open, output })).toBe(true);
+      }
+    }
+  });
+
+  it('ends and adds no characters on random block input, at every cut', () => {
+    const next = random(2);
+    for (let i = 0; i < 1500; i += 1) {
+      const input = sample(next, BLOCK);
+      const cuts = [input, input.slice(0, Math.floor(next() * (input.length + 1)))];
+      for (const text of cuts) {
+        for (const streaming of [false, true]) {
+          const counts = countOf(text);
+          const output = countOf(words(parseAnswerMarkdown(text, { streaming })));
+          for (const [char, count] of output) {
+            expect(count, JSON.stringify({ text, streaming, char })).toBeLessThanOrEqual(
+              counts.get(char) ?? 0,
+            );
+          }
+        }
+      }
+    }
+  });
+});
+
 describe('half-written answers', () => {
   it('never throws or shows raw bold marks, at any cut of a full answer', () => {
     const answer = readFileSync(

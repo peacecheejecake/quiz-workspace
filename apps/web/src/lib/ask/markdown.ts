@@ -54,6 +54,8 @@ interface Context {
 }
 
 const MAX_DEPTH = 8;
+/** Spans inside spans; deeper markers stay text, so unclosed markers cannot exhaust the stack. */
+const MAX_INLINE_DEPTH = 16;
 const MAX_HEADING = 6;
 
 const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
@@ -336,14 +338,14 @@ function parseBlocks(
     if (nest && LIST_ITEM.test(line)) {
       const { block, next } = parseList(lines, i, context, tail, depth);
       blocks.push(block);
-      i = next;
+      i = Math.max(next, i + 1);
       continue;
     }
     const align = tableAt(lines, i);
     if (align) {
       const { block, next } = parseTable(lines, i, align, tail, nest);
       blocks.push(block);
-      i = next;
+      i = Math.max(next, i + 1);
       continue;
     }
     if (tail && mayBecomeTable(lines, i)) break;
@@ -409,10 +411,13 @@ const BARE_URL = /https?:\/\/[A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]+/y;
 
 const text = (value: string): Inline => ({ kind: 'text', text: value });
 
+/** A match at `at`. Read its end with `endOf`: recursion reuses these patterns' `lastIndex`. */
 function stickyMatch(pattern: RegExp, value: string, at: number): RegExpExecArray | null {
   pattern.lastIndex = at;
   return pattern.exec(value);
 }
+
+const endOf = (match: RegExpExecArray) => match.index + match[0].length;
 
 function codeAt(value: string, at: number, open: boolean): Hit {
   let end = at;
@@ -433,30 +438,35 @@ function codeAt(value: string, at: number, open: boolean): Hit {
   return { nodes: rest ? [{ kind: 'code', text: rest }] : [], end: value.length };
 }
 
-function emphasisAt(value: string, at: number, open: boolean, inLink: boolean): Hit {
+function emphasisAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
   const char = value[at] as string;
   if (char === '_' && WORD.test(value[at - 1] ?? '')) return null;
   const closed = (end: number) => char !== '_' || !WORD.test(value[end] ?? '');
   const triple = stickyMatch(TRIPLE, value, at);
-  if (triple && closed(TRIPLE.lastIndex)) {
-    const inner = parseAnswerInline(triple[2] ?? '', false, inLink);
+  if (triple && closed(endOf(triple))) {
+    const inner = parseAnswerInline(triple[2] ?? '', false, inLink, depth + 1);
     return {
       nodes: [{ kind: 'strong', children: [{ kind: 'em', children: inner }] }],
-      end: TRIPLE.lastIndex,
+      end: endOf(triple),
     };
   }
   const double = value[at + 1] === char;
   const match = stickyMatch(SPAN, value, at);
-  if (match && closed(SPAN.lastIndex) && (!open || !double || match[1] !== undefined)) {
+  if (match && closed(endOf(match)) && (!open || !double || match[1] !== undefined)) {
     const strong = match[1] !== undefined;
     return {
       nodes: [
         {
           kind: strong ? 'strong' : 'em',
-          children: parseAnswerInline((strong ? match[2] : match[4]) ?? '', false, inLink),
+          children: parseAnswerInline(
+            (strong ? match[2] : match[4]) ?? '',
+            false,
+            inLink,
+            depth + 1,
+          ),
         },
       ],
-      end: SPAN.lastIndex,
+      end: endOf(match),
     };
   }
   if (!open) return null;
@@ -468,22 +478,24 @@ function emphasisAt(value: string, at: number, open: boolean, inLink: boolean): 
     nodes: [
       {
         kind: double ? 'strong' : 'em',
-        children: parseAnswerInline(rest, true, inLink),
+        children: parseAnswerInline(rest, true, inLink, depth + 1),
       },
     ],
     end: value.length,
   };
 }
 
-function strikeAt(value: string, at: number, open: boolean, inLink: boolean): Hit {
+function strikeAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
   if (value[at + 1] !== '~') {
     return open && at === value.length - 1 ? { nodes: [], end: value.length } : null;
   }
   const match = stickyMatch(STRIKE, value, at);
   if (match) {
     return {
-      nodes: [{ kind: 'del', children: parseAnswerInline(match[1] ?? '', false, inLink) }],
-      end: STRIKE.lastIndex,
+      nodes: [
+        { kind: 'del', children: parseAnswerInline(match[1] ?? '', false, inLink, depth + 1) },
+      ],
+      end: endOf(match),
     };
   }
   if (!open) return null;
@@ -492,7 +504,7 @@ function strikeAt(value: string, at: number, open: boolean, inLink: boolean): Hi
   return /^\s/.test(rest)
     ? null
     : {
-        nodes: [{ kind: 'del', children: parseAnswerInline(rest, true, inLink) }],
+        nodes: [{ kind: 'del', children: parseAnswerInline(rest, true, inLink, depth + 1) }],
         end: value.length,
       };
 }
@@ -545,14 +557,16 @@ function linkSyntaxAt(value: string, at: number): LinkSyntax | null {
   return { label: value.slice(at + 1, close), url, end: i + 1 };
 }
 
-function linkAt(value: string, at: number, open: boolean): Hit {
+function linkAt(value: string, at: number, open: boolean, depth: number): Hit {
   const link = linkSyntaxAt(value, at);
   if (link) {
     if (CITE_LABEL.test(link.label)) return null;
     const href = safeHref(link.url);
     if (!href) return { nodes: [text(value.slice(at, link.end))], end: link.end };
     return {
-      nodes: [{ kind: 'link', href, children: parseAnswerInline(link.label, false, true) }],
+      nodes: [
+        { kind: 'link', href, children: parseAnswerInline(link.label, false, true, depth + 1) },
+      ],
       end: link.end,
     };
   }
@@ -561,7 +575,7 @@ function linkAt(value: string, at: number, open: boolean): Hit {
   if (PARTIAL_CITE.test(rest)) return { nodes: [], end: value.length };
   const partial = PARTIAL_LINK.exec(rest);
   if (!partial || CITE_LABEL.test(partial[1] ?? '')) return null;
-  return { nodes: parseAnswerInline(partial[1] ?? '', false, true), end: value.length };
+  return { nodes: parseAnswerInline(partial[1] ?? '', false, true, depth + 1), end: value.length };
 }
 
 function bareUrlAt(value: string, at: number): Hit {
@@ -582,12 +596,13 @@ function angleUrlAt(value: string, at: number): Hit {
   const match = stickyMatch(ANGLE_URL, value, at);
   const url = match?.[1];
   const href = url ? safeHref(url) : null;
-  return href && url
-    ? { nodes: [{ kind: 'link', href, children: [text(url)] }], end: ANGLE_URL.lastIndex }
+  return match && href && url
+    ? { nodes: [{ kind: 'link', href, children: [text(url)] }], end: endOf(match) }
     : null;
 }
 
-function tokenAt(value: string, at: number, open: boolean, inLink: boolean): Hit {
+function tokenAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
+  const nestable = depth < MAX_INLINE_DEPTH;
   switch (value[at]) {
     case '\n':
       return { nodes: [{ kind: 'break' }], end: at + 1 };
@@ -601,11 +616,11 @@ function tokenAt(value: string, at: number, open: boolean, inLink: boolean): Hit
       return codeAt(value, at, open);
     case '*':
     case '_':
-      return emphasisAt(value, at, open, inLink);
+      return nestable ? emphasisAt(value, at, open, inLink, depth) : null;
     case '~':
-      return strikeAt(value, at, open, inLink);
+      return nestable ? strikeAt(value, at, open, inLink, depth) : null;
     case '[':
-      return inLink ? null : linkAt(value, at, open);
+      return inLink || !nestable ? null : linkAt(value, at, open, depth);
     case '!': {
       if (value[at + 1] !== '[') return null;
       const image = linkSyntaxAt(value, at + 1);
@@ -625,17 +640,22 @@ function tokenAt(value: string, at: number, open: boolean, inLink: boolean): Hit
  * Inline nodes of `value`. `open`: the text ends here for now, so unclosed spans run to its end
  * and a marker with nothing after it is dropped. `inLink`: no links inside a link.
  */
-export function parseAnswerInline(value: string, open = false, inLink = false): Inline[] {
+export function parseAnswerInline(
+  value: string,
+  open = false,
+  inLink = false,
+  depth = 0,
+): Inline[] {
   const nodes: Inline[] = [];
   let plain = '';
   let at = 0;
   while (at < value.length) {
-    const hit = SPECIAL.test(value[at] as string) ? tokenAt(value, at, open, inLink) : null;
+    const hit = SPECIAL.test(value[at] as string) ? tokenAt(value, at, open, inLink, depth) : null;
     if (hit) {
       if (plain) nodes.push(text(plain));
       plain = '';
       nodes.push(...hit.nodes);
-      at = hit.end;
+      at = Math.max(hit.end, at + 1);
     } else {
       plain += value[at];
       at += 1;
