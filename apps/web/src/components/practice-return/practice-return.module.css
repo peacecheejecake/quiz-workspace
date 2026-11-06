@@ -37,7 +37,7 @@
   /* The bar swipes down from anywhere, its buttons included. */
   touch-action: none;
 }
-.target {
+.control .target {
   min-width: 44px;
   min-height: 44px;
 }

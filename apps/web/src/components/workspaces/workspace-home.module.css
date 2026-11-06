@@ -26,7 +26,9 @@
 /* Two button groups (UX4): 문서 N · 모의고사, then AI 질문 · 이력 · 공유하기 aligned right, with
    검색 · 필터 between them (UX12-HOMEFILTER). Under the app header and over the heatmap's raised
    markers and hover layers. It spans the full page width (HOME-EDGE): the negative inline margin
-   reaches the viewport edges and the equal padding keeps the buttons on the content edges.
+   reaches the page edges and the equal padding keeps the buttons on the content edges. The
+   bleed is measured per side by `trackToolbarHeight` (the scrollbar gutter makes the content
+   off-centre in the viewport); `50vw - 50%` is the fallback before it runs.
    Transparent with no blur at the page top; once stuck (`data-stuck`, set by
    `trackToolbarHeight`) it is glass in the canvas tone, opaque where glass falls back
    (UX12-GLASSBTN). The negative block margins cancel its padding. */
@@ -40,9 +42,11 @@
   gap: var(--space-2) var(--space-3);
   min-width: 0;
   margin-block: calc(-1 * var(--home-toolbar-padding));
-  margin-inline: calc(50% - 50vw);
+  margin-inline: calc(-1 * var(--toolbar-bleed-start, calc(50vw - 50%)))
+    calc(-1 * var(--toolbar-bleed-end, calc(50vw - 50%)));
   padding-block: var(--home-toolbar-padding);
-  padding-inline: calc(50vw - 50%);
+  padding-inline: var(--toolbar-bleed-start, calc(50vw - 50%))
+    var(--toolbar-bleed-end, calc(50vw - 50%));
   background: transparent;
 }
 
