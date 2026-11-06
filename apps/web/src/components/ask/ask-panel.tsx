@@ -1275,7 +1275,7 @@ function useAskPanel({
 
   function composer() {
     return (
-      <div className={styles.composer}>
+      <div className={`${styles.composer} glass-surface`}>
         {attachment ? (
           <div role="group" aria-label="첨부한 문제" className={styles.chip}>
             <span className={styles.chipText}>

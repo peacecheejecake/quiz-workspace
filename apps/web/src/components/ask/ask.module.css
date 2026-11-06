@@ -103,8 +103,10 @@
   cursor: pointer;
 }
 
-.rowOpen:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .rowOpen:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .rowTitle {
@@ -184,7 +186,7 @@
   padding: 0 var(--space-1);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-label);
@@ -192,8 +194,10 @@
   cursor: pointer;
 }
 
-.cite:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .cite:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .tag {
@@ -201,8 +205,10 @@
   cursor: default;
 }
 
-.tag:hover {
-  background: var(--color-surface);
+@media (hover: hover) {
+  .tag:hover {
+    background: transparent;
+  }
 }
 
 .sources {
@@ -220,7 +226,7 @@
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-label);
@@ -228,8 +234,10 @@
   cursor: pointer;
 }
 
-.sourceButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .sourceButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .searched {
@@ -290,8 +298,6 @@
   padding: var(--space-2);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-floating);
 }
 
 .composer:has(.input:focus-visible) {

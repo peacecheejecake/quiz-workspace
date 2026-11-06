@@ -42,7 +42,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
 }
 
 .itemMain {
@@ -73,8 +73,10 @@
   cursor: pointer;
 }
 
-.titleButton:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .titleButton:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (hover: hover) {
@@ -181,7 +183,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   text-align: start;
@@ -189,8 +191,10 @@
   cursor: pointer;
 }
 
-.questionButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .questionButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .questionTitle {

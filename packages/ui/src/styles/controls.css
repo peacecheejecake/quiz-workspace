@@ -85,16 +85,30 @@
 }
 
 /*
- * The only buttons without a visible boundary (UX12-CONTROLS): icon ghost buttons and ghost text
- * buttons marked `borderless`. The transparent border keeps their size; hover fills the background.
+ * The only buttons without a visible boundary (UX12-CONTROLS, UX12-GLASSBTN): icon-only buttons of
+ * every variant and ghost text buttons marked `borderless`; toggles keep theirs. The transparent
+ * border keeps their size; hover fills the background.
  */
-.qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+.qz-icon-button:not([aria-pressed], [data-state='on'], [data-state='off']),
 .qz-button[data-variant='ghost'][data-borderless]:not(
     [aria-pressed],
     [data-state='on'],
     [data-state='off']
   ) {
   border-color: transparent;
+}
+
+/*
+ * On glass a secondary button has no fill (UX12-GLASSBTN): the layer shows through and the border
+ * stays. Hover and pressed still fill it; they are more specific.
+ */
+.glass-surface
+  :is(.qz-button, .qz-icon-button)[data-variant='secondary']:not(
+    [aria-pressed],
+    [data-state='on'],
+    [data-state='off']
+  ) {
+  background: transparent;
 }
 
 /*
@@ -163,7 +177,7 @@
   }
 
   /* Same selector as the transparent rule above, so the boundary returns here. */
-  .qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+  .qz-icon-button:not([aria-pressed], [data-state='on'], [data-state='off']),
   .qz-button[data-variant='ghost'][data-borderless]:not(
       [aria-pressed],
       [data-state='on'],
@@ -271,6 +285,11 @@
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   cursor: not-allowed;
+}
+
+/* Glass raises muted areas to the input's own color, so a disabled input drops its fill instead. */
+.glass-surface .qz-control:disabled {
+  background: transparent;
 }
 
 .qz-control[data-multiline] {

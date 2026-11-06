@@ -597,3 +597,9 @@
   height: 100%;
   min-height: 24rem;
 }
+
+@media (hover: hover) {
+  .blockBody:hover {
+    background: var(--color-state-hover);
+  }
+}

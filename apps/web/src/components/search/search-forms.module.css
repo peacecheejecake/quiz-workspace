@@ -128,8 +128,10 @@
   cursor: pointer;
 }
 
-.settingsToggle:hover {
-  color: var(--color-text-primary);
+@media (hover: hover) {
+  .settingsToggle:hover {
+    color: var(--color-text-primary);
+  }
 }
 
 @media (hover: hover) {

@@ -172,3 +172,9 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);
 }
+
+@media (hover: hover) {
+  .sheetButton:hover {
+    background: var(--color-state-hover);
+  }
+}
