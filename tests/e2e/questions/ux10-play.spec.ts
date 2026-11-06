@@ -1,5 +1,6 @@
 import { test, expect, createNumberedQuestions, homePath, signInAs } from '../fixtures/test.ts';
 import type { Locator, Page } from '@playwright/test';
+import { confirmRunClose } from '../fixtures/practice-runs.ts';
 import {
   createMockExam,
   getMockExam,
@@ -69,6 +70,7 @@ test('UX10-PLAY-AC01 original questions start a bank run without creating a mock
   await expect(page.getByText(/ux10-play-1 문제/)).toBeVisible();
   await expect(page.getByRole('dialog').getByRole('heading', { name: /1번/ })).toBeFocused();
   await page.keyboard.press('Escape');
+  await confirmRunClose(page);
   await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeFocused();
   const mocks = await owner.api.ok<{ items: unknown[] }>(
     'GET',

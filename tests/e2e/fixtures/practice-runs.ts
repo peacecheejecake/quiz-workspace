@@ -569,6 +569,28 @@ export const runUi = {
     panel.getByRole('button', { name: /^(처음부터 다시|start over|restart)$/i }),
 };
 
+/** The confirm an unfinished run asks before closing (UX12-RUNCLOSE). */
+export const runCloseUi = {
+  dialog: (page: Page) =>
+    page.getByRole('alertdialog', { name: /풀이를 닫을까요|close this run/i }),
+  keepSolving: (page: Page) =>
+    runCloseUi.dialog(page).getByRole('button', { name: /^(계속 풀기|keep solving)$/i }),
+  close: (page: Page) => runCloseUi.dialog(page).getByRole('button', { name: /^(닫기|close)$/i }),
+};
+
+/** Answers the close confirm with 닫기, after a close button, Escape, backdrop or swipe. */
+export async function confirmRunClose(page: Page): Promise<void> {
+  await runCloseUi.close(page).click();
+  await expect(runCloseUi.dialog(page)).toHaveCount(0);
+}
+
+/** Closes the run panel of an unfinished run through its confirm. */
+export async function closeUnfinishedRun(panel: Locator): Promise<void> {
+  await runUi.close(panel).click();
+  await confirmRunClose(panel.page());
+  await expect(panel).toBeHidden();
+}
+
 /**
  * Opens the range step of a bank run by its URL (the home's 모의고사 opens the 모의고사 list, and its
  * 만들기 without variations starts a run with a chosen range instead of this step).

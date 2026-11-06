@@ -16,6 +16,7 @@ import {
   seedRangeWorkspace,
   type PracticeRun,
   type RangeWorkspace,
+  closeUnfinishedRun,
 } from '../fixtures/practice-runs.ts';
 import {
   createQuestion,
@@ -238,8 +239,7 @@ test(
     await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     expect(questionAttemptCount(s.workspaceId)).toBe(attempts + 1);
 
-    await runUi.close(panel).click();
-    await expect(panel).toBeHidden();
+    await closeUnfinishedRun(panel);
     await expect(chapterPlay(page, CH2)).toBeFocused();
 
     await startRun(page, s.viewer, CH1);

@@ -18,11 +18,18 @@ import { GroupedResults } from './grouped-results';
 //            position read-only), `처음부터 다시` (a new run of the same questions and order
 //            setting) and `닫기`.
 // The URL is the screen's (`?practice=…`, practice-runs.ts): `시작`, `결과 보기` and `처음부터 다시`
-// replace the history entry, moving between positions pushes one (QOV-01-AC14). Closing (Escape,
-// 닫기) asks nothing: every submission is saved already. `bank` runs carry the study toggles and the
+// replace the history entry, moving between positions pushes one (QOV-01-AC14). Closing an
+// unfinished run asks first (UX12-RUNCLOSE), every other close and Back do not. `bank` runs carry the study toggles and the
 // screen's 문제 관리 / 문제 정보 menu (`headerExtra`); `mock` runs carry neither, but
 // `질문하기` (ASK-01, the question attached with its session).
-import { Button, Checkbox, FloatingSidePanel, ProgressBar, questionTypeLabels } from '@quiz/ui';
+import {
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  FloatingSidePanel,
+  ProgressBar,
+  questionTypeLabels,
+} from '@quiz/ui';
 import {
   useEffect,
   useId,
@@ -406,6 +413,25 @@ export function SequenceViewer({
     onClose,
   });
 
+  // UX12-RUNCLOSE: every deliberate close of an unfinished run asks first. Keyed to the step, so a
+  // Back under the confirm drops it for good. The panel stays controlled: it closes only on onClose.
+  const [closeAsk, setCloseAsk] = useState<string | null>(null);
+  const confirmingClose = open && closeAsk === stepKey;
+  if (closeAsk !== null && !confirmingClose) setCloseAsk(null);
+  const closeReturnFocus = useRef<HTMLElement | null>(null);
+  function requestClose() {
+    if (view?.step !== 'solve' || !solve.unfinished) {
+      onClose();
+      return;
+    }
+    // A click does not focus a button in Safari: the title is the panel's own fallback.
+    const active = document.activeElement;
+    const inPanel =
+      active instanceof HTMLElement && titleRef.current?.closest('[role=dialog]')?.contains(active);
+    closeReturnFocus.current = inPanel ? active : titleRef.current;
+    setCloseAsk(stepKey);
+  }
+
   let title: string = pickerTitle;
   let description: string | undefined;
   let body: ReactNode = null;
@@ -451,7 +477,7 @@ export function SequenceViewer({
     <FloatingSidePanel
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next) requestClose();
       }}
       title={title}
       titleRef={titleRef}
@@ -485,6 +511,21 @@ export function SequenceViewer({
           {body}
         </div>
       ) : null}
+      <ConfirmDialog
+        open={confirmingClose}
+        onOpenChange={(next) => {
+          if (!next) setCloseAsk(null);
+        }}
+        title="풀이를 닫을까요?"
+        description="제출한 답은 저장되어 있습니다. 모의고사 목록의 이어 풀기로 계속 풀 수 있습니다."
+        confirmLabel="닫기"
+        cancelLabel="계속 풀기"
+        returnFocusRef={closeReturnFocus}
+        onConfirm={() => {
+          setCloseAsk(null);
+          onClose();
+        }}
+      />
     </FloatingSidePanel>
   );
 }
@@ -736,6 +777,13 @@ function useSolveStep({
     () => client.getRun(runId ?? ''),
   );
   const run = runLoad?.status === 'ready' ? runLoad.data : null;
+  // Positions submitted since the run was read, which `run.answered` does not count yet.
+  const [newSubmissions, setNewSubmissions] = useState(0);
+  const [countedRun, setCountedRun] = useState(run);
+  if (run !== countedRun) {
+    setCountedRun(run);
+    setNewSubmissions(0);
+  }
   const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
@@ -972,6 +1020,7 @@ function useSolveStep({
     }
     if (practiceResetVersion(workspaceId, qid) !== version) return;
     if (result.ok) {
+      setNewSubmissions((n) => n + 1);
       if (result.data.result === 'pending') pendingHere(qid);
       else gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
@@ -1040,6 +1089,7 @@ function useSolveStep({
       onShowSource: null,
       flags: null,
       changeFlags: () => undefined,
+      unfinished: false,
     };
   }
 
@@ -1339,6 +1389,11 @@ function useSolveStep({
     lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
     pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,
     changeFlags,
+    unfinished:
+      run !== null &&
+      run.finished_at === null &&
+      run.answered + newSubmissions < run.total &&
+      itemLoad?.status !== 'error',
   };
 }
 
