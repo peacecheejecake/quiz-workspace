@@ -3,7 +3,7 @@
 // (which opens a practice session = the view); closing it removes the param and returns focus to
 // the dot — also when the panel was opened by a deep link. Hovering never opens a session.
 import './dom-setup';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { useSyncExternalStore } from 'react';
@@ -477,18 +477,58 @@ describe('QuestionsOverview practice panel (QPLAY-01)', () => {
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
     panel = await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
     await user.click(within(panel).getByRole('button', { name: '다음 문제' }));
     panel = await screen.findByRole('dialog', { name: '3번 문제' });
     const next = within(panel).getByRole('button', { name: '다음 문제' });
     expect(next).toHaveAttribute('aria-disabled', 'true');
     await user.click(next);
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(3));
-    // Each question opened its own session (= its own view).
+    // Each question it stopped on opened its own session (= its own view).
     await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(3));
 
     await user.click(within(panel).getByRole('button', { name: '이전 문제' }));
     await screen.findByRole('dialog', { name: '2번 문제' });
     expect(new URLSearchParams(window.location.search).get('question')).toBe(id(2));
+  });
+
+  it('UX12-OPEN-AC08 a direct open posts at once, without the navigation pause', async () => {
+    render(<Screen />);
+    fireEvent.click(dot(1));
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1), { timeout: 100 });
+  });
+
+  it('UX12-OPEN-AC08 rapid next opens only the question it stops on', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    // Both clicks run in one task, so no timer can fire between them.
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+
+    await screen.findByRole('dialog', { name: '3번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(dotStatus(3)).toBe('viewed'));
+    expect(openPracticeSession.mock.calls.map((call) => call[1])).toEqual([id(1), id(3)]);
+    expect(dotStatus(2)).not.toBe('viewed');
+  });
+
+  it('UX12-OPEN-AC08 closing during the pause opens nothing', async () => {
+    const user = userEvent.setup();
+    render(<Screen />);
+    await user.click(dot(1));
+    const panel = await screen.findByRole('dialog', { name: '1번 문제' });
+    await waitFor(() => expect(openPracticeSession).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(within(panel).getByRole('button', { name: '다음 문제' }));
+    fireEvent.click(within(panel).getByRole('button', { name: /닫기/ }));
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    expect(openPracticeSession).toHaveBeenCalledTimes(1);
+    expect(dotStatus(2)).not.toBe('viewed');
   });
 
   it('submits the chosen option id, reveals the answer only then and refreshes on close', async () => {

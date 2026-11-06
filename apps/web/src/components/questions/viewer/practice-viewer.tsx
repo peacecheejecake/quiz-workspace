@@ -50,7 +50,11 @@ import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanat
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
 import { openQuestionPractice } from '@/lib/questions/practice-open-client';
-import { measurePracticeOpen, PRACTICE_OPEN_MEASURE } from '@/lib/questions/practice-open-timing';
+import {
+  measurePracticeOpen,
+  PRACTICE_NAVIGATION_PAUSE_MS,
+  PRACTICE_OPEN_MEASURE,
+} from '@/lib/questions/practice-open-timing';
 import {
   practiceResetVersion,
   rememberPracticeEpoch,
@@ -152,6 +156,8 @@ interface Opening {
   /** The open session to reuse if the server confirms it is current. */
   readonly cached: PracticeSession | null;
   readonly forceNew?: boolean;
+  /** Reached from another question: passed over quickly, it must not count as viewed. */
+  readonly afterNavigation?: boolean;
 }
 
 /** The answering state of one session in one opening. */
@@ -253,7 +259,13 @@ export function PracticeViewer({
     cached: cache.get(questionId),
   }));
   if (opening.questionId !== questionId || reopen) {
-    setOpening({ questionId, key: newKey(), cached: scoped ? cache.get(questionId) : null });
+    setOpening({
+      questionId,
+      key: newKey(),
+      cached: scoped ? cache.get(questionId) : null,
+      afterNavigation:
+        opening.questionId !== null && questionId !== null && opening.questionId !== questionId,
+    });
   }
   const [session, setSession] = useState<SessionState & { readonly key: string | null }>({
     status: 'loading',
@@ -266,9 +278,9 @@ export function PracticeViewer({
     if (!id || readOnly || resetClosing.current === id) return;
     let current = true;
     const key = opening.key;
-    const resetVersion = practiceResetVersion(workspaceId, id);
     const startedAt = performance.now();
-    void (async () => {
+    const open = async () => {
+      const resetVersion = practiceResetVersion(workspaceId, id);
       const held =
         opening.cached && cache.get(id)?.id === opening.cached.id ? opening.cached : null;
       const opened = await openQuestionPractice(workspaceId, id, key, {
@@ -323,11 +335,18 @@ export function PracticeViewer({
         previousRevision: data.previous_revision,
         key,
       });
-    })().catch(() => {
-      if (current) setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
-    });
+    };
+    const start = () => {
+      open().catch(() => {
+        if (current) setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
+      });
+    };
+    let pause: ReturnType<typeof setTimeout> | undefined;
+    if (opening.afterNavigation) pause = setTimeout(start, PRACTICE_NAVIGATION_PAUSE_MS);
+    else start();
     return () => {
       current = false;
+      clearTimeout(pause);
     };
     // onViewed is a stable callback of the screen; the opening identifies the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -461,7 +480,15 @@ export function PracticeViewer({
       {readOnly ? null : (
         <AnotherTryButton
           available={ready !== null && finished}
-          onTry={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
+          onTry={() =>
+            setOpening((o) => ({
+              ...o,
+              key: newKey(),
+              cached: null,
+              forceNew: true,
+              afterNavigation: false,
+            }))
+          }
         />
       )}
       {ready && (outcome || view.lastGradedResult || view.isPendingGrading) ? (
@@ -638,7 +665,11 @@ export function PracticeViewer({
           ) : state.status === 'error' ? (
             <div role="alert" className={styles.error}>
               <p>{state.message}</p>
-              <Button onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null }))}>
+              <Button
+                onClick={() =>
+                  setOpening((o) => ({ ...o, key: newKey(), cached: null, afterNavigation: false }))
+                }
+              >
                 다시 시도
               </Button>
             </div>

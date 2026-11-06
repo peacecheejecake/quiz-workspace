@@ -18,6 +18,7 @@ import {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const AGAIN = /^다시 풀기$|^solve again$/i;
+const NEXT = /^다음 문제$|^next question$/i;
 const ANSWER_FIELDS = /"(correct_option_ids|accepted_answers|explanation|rubric|outcome)"/;
 
 interface Traffic {
@@ -152,5 +153,39 @@ test(
     const third = await openPanel(page);
     await expect(panelUi.result(third)).toContainText(RESULT_TEXT.correct);
     await expect(panelUi.submit(third)).toHaveCount(0);
+  },
+);
+
+test(
+  'UX12-OPEN-AC08 rapid next opens only the question it stops on',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member('ux12-open-rapid');
+    const ws = await workspaceFactory.create(owner);
+    const label = `rapid-${Date.now()}`;
+    const first = await createQuestion(owner, ws.id, numberedMcq(label, 1, 0));
+    await createQuestion(owner, ws.id, numberedMcq(label, 2, 0));
+    const third = await createQuestion(owner, ws.id, numberedMcq(label, 3, 0));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    const traffic = watch(page);
+
+    const opened = await openPanel(page);
+    await expect(panelUi.submit(opened)).toBeVisible();
+    // In the page, so the two clicks fall inside the pause however busy the machine is.
+    await opened.getByRole('button', { name: NEXT }).evaluate(async (button: HTMLElement) => {
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      button.click();
+    });
+
+    const last = panelUi.numbered(page, 3);
+    await expect(panelUi.submit(last)).toBeVisible();
+    await expect.poll(() => traffic.opens.length).toBe(2);
+    expect(traffic.posts).toEqual([openPost(first), openPost(third)]);
+
+    await closePanel(page, last);
+    await expect(overviewUi.dot(page, 3)).toHaveAttribute('data-status', 'viewed');
+    await expect(overviewUi.dot(page, 2)).not.toHaveAttribute('data-status', 'viewed');
   },
 );

@@ -7,7 +7,7 @@
 
 ```yaml
 id: UX12-OPEN
-linked_tests: [UX12-OPEN-AC01 … UX12-OPEN-AC07]
+linked_tests: [UX12-OPEN-AC01 … UX12-OPEN-AC08]
 ```
 
 **명세:** [UX12 VIEW-5](../implementation/ux12/index.md), [UX10-QVIEW](../implementation/ux10/qview.md)(캐시 정합성 결정을 개정), [QPLAY-01](questions-practice.md)
@@ -49,7 +49,7 @@ UX10의 "서버 metadata를 먼저 확인한다"는 보장은 그대로이며, �
 
 "전" 측정에서 RTT 0과 10 ms의 차이가 왕복 수에 비례하므로 병목은 DB 왕복 수다. 개선 효과의 근거는 현재 위 왕복 수이며, 체감 시간 단축은 아직 확인되지 않았다.
 
-**알려진 동작 변화:** 예전에는 `practice-recent`가 도는 동안 panel을 닫거나 다음 문제로 넘어가면 session이 열리지 않았다. 이제 요청이 나간 뒤에는 서버가 열람을 기록한다. 응답은 client가 버린다. reset이 panel을 닫는 경우만 예외로, client가 다시 열기를 보내지 않는다(UX10-QVIEW-AC04).
+**알려진 동작 변화:** 예전에는 `practice-recent`가 도는 동안 panel을 닫으면 session이 열리지 않았다. 이제 요청이 나간 뒤에는 서버가 열람을 기록한다. 응답은 client가 버린다. reset이 panel을 닫는 경우는 client가 다시 열기를 보내지 않는다(UX10-QVIEW-AC04). 이전/다음 이동은 약 150 ms 뒤에 요청을 보내므로 빠르게 지나간 문제는 열람으로 남지 않는다(UX12-OPEN-AC08).
 
 ## 수용 기준
 
@@ -80,3 +80,7 @@ Heatmap에서 처음 여는 문제는 `POST /api/questions/{id}/practice-open` �
 ### UX12-OPEN-AC07
 
 DB 왕복 상한은 처음 열기 10, 캐시 재사용 8, 결과 다시 열기 7이다. 이전에는 각각 19, 9, 9였다. 응답의 `Server-Timing`에는 `db`와 `app` 시간만 있다.
+
+### UX12-OPEN-AC08
+
+이전/다음으로 도착한 문제는 약 150 ms 머문 뒤에 `practice-open`을 보낸다. 그 안에 다시 이동하거나 panel을 닫으면 요청을 보내지 않으므로 지나간 문제는 열람으로 남지 않는다. Heatmap이나 deep link로 직접 여는 경우, 다시 풀기, 다시 시도는 기다리지 않는다.
