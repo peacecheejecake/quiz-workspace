@@ -4436,6 +4436,26 @@
             "title": "Id",
             "type": "string"
           },
+          "include_ai_explanations": {
+            "description": "Guests read AI explanations; forks copy them.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Guests read chapter notes; forks copy them.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "Guests read the owner's own attempts and highlights. Never forked.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Guests read document summaries; forks copy them.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "revoked_at": {
             "anyOf": [
               {
@@ -4515,6 +4535,10 @@
           "id",
           "workspace_id",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "revoked_at",
           "status",
@@ -7240,6 +7264,32 @@
           "preview"
         ],
         "title": "OverviewItem",
+        "type": "object"
+      },
+      "OwnerRecordQuestion": {
+        "properties": {
+          "number_label": {
+            "description": "`<번호>번` or `번호 없음` (the printed number).",
+            "title": "Number Label",
+            "type": "string"
+          },
+          "question_id": {
+            "format": "uuid",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "stem_preview": {
+            "description": "First 40 characters of the current stem.",
+            "title": "Stem Preview",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "number_label",
+          "stem_preview"
+        ],
+        "title": "OwnerRecordQuestion",
         "type": "object"
       },
       "PracticeOption": {
@@ -11282,6 +11332,26 @@
             "title": "Id",
             "type": "string"
           },
+          "include_ai_explanations": {
+            "description": "Guests read AI explanations; forks copy them.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Guests read chapter notes; forks copy them.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "Guests read the owner's own attempts and highlights. Never forked.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Guests read document summaries; forks copy them.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "revoked_at": {
             "anyOf": [
               {
@@ -11344,6 +11414,10 @@
           "id",
           "workspace_id",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "revoked_at",
           "status",
@@ -11374,6 +11448,26 @@
             ],
             "description": "Future instant with a UTC offset; null or absent: no expiry.",
             "title": "Expires At"
+          },
+          "include_ai_explanations": {
+            "default": true,
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "default": true,
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "default": false,
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "default": true,
+            "title": "Include Summary",
+            "type": "boolean"
           }
         },
         "title": "ShareLinkCreate",
@@ -11421,6 +11515,50 @@
               }
             ],
             "title": "Expires At"
+          },
+          "include_ai_explanations": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Ai Explanations"
+          },
+          "include_notes": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Notes"
+          },
+          "include_owner_records": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Owner Records"
+          },
+          "include_summary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include Summary"
           }
         },
         "title": "ShareLinkUpdate",
@@ -11632,6 +11770,177 @@
           "created_at"
         ],
         "title": "SharedExplanation",
+        "type": "object"
+      },
+      "SharedOwnerAttempt": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/OwnerRecordQuestion"
+          },
+          "question_type": {
+            "enum": [
+              "MCQ",
+              "SHORT_ANSWER",
+              "ESSAY"
+            ],
+            "title": "Question Type",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "correct",
+              "incorrect",
+              "pending"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "question_type",
+          "result",
+          "submitted_at"
+        ],
+        "title": "SharedOwnerAttempt",
+        "type": "object"
+      },
+      "SharedOwnerAttemptPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedOwnerAttempt"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SharedOwnerAttemptPage",
+        "type": "object"
+      },
+      "SharedOwnerHighlight": {
+        "properties": {
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Note highlights only.",
+            "title": "Chapter Title"
+          },
+          "color": {
+            "enum": [
+              "yellow",
+              "blue",
+              "pink"
+            ],
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "note",
+              "explanation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnerRecordQuestion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explanation highlights only."
+          },
+          "quote": {
+            "description": "The highlighted text, as it stands in the shared text.",
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "color",
+          "quote",
+          "question",
+          "chapter_title",
+          "created_at"
+        ],
+        "title": "SharedOwnerHighlight",
+        "type": "object"
+      },
+      "SharedOwnerHighlightPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SharedOwnerHighlight"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A page can hold fewer than `limit` items: rows outside the share are left out.",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SharedOwnerHighlightPage",
         "type": "object"
       },
       "SharedQuestion": {
@@ -11986,6 +12295,26 @@
             "description": "When the link expires; null: never.",
             "title": "Expires At"
           },
+          "include_ai_explanations": {
+            "description": "AI explanations are part of this link.",
+            "title": "Include Ai Explanations",
+            "type": "boolean"
+          },
+          "include_notes": {
+            "description": "Chapter notes are part of this link.",
+            "title": "Include Notes",
+            "type": "boolean"
+          },
+          "include_owner_records": {
+            "description": "The owner's attempts and highlights can be read through this link.",
+            "title": "Include Owner Records",
+            "type": "boolean"
+          },
+          "include_summary": {
+            "description": "Document summaries are part of this link.",
+            "title": "Include Summary",
+            "type": "boolean"
+          },
           "workspace": {
             "$ref": "#/components/schemas/SharedWorkspaceInfo"
           }
@@ -11993,6 +12322,10 @@
         "required": [
           "workspace",
           "allow_fork",
+          "include_notes",
+          "include_ai_explanations",
+          "include_summary",
+          "include_owner_records",
           "expires_at",
           "documents"
         ],
@@ -23306,7 +23639,7 @@
     },
     "/api/v1/shared/{share_id}/documents/{document_id}/summary": {
       "get": {
-        "description": "The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a\nsucceeded summary of the revision the guest reads now. An older revision's summary, a run in\nprogress or failed, and anything of other workspaces answer the same 404 as a random id; no\nrun, usage, cost or error data.",
+        "description": "The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a\nsucceeded summary of the revision the guest reads now. An older revision's summary, a run in\nprogress or failed, and anything of other workspaces answer the same 404 as a random id; no\nrun, usage, cost or error data. A link without summaries answers that same 404.",
         "operationId": "getSharedDocumentSummary",
         "parameters": [
           {
@@ -23402,7 +23735,7 @@
     },
     "/api/v1/shared/{share_id}/forks": {
       "post": {
-        "description": "Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).\n\nNeeds the user's Bearer JWT and the share session cookie of this link, and the link must\nallow forking. Copies the published documents, questions, answers and explanations; never\ndrafts, other people's progress, activity or share links. 202 with the fork; poll\n`GET /me/forks/{id}`.",
+        "description": "Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).\n\nNeeds the user's Bearer JWT and the share session cookie of this link, and the link must\nallow forking. Copies the published documents, questions, answers and explanations, plus the\nnotes, AI explanations and summaries the link includes; never drafts, anyone's progress or\nhighlights, activity or share links. 202 with the fork; poll `GET /me/forks/{id}`.",
         "operationId": "startWorkspaceFork",
         "parameters": [
           {
@@ -23537,6 +23870,236 @@
         "summary": "Start Fork",
         "tags": [
           "forks"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/owner-attempts": {
+      "get": {
+        "description": "The owner's attempts on published questions: result and time (UX12-SHARE-AC07/AC08).",
+        "operationId": "listSharedOwnerAttempts",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedOwnerAttemptPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Owner Attempts",
+        "tags": [
+          "shared"
+        ]
+      }
+    },
+    "/api/v1/shared/{share_id}/owner-highlights": {
+      "get": {
+        "description": "The owner's highlights on text a guest can read now (UX12-SHARE-AC07/AC08).",
+        "operationId": "listSharedOwnerHighlights",
+        "parameters": [
+          {
+            "description": "The share link id (`/share/{id}`).",
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "description": "The share link id (`/share/{id}`).",
+              "maxLength": 64,
+              "title": "Share Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedOwnerHighlightPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "List Shared Owner Highlights",
+        "tags": [
+          "shared"
         ]
       }
     },
@@ -28014,7 +28577,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/share-links/{link_id}": {
       "patch": {
-        "description": "Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).\n\nA revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.",
+        "description": "Change `allow_fork`, `expires_at` and the scope flags (WS-SHARE-01-AC03, UX12-SHARE-AC01;\nallowed on archived).\n\nA revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.",
         "operationId": "updateShareLink",
         "parameters": [
           {

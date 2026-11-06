@@ -101,6 +101,8 @@ def _shareable(
 @router.get("/chapter-notes", operation_id="listSharedChapterNotes")
 def list_shared_chapter_notes(link: Shared, repo: Repo) -> SharedChapterNoteList:
     """Chapters of published documents whose newest note is source-matched."""
+    if not link.include_notes:
+        raise _not_found()
     items = [
         SharedChapterNoteSummary(chapter_id=c.id, chapter_title=c.title)
         for c in repo.workspace_chapters(link.workspace_id)
@@ -116,6 +118,8 @@ def get_shared_chapter_note(
     repo: Repo,
 ) -> SharedChapterNote:
     """The chapter's newest note, read-only, when it is source-matched (else 404)."""
+    if not link.include_notes:
+        raise _not_found()
     try:
         parsed = uuid.UUID(chapter_id)
     except ValueError:

@@ -1,4 +1,4 @@
-"""UX12-SHARE: link scope flags × every shared route, and the owner's records.
+"""UX12-SHARE: link scope flags against every shared route, and the owner's records.
 
 docs/workspace-sharing.md §12, docs/screens/ux12-share-scope.md. Runs the real API and SQL against
 the local stack. Content that needs the LLM pipelines is seeded directly: these tests are about
@@ -300,9 +300,7 @@ def test_owner_records_are_off_by_default_and_only_the_owners(seed: Any) -> None
     seed.assert_status(guest.read(link["id"], cookie, "/owner-attempts"), 404, "off again")
 
     # Rotate carries the option; a session of the old link is over anyway.
-    seed.assert_status(
-        w.owner.patch_link(w.ws, link["id"], include_owner_records=True), 200, "on"
-    )
+    seed.assert_status(w.owner.patch_link(w.ws, link["id"], include_owner_records=True), 200, "on")
     rotated = w.owner.rotate(w.ws, link["id"]).json()
     assert rotated["include_owner_records"] is True
     fresh = seed.guest().session(rotated["id"], rotated["secret"])
@@ -376,14 +374,15 @@ def test_records_outside_the_share_stay_hidden(seed: Any) -> None:
     assert [i for i in quotes() if i == "문제 하나"] == []
 
 
-def test_mock_exam_attempts_and_pending_rows_are_not_listed_twice(seed: Any) -> None:
+def test_a_graded_pending_attempt_is_listed_once(seed: Any) -> None:
     w = _world(seed, "pending")
     link, cookie = _session(seed, w, include_owner_records=True)
     q, rev = w.question["id"], w.question["revision"]["id"]
     owner_id = str(w.owner.user.id)
     session = seed._admin(
         "insert into public.practice_sessions (workspace_id, question_id, question_revision_id, "
-        "user_id, state, submitted_at) values (%s, %s, %s, %s, 'submitted', now()) returning id",
+        "user_id, state, submitted_at) values (%s, %s, %s, %s, 'pending_grade', now()) "
+        "returning id",
         (w.ws, q, rev, owner_id),
     )[0][0]
     pending = seed._admin(
@@ -393,18 +392,18 @@ def test_mock_exam_attempts_and_pending_rows_are_not_listed_twice(seed: Any) -> 
         (w.ws, q, rev, session, owner_id),
     )[0][0]
     guest = seed.guest()
-    assert [i["result"] for i in guest.read(link["id"], cookie, "/owner-attempts").json()["items"]] == [
-        "pending"
-    ]
+    assert [
+        i["result"] for i in guest.read(link["id"], cookie, "/owner-attempts").json()["items"]
+    ] == ["pending"]
     seed._admin(
         "insert into public.question_attempts (workspace_id, question_id, question_revision_id, "
         "practice_session_id, user_id, submitted_answer, result, grading_method, graded_at, "
         "grades_attempt_id) values (%s, %s, %s, %s, %s, '{}'::jsonb, 'correct', 'self', now(), %s)",
         (w.ws, q, rev, session, owner_id, pending),
     )
-    assert [i["result"] for i in guest.read(link["id"], cookie, "/owner-attempts").json()["items"]] == [
-        "correct"
-    ]
+    assert [
+        i["result"] for i in guest.read(link["id"], cookie, "/owner-attempts").json()["items"]
+    ] == ["correct"]
 
 
 def test_owner_attempts_page_with_a_cursor(seed: Any) -> None:

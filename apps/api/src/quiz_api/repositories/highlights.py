@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, insert, literal, select, text, update
+from sqlalchemy import and_, func, insert, literal, select, text, tuple_, update
 from sqlalchemy.orm import Session
 
 from quiz_api.chapter_notes import Ref, parse_refs
@@ -293,6 +293,27 @@ class HighlightRepository:
         if row is None:
             raise LookupError(f"highlight {highlight_id} vanished inside its transaction")
         return row
+
+    def live_page(
+        self,
+        user_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        limit: int,
+        after: tuple[datetime, uuid.UUID] | None = None,
+    ) -> list[HighlightRow]:
+        """`user_id`'s live highlights of the workspace, newest first, `limit` rows at most."""
+        stmt = _select().where(
+            user_highlights.c.user_id == user_id,
+            user_highlights.c.workspace_id == workspace_id,
+            user_highlights.c.deleted_at.is_(None),
+        )
+        if after is not None:
+            stmt = stmt.where(
+                tuple_(user_highlights.c.created_at, user_highlights.c.id) < tuple_(*after)
+            )
+        stmt = stmt.order_by(user_highlights.c.created_at.desc(), user_highlights.c.id.desc())
+        return [_row(r) for r in self._session.execute(stmt.limit(limit))]
 
     def live_on_target(
         self, user_id: uuid.UUID, workspace_id: uuid.UUID, kind: str, target_id: uuid.UUID
