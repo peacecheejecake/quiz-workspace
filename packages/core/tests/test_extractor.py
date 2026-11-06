@@ -970,7 +970,7 @@ def test_options_printed_as_table_rows() -> None:
     (draft,) = QuestionExtractor().extract(doc, document_id="t").drafts
     assert draft.question_type is QuestionType.MCQ
     assert draft.stem == (
-        "(가)~(나)에 들어갈 기간이 맞는 것은? ( ) - 이직기간이 (가) 이상인 경우 보기 | (가) | (나)"
+        "(가)~(나)에 들어갈 기간이 맞는 것은? ( )\n- 이직기간이 (가) 이상인 경우 보기 | (가) | (나)"
     )
     assert [(o.id, o.text) for o in draft.options] == [
         ("opt-1", "6개월 | 1년"),
