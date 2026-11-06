@@ -109,6 +109,7 @@ RULES: dict[str, Rule | str] = {
     "listMyQuestionAttempts": READ,
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
+    "openQuestionPractice": PRACTICE,  # UX12-OPEN
     "listMyWorkspaceAttempts": READ,
     # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
     "createPracticeRun": RUN_CREATE,
@@ -237,6 +238,9 @@ RULES: dict[str, Rule | str] = {
     "getSharedChapterNote": SHARED,
     "getSharedQuestionPreview": SHARED,
     "getSharedQuestionAiExplanation": SHARED,
+    # UX12-SHARE: 404 while `include_owner_records` is off (test_share_attacks.py)
+    "listSharedOwnerAttempts": SHARED,
+    "listSharedOwnerHighlights": SHARED,
     "createSharedSession": SHARED,
     # health
     "getLiveness": PUBLIC,
