@@ -1268,6 +1268,29 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/question-imports/{import_id}/re-extract': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reextract Question Import
+     * @description Read the run's revision again as a new run with fresh drafts (`다시 추출`,
+     *     UX12-REEXTRACT): the worker reads the stored parse artifact with the current extractor, and
+     *     nothing registered changes. 409 `import-running` while a run of the document is working,
+     *     409 `document-not-ready` when it was deleted or is processing.
+     */
+    post: operations['reextractQuestionImport'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/question-imports/{import_id}/registrations': {
     parameters: {
       query?: never;
@@ -3702,6 +3725,34 @@ export type components = {
        */
       variation_type?: ('PARAPHRASE' | 'INVERT_POLARITY' | 'ANALOGOUS_CONCEPT') | null;
     };
+    /**
+     * DraftPrevious
+     * @description What a re-extracted draft replaces (UX12-REEXTRACT, C04): the earlier draft with the same
+     *     extraction id, read through to its live CONFIRMED question when it has one. Field names only:
+     *     the content stays with the question and the draft.
+     */
+    DraftPrevious: {
+      /**
+       * Changed
+       * @description What differs; empty when nothing does.
+       */
+      changed: ('type' | 'stem' | 'options' | 'answer')[];
+      /**
+       * Number
+       * @description Its number, else the earlier draft's N번.
+       */
+      number: number | null;
+      /**
+       * Question Id
+       * @description The live CONFIRMED question, if any.
+       */
+      question_id: string | null;
+      /**
+       * Revision Id
+       * @description Its active revision (`base_revision_id` of the replace path's archive).
+       */
+      revision_id: string | null;
+    };
     /** DraftPublishError */
     DraftPublishError: {
       /** Field */
@@ -4292,6 +4343,8 @@ export type components = {
        * @description 0-based order in the source.
        */
       position: number;
+      /** @description Drafts of a re-extracted run (`다시 추출`): what the draft replaces; null when no earlier draft has its extraction id. */
+      previous?: components['schemas']['DraftPrevious'] | null;
       /**
        * Publish Errors
        * @description Why it cannot be confirmed yet.
@@ -4399,6 +4452,8 @@ export type components = {
        * @description 0-based order in the source.
        */
       position: number;
+      /** @description As `ImportDraft.previous` (UX12-REEXTRACT). */
+      previous?: components['schemas']['DraftPrevious'] | null;
       /**
        * Publishable
        * @description Can be approved / confirmed as it is.
@@ -4441,6 +4496,11 @@ export type components = {
        * @description Every draft of the run, source order.
        */
       items: components['schemas']['ImportDraftSummary'][];
+      /**
+       * Missing Previous
+       * @description Re-extracted runs: numbers of earlier drafts with no draft here.
+       */
+      missing_previous?: number[];
     };
     /** ImportPublishBody */
     ImportPublishBody: {
@@ -4615,6 +4675,11 @@ export type components = {
       job_id: string | null;
       /** Published Count */
       published_count: number;
+      /**
+       * Reextract Of
+       * @description The run this one reads again (`다시 추출`, UX12-REEXTRACT).
+       */
+      reextract_of?: string | null;
       /**
        * Registration Job Id
        * @description The newest registration (QIMP-JOB) of this run, if any: read its progress at `GET /question-imports/{id}/registrations/{registration_id}`.
@@ -13618,6 +13683,85 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ImportPublishOutcome'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  reextractQuestionImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        import_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportRun'];
         };
       };
       /** @description Unauthorized */

@@ -67,6 +67,7 @@ export interface ImportReviewData {
   readonly drafts: readonly ReviewDraft[];
   readonly summaries: readonly DraftSummary[];
   readonly chapters: readonly BookChapterOption[];
+  readonly missingPrevious?: readonly number[];
   readonly loadedAt: string;
   readonly loadFailed: boolean;
 }
@@ -513,6 +514,9 @@ export function ImportReviewLayout({
                 initialDrafts={review.drafts}
                 initialSummaries={review.summaries}
                 initialChapters={review.chapters}
+                {...(review.missingPrevious
+                  ? { initialMissingPrevious: review.missingPrevious }
+                  : {})}
                 loadedAt={review.loadedAt}
                 documentId={documentId ?? undefined}
                 loadFailed={review.loadFailed}

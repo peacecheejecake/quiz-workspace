@@ -172,6 +172,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-PICKER.0': ['UX12-PICKER'],
   // UX12 VIEW-7: <제목> passages in stems, each in its own box, with item lines.
   'UX12-PASSAGE.0': ['UX12-PASSAGE'],
+  // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.
+  'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
 };
 
 const LEADING_ID = new RegExp(

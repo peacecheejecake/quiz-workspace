@@ -36,6 +36,7 @@ const EVENT_LABELS: Readonly<Record<string, string>> = {
   'questions.chapters_reassigned': '챕터 재분배',
   'question_import.started': '문제 가져오기 시작',
   'question_import.retried': '문제 가져오기 재시도',
+  'question_import.reextracted': '문제 다시 추출',
   'question_import.published': '가져온 문제 게시',
   'question_import.registration_requested': '가져온 문제 등록 요청',
   'workspace.created': 'Workspace 생성',
