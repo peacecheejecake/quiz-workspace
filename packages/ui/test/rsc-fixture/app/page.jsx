@@ -3,6 +3,7 @@
 // this list in sync with src/index.ts.
 import {
   useModalLayerOpen,
+  useDragDismiss,
   AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
@@ -14,7 +15,10 @@ import {
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
+  FilterIcon,
+  PlusIcon,
   ChevronUpIcon,
   HistoryIcon,
   SearchIcon,
@@ -248,6 +252,9 @@ export default function Page() {
             <CheckIcon />
             <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
+            <ChevronLeftIcon />
+            <FilterIcon />
+            <PlusIcon />
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />

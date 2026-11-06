@@ -1,4 +1,5 @@
 import { expect, homeUi, overviewPath, signInAs, test, wsUi } from '../fixtures/test.ts';
+import { drag, expectSettled, line } from '../fixtures/overlay-drag.ts';
 import type { Locator } from '@playwright/test';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -112,29 +113,14 @@ test(
     const member = await workspaceFactory.member('ux10-ui-03');
     await signInAs(page, member.user);
     await page.goto('/workspaces');
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     const opener = wsUi.createButton(page);
     await opener.click();
     const dialog = wsUi.createDialog(page);
     await expect(dialog).toBeVisible();
-    const box = await dialog.boundingBox();
-    if (!box) throw new Error('missing dialog bounds');
-    const viewport = page.viewportSize();
-    if (!viewport) throw new Error('missing viewport');
-    const distances = [
-      box.x,
-      viewport.width - box.x - box.width,
-      box.y,
-      viewport.height - box.y - box.height,
-    ];
-    const minimum = Math.min(...distances);
-    const edge = distances[3] === minimum ? 3 : distances.indexOf(minimum);
-    await swipe(
-      dialog.locator(':scope > .header'),
-      edge === 0 ? -80 : edge === 1 ? 80 : 0,
-      edge === 2 ? -80 : edge === 3 ? 80 : 0,
-      'pen',
-    );
+    // UX12 DESIGN-3: a centered dialog goes down, from anywhere in the header, following the finger.
+    const seen = await drag(dialog.locator(':scope > .header .title'), line(0, 120));
+    expect(seen).toEqual(['0px 30px', '0px 60px', '0px 90px', '0px 120px']);
     await expect(dialog).toBeHidden();
     await expect(opener).toBeFocused();
   },
@@ -148,10 +134,16 @@ test(
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
     await page.goto(overviewPath(ws.id));
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await swipe(dialog.locator(':scope > .header'), 5, 5);
     await swipe(dialog.locator(':scope > .body'), 100, 100);
+    await expect(dialog).toBeVisible();
+    // UX12 DESIGN-3: a drag against the panel's direction moves it a little, then springs back.
+    const seen = await drag(dialog.locator(':scope > .header .title'), line(-100, 0));
+    expect(seen.at(-1)).toMatch(/^-[\d.]+px$/);
+    await expectSettled(dialog);
     await expect(dialog).toBeVisible();
   },
 );

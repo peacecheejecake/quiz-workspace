@@ -94,6 +94,24 @@ it('UX11-RETURN-AC03 dismisses the control until another activity', () => {
   fireEvent.click(screen.getByText('activity'));
   expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
 });
+it('UX12-GESTURE-AC08 a swipe down dismisses like the close button', () => {
+  const finger = (target: Window | Element, type: string, clientY: number) => {
+    const init = { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: 0, clientY };
+    fireEvent(target, Object.assign(new Event(type, { bubbles: true }), init));
+  };
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const button = screen.getByRole('button', { name: '보던 문제로 돌아가기' });
+  finger(button, 'pointerdown', 0);
+  finger(window, 'pointermove', 100);
+  expect(button.parentElement?.style.translate).toBe('0px 100px');
+  act(() => finger(window, 'pointerup', 100));
+  fireEvent.click(button);
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  expect(nav.push).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('activity'));
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+});
 it('UX11-RETURN-AC04 removes an unavailable target and reports it', async () => {
   lookup.mockResolvedValue({ ok: true, data: null });
   setup();

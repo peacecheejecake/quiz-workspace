@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, CloseIcon, IconButton, useModalLayerOpen } from '@quiz/ui';
+import { Button, CloseIcon, IconButton, useDragDismiss, useModalLayerOpen } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   createContext,
@@ -310,6 +310,17 @@ export function PracticeReturnProvider({
       setBusy(false);
     }
   }
+  const dismiss = () => {
+    generation.current++;
+    dispatch({ type: 'dismiss' });
+  };
+  const controlRef = useRef<HTMLDivElement>(null);
+  const dragControl = useDragDismiss({
+    surface: controlRef,
+    edges: ['bottom'],
+    startFrom: 'any',
+    close: dismiss,
+  });
   const protectedRoute =
     pathname === '/workspaces' ||
     pathname.startsWith('/workspaces/') ||
@@ -342,7 +353,7 @@ export function PracticeReturnProvider({
                     </p>
                   ) : null}
                   {visible ? (
-                    <div className={styles.control}>
+                    <div ref={controlRef} className={styles.control} onPointerDown={dragControl}>
                       <Button type="button" onClick={returnToTarget} disabled={busy}>
                         보던 문제로 돌아가기
                       </Button>
@@ -350,10 +361,7 @@ export function PracticeReturnProvider({
                         label="복귀 버튼 닫기"
                         icon={<CloseIcon />}
                         className={styles.close}
-                        onClick={() => {
-                          generation.current++;
-                          dispatch({ type: 'dismiss' });
-                        }}
+                        onClick={dismiss}
                       />
                     </div>
                   ) : null}

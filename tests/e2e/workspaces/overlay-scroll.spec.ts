@@ -200,7 +200,6 @@ async function expectSwipesContained(
   const scroller = await overlayScroller(dialog);
 
   expectContained(await swipe(page, header, -160, undefined, browserName));
-  expectContained(await swipe(page, header, 160, undefined, browserName));
 
   await scrollTo(scroller, 'bottom');
   expectContained(await swipe(page, scroller, -160, scroller, browserName));
@@ -209,6 +208,9 @@ async function expectSwipesContained(
 
   await scrollTo(scroller, 'middle');
   expectOverlayScrolls(await swipe(page, scroller, -160, scroller, browserName));
+
+  // Last: pulling the header down dismisses the overlay (UX12 DESIGN-3).
+  expectContained(await swipe(page, header, 160, undefined, browserName));
 }
 
 test.describe('phone (touch)', () => {
