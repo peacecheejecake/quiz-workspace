@@ -278,7 +278,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DESIGN-1 | 2 | 완료 | ee5864fa · Codex P2(CI phase)는 merge에서 반영, 경계 규칙·hover·--control-gap, E2E 22·Vitest GREEN |
 | VIEW-1 | 2 | 진행 | |
 | VIEW-2 | 2 | 진행 | |
-| EXPL-1 | 2 | 진행 | |
+| EXPL-1 | 2 | 완료 | d99c8c46 · Codex P2(CI phase)는 merge에서 반영, rebase 후 E2E 10·Vitest 31 GREEN |
 | EXPL-2 | 2 | 완료 | a52aae6c · Codex P2(옛 ID stream 차단) 수정 후 재리뷰 통과, 통합 18·pytest 18 GREEN |
 | HOME-2 | 2 | 진행 | |
 | HOME-3 | 2 | 대기 | |
