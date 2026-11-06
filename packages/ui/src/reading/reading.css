@@ -173,18 +173,6 @@
     line-height: var(--line-height-snug);
   }
 
-  > .status {
-    margin: 0;
-    padding: 0 var(--space-3);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-label);
-    line-height: var(--line-height-snug);
-
-    &:empty {
-      padding: 0;
-    }
-  }
-
   /* Touch: 44px targets. */
   @media (pointer: coarse) {
     > .item,

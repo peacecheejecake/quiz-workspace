@@ -127,10 +127,13 @@ export { SplitView } from './layout/SplitView';
 export type { SplitViewOrientation, SplitViewProps } from './layout/SplitView';
 
 export {
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   deriveDotStatus,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
 } from './questions/status';
@@ -145,6 +148,7 @@ export type {
 export { QuestionMarker } from './questions/QuestionMarker';
 export type { QuestionMarkerProps } from './questions/QuestionMarker';
 export { QuestionDot } from './questions/QuestionDot';
+export { focusQuestionDotQuietly } from './questions/quiet-focus';
 export type { QuestionDotProps } from './questions/QuestionDot';
 export { QuestionHeatmap } from './questions/QuestionHeatmap';
 export type {

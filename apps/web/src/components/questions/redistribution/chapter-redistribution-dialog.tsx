@@ -37,7 +37,6 @@ import {
   REASON_LABELS,
   REDIST_FAILURE_MESSAGES,
   redistributionGroups,
-  rowNumber,
   targetOptions,
   type AssignmentItem,
   type RedistFailureKind,
@@ -530,15 +529,11 @@ export function PreviewStep({
   const row = (item: RedistributionPreviewItem) => {
     const current = item.current_chapter?.title ?? NO_CHAPTER_TITLE;
     const next = item.recommended_chapter.title;
-    const number =
-      item.current_chapter === null
-        ? rowNumber({ chapter_id: null, label: item.number_label })
-        : item.number_label;
     return (
       <>
         <Checkbox
           label="적용"
-          aria-label={`적용: ${number} · ${item.stem_preview} (${current}에서 ${next}으로)`}
+          aria-label={`적용: ${item.number_label} · ${item.stem_preview} (${current}에서 ${next}으로)`}
           tabIndex={0}
           checked={checked.has(item.question_id)}
           onCheckedChange={(on) => {
@@ -549,7 +544,7 @@ export function PreviewStep({
           }}
         />
         <div className={styles.previewText}>
-          <p className={styles.stem}>{`${number} · ${item.stem_preview}`}</p>
+          <p className={styles.stem}>{`${item.number_label} · ${item.stem_preview}`}</p>
           {/* Two lines, each clamped on its own: the recommended chapter always shows. */}
           <p data-part="current">{`현재: ${current}`}</p>
           <p data-part="recommended">

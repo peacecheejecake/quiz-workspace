@@ -1,7 +1,45 @@
 import { test, expect, createNumberedQuestions, homePath, signInAs } from '../fixtures/test.ts';
-import { createMockExam, waitForMockExam } from '../fixtures/mock-exams.ts';
+import type { Locator, Page } from '@playwright/test';
+import {
+  createMockExam,
+  getMockExam,
+  mockExamsPath,
+  mockUi,
+  waitForMockExam,
+} from '../fixtures/mock-exams.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
+
+async function boxOf(locator: Locator) {
+  await expect(locator).toBeVisible();
+  const box = await locator.boundingBox();
+  if (!box) throw new Error('The control must have a layout box');
+  return box;
+}
+
+/** Saving a name fails until the returned function is called. */
+async function failRename(page: Page): Promise<() => Promise<void>> {
+  const target = (url: URL) => /\/api\/mock-exams\/[^/]+$/.test(url.pathname);
+  await page.route(target, async (route) => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    return route.fulfill({
+      status: 500,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ title: 'Internal Server Error', status: 500 }),
+    });
+  });
+  return () => page.unroute(target);
+}
+
+/** 저장·취소 share one line under the input (UX10-PLAY-AC06). */
+async function expectActionsUnderInput(scope: Locator): Promise<void> {
+  const input = await boxOf(scope.getByRole('textbox', { name: /모의고사 이름/ }));
+  const save = await boxOf(scope.getByRole('button', { name: '저장' }));
+  const cancel = await boxOf(scope.getByRole('button', { name: '취소' }));
+  expect(save.y).toBeGreaterThanOrEqual(input.y + input.height);
+  expect(save.y).toBe(cancel.y);
+  expect(cancel.x).toBeGreaterThan(save.x);
+}
 
 test('UX10-PLAY-AC01 original questions start a bank run without creating a mock', async ({
   page,
@@ -68,6 +106,32 @@ test('UX10-PLAY-AC03 uses steps instead of a generation progressbar', async ({
   const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
   await expect(dialog.getByRole('list', { name: /풀기 단계/ })).toBeVisible();
   await expect(dialog.getByRole('progressbar')).toHaveCount(0);
+});
+
+test('UX10-PLAY-AC03 aligns 문항 수 and 난이도 on desktop and stacks them on mobile', async ({
+  page,
+  workspaceFactory,
+}) => {
+  const owner = await workspaceFactory.member('ux10-form-row');
+  const workspace = await workspaceFactory.create(owner);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signInAs(page, owner.user);
+  await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
+  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  await mockUi.variation(dialog, 'PARAPHRASE').check();
+
+  const count = await boxOf(mockUi.questionCount(dialog));
+  const difficulty = await boxOf(mockUi.difficulty(dialog));
+  expect(Math.abs(count.width - difficulty.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(count.y - difficulty.y)).toBeLessThanOrEqual(1);
+  expect(difficulty.x).toBeGreaterThanOrEqual(count.x + count.width);
+
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mobileCount = await boxOf(mockUi.questionCount(dialog));
+  const mobileDifficulty = await boxOf(mockUi.difficulty(dialog));
+  expect(Math.abs(mobileCount.x - mobileDifficulty.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(mobileCount.width - mobileDifficulty.width)).toBeLessThanOrEqual(1);
+  expect(mobileDifficulty.y).toBeGreaterThanOrEqual(mobileCount.y + mobileCount.height);
 });
 
 test('UX10-PLAY-AC04 keeps action rows at the dialog bottom and fields reachable', async ({
@@ -178,6 +242,84 @@ test('UX10-PLAY-AC06 only the edited mock is disabled and cancel restores it', a
   expect(saveBox.y).toBe(cancelBox.y);
   await cancel.click();
   await expect(firstRow.getByRole('button', { name: '풀기' })).toBeEnabled();
+});
+
+test('UX10-PLAY-AC06 the detail header rename keeps its input and 풀기 off until saved', async ({
+  page,
+  workspaceFactory,
+}) => {
+  const owner = await workspaceFactory.member('ux10-rename-detail');
+  const workspace = await workspaceFactory.create(owner);
+  await createNumberedQuestions(owner, workspace.id, 'rename-detail', 2);
+  const exam = await createMockExam(owner, workspace.id, '상세 시험', {
+    variation_types: ['OPTION_SHUFFLE'],
+    question_count: 1,
+  });
+  await waitForMockExam(owner, exam.id);
+  await signInAs(page, owner.user);
+  await page.goto(mockExamsPath(workspace.id, exam.id));
+  const dialog = mockUi.dialog(page);
+  const practise = dialog.getByRole('button', { name: /^풀기$/ });
+  await expect(practise).toBeEnabled();
+
+  await mockUi.rename(dialog).click();
+  await expect(practise).toBeDisabled();
+  await expectActionsUnderInput(dialog);
+
+  const input = dialog.getByRole('textbox', { name: /모의고사 이름/ });
+  const save = dialog.getByRole('button', { name: '저장' });
+  const restore = await failRename(page);
+  await input.fill('바뀐 상세 시험');
+  await save.click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await expect(input).toHaveValue('바뀐 상세 시험');
+  await expect(input).toBeEnabled();
+  await expect(practise).toBeDisabled();
+  expect((await getMockExam(owner, exam.id)).title).toBe('상세 시험');
+
+  await restore();
+  await save.click();
+  await expect(input).toHaveCount(0);
+  await expect(dialog.getByRole('heading', { name: '바뀐 상세 시험' })).toBeVisible();
+  await expect(practise).toBeEnabled();
+  expect((await getMockExam(owner, exam.id)).title).toBe('바뀐 상세 시험');
+});
+
+test('UX10-PLAY-AC06 a failed row rename keeps the input and that row 풀기 off', async ({
+  page,
+  workspaceFactory,
+}) => {
+  const owner = await workspaceFactory.member('ux10-rename-fail');
+  const workspace = await workspaceFactory.create(owner);
+  await createNumberedQuestions(owner, workspace.id, 'rename-fail', 2);
+  const exam = await createMockExam(owner, workspace.id, '실패 시험', {
+    variation_types: ['OPTION_SHUFFLE'],
+    question_count: 1,
+  });
+  await waitForMockExam(owner, exam.id);
+  await signInAs(page, owner.user);
+  await page.goto(homePath(workspace.id, 'panel=mock-exams'));
+  const dialog = mockUi.dialog(page);
+  // Named by its menu: the title button gives way to the input while renaming.
+  const menu = page.getByRole('button', { name: /실패 시험 메뉴/ });
+  const row = mockUi.rows(dialog).filter({ has: menu });
+  await menu.click();
+  await page.getByRole('menuitem', { name: /이름 바꾸기/ }).click();
+  const input = row.getByRole('textbox', { name: /모의고사 이름/ });
+  const practise = row.getByRole('button', { name: /^풀기$/ });
+
+  const restore = await failRename(page);
+  await input.fill('바뀐 시험');
+  await row.getByRole('button', { name: '저장' }).click();
+  await expect(row.getByRole('alert')).toBeVisible();
+  await expect(input).toHaveValue('바뀐 시험');
+  await expect(practise).toBeDisabled();
+
+  await restore();
+  await row.getByRole('button', { name: '취소' }).click();
+  await expect(input).toHaveCount(0);
+  await expect(practise).toBeEnabled();
+  expect((await getMockExam(owner, exam.id)).title).toBe('실패 시험');
 });
 
 test('UX10-PLAY-AC01 selecting shuffle creates a mock instead of a bank run', async ({

@@ -81,7 +81,7 @@ function explanationHl(questionId: string, extra: Partial<MyHighlight> = {}): My
     quote: '라마바',
     anchor_status: 'exact',
     anchor_current: { block: 'p0', start: 3, end: 6 },
-    question: { question_id: questionId, number_label: '1장 1번', stem_preview: '첫 문제 발문' },
+    question: { question_id: questionId, number_label: '1번', stem_preview: '첫 문제 발문' },
     created_at: '2026-11-02T00:00:00Z',
     updated_at: '2026-11-02T00:00:00Z',
     ...extra,
@@ -91,7 +91,7 @@ function explanationHl(questionId: string, extra: Partial<MyHighlight> = {}): My
 describe('내 하이라이트 view model', () => {
   it('labels rows by color, source and version or question', () => {
     expect(rowMeta(noteHl(N1, 1))).toBe('노랑 · 노트 · 버전 1');
-    expect(rowMeta(explanationHl(Q1))).toBe('분홍 · 해설 · 1장 1번');
+    expect(rowMeta(explanationHl(Q1))).toBe('분홍 · 해설 · 1번');
   });
 
   it('orders notes newest version first in body order, then explanations', () => {
@@ -119,11 +119,11 @@ describe('내 하이라이트 view model', () => {
   it('numbers explanation footnotes [^hk] in display order', () => {
     const a = explanationHl(Q1);
     const b = explanationHl(Q2, {
-      question: { question_id: Q2, number_label: '1장 2번', stem_preview: '[E2E] 둘째 발문' },
+      question: { question_id: Q2, number_label: '2번', stem_preview: '[E2E] 둘째 발문' },
     });
     const numbers = footnoteNumbers([noteHl(N1, 1), a, b]);
     expect([numbers.get(a.id), numbers.get(b.id)]).toEqual([1, 2]);
-    expect(highlightFootnote(a, 1)).toBe('[^h1] 1장 1번 — 첫 문제 발문');
+    expect(highlightFootnote(a, 1)).toBe('[^h1] 1번 — 첫 문제 발문');
   });
 
   it('a lost position has the badge and no 위치로 이동', () => {
@@ -279,7 +279,7 @@ describe('MyHighlightsSection', () => {
     const region = screen.getByRole('region', { name: '내 하이라이트 (2)' });
     const list = within(region).getByRole('list', { name: '내 하이라이트 목록' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
-    expect(list.textContent).toContain('[^h1] 1장 1번 — 첫 문제 발문');
+    expect(list.textContent).toContain('[^h1] 1번 — 첫 문제 발문');
     const explanation = within(within(region).getByRole('group', { name: '출처' })).getByRole(
       'button',
       { name: '해설' },

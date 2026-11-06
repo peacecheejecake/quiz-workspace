@@ -70,6 +70,7 @@ import {
   type Problem,
   type Question,
   type QuestionInput,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import type { WorkspaceFactory } from '../fixtures/workspaces.ts';
 
@@ -169,7 +170,7 @@ async function expectGroupSize(page: Page, title: string, n: number): Promise<vo
     await expect(group).toHaveCount(0);
     return;
   }
-  await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(n);
+  await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(n);
 }
 
 /** Asks the server to move `ids` as the viewer / archived owner would: every call refused. */
@@ -253,11 +254,11 @@ test(
     for (let n = 1; n <= 6; n++) {
       const row = redistUi.questionByStem(dialog, stemTag(s.label, n));
       await expect(row, `question ${n} is listed`).toHaveCount(1);
-      await expect(row).toHaveAccessibleName(/^(\d+장|챕터 없음) \d+번 · .+ · (객관식|MCQ)/);
+      await expect(row).toHaveAccessibleName(/^\d+번 · .+ · (객관식|MCQ)/);
     }
     await expect(redistUi.questionByStem(dialog, stemTag(s.label, 7))).toHaveCount(0);
     await expect(redistUi.questionByStem(dialog, stemTag(s.label, 8))).toHaveCount(0);
-    await expect(rangePickerUi.questions(dialog)).toHaveCount(5); // 1장/2장 rows ("챕터 없음" apart)
+    await expect(rangePickerUi.questions(dialog)).toHaveCount(6); // the 챕터 없음 row is numbered alike
 
     // Space on the 1장 checkbox selects its three questions; one 2장 question makes 2장 mixed.
     const ch1Box = rangePickerUi.chapter(dialog, CH1);

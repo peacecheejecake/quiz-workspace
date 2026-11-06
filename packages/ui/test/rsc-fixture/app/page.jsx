@@ -59,8 +59,10 @@ import {
   PopoverClose,
   PopoverContent,
   PopoverTrigger,
+  NO_QUESTION_NUMBER,
   QUESTION_DOT_STATUSES,
   QuestionDot,
+  focusQuestionDotQuietly,
   QuestionHeatmap,
   QuestionMarker,
   QuestionPreviewPopover,
@@ -89,7 +91,9 @@ import {
   deriveDotStatus,
   focusRingClassName,
   questionDotLabel,
+  questionNumberLabel,
   questionStatusLabels,
+  questionTitle,
   questionTypeLabels,
   summarizeStatuses,
   useTheme,
@@ -183,9 +187,11 @@ const label = questionDotLabel({
   isFavorite: true,
   lastGradedResult: 'incorrect',
 });
+const numberLabels = [questionNumberLabel(12), questionTitle(null), NO_QUESTION_NUMBER].join(' · ');
 
 export default function Page() {
   void useModalLayerOpen;
+  void focusQuestionDotQuietly;
   return (
     <ThemeProvider defaultTheme="light">
       <ToastProvider>
@@ -326,6 +332,7 @@ export default function Page() {
           <StarIcon />
           <RetryIcon />
           <p>{readingSummary}</p>
+          <p>{numberLabels}</p>
           <HighlightableText
             label="정리 노트 본문"
             blocks={noteBlocks.map((b, i) => ({ ...b, suffix: <a href="#fn">[{i + 1}]</a> }))}

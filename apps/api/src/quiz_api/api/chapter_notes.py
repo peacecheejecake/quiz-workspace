@@ -41,7 +41,6 @@ from sqlalchemy.orm import Session
 
 from quiz_api.api.documents import get_job_publisher
 from quiz_api.api.question_imports import _publish_job
-from quiz_api.api.question_overview import chapter_number
 from quiz_api.auth import CurrentUser
 from quiz_api.authz import (
     AccessRepository,
@@ -249,10 +248,6 @@ def _load_chapter(repo: ChapterNoteRepository, access: ResourceAccess) -> Chapte
     return chapter
 
 
-def _number(repo: ChapterNoteRepository, chapter: ChapterRecord) -> int | None:
-    return chapter_number(repo.chapter_numbers([chapter.id]).get(chapter.id, []))
-
-
 def current_fingerprint(
     repo: ChapterNoteRepository, chapter: ChapterRecord, current: list[ChapterQuestion]
 ) -> str:
@@ -348,7 +343,7 @@ def note_state(
         available=settings.chapter_notes_available,
         confirmed_question_count=len(current),
         generation=generation_out(latest) if latest is not None else None,
-        note=note_out(note, linkable) if note is not None else None,
+        note=note_out(repo.with_current_labels(note), linkable) if note is not None else None,
         versions=[
             NoteVersion(
                 version=v.version or 0,
@@ -479,13 +474,12 @@ def create_chapter_note(
             ProblemType.NO_CHAPTER_QUESTIONS,
             detail="The chapter has no confirmed questions.",
         )
-    number = _number(repo, chapter)
     refs = [
         {
             "tag": f"Q{position}",
             "question_id": str(q.question_id),
             "question_revision_id": str(q.revision_id),
-            "label": question_label(number, chapter.title, q.question_number, position),
+            "label": question_label(q.question_number),
         }
         for position, q in enumerate(current, start=1)
     ]

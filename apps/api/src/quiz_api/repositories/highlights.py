@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 
 from quiz_api.chapter_notes import Ref, parse_refs
 from quiz_api.repositories.question_overview import (
-    QuestionOverviewRepository,
     heatmap_conditions,
     heatmap_order,
     heatmap_source,
@@ -264,9 +263,6 @@ class HighlightRepository:
             .order_by(*heatmap_order())
         )
         return [_question_text(r) for r in rows]
-
-    def chapter_lineage(self, chapter_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
-        return QuestionOverviewRepository(self._session).chapter_lineage(chapter_ids)
 
     # --- highlights -----------------------------------------------------------------------------
 

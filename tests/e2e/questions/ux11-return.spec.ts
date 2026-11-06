@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Page } from '@playwright/test';
 import {
   createPracticeRun,
   createShuffleMockExam,
@@ -32,6 +33,19 @@ import {
   startPractice,
   submitPractice,
 } from '../fixtures/test.ts';
+
+/** Records whether the fail-closed attribute ever appears, not only whether it is set afterwards. */
+async function watchIdentityPending(page: Page) {
+  await page.evaluate(() => {
+    const flags = window as unknown as { identityPendingSeen?: boolean };
+    flags.identityPendingSeen = false;
+    new MutationObserver(() => {
+      if (document.body.hasAttribute('data-identity-pending')) flags.identityPendingSeen = true;
+    }).observe(document.body, { attributes: true, attributeFilter: ['data-identity-pending'] });
+  });
+}
+const identityPendingSeen = (page: Page) =>
+  page.evaluate(() => (window as unknown as { identityPendingSeen?: boolean }).identityPendingSeen);
 
 test.use({
   storageState: { cookies: [], origins: [] },
@@ -305,5 +319,73 @@ test(
     } finally {
       await otherContext.close();
     }
+  },
+);
+
+test(
+  'UX11-RETURN-AC04 same-user re-entry and the return click never hide the page or flash a message',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-silent-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, numberedMcq('return-silent', 1, 1));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    await page.route('**/api/auth/identity', async (route) => {
+      await new Promise((done) => setTimeout(done, 300));
+      await route.continue();
+    });
+    await watchIdentityPending(page);
+    const checked = page.waitForResponse('**/api/auth/identity');
+    await page.evaluate(() => {
+      (window as unknown as { returnControl?: Element | null }).returnControl =
+        document.querySelector('[data-app-global-control="practice-return"] button');
+      window.dispatchEvent(new Event('focus'));
+      window.dispatchEvent(new PageTransitionEvent('pageshow'));
+    });
+    await expect(control).toBeVisible();
+    await checked;
+    await expect(
+      page.locator('[data-app-global-control="practice-return"]').getByRole('status'),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { returnControl?: Element | null }).returnControl?.isConnected,
+      ),
+    ).toBe(true);
+
+    await control.click();
+    await expect(panelUi.numbered(page, 1)).toBeVisible();
+    expect(await identityPendingSeen(page)).toBe(false);
+  },
+);
+
+test(
+  'UX11-RETURN-AC04 an identity outage keeps the page visible and retries with a late notice',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-outage-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, numberedMcq('return-outage', 1, 1));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await expect(overviewUi.dot(page, 1)).toBeVisible();
+    await page.route('**/api/auth/identity', (route) => route.abort());
+    await watchIdentityPending(page);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    const notice = page.getByRole('status').filter({ hasText: /연결이 불안정/ });
+    await expect(notice).toHaveCount(0);
+    await expect(notice).toBeVisible({ timeout: 15_000 });
+    await expect(overviewUi.dot(page, 1)).toBeVisible();
+    await page.unroute('**/api/auth/identity');
+    await expect(notice).toBeHidden({ timeout: 10_000 });
+    expect(await identityPendingSeen(page)).toBe(false);
   },
 );

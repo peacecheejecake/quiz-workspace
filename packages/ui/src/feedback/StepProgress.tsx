@@ -82,7 +82,11 @@ export function StepProgress({
               aria-current={state === 'current' ? 'step' : undefined}
             >
               <span className="marker" aria-hidden="true">
-                {state === 'done' ? <CheckIcon width={12} height={12} /> : i + 1}
+                {state === 'done' ? (
+                  <CheckIcon width={12} height={12} />
+                ) : (
+                  <span className="number">{i + 1}</span>
+                )}
               </span>
               <span className="label">{s.label}</span>
               <span className="qz-visually-hidden">{STATE_TEXT[state]}</span>

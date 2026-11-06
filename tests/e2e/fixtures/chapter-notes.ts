@@ -374,7 +374,7 @@ export function sharedNotePanelPath(shareId: string, chapterId: string): string 
 }
 
 /** Footnote line: "[^k] <n>장 <번호>번 — <발문 앞부분>" (the "[^k]" prefix may be the list number). */
-export const FOOTNOTE_LINE = /^\s*(?:\[\^?\d+\]\s*)?(\d+)장\s*(\d+)번\s*[—–-]\s*\S/;
+export const FOOTNOTE_LINE = /^\s*(?:\[\^?\d+\]\s*)?(\d+)번\s*[—–-]\s*\S/;
 export const FOOTNOTE_GONE = /삭제되었거나 옮긴 문제|deleted or moved/i;
 
 export const noteUi = {

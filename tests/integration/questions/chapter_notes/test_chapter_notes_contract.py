@@ -45,7 +45,7 @@ NO_QUESTIONS = P + "no-chapter-questions"
 RUNNING = P + "note-generation-running"
 DISABLED = P + "note-generation-disabled"
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
-LABEL = re.compile(r"^\d+장 \d+번$")
+LABEL = re.compile(r"^\d+번$")
 MEMBER_ONLY = ("versions", "generation", "usage", "input_fingerprint", "question_refs")
 
 
@@ -109,7 +109,7 @@ def question(
     client: Any,
     workspace_id: str,
     stem: str,
-    n: int,
+    n: int | None,
     chapter_id: str | None,
     marker: str,
     explanation: str | None = None,
@@ -615,6 +615,34 @@ def test_chnote_01_c05_shared_api_serves_only_source_matched_latest_notes(seed: 
     seed.assert_status(owner.revoke(ws, link["id"]), 200, "revoke")
     revoked = guest.read(link["id"], cookie, f"/chapters/{ch[CH1]}/note")
     seed.assert_status(revoked, 404, "revoked link")
+
+
+def test_ux12_number_old_notes_read_the_current_number_not_their_stored_label(seed: Any) -> None:
+    """A note stored before UX12-NUMBER has `3장 12번` or a position in `question_refs`."""
+    owner = seed.client("ux12-number-old-note")
+    ws = owner.create_workspace()["id"]
+    ch = book(owner, ws)
+    t = token()
+    question(owner, ws, f"{t}-numbered", 12, ch[CH1], OK)
+    question(owner, ws, f"{t}-unnumbered", None, ch[CH1], OK)
+    generate(owner, ch[CH1])
+    seed._admin(
+        "update public.chapter_notes set question_refs = (select jsonb_agg(r || %s::jsonb) "
+        "from jsonb_array_elements(question_refs) r) where workspace_id = %s",
+        (json.dumps({"label": "9장 99번"}), ws),
+    )
+    expected = {"12번", "번호 없음"}
+
+    note = state(owner, ch[CH1])["note"]
+    assert {f["label"] for f in note["footnotes"]} == expected
+    assert {r["label"] for r in note["question_refs"]} == expected
+
+    link = owner.create_link(ws)
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+    shared = guest.read(link["id"], cookie, f"/chapters/{ch[CH1]}/note")
+    seed.assert_status(shared, 200, "shared old note")
+    assert {f["label"] for f in shared.json()["footnotes"]} == expected
 
 
 def test_chnote_01_c05_practice_responses_carry_no_note_fields(seed: Any) -> None:

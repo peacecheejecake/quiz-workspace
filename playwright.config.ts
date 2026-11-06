@@ -70,7 +70,9 @@ const A11Y_SPECS = /quality\/a11y[^/]*\.spec\.ts$/;
 const SMOKE_SPECS = /quality\/smoke\.spec\.ts$/;
 const VISUAL_SPECS = /quality\/visual\.spec\.ts$/;
 const PERF_SPECS = /quality\/perf\.spec\.ts$/;
-const QUALITY_SPECS = /quality\/[^/]+\.spec\.ts$/;
+// quality/ux12-*: cross-screen AC specs that need both engines, so they run in the authenticated
+// projects (each test signs in its own user).
+const QUALITY_SPECS = /quality\/(?!ux12-)[^/]+\.spec\.ts$/;
 
 // Visual baselines are Linux renders from the pinned Playwright image (fonts and rasterizer
 // differ per OS; tests/e2e/README.md "Visual baselines"). The visual projects exist only where

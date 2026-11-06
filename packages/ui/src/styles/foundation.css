@@ -253,7 +253,14 @@
       box-sizing: border-box;
       border: 1px solid var(--color-border-strong);
       border-radius: var(--radius-pill);
+      font-size: var(--font-size-label-xs);
       font-variant-numeric: tabular-nums;
+      line-height: 1;
+
+      /* The digit's own height, not the font's line box, is what centres it in every engine. */
+      > .number {
+        text-box: trim-both cap alphabetic;
+      }
     }
 
     > .label {

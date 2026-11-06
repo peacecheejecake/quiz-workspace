@@ -1,4 +1,7 @@
-// Plain module (no 'use client') so the delays are real numbers in Server Components too.
+// Plain module (no 'use client') so the values are real numbers in Server Components too.
+
+/** Safe margin (px) tooltips and previews keep from the viewport edge (UX12-POPPERS). */
+export const POPPER_COLLISION_PADDING = 16;
 
 /** Hover delay (ms) before a tooltip opens; keyboard focus opens it immediately. */
 export const TOOLTIP_DELAY_MS = 300;

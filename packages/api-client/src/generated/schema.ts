@@ -4024,7 +4024,7 @@ export type components = {
     HighlightQuestion: {
       /**
        * Number Label
-       * @description `<n>장 <번호>번` (the Heatmap's numbering).
+       * @description `<번호>번` or `번호 없음` (the printed number).
        */
       number_label: string;
       /**
@@ -4224,6 +4224,11 @@ export type components = {
     ImportDraftSummary: {
       /** Answer Missing */
       answer_missing: boolean;
+      /**
+       * Block Ids
+       * @description The draft's source blocks: present only with `include_blocks=true` (UX12-EXTRACT). Ids only, for the document viewer to mark the whole printed question.
+       */
+      block_ids?: string[];
       /**
        * Chapter Id
        * @description Import drafts: the book chapter the draft is registered under (as `ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.
@@ -6247,7 +6252,7 @@ export type components = {
       chapter_title: string | null;
       /**
        * Number Label
-       * @description "<n>장 <번호>번" like the Heatmap, or "<번호>번".
+       * @description "<번호>번" or "번호 없음".
        */
       number_label: string;
       /**
@@ -12945,7 +12950,10 @@ export interface operations {
   };
   listQuestionImportDraftSummaries: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Fill `block_ids` (the document viewer, UX12-EXTRACT). */
+        include_blocks?: boolean;
+      };
       header?: never;
       path: {
         import_id: string;

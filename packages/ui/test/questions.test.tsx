@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FavoriteToggle,
+  focusQuestionDotQuietly,
   HeatmapLegend,
   QuestionDot,
   QuestionHeatmap,
@@ -216,7 +217,8 @@ describe('QuestionDot', () => {
     // The visible preview card: type, number, chapter, status, favorite.
     const card = document.querySelector('.qz-question-preview');
     expect(card).toHaveTextContent('객관식');
-    expect(card).toHaveTextContent('3장 12번 문제');
+    expect(card).toHaveTextContent('12번 문제');
+    expect(card).not.toHaveTextContent('3장 12번');
     expect(card).toHaveTextContent('어텐션');
     expect(card).toHaveTextContent('아직 보지 않음');
     expect(card).toHaveTextContent('즐겨찾기');
@@ -249,6 +251,28 @@ describe('QuestionDot', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
     expect(dot).toHaveFocus();
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('quiet focus keeps the preview closed; hover and later keyboard focus still open it (UX12-HOME-AC01, AC02)', async () => {
+    const user = userEvent.setup();
+    const onFocus = vi.fn();
+    render(<QuestionDot {...dotProps({ onFocus })} />);
+    const dot = screen.getByRole('button');
+
+    act(() => focusQuestionDotQuietly(dot));
+    expect(dot).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    await user.hover(dot);
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    await user.unhover(dot);
+    act(() => dot.blur());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    await user.tab();
+    expect(dot).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
   });
 });
 

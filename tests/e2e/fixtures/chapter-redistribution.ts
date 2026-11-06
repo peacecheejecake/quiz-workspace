@@ -17,7 +17,7 @@
 //
 // NOT in the docs (UX9.0 assumptions, to confirm or change in UX9-REDIST-B):
 //   R1 GET …/chapter-redistribution/questions → 200 {items: [{question_id, chapter_id,
-//      question_number, question_type, label ("1장 3번"), stem_preview, chapter_source}],
+//      question_number, question_type, label ("3번"), stem_preview, chapter_source}],
 //      chapters: [{id: string|null, title}] (Heatmap order, "챕터 없음" last), targets:
 //      [{document_id, document_title, chapters: [{id, title, depth}]}]} — no answers.
 //   R2 POST …/preview → 200 {items: [{question_id, number_label, stem_preview, current_chapter:
@@ -181,7 +181,7 @@ export const redistUi = {
   manualBadge: (scope: Locator) => scope.getByText(/^(직접 정함|set by hand|manual)$/i),
   /** A question checkbox row by a unique stem fragment. */
   questionByStem: (dialog: Locator, stem: string) =>
-    dialog.getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+    dialog.getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
   /** The element holding a question row (checkbox + badge); `has` is relative to the row. */
   rowByStem: (dialog: Locator, stem: string) =>
     dialog
@@ -189,7 +189,7 @@ export const redistUi = {
       .filter({
         has: dialog
           .page()
-          .getByRole('checkbox', { name: new RegExp(`\\d+번 · .*${escape(stem)}`) }),
+          .getByRole('checkbox', { name: new RegExp(`(\\d+번|번호 없음) · .*${escape(stem)}`) }),
       })
       .last(),
   target: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(옮길 챕터|move to)/i }),

@@ -153,7 +153,7 @@
 //             §6.1, packages/ui/src/questions); preview role=tooltip; collapsible group "상태 필터"
 //             (toggle button "상태 필터", collapsed by default); no status summary or legend since
 //             UX3c and no question count line since UX4.
-//   QPLAY-01  modal dialog named by the question title (`… 12번 문제`) with "패널 닫기",
+//   QPLAY-01  modal dialog named by the question title (`12번 문제`) with "패널 닫기",
 //             toggles "즐겨찾기 추가"/"즐겨찾기 해제" and "다시 풀기 표시"/"다시 풀기 해제" (M5.3
 //             StudyToggles); MCQ options as radios (single) or checkboxes (multi) named by the
 //             option text in displayed order; textbox "답안" (short/essay); button "제출"; the
@@ -188,6 +188,7 @@ export interface TruthQuestion {
     readonly accepted_answers: readonly string[] | null;
   } | null;
   readonly page: number;
+  readonly figure: { readonly caption: string } | null;
 }
 
 export interface QuestionPaper extends PdfFile {
@@ -822,11 +823,13 @@ export function questionNumberName(n: number): RegExp {
   return new RegExp(`(?<!\\d)${n}번 문제|question ${n}(?!\\d)`, 'i');
 }
 
+/** Any dot's accessible name: `3장 12번 문제, …`, or `3장 번호 없음, …` without a number. */
+export const QUESTION_DOT_NAME = /\d+번 문제|번호 없음|question \d+/i;
+
 export const overviewUi = {
   heatmap: (page: Page) => main(page).getByRole('group', { name: /문제 heatmap|heatmap/i }),
   /** The question markers (chapter headers also hold a `<장 제목> 정리 노트` button, CHNOTE-01). */
-  dots: (page: Page) =>
-    overviewUi.heatmap(page).getByRole('button', { name: /\d+번 문제|question \d+/i }),
+  dots: (page: Page) => overviewUi.heatmap(page).getByRole('button', { name: QUESTION_DOT_NAME }),
   dot: (page: Page, n: number) =>
     overviewUi.heatmap(page).getByRole('button', { name: questionNumberName(n) }),
   markers: (page: Page) => overviewUi.heatmap(page).getByTestId('question-marker'),
@@ -841,7 +844,7 @@ export const overviewUi = {
 };
 
 export const panelUi = {
-  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|question \d/i }),
+  panel: (page: Page) => page.getByRole('dialog', { name: /번 문제|번호 없음|question \d/i }),
   numbered: (page: Page, n: number) => page.getByRole('dialog', { name: questionNumberName(n) }),
   close: (panel: Locator) => panel.getByRole('button', { name: /패널 닫기|^닫기$|^close/i }),
   favoriteOn: (panel: Locator) =>

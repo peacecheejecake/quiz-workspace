@@ -91,6 +91,7 @@ export const themedTokens = {
 } as const;
 export const staticTokens = {
   'font-sans': '"Pretendard", "Inter", system-ui, -apple-system, sans-serif',
+  'font-size-label-xs': '11px',
   'font-size-label-sm': '12px',
   'font-size-label': '13px',
   'font-size-body': '14px',
@@ -128,11 +129,11 @@ export const staticTokens = {
   'paired-dialog-min-width': '320px',
   'breakpoint-paired-panel': '868px',
   'outline-panel-width': '20rem',
-  'heatmap-cell': '24px',
+  'heatmap-cell': '28px',
   'heatmap-cell-touch': '24px',
   'heatmap-gap': '0px',
   'heatmap-dot': '16px',
-  'heatmap-marker-hover-scale': '1.18',
+  'heatmap-marker-hover-scale': '1.3',
   'heatmap-marker-stroke-width': '0.5px',
   'z-base': '0',
   'z-raised': '1',

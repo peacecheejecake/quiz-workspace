@@ -70,8 +70,8 @@ function note(version = 1, overrides: Partial<ChapterNote> = {}): ChapterNote {
       },
     ],
     footnotes: [
-      { number: 1, question_id: Q1, label: '1장 1번', stem_preview: '첫 문제 발문' },
-      { number: 2, question_id: null, label: '1장 2번', stem_preview: null },
+      { number: 1, question_id: Q1, label: '1번', stem_preview: '첫 문제 발문' },
+      { number: 2, question_id: null, label: '2번', stem_preview: null },
     ],
     ...overrides,
   };
@@ -182,8 +182,8 @@ describe('note view model', () => {
   it('writes footnote lines and never links a gone question', () => {
     const [first, gone] = note().footnotes;
     if (!first || !gone) throw new Error('two footnotes');
-    expect(footnoteText(first)).toBe('[^1] 1장 1번 — 첫 문제 발문');
-    expect(footnoteText(gone)).toBe('[^2] 1장 2번 — 삭제되었거나 옮긴 문제');
+    expect(footnoteText(first)).toBe('[^1] 1번 — 첫 문제 발문');
+    expect(footnoteText(gone)).toBe('[^2] 2번 — 삭제되었거나 옮긴 문제');
   });
 
   it('renders emphasis only; HTML, links and images stay text', () => {
@@ -337,7 +337,7 @@ describe('ChapterNotePanel', () => {
       if (url.includes('/preview')) {
         return Response.json({
           question_id: Q1,
-          number_label: '1장 1번',
+          number_label: '1번',
           chapter_title: '1장 물의 순환',
           question_type: 'MCQ',
           stem: '첫 문제 발문',
@@ -423,8 +423,8 @@ describe('ChapterNotePanel', () => {
     const list = within(dialog).getByRole('list', { name: '각주' });
     const lines = within(list).getAllByRole('listitem');
     expect(lines.map((l) => l.textContent)).toEqual([
-      '[^1] 1장 1번 — 첫 문제 발문',
-      '[^2] 1장 2번 — 삭제되었거나 옮긴 문제',
+      '[^1] 1번 — 첫 문제 발문',
+      '[^2] 2번 — 삭제되었거나 옮긴 문제',
     ]);
     const [line1, line2] = lines;
     if (!line1 || !line2) throw new Error('two footnote lines');

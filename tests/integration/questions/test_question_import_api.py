@@ -621,6 +621,13 @@ def test_qimport_01_ac09_drafts_are_read_page_by_page_and_summarized_without_con
         assert summary["chapter_id"] == (draft["chapter"] or {}).get("id")
     text = json.dumps(summaries["items"], ensure_ascii=False)
     assert not CONTENT_FIELDS & {k for s in items for k in s}
+    # UX12-EXTRACT-AC02: the document viewer's opt-in adds ids and nothing else.
+    with_blocks = owner.ok("GET", f"{base}/draft-summaries?include_blocks=true")
+    for plain, extended in zip(items, with_blocks["items"], strict=True):
+        ids = extended.pop("block_ids")
+        assert ids
+        assert all(isinstance(i, str) for i in ids)
+        assert extended == plain
     for draft in full:
         assert draft["payload"]["stem"] not in text
         for option in draft["payload"]["options"]:

@@ -73,6 +73,7 @@ from quiz_api.authz import (
     authorize_workspace,
     get_access_repository,
 )
+from quiz_api.chapter_notes import question_label
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import REPLAYED_HEADER, IdempotencyKey, request_hash
@@ -243,28 +244,11 @@ def stem_preview(stem: str) -> str:
     return " ".join(stem.split())[:STEM_PREVIEW]
 
 
-def number_label(chapter_no: int | None, chapter_title: str | None, number: int | None) -> str:
-    """ "1장 3번": the chapter number (else its title) and the question number."""
-    parts: list[str] = []
-    if chapter_no is not None:
-        parts.append(f"{chapter_no}장")
-    elif chapter_title is not None:
-        parts.append(chapter_title)
-    if number is not None:
-        parts.append(f"{number}번")
-    return " ".join(parts) if parts else "번호 없음"
-
-
 def _chapter_numbers(session: Session, rows: list[ListedQuestion]) -> dict[uuid.UUID, int | None]:
     lineage = QuestionOverviewRepository(session).chapter_lineage(
         r.chapter_id for r in rows if r.chapter_id is not None
     )
     return {cid: chapter_number(titles) for cid, titles in lineage.items()}
-
-
-def _label(row: ListedQuestion, numbers: dict[uuid.UUID, int | None]) -> str:
-    no = numbers.get(row.chapter_id) if row.chapter_id is not None else None
-    return number_label(no, row.chapter_title, row.question_number)
 
 
 def _brief(chapter: BookChapter) -> RedistributionChapter:
@@ -306,7 +290,7 @@ def list_redistribution_questions(
                 chapter_id=row.chapter_id,
                 question_number=row.question_number,
                 question_type=row.question_type,
-                label=_label(row, numbers),
+                label=question_label(row.question_number),
                 stem_preview=stem_preview(row.stem_head),
                 chapter_source=row.chapter_source,
             )
@@ -337,7 +321,6 @@ def preview_redistribution(
     access: EditWorkspace,
     body: RedistributionPreviewRequest,
     repo: RedistRepo,
-    session: Annotated[Session, Depends(get_db_session)],
 ) -> RedistributionPreview:
     """Recommend chapters again (CHAPTER-MAP on each question's first source block) and list the
     questions whose chapter would change. Read-only: computed on every request, nothing stored."""
@@ -351,7 +334,6 @@ def preview_redistribution(
             scoped.append(row)
     starts = repo.start_blocks(access.workspace_id, [r.question_id for r in scoped])
     matcher = ChapterMatcher(repo.book_chapters(access.workspace_id))
-    numbers = _chapter_numbers(session, scoped)
     items: list[RedistributionPreviewItem] = []
     unchanged = 0
     missing: Counter[NoRecommendation] = Counter()
@@ -366,7 +348,7 @@ def preview_redistribution(
         items.append(
             RedistributionPreviewItem(
                 question_id=row.question_id,
-                number_label=_label(row, numbers),
+                number_label=question_label(row.question_number),
                 stem_preview=stem_preview(row.stem_head),
                 current_chapter=RedistributionChapter(
                     id=row.chapter_id,

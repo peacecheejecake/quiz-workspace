@@ -279,6 +279,11 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
   answer_key_table_ambiguous: '정답표를 해석하기 어려워 적용하지 않은 부분이 있습니다.',
   type_uncertain: '문제 유형을 확실히 알 수 없습니다. 유형이 맞는지 확인해 주세요.',
   figure_missing: '문제에서 말하는 그림을 PDF에서 찾지 못했습니다. 원본과 비교해 확인해 주세요.',
+  reading_order_repaired: 'PDF에 인쇄된 순서로 다시 읽어 정리했습니다.',
+  option_count_outlier:
+    '이 문서의 다른 문제와 보기 수가 다릅니다. 원본과 비교해 보기를 확인해 주세요.',
+  options_on_next_question:
+    '보기가 앞뒤 문제에 잘못 붙었을 수 있습니다. 원본과 비교해 보기를 확인해 주세요.',
   llm_output_invalid: 'AI 보조 정리 결과를 쓸 수 없어 PDF에서 읽은 그대로 두었습니다.',
   llm_unavailable: 'AI 보조 정리를 사용할 수 없어 PDF에서 읽은 그대로 두었습니다.',
   llm_type_rejected:
@@ -289,11 +294,16 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Codes that say the optional AI assist of the extraction did not apply (provider unavailable,
- * unusable output), so the rule-based draft was kept as read from the PDF. They describe the
- * extraction, not the draft's content: shown as a note, never a reason to check the draft.
+ * Codes that describe the extraction, not the draft's content: the optional AI assist did not
+ * apply (provider unavailable, unusable output), so the rule-based draft was kept as read from
+ * the PDF, or the blocks were put back in printed order. Shown as a note, never a reason to
+ * check the draft.
  */
-const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set(['llm_unavailable', 'llm_output_invalid']);
+const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set([
+  'llm_unavailable',
+  'llm_output_invalid',
+  'reading_order_repaired',
+]);
 
 /** A validation that is only a note about the extraction (not something to check). */
 export function isAssistNote(code: string): boolean {

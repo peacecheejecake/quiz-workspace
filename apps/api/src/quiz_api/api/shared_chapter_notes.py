@@ -128,7 +128,8 @@ def get_shared_chapter_note(
         raise _not_found()
     note, stems = found
     current = repo.chapter_questions(chapter.workspace_id, [chapter.id])[chapter.id]
-    sections, footnotes = present_body(note.body, note.refs, stems)
+    refs = repo.with_current_labels(note).refs
+    sections, footnotes = present_body(note.body, refs, stems)
     return SharedChapterNote(
         chapter_id=chapter.id,
         chapter_title=chapter.title,

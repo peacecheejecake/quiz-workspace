@@ -288,6 +288,63 @@ test(
 );
 
 test(
+  'DOC-01-AC05 the step list keeps its box while the percent appears and grows to 100 %',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    test.setTimeout(2 * JOB_TIMEOUT_MS + 60_000);
+    // A narrow row: a wide one caps the steps anyway, so only here the percent could squeeze them.
+    await page.setViewportSize({ width: 375, height: 800 });
+    const owner = await workspaceFactory.member('doc01-ac05-steps');
+    const ws = await workspaceFactory.create(owner);
+    const target = await uploadReadyBook(owner, ws.id, 'book-ko');
+    await openLibrary(page, owner, ws.id);
+    const row = docUi.item(page, BOOK_TITLE);
+    await expect(docUi.ready(row)).toBeVisible();
+
+    // As in the test above: fake adapters finish in seconds, so the library's own list request
+    // gets the target's job state replaced by each state under test.
+    let job: Record<string, unknown> = { status: 'queued', stage: null, progress: null };
+    await page.route(
+      (url) => url.pathname === `/api/workspaces/${ws.id}/documents`,
+      async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const body = (await response.json()) as { items: Record<string, unknown>[] };
+        for (const item of body.items) {
+          if (item.id !== target) continue;
+          const now = new Date().toISOString();
+          item.status = 'processing';
+          item.processing_job = {
+            id: crypto.randomUUID(),
+            created_at: now,
+            started_at: now,
+            ...job,
+          };
+        }
+        await route.fulfill({ response, json: body });
+      },
+    );
+
+    // Another upload through the UI: once its job ends the library re-reads the list.
+    await chooseFile(page, book('book-en').path);
+    await expect(docUi.ready(docUi.item(page, /book-en/))).toBeVisible({ timeout: JOB_TIMEOUT_MS });
+
+    const steps = row.getByRole('list', { name: /진행 단계|steps/i }).locator('..');
+    await expect(row.getByText(/처리 대기 중|queued/i)).toBeVisible();
+    const queued = await steps.boundingBox();
+
+    // The polled list moves the row on.
+    job = { status: 'running', stage: 'parsing', progress: 0 };
+    await expect(row.getByText('0%', { exact: true })).toBeVisible();
+    expect(await steps.boundingBox()).toEqual(queued);
+
+    job = { status: 'running', stage: 'publishing', progress: 100 };
+    await expect(row.getByText('100%', { exact: true })).toBeVisible();
+    expect(await steps.boundingBox()).toEqual(queued);
+  },
+);
+
+test(
   'DOC-01-AC04 cancelling an upload in progress leaves no document behind',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {

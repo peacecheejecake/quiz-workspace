@@ -83,7 +83,8 @@ function restoreRange(range: Range | null): () => void {
       return;
     }
     selection.removeAllRanges();
-    selection.addRange(range);
+    // A copy: the live selection must never change the remembered range.
+    selection.addRange(range.cloneRange());
   };
 }
 

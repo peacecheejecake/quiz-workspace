@@ -16,7 +16,12 @@ import {
 } from 'react';
 import { cx } from '../internal/cx';
 import { PopoverContent } from './Popover';
-import { PREVIEW_CLOSE_MS, PREVIEW_LONG_PRESS_MS, TOOLTIP_DELAY_MS } from './tooltip-delay';
+import {
+  POPPER_COLLISION_PADDING,
+  PREVIEW_CLOSE_MS,
+  PREVIEW_LONG_PRESS_MS,
+  TOOLTIP_DELAY_MS,
+} from './tooltip-delay';
 
 /** A touch that moves farther than this (px) is a scroll or drag, not a long-press. */
 const PRESS_SLOP = 10;
@@ -310,7 +315,7 @@ export function PreviewTooltip({
           side={side}
           align="start"
           sideOffset={6}
-          collisionPadding={16}
+          collisionPadding={POPPER_COLLISION_PADDING}
           className={cx('qz-preview-tooltip', className)}
           data-mode={mode}
           onOpenAutoFocus={(event) => event.preventDefault()}

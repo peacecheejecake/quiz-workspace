@@ -7,7 +7,7 @@ import { GroupedResults } from './grouped-results';
 //   range    QuestionRangePicker (`전체 선택`, chapters, filters) + `무작위 순서` (off, never
 //            remembered) + `시작` (disabled with the reason while nothing is selected). The server
 //            resolves the range into a fixed, ordered run (QVIEW-01-C01/C02).
-//   solve    one position at a time: the title names the question ("3장 12번"; mock "문제 k") and
+//   solve    one position at a time: the title names the question ("12번"; mock "문제 k") and
 //            takes focus on every move, a progress bar with "n문제 중 k번째" (also announced), the
 //            QuestionBody, `제출` → result + answers + explanation, `다음` / `결과 보기`, `이전`,
 //            `건너뛰기`. A submitted position shows its answer and result read-only (one submission
@@ -1469,6 +1469,7 @@ function useResultsStep({
         <p className={styles.summary}>{summaryText(data.run.summary)}</p>
         <GroupedResults
           items={items}
+          source={source}
           onSelect={(position) => {
             if (runId) onNavigate({ step: 'solve', runId, position }, 'push');
           }}

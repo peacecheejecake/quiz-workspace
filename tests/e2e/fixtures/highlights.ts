@@ -23,7 +23,7 @@
 //      question_revision_id} | {kind: "ai_explanation", ai_explanation_id, question_id},
 //      anchor: {block, start, end}, quote, anchor_status: "exact"|"relocated"|"missing",
 //      anchor_current: {block, start, end} | null, question: {question_id, number_label,
-//      stem_preview} | null (explanation targets: "3장 12번" + the stem's first 40 chars, no
+//      stem_preview} | null (explanation targets: "12번" + the stem's first 40 chars, no
 //      answers/options/explanation text), created_at, updated_at}. `prefix`/`suffix` are stored
 //      but never returned (they are explanation text around the quote the user did not pick).
 //   H2 `block` is a string: a note item is "s<i>.i<j>" (body.sections[i].items[j], rendered text
@@ -56,7 +56,7 @@
 //     attributes are the only non-ARIA hooks (state, like the heatmap's data-status).
 //   HighlightMenu: role=menu "하이라이트" with items "노랑" · "파랑" · "분홍" (menuitemcheckbox or
 //     menuitemradio, aria-checked on the exact current color), "하이라이트 지우기" (only when the
-//     selection overlaps a highlight), "복사"; status text "복사했습니다"; reason text
+//     selection overlaps a highlight), "복사" (closes the menu, toast "복사했습니다."); reason text
 //     "한 문단 안에서 고르세요" (color items aria-disabled) for a selection across blocks.
 //   MyHighlightsSection: region named "내 하이라이트" with h3 "내 하이라이트 (n)", text
 //     "나에게만 보입니다."; groups "출처" (전체·노트·해설) and "색" (전체·노랑·파랑·분홍) of toggle
@@ -68,7 +68,7 @@
 //     Empty: "아직 하이라이트가 없습니다…"; filtered empty: "고른 조건의 하이라이트가 없습니다.".
 //   Toast region "알림 (F8)" (landmark); toast text "하이라이트를 지웠습니다" with button
 //     "되돌리기"; refusal "같은 자리에 다른 하이라이트가 있어 되돌리지 못했습니다".
-//   Explanation notice "정리 노트의 내 하이라이트에 모았습니다 · <장 제목>".
+//   Explanation toast "정리 노트의 내 하이라이트에 모았습니다 · <장 제목>".
 //   "챕터 없음" Heatmap group header: button "내 하이라이트" (`?panel=chapter-note&chapter=none`).
 //   CHNOTE-02 note search: searchbox "노트에서 찾기"; result text "k/n" (or "결과 없음"); icon
 //     buttons "이전 결과" / "다음 결과". Notice "이 노트에는 문제의 정답과 해설 내용이 들어
@@ -501,6 +501,15 @@ export async function touchSelect(scope: Locator, text: string): Promise<void> {
   await page.waitForTimeout(400); // the menu waits for the selection to rest 300 ms
 }
 
+/** Whether `target` is what the pointer would hit at its center (nothing covers it). */
+export function isOnTop(target: Locator): Promise<boolean> {
+  return target.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return hit !== null && (el.contains(hit) || hit.contains(el));
+  });
+}
+
 /** Records clipboard writes in the page (no OS clipboard). Call before navigating. */
 export async function recordClipboard(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -551,12 +560,8 @@ export const highlightUi = {
   removeItem: (menu: Locator) =>
     menu.getByRole('menuitem', { name: /^(하이라이트 지우기|remove highlight)$/i }),
   copyItem: (menu: Locator) => menu.getByRole('menuitem', { name: /^(복사|copy)$/i }),
-  /** The text under `복사` in the menu (the announcement is a status outside the menu). */
-  copied: (page: Page) => highlightUi.menu(page).getByText(/^(복사했습니다|copied)\.?$/i),
   oneBlockReason: (scope: Page | Locator) =>
     scope.getByText(/한 문단 안에서 고르세요|select within one paragraph/i),
-  collectedNotice: (scope: Locator) =>
-    scope.getByText(/정리 노트의 내 하이라이트에 모았습니다|added to my highlights/i),
 
   section: (panel: Locator) =>
     panel.getByRole('region', { name: /^(내 하이라이트|my highlights)/i }),
@@ -600,6 +605,14 @@ export const highlightUi = {
     page
       .getByRole('status')
       .filter({ hasText: /하이라이트를 지웠습니다|highlight (deleted|removed)/i }),
+  /** The toast of a successful `복사`. */
+  copiedToast: (page: Page) =>
+    highlightUi.toastRegion(page).getByText(/^(복사했습니다|copied)\.?$/i),
+  /** The toast of a new explanation highlight. */
+  collectedToast: (page: Page) =>
+    highlightUi
+      .toastRegion(page)
+      .getByText(/정리 노트의 내 하이라이트에 모았습니다|added to my highlights/i),
   undo: (scope: Page | Locator) => scope.getByRole('button', { name: /^(되돌리기|undo)$/i }),
   noChapterButton: (group: Locator) =>
     group.getByRole('button', { name: /^(내 하이라이트|my highlights)$/i }),
@@ -633,13 +646,13 @@ export const noteToolsUi = {
   results: (panel: Locator) => panel.locator('mark[data-search-result]'),
   current: (panel: Locator) => panel.locator('mark[data-search-result][data-current="true"]'),
   currentLabel: /현재 결과|current (result|match)/i,
-  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /\d+장\s*\d+번/ }),
+  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /(\d+번|번호 없음)\s*·/ }),
   touchPreview: (page: Page) =>
     page.getByRole('dialog', { name: /문제 미리보기|question preview/i }),
   openQuestion: (scope: Locator) =>
     scope.getByRole('button', { name: /^(문제 열기|open question)$/i }),
   previewHeading: (n: number, type = '객관식') =>
-    new RegExp(`\\d+장\\s*${n}번\\s*·\\s*${escape(type)}`),
+    new RegExp(`(?<!\\d)${n}번\\s*·\\s*${escape(type)}`),
 };
 
 /** Computed highlight style of a mark (background + underline shape). */

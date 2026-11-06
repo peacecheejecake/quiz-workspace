@@ -154,7 +154,7 @@ export const Practice: Story = {
     workspaceId: WS,
     question: {
       id: STORY_SESSION.question_id,
-      title: '3장 12번 문제',
+      title: '12번 문제',
       chapterTitle: '3장 물의 순환',
       questionType: 'MCQ',
       preview: STORY_SESSION.stem,
@@ -242,7 +242,7 @@ export const Manage: Story = {
     workspaceId: WS,
     open: true,
     onClose: noop,
-    description: '3장 12번 문제 · 객관식 · 3장 물의 순환',
+    description: '12번 문제 · 객관식 · 3장 물의 순환',
     focus: 'answers',
     load: {
       status: 'ready',

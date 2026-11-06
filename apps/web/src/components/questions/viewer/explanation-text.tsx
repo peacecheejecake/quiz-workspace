@@ -7,8 +7,8 @@
 // highlights are read then and never before (AGENTS.md §5). The text shows at once; the
 // highlights are drawn when they arrive. Places without highlights (mock exam questions, share
 // guests, older revisions) get the plain text.
-import { HighlightableText } from '@quiz/ui';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { HighlightableText, useToast } from '@quiz/ui';
+import { useEffect, useMemo, useRef } from 'react';
 import { getQuestionHighlights } from '@/lib/highlights/client';
 import {
   collectedNotice,
@@ -23,7 +23,7 @@ export interface ExplanationHighlighting {
   readonly questionId: string;
   /** The revision whose explanation is shown (the API refuses a stale one). */
   readonly revisionId?: string | null;
-  /** The question's chapter ("챕터 없음" without one), for the "모았습니다" notice. */
+  /** The question's chapter ("챕터 없음" without one), for the "모았습니다" toast. */
   readonly chapterTitle?: string | null;
   /** Focus this highlight's mark once it is drawn (`내 하이라이트` › `위치로 이동`). */
   readonly focusId?: string | null;
@@ -63,9 +63,9 @@ function HighlightedExplanation({
     () => explanationHighlightsOf(store.items ?? [], questionId),
     [store.items, questionId],
   );
-  const [collected, setCollected] = useState(false);
+  const { toast } = useToast();
   const areaRef = useRef<HTMLDivElement>(null);
-  const { onSelectRange, menu } = useHighlightTool({
+  const { onSelectRange, activeHighlightId, menu } = useHighlightTool({
     store,
     areaRef,
     drawn,
@@ -75,7 +75,8 @@ function HighlightedExplanation({
       question_id: questionId,
       ...(revisionId ? { question_revision_id: revisionId } : {}),
     },
-    onCreated: () => setCollected(true),
+    onCreated: () =>
+      toast({ tone: 'success', title: collectedNotice(chapterTitle || HIGHLIGHT_TEXT.noChapter) }),
   });
 
   // 위치로 이동: the mark gets focus once the highlights are drawn.
@@ -92,7 +93,7 @@ function HighlightedExplanation({
     focused.current = focusId;
   }, [focusId, drawn]);
 
-  // One box for the area, the menu's status and the notice (the explanation's section is a grid).
+  // One box for the area and a refused change's message (the explanation's section is a grid).
   return (
     <div>
       <HighlightableText
@@ -101,12 +102,10 @@ function HighlightedExplanation({
         blocks={blocks}
         highlights={drawn}
         onSelectRange={onSelectRange}
+        activeHighlightId={activeHighlightId}
         className={`${styles.explanation} ${className ?? ''}`}
       />
       {menu}
-      <p className={styles.collected} aria-live="polite">
-        {collected ? collectedNotice(chapterTitle || HIGHLIGHT_TEXT.noChapter) : ''}
-      </p>
     </div>
   );
 }
