@@ -399,6 +399,7 @@ describe('selection (QIMP-BULK)', () => {
 
   it('UX12-EXTRACT: a repaired reading order is a note; layout warnings are to check', () => {
     expect(isAssistNote('reading_order_repaired')).toBe(true);
+    expect(isAssistNote('table_in_stem')).toBe(true);
     expect(isAssistNote('option_count_outlier')).toBe(false);
     expect(isAssistNote('options_on_next_question')).toBe(false);
     const list = [

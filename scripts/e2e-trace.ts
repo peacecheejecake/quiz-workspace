@@ -138,6 +138,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-ASK.0': ['UX12-ASK'],
   // UX12 EXTRACT-8 (2026-11-06): merged table cells in the document view.
   'UX12-SPANS.0': ['UX12-SPANS'],
+  // UX12 EXTRACT-3..5 (2026-11-06): tables in stems and options shown as columns.
+  'QTABLE.0': ['QTABLE-01'],
 };
 
 const LEADING_ID = new RegExp(

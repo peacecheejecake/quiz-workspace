@@ -24,7 +24,7 @@ from book_core.contracts import (
     SourceLocation,
     TableContent,
 )
-from book_core.parser._blocks import DraftBlock, finalize_blocks, normalize_text
+from book_core.parser._blocks import DraftBlock, finalize_blocks, normalize_text, table_text
 from book_core.parser.base import ParserError, sha256_hex
 
 FAKE_PARSER_VERSION = "fake-parser/1"
@@ -139,6 +139,20 @@ def _book_truth_document(data: Mapping[str, Any]) -> ParsedDocument:
     )
 
 
+def _text_draft(lines: Sequence[str], location: SourceLocation) -> DraftBlock:
+    return DraftBlock(type=BlockType.TEXT, text="\n".join(lines), locations=(location,))
+
+
+def _table_draft(table: Mapping[str, Any], location: SourceLocation) -> DraftBlock:
+    content = TableContent.model_validate(table)
+    return DraftBlock(
+        type=BlockType.TABLE,
+        text=table_text(content.rows),
+        locations=(location,),
+        table=content,
+    )
+
+
 def _questions_truth_document(data: Mapping[str, Any]) -> ParsedDocument:
     """Title, instructions, one block per question (number, stem, options as printed lines),
     figures with captions, and the answer key lines."""
@@ -157,15 +171,21 @@ def _questions_truth_document(data: Mapping[str, Any]) -> ParsedDocument:
     ]
     for question in data["questions"]:
         separator = ". " if question.get("option_style") == "latin" else " "
+        location = SourceLocation(page=question["page"], bbox=_bbox(question["bbox"]))
         lines = [f"{question['number']}. {question['stem']}"]
-        lines += [f"{o['label']}{separator}{o['text']}" for o in question["options"]]
-        drafts.append(
-            DraftBlock(
-                type=BlockType.TEXT,
-                text="\n".join(lines),
-                locations=(SourceLocation(page=question["page"], bbox=_bbox(question["bbox"])),),
-            )
-        )
+        stem_table = question.get("stem_table")
+        option_table = question.get("option_table")
+        if stem_table is not None:
+            # QTABLE-01: stem, table, rest of the stem, options: a text block on either side.
+            drafts.append(_text_draft(lines, location))
+            drafts.append(_table_draft(stem_table, location))
+            lines = [question["stem_after"]] if question.get("stem_after") else []
+        if option_table is not None:
+            drafts.append(_text_draft(lines, location))
+            drafts.append(_table_draft(option_table, location))
+        else:
+            lines += [f"{o['label']}{separator}{o['text']}" for o in question["options"]]
+            drafts.append(_text_draft(lines, location))
         figure = question.get("figure")
         if figure is not None:
             drafts.append(

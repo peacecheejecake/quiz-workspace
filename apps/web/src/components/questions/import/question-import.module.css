@@ -156,6 +156,10 @@
   overflow-wrap: anywhere;
 }
 
+.compareGridHead {
+  padding-inline-start: var(--space-5);
+}
+
 .compareOptions {
   display: grid;
   gap: var(--space-1);

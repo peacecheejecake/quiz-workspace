@@ -272,6 +272,10 @@
   overflow-wrap: anywhere;
 }
 
+.previewGridHead {
+  padding-inline-start: var(--space-5);
+}
+
 .previewOptions {
   display: grid;
   gap: var(--space-1);

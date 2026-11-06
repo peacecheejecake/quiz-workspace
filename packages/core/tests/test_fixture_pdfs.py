@@ -28,7 +28,8 @@ from pypdf.generic import DictionaryObject, PdfObject
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 BOOKS = ("book-ko", "book-en")
 QUESTIONS = "questions-ko"
-ALL_FIXTURES = (*BOOKS, QUESTIONS)
+TABLES = "questions-tables-ko"
+ALL_FIXTURES = (*BOOKS, QUESTIONS, TABLES)
 FONT_PREFIX = "NotoSansKRFixtureSubset"
 
 
@@ -114,7 +115,9 @@ def test_cli_regenerates_byte_identical_files(tmp_path: Path) -> None:
 @pytest.mark.parametrize("fixture_id", ALL_FIXTURES)
 def test_truth_matches_pdf_file(fixture_id: str) -> None:
     truth: BookTruth | QuestionsTruth = (
-        _questions() if fixture_id == QUESTIONS else _book(fixture_id)
+        QuestionsTruth.model_validate_json((OUT_DIR / f"{fixture_id}.truth.json").read_bytes())
+        if fixture_id in (QUESTIONS, TABLES)
+        else _book(fixture_id)
     )
     pdf = OUT_DIR / truth.file
     assert truth.fixture_id == fixture_id

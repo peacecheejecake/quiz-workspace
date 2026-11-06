@@ -26,6 +26,7 @@ from fixture_content import (
     BOOK_EN,
     BOOK_KO,
     QUESTIONS_KO,
+    QUESTIONS_TABLES_KO,
     RETRIEVAL_SEED,
     BodyItem,
     BookContent,
@@ -366,26 +367,37 @@ def _layout_item(flow: Flow, item: BodyItem, section_id: str) -> list[TruthBlock
     return _layout_table(flow, item, section_id)
 
 
-def _layout_table(flow: Flow, table: Table, section_id: str) -> list[TruthBlock]:
+def _draw_grid(
+    flow: Flow, rows: tuple[tuple[str, ...], ...], header_rows: int, left: float = LEFT
+) -> float:
+    """A ruled table at ``flow.y``, as wide as the body from ``left``; its bottom edge."""
     row_h, size = 22.0, 10.0
-    ncols = len(table.rows[0])
-    col_w = (RIGHT - LEFT) / ncols
+    ncols = len(rows[0])
+    col_w = (RIGHT - left) / ncols
+    top = flow.y
+    ascent, descent = _ascent_descent(REGULAR, size)
+    for r, row in enumerate(rows):
+        y = top + r * row_h
+        font = BOLD if r < header_rows else REGULAR
+        baseline = y + (row_h + ascent - descent) / 2
+        for c, cell in enumerate(row):
+            if cell:
+                flow.add(TextOp(left + c * col_w + 6, baseline, cell, font, size))
+    bottom = top + row_h * len(rows)
+    for r in range(len(rows) + 1):
+        flow.add(LineOp(left, top + r * row_h, RIGHT, top + r * row_h))
+    for c in range(ncols + 1):
+        flow.add(LineOp(left + c * col_w, top, left + c * col_w, bottom))
+    return bottom
+
+
+def _layout_table(flow: Flow, table: Table, section_id: str) -> list[TruthBlock]:
+    row_h = 22.0
     flow.ensure(BODY_LEADING + row_h * len(table.rows) + PARA_GAP)
     caption = flow.text_lines(table.caption, size=10.0, leading=16.0)
     flow.y += 4
     top = flow.y
-    ascent, descent = _ascent_descent(REGULAR, size)
-    for r, row in enumerate(table.rows):
-        y = top + r * row_h
-        font = BOLD if r < table.header_rows else REGULAR
-        baseline = y + (row_h + ascent - descent) / 2
-        for c, cell in enumerate(row):
-            flow.add(TextOp(LEFT + c * col_w + 6, baseline, cell, font, size))
-    bottom = top + row_h * len(table.rows)
-    for r in range(len(table.rows) + 1):
-        flow.add(LineOp(LEFT, top + r * row_h, RIGHT, top + r * row_h))
-    for c in range(ncols + 1):
-        flow.add(LineOp(LEFT + c * col_w, top, LEFT + c * col_w, bottom))
+    bottom = _draw_grid(flow, table.rows, table.header_rows)
     flow.y = bottom + PARA_GAP + 4
     text = "\n".join(" | ".join(row) for row in table.rows)
     return [
@@ -523,7 +535,22 @@ def _question_height(q: QuestionContent) -> float:
         height += 110 + 8 + 16 + 8
     if q.kind == "ESSAY":
         height += 70
+    if q.stem_table:
+        height += 22.0 * len(q.stem_table) + 8 + BODY_LEADING
+    if q.option_table_header:
+        height += 22.0 + 8
     return height + 16
+
+
+def _option_rows(q: QuestionContent) -> tuple[tuple[str, ...], ...]:
+    """The option table as printed: a header row, then a label and its cells per option."""
+    assert q.option_table_header is not None  # noqa: S101 - callers check
+    cells = [tuple(o.split(" | ")) for o in q.options]
+    if q.option_labels_glued:
+        body = [(f"{label}{row[0]}", *row[1:]) for label, row in zip(q.labels, cells, strict=True)]
+        return (q.option_table_header, *body)
+    body = [(label, *row) for label, row in zip(q.labels, cells, strict=True)]
+    return (("", *q.option_table_header), *body)
 
 
 def _layout_question(flow: Flow, q: QuestionContent) -> TruthQuestion:
@@ -548,12 +575,28 @@ def _layout_question(flow: Flow, q: QuestionContent) -> TruthQuestion:
     right = max(p.bbox.x1 for p in stem)
     if figure is not None:
         right = max(right, figure.bbox.x1, figure.caption_bbox.x1)
+    stem_table: TruthTable | None = None
+    if q.stem_table:
+        stem_table = TruthTable(rows=q.stem_table, header_rows=1)
+        flow.y = _draw_grid(flow, q.stem_table, 1, LEFT + 20) + 8
+        right = RIGHT
+    if q.stem_after:
+        flow.text_lines(q.stem_after, indent=20.0)
+        flow.y += 4
     options: list[TruthOption] = []
-    for label, option in zip(q.labels, q.options, strict=True):
-        marker = label if q.option_style == "circled" else f"{label}."
-        placed = flow.text_lines(option, indent=52.0, hanging=marker)
-        right = max(right, *(p.bbox.x1 for p in placed))
-        options.append(TruthOption(label=label, text=option))
+    option_table: TruthTable | None = None
+    if q.option_table_header:
+        rows = _option_rows(q)
+        option_table = TruthTable(rows=rows, header_rows=1)
+        flow.y = _draw_grid(flow, rows, 1, LEFT + 20) + 8 + BODY_LEADING
+        options = [TruthOption(label=x, text=o) for x, o in zip(q.labels, q.options, strict=True)]
+        right = RIGHT
+    else:
+        for label, option in zip(q.labels, q.options, strict=True):
+            marker = label if q.option_style == "circled" else f"{label}."
+            placed = flow.text_lines(option, indent=52.0, hanging=marker)
+            right = max(right, *(p.bbox.x1 for p in placed))
+            options.append(TruthOption(label=label, text=option))
     bottom = flow.y - (BODY_LEADING - sum(_ascent_descent(REGULAR, BODY_SIZE)))
     if q.kind == "ESSAY":
         # Empty answer box below the stem.
@@ -579,6 +622,9 @@ def _layout_question(flow: Flow, q: QuestionContent) -> TruthQuestion:
         page=stem[0].page,
         bbox=_bbox(LEFT, top, right, bottom),
         figure=figure,
+        stem_table=stem_table,
+        stem_after=q.stem_after,
+        option_table=option_table,
     )
 
 
@@ -654,6 +700,7 @@ def build_all() -> dict[str, bytes]:
         (BOOK_KO.fixture_id, lambda: build_book(BOOK_KO)),
         (BOOK_EN.fixture_id, lambda: build_book(BOOK_EN)),
         (QUESTIONS_KO.fixture_id, lambda: build_questions(QUESTIONS_KO)),
+        (QUESTIONS_TABLES_KO.fixture_id, lambda: build_questions(QUESTIONS_TABLES_KO)),
     ]
     for fixture_id, build in builders:
         pdf, truth = build()

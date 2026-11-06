@@ -9,6 +9,7 @@ All text was written for this repository; the tables hold illustrative numbers o
 | `book-ko.pdf` | Korean book excerpt "물의 순환과 정수 처리", 4 pages: title + TOC page, 2 chapters × 2 sections, figure placeholder + caption, table, a paragraph split across pages 2→3, running header and page numbers, source note |
 | `book-en.pdf` | English counterpart "The Water Cycle and Water Treatment" with the same section ids |
 | `questions-ko.pdf` | Korean question paper, 3 pages: 8 questions (MCQ single/multi, ①–④ and A–D options, short answer, essay, one figure question) and an answer key on the last page that covers only questions 1, 2, 4, 5, 8 |
+| `questions-tables-ko.pdf` | Korean question paper: a table inside a stem, an option table with a header row, an option table with labels glued to the cell (QTABLE-01) |
 | `*.truth.json` | Ground truth per PDF (schema below) |
 | `retrieval-seed.json` | KO↔EN query → relevant section judgments over both books |
 | `fonts/` | Noto Sans KR subsets embedded in the PDFs + `OFL.txt` |
