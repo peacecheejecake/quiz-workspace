@@ -15,7 +15,9 @@ import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher
 import { FormNotice } from '@/components/auth/form-notice';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 import {
   contentBody,
   errorSummary,
@@ -75,6 +77,8 @@ export function MockQuestionDialog({
   if (target && target !== shown) setShown(target);
   const view = target ?? shown;
   const question = view?.question ?? null;
+  const grid =
+    question?.question_type === 'MCQ' ? optionGrid(question.stem, question.options) : null;
   const asks = useAskLauncher() !== null;
 
   const [editing, setEditing] = useState<{ session: number; open: boolean }>({
@@ -209,11 +213,14 @@ export function MockQuestionDialog({
               </>
             ) : (
               <>
-                <StemText stem={question.stem} className={styles.previewStem} />
+                <StemText stem={grid?.stem ?? question.stem} className={styles.previewStem} />
+                {grid ? <OptionGridHead grid={grid} className={styles.previewGridHead} /> : null}
                 {question.question_type === 'MCQ' ? (
                   <ol className={styles.previewOptions} aria-label="보기">
-                    {question.options.map((o) => (
-                      <li key={o.id}>{o.text}</li>
+                    {question.options.map((o, index) => (
+                      <li key={o.id}>
+                        {grid ? <OptionCells grid={grid} index={index} /> : o.text}
+                      </li>
                     ))}
                   </ol>
                 ) : null}

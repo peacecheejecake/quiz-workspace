@@ -15,7 +15,9 @@ import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import styles from './question-import.module.css';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 
 export interface SourceComparePanelProps {
   /** Null while closed. */
@@ -113,6 +115,7 @@ function ComparePages({ draft, documentId }: { draft: ReviewDraft; documentId: s
 
 /** The draft's extracted content, read-only (edit it from the list after closing the panel). */
 function DraftContent({ draft, page }: { draft: ReviewDraft; page?: number }) {
+  const grid = draft.type === 'MCQ' ? optionGrid(draft.stem, draft.options) : null;
   return (
     <section className={styles.compareDraft} aria-label={`${draftNumber(draft)}번 초안`}>
       {draft.pages.length > 0 ? (
@@ -121,20 +124,30 @@ function DraftContent({ draft, page }: { draft: ReviewDraft; page?: number }) {
           {page !== undefined ? ` · 지금 보는 쪽: ${page}쪽` : null}
         </p>
       ) : null}
-      <StemText stem={draft.stem} className={styles.compareStem} />
+      <StemText stem={grid?.stem ?? draft.stem} className={styles.compareStem} />
+      {grid ? <OptionGridHead grid={grid} trailing className={styles.compareGridHead} /> : null}
       {draft.options.length > 0 ? (
         <ol className={styles.compareOptions}>
-          {draft.options.map((o) => (
-            <li key={o.id}>
-              {o.text}
-              {o.correct ? (
-                <span className={styles.compareCorrect}>
-                  <CheckIcon width={14} height={14} aria-hidden="true" />
-                  정답
-                </span>
-              ) : null}
-            </li>
-          ))}
+          {draft.options.map((o, index) => {
+            const mark = o.correct ? (
+              <span className={styles.compareCorrect}>
+                <CheckIcon width={14} height={14} aria-hidden="true" />
+                정답
+              </span>
+            ) : null;
+            return (
+              <li key={o.id}>
+                {grid ? (
+                  <OptionCells grid={grid} index={index} trailing={mark} reserveTrailing />
+                ) : (
+                  <>
+                    {o.text}
+                    {mark}
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ol>
       ) : null}
       {draft.type === 'SHORT_ANSWER' &&

@@ -83,6 +83,9 @@ test(
     await expect(table.getByRole('columnheader', { name: '주요 작용' })).toBeVisible();
     await expect(table.getByRole('cell', { name: '플록 가라앉힘' })).toBeVisible();
     await expect(draft).toContainText(/참고:\s*표를/);
+    const columns = importUi.draft(page, truthQuestion(paper(), 2).stem);
+    await expect(columns.getByText('미세 입자 결합', { exact: true })).toBeVisible();
+    await expect(columns.getByText('주요 작용', { exact: true }).first()).toBeVisible();
 
     await importUi.selectAll(page).click();
     await expect(importUi.select(draft)).toBeChecked();
@@ -120,7 +123,7 @@ test(
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
         ),
       )
-      .toBe(0);
+      .toBeLessThanOrEqual(0);
   },
 );
 
@@ -141,7 +144,7 @@ test(
     expect(await left(first)).toBeCloseTo(await left(second), 0);
     expect(await left(header)).toBeCloseTo(await left(first), 0);
 
-    const option = panel.getByRole('radio', { name: '단계: 응집 주요 작용: 미세 입자 결합' });
+    const option = panel.getByRole('radio', { name: /단계:\s*응집 주요 작용:\s*미세 입자 결합/ });
     await option.check({ force: true });
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
@@ -157,7 +160,12 @@ test(
     const even = await createQuestion(
       owner,
       ws.id,
-      mcqInput('다음 중 옳은 것은? ( ) 구분 | 내용', ['가 | 하나', '나 | 둘', '다 | 셋', '라 | 넷']),
+      mcqInput('다음 중 옳은 것은? ( ) 구분 | 내용', [
+        '가 | 하나',
+        '나 | 둘',
+        '다 | 셋',
+        '라 | 넷',
+      ]),
     );
     const uneven = await createQuestion(
       owner,
@@ -166,7 +174,7 @@ test(
     );
 
     let panel = await openPanel(page, owner, ws.id, even.id);
-    await expect(panel.getByRole('radio', { name: '구분: 가 내용: 하나' })).toBeVisible();
+    await expect(panel.getByRole('radio', { name: /구분:\s*가 내용:\s*하나/ })).toBeVisible();
     await expect(panel.getByText('다음 중 옳은 것은?', { exact: true })).toBeVisible();
 
     await page.goto(overviewPath(ws.id, uneven.id));
@@ -205,7 +213,11 @@ test(
     await expect(panel.getByRole('table')).toBeVisible();
     await panelUi.close(panel).click();
 
-    await overviewUi.dots(page).nth(1).hover();
+    await overviewUi
+      .heatmap(page)
+      .getByRole('button', { name: /객관식/ })
+      .nth(1)
+      .hover();
     const preview = overviewUi.tooltip(page);
     await expect(preview).toContainText('표를 보시오. | 단계 | 작용 |');
     await expect(preview.getByRole('table')).toHaveCount(0);
@@ -230,6 +242,9 @@ test(
     await expect(detail.getByText('주요 작용', { exact: true }).first()).toBeVisible();
     await detailUi.close(detail).click();
 
+    await page.addInitScript(() =>
+      localStorage.setItem('quiz.documentViewer.v1', JSON.stringify({ mode: 'both' })),
+    );
     await page.goto(`/workspaces/${ws.id}/documents/${run.source_document_id ?? ''}`);
     const first = editorUi.questionCard(page, 1);
     await expect(first.getByRole('columnheader', { name: '주요 작용' })).toBeVisible();

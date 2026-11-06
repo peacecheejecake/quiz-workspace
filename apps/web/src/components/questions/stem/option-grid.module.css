@@ -1,0 +1,53 @@
+/* QTABLE-01: the shared tracks of the option rows and their header. Semantic tokens only. */
+.row {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(var(--option-columns), minmax(0, 1fr));
+  column-gap: var(--space-2);
+  min-inline-size: 0;
+  white-space: normal;
+}
+
+.row[data-numbered] {
+  grid-template-columns: 3ch repeat(var(--option-columns), minmax(0, 1fr));
+}
+
+.row[data-trailing] {
+  grid-template-columns: repeat(var(--option-columns), minmax(0, 1fr)) 4.5em;
+}
+
+.row[data-numbered][data-trailing] {
+  grid-template-columns: 3ch repeat(var(--option-columns), minmax(0, 1fr)) 4.5em;
+}
+
+.head {
+  min-inline-size: 0;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+/* Grid of one track: the hidden bold copy holds the row at its hovered height (UX12-OPTIONS). */
+.cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-inline-size: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cell > *,
+.cell::after {
+  grid-area: 1 / 1;
+}
+
+.cell::after {
+  content: attr(data-copy);
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+}
+
+.trailing {
+  display: flex;
+  justify-content: flex-end;
+  min-inline-size: 0;
+}

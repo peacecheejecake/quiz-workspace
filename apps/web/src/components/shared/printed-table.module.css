@@ -1,0 +1,27 @@
+/* A table as printed in a document block (DOC-02) or in a stem (QTABLE-01), one style for both.
+   Korean words stay whole so a wide table scrolls in its region instead of stacking letters. */
+.tableScroll {
+  min-inline-size: 0;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: var(--font-size-body);
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.table th,
+.table td {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  text-align: start;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+.table th {
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-semibold);
+}

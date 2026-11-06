@@ -24,7 +24,9 @@ import { tableGrid } from '@/lib/documents/table-grid';
 import { answerLines, optionLabel, QUESTION_TYPE_LABELS } from '@/lib/documents/document-questions';
 import { blockPageSpan, type PageGroup, type QuestionItem } from '@/lib/documents/text-groups';
 import styles from './editor.module.css';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 
 export interface TextBlockEditorProps {
   /** The revision's blocks grouped by page (lib/documents/text-groups pageGroups). */
@@ -275,6 +277,7 @@ function QuestionCard({
   const title = question.number !== null ? `${question.number}번 문제` : '문제';
   const holdsCurrent = currentBlockId !== null && blocks.some((b) => b.block_id === currentBlockId);
   const first = blocks[0];
+  const grid = optionGrid(question.stem, question.options);
   return (
     <div
       role="group"
@@ -303,13 +306,25 @@ function QuestionCard({
           ) : null}
         </span>
       </div>
-      <StemText stem={question.stem} className={styles.questionStem} />
+      <StemText stem={grid?.stem ?? question.stem} className={styles.questionStem} />
+      {grid ? <OptionGridHead grid={grid} numbered className={styles.optionGridHead} /> : null}
       {question.options.length > 0 ? (
         <ol className={styles.optionList} aria-label="보기">
           {question.options.map((option, index) => (
             <li key={option.id} className={styles.option}>
-              <span className={styles.optionLabel}>{optionLabel(index)}</span>
-              <span>{option.text}</span>
+              {grid ? (
+                <OptionCells
+                  grid={grid}
+                  index={index}
+                  number={optionLabel(index)}
+                  numberClassName={styles.optionLabel}
+                />
+              ) : (
+                <>
+                  <span className={styles.optionLabel}>{optionLabel(index)}</span>
+                  <span>{option.text}</span>
+                </>
+              )}
             </li>
           ))}
         </ol>
