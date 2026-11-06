@@ -222,8 +222,8 @@ html body[data-scroll-locked] {
     /* Full-width sheets cover the reading area: opaque for legibility. The longhand keeps the
        gradient layer of .glass-surface (UX12 DESIGN-4). */
     background-color: var(--color-glass-solid);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 
     &:is([data-size='wide'], [data-size='narrow']) {
       width: 100%;
@@ -286,8 +286,8 @@ html body[data-scroll-locked] {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     background-color: var(--color-glass-solid);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 
     &[data-state='open'] {
       animation-name: qz-sheet-in;
@@ -398,6 +398,11 @@ html body[data-scroll-locked] {
     font-size: var(--font-size-body-lg);
     line-height: var(--line-height-relaxed);
   }
+}
+
+/* ConfirmDialog has no body: the header and footer touch, and neither draws a divider. */
+.qz-modal[role='alertdialog'] > :is(.header, .footer) {
+  border: 0;
 }
 
 /* Popover */
@@ -857,8 +862,10 @@ html body[data-scroll-locked] {
     user-select: none;
     transition: background-color var(--qz-transition-fast);
 
-    &:hover {
-      background: var(--color-state-hover);
+    @media (hover: hover) {
+      &:hover {
+        background: var(--color-state-hover);
+      }
     }
 
     &:focus-visible {
@@ -890,8 +897,10 @@ html body[data-scroll-locked] {
       color: var(--color-text-secondary);
       cursor: pointer;
 
-      &:hover {
-        background: var(--color-state-pressed);
+      @media (hover: hover) {
+        &:hover {
+          background: var(--color-state-pressed);
+        }
       }
     }
 
@@ -937,8 +946,8 @@ html body[data-scroll-locked] {
     padding: var(--space-3) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom));
     /* The longhand keeps the gradient layer of .glass-surface, as on .qz-panel. */
     background-color: var(--color-glass-solid);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 
     &:has(> .close) {
       padding-right: var(--space-3);
