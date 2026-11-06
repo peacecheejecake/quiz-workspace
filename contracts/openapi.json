@@ -6364,6 +6364,13 @@
       "MockQuestionSourceRegion": {
         "additionalProperties": false,
         "properties": {
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRegionItem"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
           "mock_exam_question_id": {
             "format": "uuid",
             "title": "Mock Exam Question Id",
@@ -6379,7 +6386,8 @@
         },
         "required": [
           "mock_exam_question_id",
-          "regions"
+          "regions",
+          "figures"
         ],
         "title": "MockQuestionSourceRegion",
         "type": "object"
@@ -9284,6 +9292,13 @@
       "QuestionSourceRegion": {
         "additionalProperties": false,
         "properties": {
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRegionItem"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
           "question_id": {
             "format": "uuid",
             "title": "Question Id",
@@ -9299,7 +9314,8 @@
         },
         "required": [
           "question_id",
-          "regions"
+          "regions",
+          "figures"
         ],
         "title": "QuestionSourceRegion",
         "type": "object"

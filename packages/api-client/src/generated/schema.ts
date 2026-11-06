@@ -5460,6 +5460,8 @@ export type components = {
     };
     /** MockQuestionSourceRegion */
     MockQuestionSourceRegion: {
+      /** Figures */
+      figures: components['schemas']['SourceRegionItem'][];
       /**
        * Mock Exam Question Id
        * Format: uuid
@@ -6709,6 +6711,8 @@ export type components = {
     };
     /** QuestionSourceRegion */
     QuestionSourceRegion: {
+      /** Figures */
+      figures: components['schemas']['SourceRegionItem'][];
       /**
        * Question Id
        * Format: uuid

@@ -2,6 +2,14 @@
 // new run with fresh drafts, shows what changed and leaves registered questions as they were.
 // The server guarantees live in tests/integration/questions/test_question_reextract.py.
 import type { Locator, Page } from '@playwright/test';
+import {
+  addImportFigure,
+  figureUi,
+  ratio,
+  seedQuestionSource,
+  sourceUi,
+  watchRegionTraffic,
+} from '../fixtures/question-source.ts';
 import { draftFor, questionPaper, truthQuestion } from '../fixtures/questions.ts';
 import {
   expect,
@@ -10,6 +18,7 @@ import {
   importPath,
   importUi,
   listDrafts,
+  overviewPath,
   publishDrafts,
   seedMembership,
   signInAs,
@@ -146,5 +155,71 @@ test(
     expect(archived.publication_status).toBe('ARCHIVED');
     expect(archived.revision.correct_option_ids).toEqual(edited.revision.correct_option_ids);
     expect(await getQuestion(owner, first.id)).toEqual(first);
+  },
+);
+
+/** A figure inside question `n`'s own region of the paper (no block of the paper is an image). */
+function figureBox(n: number) {
+  const q = truthQuestion(paper, n) as unknown as {
+    bbox: { x0: number; y0: number; x1: number; y1: number };
+  };
+  const { x0, y0, x1, y1 } = q.bbox;
+  return { x0, y0, x1, y1: y0 + (y1 - y0) * 0.6 };
+}
+
+test(
+  'UX12-REEXTRACT-AC04 a figure shows between the stem and the options before submitting',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedQuestionSource(workspaceFactory, `fig-ac04-${Date.now()}`);
+    const box = figureBox(1);
+    addImportFigure(s.single.id, truthQuestion(paper, 1).page, box);
+
+    await signInAs(page, s.owner.user);
+    await page.goto(overviewPath(s.workspaceId, s.single.id));
+    const panel = page.getByRole('dialog').first();
+    const figures = figureUi.images(panel);
+    await expect(figures).toHaveCount(1);
+    await expect(panel.getByRole('figure')).toHaveCount(1);
+    await expect(panel.getByRole('figure')).toHaveText('');
+
+    const shown = await figures.boundingBox();
+    if (!shown) throw new Error('no figure box');
+    expect(shown.width / shown.height).toBeCloseTo(ratio(box), 1);
+    const option = await panel.getByRole('radio').first().boundingBox();
+    if (!option) throw new Error('no option box');
+    expect(shown.y + shown.height).toBeLessThanOrEqual(option.y);
+    await expect(sourceUi.button(panel)).toBeVisible();
+  },
+);
+
+test(
+  'UX12-REEXTRACT-AC05 the PDF is fetched when a figure scrolls into view and not without one',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seedQuestionSource(workspaceFactory, `fig-ac05-${Date.now()}`);
+    addImportFigure(s.single.id, truthQuestion(paper, 1).page, figureBox(1));
+    const long = Array.from({ length: 60 }, (_, i) => `${i + 1}째 줄의 긴 발문입니다.`).join(
+      '\n\n',
+    );
+    await editStem(s.owner, s.single, long);
+
+    await page.setViewportSize({ width: 1280, height: 480 });
+    const traffic = watchRegionTraffic(page);
+    await signInAs(page, s.owner.user);
+    await page.goto(overviewPath(s.workspaceId, s.twoPage.id));
+    await expect(sourceUi.button(page.getByRole('dialog').first())).toBeVisible();
+    expect(traffic.pdfRequests(), 'a question without a figure').toBe(0);
+
+    await page.goto(overviewPath(s.workspaceId, s.single.id));
+    const panel = page.getByRole('dialog').first();
+    await expect(sourceUi.button(panel)).toBeVisible();
+    const group = figureUi.group(panel);
+    await expect(group).toBeAttached();
+    expect(traffic.pdfRequests(), 'the figure is below the fold').toBe(0);
+
+    await group.scrollIntoViewIfNeeded();
+    await expect(figureUi.images(panel)).toHaveCount(1);
+    await expect.poll(() => traffic.pdfRequests()).toBe(1);
   },
 );

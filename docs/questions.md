@@ -389,6 +389,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **정답 비노출:** API는 문서 id·revision id·쪽·bbox만 돌려주고 글을 돌려주지 않는다. 풀이 session이 필요 없다(제출 전·후 같음). PDF 자체는 기존 `source-url` 중계(구성원 누구나)로 받고, 화면이 영역 밖을 그리지 않는 것이 보장이다 — "해설 포함" PDF는 영역 밖에 정답·해설이 있다. 새 권한을 열지 않는다.
 - **삭제된 출처 PDF:** 출처 문서가 삭제(`documents.deleted_at`)되면 그 출처는 "없음"이다(문제는 남음). 문서의 원본 PDF는 불변이라 revision 검사는 없다.
 - **모의고사 문제:** `보기 섞기`(`OPTION_SHUFFLE`) 문제만, 원본 문제(`source.question_id`)가 위 규칙으로 영역을 가지면 같은 영역을 돌려준다(`evidence`는 쓰지 않음). AI 변형 문제·원본이 없어졌거나 초안인 경우는 없다.
+- **문제 그림 (UX12 EXTRACT-7, D-11):** 응답의 `figures`는 문제 자기 영역 안에 있는 `image` 블록의 bbox다. 보기 위에 lazy로 그린다. 인라인 정답 뒤 이미지와 글 블록은 들지 않는다. 기준은 [UX12-REEXTRACT](screens/ux12-reextract.md).
 - **저장·migration 없음.** 풀이·열람 기록을 만들지 않는다(§4). 공유 링크 게스트에게는 이 기능이 없다.
 
 ## 17. `다시 풀기`는 정답을 맞춘 문제에만 (RETRY-CORRECT 2026-11-04)
