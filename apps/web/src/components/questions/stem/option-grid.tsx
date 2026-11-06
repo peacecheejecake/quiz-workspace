@@ -79,7 +79,7 @@ export function OptionCells({
           // Cells have no ids; their position is their identity. The space between cells keeps
           // them apart in the option's accessible name; it takes no room in the grid.
           <Fragment key={c}>
-            <span className={styles.cell} data-copy={cell}>
+            <span className={styles.cell}>
               {header ? <span className="qz-visually-hidden">{header}: </span> : null}
               <span>{cell}</span>
             </span>{' '}

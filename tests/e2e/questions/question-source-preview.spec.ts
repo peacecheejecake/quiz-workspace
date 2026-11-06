@@ -493,7 +493,7 @@ test(
       await page.goto(mockExamsPath(s.workspaceId));
       const list = mockUi.dialog(page);
       await expect(list).toBeVisible();
-      await mockUi.practise(mockUi.row(list, mock.title)).click();
+      await mockUi.rowTitle(mockUi.row(list, mock.title)).click();
       const mockPanel = mockUi.practicePanel(page);
       await expect(mockUi.practiceTitle(mockPanel, mock.title)).toBeVisible();
       await runUi.start(mockPanel).click();
@@ -510,7 +510,7 @@ test(
         await expect(sourceUi.button(mockPanel)).toHaveCount(0);
       }
       await page.goto(mockExamsPath(s.workspaceId));
-      await mockUi.open(mockUi.row(mockUi.dialog(page), mock.title), mock.title).click();
+      await mockUi.openDetail(mockUi.row(mockUi.dialog(page), mock.title), mock.title);
       await questionRow(mockUi.dialog(page), 1).click();
       const viewerPanel = mockUi.viewer(page, 1);
       await expect(viewerPanel).toBeVisible();

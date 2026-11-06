@@ -56,7 +56,7 @@
 //     attributes are the only non-ARIA hooks (state, like the heatmap's data-status).
 //   HighlightMenu: role=menu "하이라이트" with items "노랑" · "파랑" · "분홍" (menuitemcheckbox or
 //     menuitemradio, aria-checked on the exact current color), "하이라이트 지우기" (only when the
-//     selection overlaps a highlight), "복사" (closes the menu, toast "복사했습니다."); reason text
+//     selection overlaps a highlight), (no "복사": removed 2026-11-07, the OS menu and Ctrl/Cmd+C copy); one icon-only row; reason text
 //     "한 문단 안에서 고르세요" (color items aria-disabled) for a selection across blocks.
 //   MyHighlightsSection: region named "내 하이라이트" with h3 "내 하이라이트 (n)", text
 //     "나에게만 보입니다."; groups "출처" (전체·노트·해설) and "색" (전체·노랑·파랑·분홍) of toggle
@@ -68,7 +68,7 @@
 //     Empty: "아직 하이라이트가 없습니다…"; filtered empty: "고른 조건의 하이라이트가 없습니다.".
 //   Toast region "알림 (F8)" (landmark); toast text "하이라이트를 지웠습니다" with button
 //     "되돌리기"; refusal "같은 자리에 다른 하이라이트가 있어 되돌리지 못했습니다".
-//   Explanation toast "정리 노트의 내 하이라이트에 모았습니다 · <장 제목>".
+//   (Retired 2026-11-07: the explanation toast "정리 노트의 내 하이라이트에 모았습니다 · <장 제목>".)
 //   "챕터 없음" Heatmap group header: button "내 하이라이트" (`?panel=chapter-note&chapter=none`).
 //   CHNOTE-02 note search: searchbox "노트에서 찾기"; result text "k/n" (or "결과 없음"); icon
 //     buttons "이전 결과" / "다음 결과". Notice "이 노트에는 문제의 정답과 해설 내용이 들어
@@ -559,6 +559,7 @@ export const highlightUi = {
       .or(menu.getByRole('menuitem', { name: COLOR_NAME[color] })),
   removeItem: (menu: Locator) =>
     menu.getByRole('menuitem', { name: /^(하이라이트 지우기|remove highlight)$/i }),
+  /** Retired 2026-11-07: only ever expected absent. */
   copyItem: (menu: Locator) => menu.getByRole('menuitem', { name: /^(복사|copy)$/i }),
   oneBlockReason: (scope: Page | Locator) =>
     scope.getByText(/한 문단 안에서 고르세요|select within one paragraph/i),
@@ -608,7 +609,7 @@ export const highlightUi = {
   /** The toast of a successful `복사`. */
   copiedToast: (page: Page) =>
     highlightUi.toastRegion(page).getByText(/^(복사했습니다|copied)\.?$/i),
-  /** The toast of a new explanation highlight. */
+  /** The retired toast of a new explanation highlight (2026-11-07): only ever expected absent. */
   collectedToast: (page: Page) =>
     highlightUi
       .toastRegion(page)

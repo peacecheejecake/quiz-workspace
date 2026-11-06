@@ -21,7 +21,7 @@ import {
   recolorHighlight,
   type HighlightTargetInput,
 } from '@/lib/highlights/client';
-import { HIGHLIGHT_TEXT, withCreated, withUpdated } from '@/lib/highlights/model';
+import { withCreated, withUpdated } from '@/lib/highlights/model';
 import type { MyHighlight } from '@/lib/notes/model';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 
@@ -108,8 +108,6 @@ export interface HighlightToolOptions {
   readonly target: HighlightTargetInput;
   /** The `HighlightableText` (its `ref`); the menu returns focus there. */
   readonly areaRef: RefObject<HTMLDivElement | null>;
-  /** A new highlight was made, not a recolor (the explanation's "모았습니다" toast). */
-  readonly onCreated?: (created: MyHighlight) => void;
 }
 
 export interface HighlightTool {
@@ -126,12 +124,10 @@ export function useHighlightTool({
   toAnchor,
   target,
   areaRef,
-  onCreated,
 }: HighlightToolOptions): HighlightTool {
   const [selection, setSelection] = useState<HighlightSelection | null>(null);
   // A refused change is said next to the area.
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
   const { update, reload } = store;
   const fail = (failure: unknown) => {
     const kind = failure instanceof HighlightApiError ? failure.kind : 'failed';
@@ -156,7 +152,6 @@ export function useHighlightTool({
           newIdempotencyKey(),
         );
         update((list) => withCreated(list, created, action.replaceIds));
-        onCreated?.(created);
       } else if (action.type === 'recolor') {
         const current = items.find((h) => h.id === action.id);
         if (!current) return;
@@ -179,7 +174,6 @@ export function useHighlightTool({
         returnFocusTo={areaRef}
         onClose={() => setSelection(null)}
         onAction={(action) => void act(action)}
-        onCopied={() => toast({ tone: 'success', title: HIGHLIGHT_TEXT.copied })}
       />
       {error ? <p role="alert">{error}</p> : null}
     </>

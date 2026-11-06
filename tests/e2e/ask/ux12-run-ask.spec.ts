@@ -23,7 +23,7 @@ test(
     await page.goto(mockExamsPath(ws.id));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(list.getByRole('listitem').filter({ hasText: exam.title })).click();
+    await mockUi.rowTitle(list.getByRole('listitem').filter({ hasText: exam.title })).click();
     await runUi.start(runUi.panel(page)).click();
     const run = runUi.panel(page);
     await expect(runUi.mockTitle(run, 1)).toBeVisible();

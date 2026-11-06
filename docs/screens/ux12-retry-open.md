@@ -19,7 +19,7 @@ linked_tests: [UX12-RETRYOPEN-AC01 … UX12-RETRYOPEN-AC09]
 - **MOCKUX-11 개정.** 이 동작은 모든 푼 문제로 넓어졌고([UX12-SOLVEDOPEN](ux12-solved-open.md)), 표시는 더 이상 열기를 정하지 않는다. 아래는 표시가 켜진 문제에서 지금도 맞는 내용이다.
 - **채점 대기는 예외.** 가장 최근 제출이 채점 대기(`pending`)이면 그 제출의 결과와 `맞음`/`틀림`을 그대로 보인다(AC08).
 - **제출 뒤는 그대로.** 제출하면 결과·해설이 평소처럼 보인다. 플래그 규칙은 questions.md §17 그대로다: 정답은 플래그를 두고, 오답은 끈다. 어느 쪽이든 다시 열면 풀이 화면이다.
-- **toggle과 footer.** 깨끗하게 열린 panel의 header toggle은 Heatmap 상태를 읽으므로(`lastGradedResult`) 켜진 채 보이고 바로 끌 수 있다. footer의 `다시 풀기`(`AnotherTryButton`)는 답하는 동안과 같이 사유와 함께 비활성이다. `초기화`는 기록이 있으므로 그대로 보인다.
+- **toggle과 footer.** 깨끗하게 열린 panel의 header toggle은 Heatmap 상태를 읽으므로(`lastGradedResult`) 켜진 채 보이고 바로 끌 수 있다. footer의 `다시 풀기`(`AnotherTryButton`)는 답하는 동안과 같이 사유와 함께 비활성이다. `초기화`는 기록이 있으므로 header 메뉴에 그대로 있다(VIEW-RESET 2026-11-07).
 - **범위 풀이의 기록.** 범위 풀이·모의고사의 위치는 그 run의 기록이다. 제출하지 않은 위치는 원래 풀이 화면이고, 제출한 위치와 끝난 run의 결과 화면은 플래그와 상관없이 제출 결과를 읽기 전용으로 보인다. 모의고사 문제에는 플래그가 없다.
 
 ## 여는 경로

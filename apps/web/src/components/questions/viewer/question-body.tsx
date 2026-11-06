@@ -287,9 +287,7 @@ const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
  * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
- * keeps the option text as its name while its position is announced by the group. `data-copy` is
- * the hidden bold copy that reserves the hovered height (UX12-OPTIONS); a table's cells have one
- * each (QTABLE-01).
+ * keeps the option text as its name while its position is announced by the group.
  */
 function OptionLabel({
   index,
@@ -312,13 +310,11 @@ function OptionLabel({
     );
   }
   return (
-    <span className={styles.optionCopy} data-copy={`${number} ${text}`}>
-      <span>
-        <span className={styles.optionNumber} aria-hidden="true">
-          {number}
-        </span>{' '}
-        {text}
-      </span>
+    <span>
+      <span className={styles.optionNumber} aria-hidden="true">
+        {number}
+      </span>{' '}
+      {text}
     </span>
   );
 }

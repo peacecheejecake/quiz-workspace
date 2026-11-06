@@ -215,15 +215,38 @@ export interface WorkspaceHomeProps {
   };
 }
 
-/** Keeps the dots' scroll margin true when the sticky line wraps (UX12-HEADER-AC04). */
+/** Keeps the dots' scroll margin true when the sticky line wraps (UX12-HEADER-AC04) and marks the
+ *  line `data-stuck` while it rests on its sticky offset (HOME-EDGE). An attribute, not state, so
+ *  scrolling never re-renders the home. It also measures how far the page edges lie beyond the
+ *  home, which the full-width toolbar bleeds into (the scrollbar gutter keeps the home off-centre). */
 function trackToolbarHeight(toolbar: HTMLDivElement) {
   const home = toolbar.parentElement;
-  if (!home || typeof ResizeObserver === 'undefined') return undefined;
-  const observer = new ResizeObserver(() => {
-    home.style.setProperty('--home-toolbar-height', `${toolbar.offsetHeight}px`);
-  });
-  observer.observe(toolbar);
-  return () => observer.disconnect();
+  if (!home) return undefined;
+  const updateStuck = () => {
+    const page = document.documentElement.clientWidth;
+    const { left, right } = home.getBoundingClientRect();
+    toolbar.style.setProperty('--toolbar-bleed-start', `${Math.max(0, left)}px`);
+    toolbar.style.setProperty('--toolbar-bleed-end', `${Math.max(0, page - right)}px`);
+    const top = parseFloat(getComputedStyle(toolbar).top) || 0;
+    toolbar.toggleAttribute('data-stuck', toolbar.getBoundingClientRect().top <= top + 0.5);
+  };
+  updateStuck();
+  window.addEventListener('scroll', updateStuck, { passive: true });
+  window.addEventListener('resize', updateStuck);
+  const observer =
+    typeof ResizeObserver === 'undefined'
+      ? undefined
+      : new ResizeObserver(() => {
+          home.style.setProperty('--home-toolbar-height', `${toolbar.offsetHeight}px`);
+          updateStuck();
+        });
+  observer?.observe(toolbar);
+  observer?.observe(home);
+  return () => {
+    window.removeEventListener('scroll', updateStuck);
+    window.removeEventListener('resize', updateStuck);
+    observer?.disconnect();
+  };
 }
 
 export function WorkspaceHome(props: WorkspaceHomeProps) {

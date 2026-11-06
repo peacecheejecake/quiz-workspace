@@ -856,7 +856,7 @@ test(
     await page.goto(homePath(s.workspaceId, 'panel=mock-exams'));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(list.getByRole('listitem').filter({ hasText: examName })).click();
+    await mockUi.rowTitle(list.getByRole('listitem').filter({ hasText: examName })).click();
     const mockPanel = mockUi.practicePanel(page);
     await expect(mockUi.practiceTitle(mockPanel, examName)).toBeVisible();
     const opened = page.waitForResponse(

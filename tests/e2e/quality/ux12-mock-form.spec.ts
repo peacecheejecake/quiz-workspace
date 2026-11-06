@@ -155,9 +155,25 @@ test('UX12-MOCKFORM-AC03 filters are always shown with the home swatches and tex
     'aria-pressed',
     'true',
   );
+  // UX12-MOCKFORM3: the selected count sits at the end of the 전체 선택 row, in its font size.
+  await picker.selectAll(dialog).check();
+  const selectAll = await picker.selectAll(dialog).locator('xpath=ancestor::div[1]').boundingBox();
+  const count = picker.selected(dialog, 2);
+  const countBox = await count.boundingBox();
+  if (!selectAll || !countBox) throw new Error('The 전체 선택 row must be visible');
+  const labelSize = await dialog
+    .getByText(/^전체 선택$/)
+    .evaluate((el) => getComputedStyle(el).fontSize);
+  await expect(count).toHaveCSS('font-size', labelSize);
+  expect(
+    Math.abs(countBox.y + countBox.height / 2 - (selectAll.y + selectAll.height / 2)),
+  ).toBeLessThan(12);
+  const dialogBox = await dialog.boundingBox();
+  if (!dialogBox) throw new Error('The dialog must be visible');
+  expect(countBox.x).toBeGreaterThan(dialogBox.x + dialogBox.width / 2);
 });
 
-test('UX12-MOCKFORM-AC04 유형 is a multi-select checkbox group and none means every type', async ({
+test('UX12-MOCKFORM-AC04 유형 is a checkbox group: every type checked, none shows no question', async ({
   page,
   workspaceFactory,
 }) => {
@@ -181,23 +197,72 @@ test('UX12-MOCKFORM-AC04 유형 is a multi-select checkbox group and none means 
   const dialog = createDialog(page);
   await expect(picker.selectAll(dialog)).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: /^(유형|type)$/i })).toHaveCount(0);
+  // The group is named by its aria-label only: no visible legend, no hint line.
+  await expect(dialog.getByText(/^유형$/)).toHaveCount(0);
+  await expect(dialog.getByText(/모든 유형을 보여 줍니다/)).toHaveCount(0);
+  await expect(picker.resetFilters(dialog)).toHaveCount(0);
   await picker.selectAll(dialog).check();
   await expect(picker.selected(dialog, 4)).toBeVisible();
 
   const types = picker.typeFilters(dialog);
+  const box = (name: RegExp) => types.getByRole('checkbox', { name });
+  const mcq = box(/^(객관식|multiple choice)$/i);
+  const essay = box(/^(서술형|essay)$/i);
+  const short = box(/^(단답형|short answer)$/i);
   await expect(types.getByRole('checkbox')).toHaveCount(3);
-  await types.getByRole('checkbox', { name: /^(객관식|multiple choice)$/i }).check();
-  // The narrow list has to arrive first: widening before it does never drops the two others.
-  await expect(picker.selected(dialog, 2)).toBeVisible();
-  await types.getByRole('checkbox', { name: /^(서술형|essay)$/i }).check();
-  await picker.expand(dialog, '챕터 없음').click();
-  await expect(picker.questions(dialog)).toHaveCount(3);
-  // A filter drops what it hides from the selection; widening it does not bring that back.
-  await expect(picker.selected(dialog, 2)).toBeVisible();
+  for (const checkbox of [mcq, essay, short]) await expect(checkbox).toBeChecked();
 
-  await picker.resetFilters(dialog).click();
+  await essay.uncheck();
+  // A filter drops what it hides from the selection; no sibling gets disabled.
+  await expect(picker.selected(dialog, 3)).toBeVisible();
+  await expect(mcq).toBeEnabled();
+  await expect(short).toBeEnabled();
+  await expect(picker.resetFilters(dialog)).toBeVisible();
+  await essay.check();
+  await picker.expand(dialog, '챕터 없음').click();
   await expect(picker.questions(dialog)).toHaveCount(4);
-  await expect(types.getByRole('checkbox', { name: /^(서술형|essay)$/i })).not.toBeChecked();
+
+  // None checked shows no question, not every one, and `다음` says why it is off.
+  await mcq.uncheck();
+  await short.uncheck();
+  await essay.uncheck();
+  await expect(dialog.getByText(/조건에 맞는 문제가 없습니다/)).toBeVisible();
+  await expect(picker.questions(dialog)).toHaveCount(0);
+  await expect(mockUi.next(dialog)).toBeDisabled();
+  await expect(mockUi.next(dialog)).toHaveAccessibleDescription(/출제 범위를 고르세요/);
+
+  await picker.resetFilters(dialog).first().click();
+  await expect(mcq).toBeChecked();
+  await expect(essay).toBeChecked();
+  await expect(short).toBeChecked();
+  // The chapter group stays expanded.
+  await expect(picker.questions(dialog)).toHaveCount(4);
+});
+
+test('UX12-MOCKFORM-AC04 a type without questions is disabled and unchecked', async ({
+  page,
+  workspaceFactory,
+}) => {
+  const owner = await workspaceFactory.member('ux12-mockform-types-missing');
+  const workspace = await workspaceFactory.create(owner);
+  await createNumberedQuestions(owner, workspace.id, 'only-mcq', 2);
+  await signInAs(page, owner.user);
+  await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
+
+  const dialog = createDialog(page);
+  await expect(picker.selectAll(dialog)).toBeVisible();
+  const types = picker.typeFilters(dialog);
+  const mcq = types.getByRole('checkbox', { name: /^(객관식|multiple choice)$/i });
+  await expect(mcq).toBeChecked();
+  for (const name of [/^(서술형|essay)$/i, /^(단답형|short answer)$/i]) {
+    const other = types.getByRole('checkbox', { name });
+    await expect(other).toBeDisabled();
+    await expect(other).not.toBeChecked();
+  }
+  // Without a missing type counted as unchecked, nothing is filtered.
+  await expect(picker.resetFilters(dialog)).toHaveCount(0);
+  await picker.selectAll(dialog).check();
+  await expect(picker.selected(dialog, 2)).toBeVisible();
 });
 
 test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse and keyboard', async ({
@@ -207,6 +272,11 @@ test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse 
   const owner = await workspaceFactory.member('ux12-mockform-back');
   const workspace = await workspaceFactory.create(owner);
   await createNumberedQuestions(owner, workspace.id, 'back', 3);
+  await createQuestion(owner, workspace.id, {
+    question_type: 'ESSAY',
+    stem: 'back 서술 1',
+    question_number: 4,
+  });
   await signInAs(page, owner.user);
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
 
@@ -214,10 +284,8 @@ test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse 
   await expect(picker.selectAll(dialog)).toBeVisible();
   await expect(mockUi.backToRange(dialog)).toHaveCount(0);
   await picker.selectAll(dialog).check();
-  const mcq = picker
-    .typeFilters(dialog)
-    .getByRole('checkbox', { name: /^(객관식|multiple choice)$/i });
-  await mcq.check();
+  const essay = picker.typeFilters(dialog).getByRole('checkbox', { name: /^(서술형|essay)$/i });
+  await essay.uncheck();
   await expect(picker.selected(dialog, 3)).toBeVisible();
   await mockUi.next(dialog).click();
 
@@ -232,7 +300,7 @@ test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse 
   expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
   await back.click();
   await expect(picker.selected(dialog, 3)).toBeVisible();
-  await expect(mcq).toBeChecked();
+  await expect(essay).not.toBeChecked();
 
   await mockUi.next(dialog).click();
   await expect(mockUi.title(dialog)).toHaveValue('돌아가기 점검');
@@ -242,6 +310,56 @@ test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse 
   await back.focus();
   await page.keyboard.press('Enter');
   await expect(picker.selected(dialog, 3)).toBeVisible();
+});
+
+test('UX12-MOCKFORM-AC05 the header back button steps back, and the dim closes at once on the options step', async ({
+  page,
+  workspaceFactory,
+}) => {
+  const owner = await workspaceFactory.member('ux12-mockform-header');
+  const workspace = await workspaceFactory.create(owner);
+  await createNumberedQuestions(owner, workspace.id, 'header', 3);
+  await signInAs(page, owner.user);
+  await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
+
+  const dialog = createDialog(page);
+  await expect(picker.selectAll(dialog)).toBeVisible();
+  // One back button, in the header before the title: 모의고사 목록 on the first step.
+  const header = dialog.getByRole('button', { name: /^(모의고사 목록|mock exam list)$/i });
+  await expect(header).toBeVisible();
+  await expect(dialog.getByRole('link', { name: /모의고사 목록|mock exam list/i })).toHaveCount(0);
+  const title = await dialog
+    .getByRole('heading', { name: /^(모의고사|mock exams?)$/i })
+    .boundingBox();
+  const button = await header.boundingBox();
+  if (!title || !button) throw new Error('The header and its back button must be visible');
+  expect(button.x + button.width).toBeLessThanOrEqual(title.x + 1);
+
+  // Step 2: 이전 단계 goes back to the range with the range and options kept; focus on 범위.
+  await picker.selectAll(dialog).check();
+  await mockUi.next(dialog).click();
+  await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
+  await mockUi.title(dialog).fill('헤더 점검');
+  await dialog.getByRole('button', { name: /^(이전 단계|previous step)$/i }).click();
+  await expect(dialog.getByRole('heading', { name: /^(범위|range)$/i })).toBeFocused();
+  await expect(picker.selected(dialog, 3)).toBeVisible();
+  await mockUi.next(dialog).click();
+  await expect(mockUi.title(dialog)).toHaveValue('헤더 점검');
+
+  // On the options step the dim closes the dialog at once, edited options or not.
+  const box = await dialog.boundingBox();
+  if (!box) throw new Error('The dialog must be visible');
+  await page.mouse.click(Math.max(2, box.x / 2), box.y + box.height / 2);
+  await expect(dialog).toBeHidden();
+
+  // On the range step a touched range keeps it open.
+  await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
+  await picker.selectAll(dialog).check();
+  await page.mouse.click(Math.max(2, box.x / 2), box.y + box.height / 2);
+  await expect(dialog).toBeVisible();
+  // The first step's back button returns to the list.
+  await dialog.getByRole('button', { name: /^(모의고사 목록|mock exam list)$/i }).click();
+  await expect(mockUi.count(dialog, 0)).toBeVisible();
 });
 
 test('UX12-MOCKFORM-AC06 설정 바꾸기 shares the screen and restores the saved types', async ({

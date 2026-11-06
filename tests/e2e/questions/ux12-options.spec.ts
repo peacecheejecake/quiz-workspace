@@ -20,8 +20,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 const TRANSPARENT = 'rgba(0, 0, 0, 0)';
 const REGULAR = '400';
-const SEMIBOLD = '600';
-// Long enough to wrap, wider in bold: the hover must not make the row taller.
+// Long enough to wrap: the hover must not make the row taller.
 const LONG_OPTION = Array.from({ length: 70 }, (_, i) => `word${i % 7}`).join(' ');
 
 interface Seeded {
@@ -75,7 +74,7 @@ async function rowBoxes(panel: Locator) {
 }
 
 test(
-  'UX12-OPTIONS-AC01 a hovered option row darkens its control and bolds its text without moving',
+  'UX12-OPTIONS-AC01 a hovered option row darkens its control and thickens its border to 2px, without moving or bolding',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = `ux12-opt1-${randomUUID().slice(0, 8)}`;
@@ -102,26 +101,21 @@ test(
       for (const text of texts) {
         const option = panelUi.option(panel, text);
         await expect(option).toHaveCSS('border-top-color', rest);
+        await expect(option).toHaveCSS('border-top-width', '1px');
         await expect(labelOf(option)).toHaveCSS('font-weight', REGULAR);
         const height = await rowHeight(option);
+        const control = await option.boundingBox();
 
         await rowOf(option).hover();
         await expect(option).toHaveCSS('border-top-color', hover);
-        await expect(labelOf(option)).toHaveCSS('font-weight', SEMIBOLD);
+        await expect(option).toHaveCSS('border-top-width', '2px');
+        await expect(labelOf(option)).toHaveCSS('font-weight', REGULAR);
         expect(await rowHeight(option)).toBeCloseTo(height, 1);
+        expect(await option.boundingBox()).toEqual(control);
 
         await moveAway(page);
         await expect(option).toHaveCSS('border-top-color', rest);
-        await expect(labelOf(option)).toHaveCSS('font-weight', REGULAR);
-      }
-      if (n === 1) {
-        // The suite runs under reduced motion, which turns every transition off.
-        await page.emulateMedia({ reducedMotion: 'no-preference' });
-        const option = panelUi.option(panel, first);
-        const duration = await option.evaluate((el) => getComputedStyle(el).transitionDuration);
-        await expect(labelOf(option)).toHaveCSS('transition-property', /font-weight/);
-        await expect(labelOf(option)).toHaveCSS('transition-duration', duration);
-        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await expect(option).toHaveCSS('border-top-width', '1px');
       }
       await page.keyboard.press('Escape');
       await expect(panel).toBeHidden();

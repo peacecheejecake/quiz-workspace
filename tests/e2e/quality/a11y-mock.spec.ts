@@ -252,7 +252,7 @@ test(
       await mockUi.backToList(dialog).click();
 
       // Detail while generating (held), then failed, partly made and round 2.
-      await mockUi.open(mockUi.row(dialog, '만드는 중 점검'), '만드는 중 점검').click();
+      await mockUi.openDetail(mockUi.row(dialog, '만드는 중 점검'), '만드는 중 점검');
       await expect(dialog.getByText(MOCK_TEXT.working)).toBeVisible();
       await expect(mockUi.progress(dialog)).toBeVisible();
       await expectAccessible(page, 'mock exam detail while generating');
@@ -307,7 +307,7 @@ test(
       await expect(mockUi.remake(dialog)).toBeVisible();
       await expectAccessible(page, 'mock exam change settings, options step');
       await mockUi.backToList(dialog).click();
-      await mockUi.open(mockUi.row(dialog, '중간 점검'), '중간 점검').click();
+      await mockUi.openDetail(mockUi.row(dialog, '중간 점검'), '중간 점검');
 
       // The manage viewer (answer and explanation shown), its edit form and the remove confirm.
       await questionRow(dialog, 1).click();
@@ -502,7 +502,7 @@ test(
     );
     await page.goto(mockExamsPath(s.workspaceId));
     const dialog = mockUi.dialog(page);
-    await mockUi.practise(mockUi.row(dialog, exam.title)).click();
+    await mockUi.rowTitle(mockUi.row(dialog, exam.title)).click();
     panel = runUi.panel(page);
     await expect(mockUi.practiceTitle(panel, exam.title)).toBeVisible();
     await expect(runUi.selectAll(panel)).toBeChecked();

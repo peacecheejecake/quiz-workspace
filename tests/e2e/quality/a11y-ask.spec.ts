@@ -253,7 +253,7 @@ test(
     await page.goto(mockExamsPath(s.workspaceId));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(list.getByRole('listitem').filter({ hasText: exam.title })).click();
+    await mockUi.rowTitle(list.getByRole('listitem').filter({ hasText: exam.title })).click();
     let run = runUi.panel(page);
     await runUi.start(run).click();
     run = runUi.panel(page);
@@ -490,7 +490,7 @@ test(
     await page.goto(mockExamsPath(s.workspaceId));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(list.getByRole('listitem').filter({ hasText: examName })).click();
+    await mockUi.rowTitle(list.getByRole('listitem').filter({ hasText: examName })).click();
     let run = mockUi.practicePanel(page);
     await runUi.start(run).click();
     run = runUi.panel(page);

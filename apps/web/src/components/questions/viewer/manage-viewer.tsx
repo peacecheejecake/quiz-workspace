@@ -141,7 +141,6 @@ export function ManageViewer({
                   ? {
                       questionId: question.id,
                       revisionId: question.revision.id,
-                      chapterTitle: question.chapter?.title ?? null,
                       focusId: focusHighlight,
                     }
                   : null

@@ -132,7 +132,7 @@ test.describe('phone sheet', () => {
 });
 
 test(
-  'UX12-GLASSBTN-AC03 secondary buttons on glass keep a raised fill; the return button and the footer have none',
+  'UX12-GLASSBTN-AC03 secondary buttons on glass keep a raised fill; the return icon button and the footer have none',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-03');
@@ -159,7 +159,7 @@ test(
     await expect
       .poll(() => back.evaluate((element) => getComputedStyle(element).backgroundColor))
       .toBe(TRANSPARENT);
-    expect((await surfaceOf(back)).border).not.toBe(TRANSPARENT);
+    expect((await surfaceOf(back)).border).toBe(TRANSPARENT); // icon button: no border (HOME-RETURN)
 
     const hover = await tokenColor(page, '--color-state-hover');
     await back.hover();
@@ -203,14 +203,16 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC05 icon-only buttons of every variant drop the border, toggles keep it',
+  'UX12-GLASSBTN-AC05 icon-only buttons of every variant drop the border, and so do the study toggles',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-05');
     const panel = await openPanel(page);
     const favorite = panelUi.favoriteOn(panel);
     await expect(favorite).toBeVisible();
-    expect((await surfaceOf(favorite)).border).not.toBe(TRANSPARENT);
+    const favoriteStyle = await surfaceOf(favorite);
+    expect(favoriteStyle.border).toBe(TRANSPARENT); // HOME-TOGGLE: the study toggles are borderless
+    expect(favoriteStyle.borderWidth).toBe('1px');
     await panelUi.close(panel).click();
 
     await page.goto(homePath(ws.id));
@@ -226,7 +228,7 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC06 a heatmap cell scales its marker by 1.5 without moving the grid',
+  'UX12-GLASSBTN-AC06 a heatmap cell scales its marker by 1.3 without moving the grid',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openOverview(page, workspaceFactory, 'ux12-gb-06');
@@ -237,7 +239,7 @@ test(
     const marker = dot.locator('.qz-question-marker');
     await expect
       .poll(() => marker.evaluate((el) => getComputedStyle(el).transform))
-      .toContain('matrix(1.5, 0, 0, 1.5');
+      .toContain('matrix(1.3, 0, 0, 1.3');
     expect(await dot.boundingBox()).toEqual(before);
     const clipped = await dot.evaluate((element) => {
       for (let node = element.parentElement; node; node = node.parentElement) {
@@ -252,28 +254,45 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC07 the sticky home toolbar is translucent and blurs what passes behind it',
+  'UX12-GLASSBTN-AC07 the sticky home toolbar is clear at the top and blurs what passes behind it once stuck',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-07');
     await page.goto(homePath(ws.id));
     const history = page.getByRole('button', { name: /^(이력|history)$/i });
     await expect(history).toBeVisible();
+    await overviewUi.heatmap(page).evaluate((element: HTMLElement) => {
+      element.style.minHeight = '250vh';
+    });
     const toolbar = await history.evaluateHandle((element) => {
       let node: Element | null = element;
       while (node && getComputedStyle(node).position !== 'sticky') node = node.parentElement;
       return node;
     });
-    const style = await toolbar.evaluate((element) => {
-      if (!(element instanceof Element)) return null;
-      const css = getComputedStyle(element);
-      return {
-        color: css.backgroundColor,
-        blur: css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'),
-      };
-    });
-    expect(style?.blur).toMatch(BLUR);
-    expect(style?.color).not.toMatch(OPAQUE);
+    const read = () =>
+      toolbar.evaluate((element) => {
+        if (!(element instanceof Element)) return null;
+        const css = getComputedStyle(element);
+        return {
+          color: css.backgroundColor,
+          blur: css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'),
+        };
+      });
+    const scrollTo = async (top: number) => {
+      await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), top);
+      await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(top);
+    };
+
+    const atTop = await read();
+    expect(atTop?.color).toBe(TRANSPARENT);
+    expect(atTop?.blur ?? 'none').not.toMatch(/blur\(/);
+
+    await scrollTo(500);
+    await expect.poll(async () => (await read())?.blur ?? '').toMatch(BLUR);
+    expect((await read())?.color).not.toMatch(OPAQUE);
+
+    await scrollTo(0);
+    await expect.poll(async () => (await read())?.color).toBe(TRANSPARENT);
   },
 );
 

@@ -25,9 +25,13 @@
 
 /* Two button groups (UX4): 문서 N · 모의고사, then AI 질문 · 이력 · 공유하기 aligned right, with
    검색 · 필터 between them (UX12-HOMEFILTER). Under the app header and over the heatmap's raised
-   markers and hover layers. The page passes behind it, so it is glass in the canvas tone: unseen
-   until something scrolls under it, opaque where glass falls back (UX12-GLASSBTN). The negative
-   margins cancel its padding while it is not stuck. */
+   markers and hover layers. It spans the full page width (HOME-EDGE): the negative inline margin
+   reaches the page edges and the equal padding keeps the buttons on the content edges. The
+   bleed is measured per side by `trackToolbarHeight` (the scrollbar gutter makes the content
+   off-centre in the viewport); `50vw - 50%` is the fallback before it runs.
+   Transparent with no blur at the page top; once stuck (`data-stuck`, set by
+   `trackToolbarHeight`) it is glass in the canvas tone, opaque where glass falls back
+   (UX12-GLASSBTN). The negative block margins cancel its padding. */
 .toolbar {
   position: sticky;
   z-index: calc(var(--z-popover) - 2);
@@ -38,20 +42,28 @@
   gap: var(--space-2) var(--space-3);
   min-width: 0;
   margin-block: calc(-1 * var(--home-toolbar-padding));
+  margin-inline: calc(-1 * var(--toolbar-bleed-start, calc(50vw - 50%)))
+    calc(-1 * var(--toolbar-bleed-end, calc(50vw - 50%)));
   padding-block: var(--home-toolbar-padding);
+  padding-inline: var(--toolbar-bleed-start, calc(50vw - 50%))
+    var(--toolbar-bleed-end, calc(50vw - 50%));
+  background: transparent;
+}
+
+.toolbar[data-stuck] {
   background: color-mix(in srgb, var(--color-canvas) 70%, transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .toolbar {
+  .toolbar[data-stuck] {
     background: var(--color-canvas);
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .toolbar {
+  .toolbar[data-stuck] {
     background: var(--color-canvas);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

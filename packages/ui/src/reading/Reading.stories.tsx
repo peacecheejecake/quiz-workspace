@@ -122,13 +122,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** All three colors; select text to open the menu (merge, recolor, remove, copy). */
+/** All three colors; select text to open the menu (merge, recolor, remove). */
 export const ThreeColors: Story = { render: () => <NoteLayout /> };
 
 /** Search results over plain text and over highlights ("주의"; the second result is current). */
 export const SearchOverHighlights: Story = { render: () => <NoteLayout query="주의" /> };
 
-/** Read-only: no pressable highlights, the menu offers only `복사`. */
+/** Read-only: no pressable highlights and no menu. */
 export const ReadOnly: Story = { render: () => <NoteLayout readOnly /> };
 
 /** Dark theme. */

@@ -68,9 +68,12 @@
     display: none;
   }
 
+  /* clip, never hidden: a full-bleed child (100vw) must not scroll the page sideways, and sticky
+     descendants keep working (HOME-EDGE). */
   > .body > .main {
     flex: 1;
     min-width: 0;
+    overflow-x: clip;
   }
 
   > .body > .main:focus {

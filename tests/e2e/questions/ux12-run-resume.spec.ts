@@ -1,5 +1,5 @@
 // UX12-RESUME (docs/screens/ux12-run-resume.md): the viewer's unfinished bank runs in the mock exam
-// list, `이어 풀기` at the next unanswered position, and `지우기`. Contract half:
+// list, `이어 풀기` at the next unanswered position, and `삭제`. Contract half:
 // tests/integration/questions/practice_runs/test_practice_runs_contract.py (UX12-RESUME).
 import type { Locator, Page } from '@playwright/test';
 import { MOCK_TEXT, mockUi } from '../fixtures/mock-exams.ts';
@@ -33,11 +33,16 @@ import {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const resumeList = (dialog: Locator) =>
-  dialog.getByRole('list', { name: /^(이어 풀기 목록|unfinished runs)$/i });
-const resumeRows = (dialog: Locator) => resumeList(dialog).getByRole('listitem');
-const resume = (row: Locator) => row.getByRole('button', { name: /(이어 풀기|resume)$/i });
+  dialog.getByRole('list', { name: /^(모의고사 목록|mock exams?)$/i });
+// Bank-run rows are the list items without the 모의고사 label.
+const resumeRows = (dialog: Locator) =>
+  resumeList(dialog)
+    .getByRole('listitem')
+    .filter({ hasNot: dialog.page().getByText('모의고사', { exact: true }) });
+// A run row has no button but its title, which resumes the run.
+const resume = (row: Locator) => row.getByRole('button').first();
 const rowMenu = (row: Locator) => row.getByRole('button', { name: /(메뉴|menu)$/i });
-const remove = (page: Page) => mockUi.menuAction(page, /^(지우기|remove)$/i);
+const remove = (page: Page) => mockUi.menuAction(page, /^(삭제|remove)$/i);
 const openListButton = (page: Page) =>
   main(page).getByRole('button', { name: /^(모의고사|mock exams?)$/i });
 
@@ -232,7 +237,7 @@ test(
 );
 
 test(
-  'UX12-RESUME-AC06 지우기 removes the row only',
+  'UX12-RESUME-AC06 삭제 removes the row only',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-resume-06');
@@ -314,7 +319,7 @@ test(
     const dialog = await openList(page, ws.id);
     await expect(mockUi.count(dialog, 1)).toBeVisible();
     await expect(mockUi.row(dialog, '중간 점검')).toBeVisible();
-    await expect(resumeList(dialog)).toHaveCount(0);
+    await expect(resumeRows(dialog)).toHaveCount(0);
   },
 );
 
