@@ -620,6 +620,10 @@ def test_c03_an_older_prompt_version_stays_stored_and_the_question_can_be_made_a
     assert now["can_create"] is True
     assert now["can_regenerate"] is False
     assert guest.read(link["id"], cookie, url).status_code == 404
+    # A client still holding the old id reconnects: the row is gone from the stream as well.
+    res = owner.call("GET", f"/ai-explanations/{old['id']}/stream?view=detail")
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
     off = type(owner)(off_app, owner.user)
     disabled = state(off.call("GET", f"{base('question', q['id'])}?view=detail"), (200,))
     assert disabled["explanation"] is None
@@ -639,6 +643,25 @@ def test_c03_an_older_prompt_version_stays_stored_and_the_question_can_be_made_a
         (fresh["id"], PROMPT_VERSION, "succeeded", False),
     ]
     assert state(guest.read(link["id"], cookie, url), (200,))["body"] == fresh["body"]
+
+
+def test_c03_an_older_prompt_version_of_a_mock_question_is_gone_from_its_stream(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-c03m-owner")
+    book = Book(owner)
+    items = shuffle_exam(owner, book.ws, [book.mcq()["id"], book.mcq()["id"]])
+    item = items[0]
+    old = make(owner, item["id"], "mock", view="manage")
+    stream = f"/mock-ai-explanations/{old['id']}/stream?view=manage"
+    assert owner.call("GET", stream).status_code == 200
+    db(
+        "update public.mock_exam_question_ai_explanations set prompt_version = %s where id = %s",
+        ("question.ai_explain/v1", old["id"]),
+    )
+    res = owner.call("GET", stream)
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
 
 
 def test_c03_the_daily_limit_holds_under_concurrent_posts_across_questions(

@@ -861,6 +861,7 @@ def _poller(request: Request, kind: _Kind) -> StreamPoller:
     database: Database | None = request.app.state.database
     if database is None:
         raise HTTPException(status_code=503, detail="Database is not configured.")
+    settings: Settings = request.app.state.settings
 
     def poll(
         user_id: uuid.UUID, explanation_id: uuid.UUID, gate: _Gate, full: bool
@@ -868,7 +869,7 @@ def _poller(request: Request, kind: _Kind) -> StreamPoller:
         with database.read_sessionmaker() as session:
             repo = ExplanationRepository(session)
             try:
-                row = _readable(repo, user_id, kind, explanation_id, gate)
+                row = _readable(repo, settings, user_id, kind, explanation_id, gate)
             except (HTTPException, ProblemException):
                 return None
             body = _explanation_out(repo, row) if full and row.terminal else None
@@ -882,15 +883,23 @@ def _poller(request: Request, kind: _Kind) -> StreamPoller:
 
 def _readable(
     repo: ExplanationRepository,
+    settings: Settings,
     user_id: uuid.UUID,
     kind: _Kind,
     explanation_id: uuid.UUID,
     gate: _Gate,
 ) -> ExplanationRow:
     """The explanation if the gate opens *its* revision: a session submitted on another revision
-    of the question (or `view` on an older revision's explanation) is the unknown-id 404."""
+    of the question (or `view` on an older revision's explanation) is the unknown-id 404. So is a
+    row of another key (an older prompt version or model): every read by key has stopped showing
+    it, and an old id must not keep it readable (D-14)."""
     row = repo.get(kind.name, explanation_id)
-    if row is None:
+    model = settings.ai_explanation_model
+    if (
+        row is None
+        or row.prompt_version != PROMPT_VERSION
+        or (model is not None and row.model != model)
+    ):
         raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)
     access = _authorize(repo, user_id, kind, row.target_id, Action.READ)
     target = _target(repo, kind, row.target_id)
@@ -1029,8 +1038,10 @@ async def _stream(
 ) -> StreamingResponse:
     def check() -> None:
         database: Database = request.app.state.database
+        settings: Settings = request.app.state.settings
         with database.read_sessionmaker() as session:
-            _readable(ExplanationRepository(session), user_id, kind, explanation_id, gate)
+            repo = ExplanationRepository(session)
+            _readable(repo, settings, user_id, kind, explanation_id, gate)
 
     try:
         await run_in_threadpool(check)
