@@ -35,6 +35,8 @@
 //   원본 범위 풀이      `?practice=new&source=bank` → `?practice=<run>&i=<n>` (a 모의고사 만들기 without
 //                     variations, QVIEW-01): the modal range run (QuestionViewer sequence, rendered
 //                     by QuestionsOverview). Its steps replace the entry; positions push one.
+//   챕터 풀기          A Heatmap chapter's `풀기` (UX12-CHAPTERRUN, every member): a small dialog of two
+//                     options, kept out of the URL; `시작` pushes `?practice=<run>&i=1`.
 //   모의고사           `?panel=mock-exams[&mock=new|<id>]` (the primary `모의고사`, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
@@ -59,6 +61,7 @@ import {
   questionTypeLabels,
   Select,
   ShareIcon,
+  type HeatmapChapter,
   type QuestionType,
 } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -78,6 +81,10 @@ import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-pane
 import { ChapterManagementPanel } from '@/components/chapters/chapter-management-panel';
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
+import {
+  ChapterRunDialog,
+  type ChapterRunTarget,
+} from '@/components/questions/viewer/chapter-run-dialog';
 import { QuestionSearch } from '@/components/search/question-search';
 import searchStyles from '@/components/search/search-forms.module.css';
 import { useLiveQuery } from '@/components/search/use-live-query';
@@ -374,6 +381,31 @@ function WorkspaceHomeContent({
   }
   function closeRun() {
     closeTo(`${pathname}${keepMockView(withRunState(window.location.search, null))}`);
+  }
+  // A chapter's 풀기 (UX12-CHAPTERRUN): a small options dialog, then the same run panel.
+  const [chapterRun, setChapterRun] = useState<ChapterRunTarget | null>(null);
+  const chapterRunOpener = useRef<HTMLElement | null>(null);
+  function startChapterRun(runId: string) {
+    practiceReturnFocusRef.current = chapterRunOpener.current;
+    setChapterRun(null);
+    const state: RunUrlState = { step: 'solve', runId, position: 1 };
+    openPanelAt(`${pathname}${keepMockView(withRunState(window.location.search, state))}`);
+  }
+  function chapterRunButton(chapter: HeatmapChapter) {
+    if (chapter.questions.length === 0) return null;
+    return (
+      <Button
+        size="sm"
+        aria-label={`${chapter.title} 풀기`}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          chapterRunOpener.current = event.currentTarget;
+          setChapterRun({ id: chapter.id, title: chapter.title });
+        }}
+      >
+        풀기
+      </Button>
+    );
   }
 
   // --- 모의고사 (MOCK-01) ---------------------------------------------------------------------------
@@ -995,14 +1027,17 @@ function WorkspaceHomeContent({
           chapterActions={(chapter) =>
             chapter.id === NO_CHAPTER_KEY ? (
               // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-haspopup="dialog"
-                onClick={() => openNote(NO_CHAPTER_NOTE)}
-              >
-                내 하이라이트
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-haspopup="dialog"
+                  onClick={() => openNote(NO_CHAPTER_NOTE)}
+                >
+                  내 하이라이트
+                </Button>
+                {chapterRunButton(chapter)}
+              </>
             ) : (
               <>
                 {generating.has(chapter.id) ? <span>만드는 중</span> : null}
@@ -1015,6 +1050,7 @@ function WorkspaceHomeContent({
                 >
                   정리 노트
                 </Button>
+                {chapterRunButton(chapter)}
               </>
             )
           }
@@ -1023,6 +1059,13 @@ function WorkspaceHomeContent({
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
       <div ref={setHost} />
+      <ChapterRunDialog
+        workspaceId={workspace.id}
+        target={chapterRun}
+        container={host}
+        onClose={() => setChapterRun(null)}
+        onStarted={startChapterRun}
+      />
       {host ? (
         <>
           <FloatingSidePanel

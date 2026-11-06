@@ -696,6 +696,7 @@ const RUN_DATA: PracticeRun = {
   source: 'bank',
   mock_exam_id: null,
   random_order: false,
+  shuffle_options: false,
   seed: 1,
   total: 1,
   answered: 0,

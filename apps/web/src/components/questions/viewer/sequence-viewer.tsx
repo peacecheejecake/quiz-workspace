@@ -139,7 +139,12 @@ export interface RunClient {
   listRange(
     filters: RangeFilterState,
   ): Promise<RunActionResult<Pick<QuestionOverview, 'chapters' | 'items'>>>;
-  create(range: RunRange, randomOrder: boolean, key: string): Promise<RunActionResult<PracticeRun>>;
+  create(
+    range: RunRange,
+    randomOrder: boolean,
+    key: string,
+    shuffleOptions?: boolean,
+  ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
   openSession(
@@ -163,7 +168,8 @@ export function bankRunClient(workspaceId: string): RunClient {
   const api = createPracticeRunApi(workspaceId);
   return {
     listRange: (filters) => api.rangeQuestions(filters),
-    create: (range, randomOrder, key) => api.create(range, randomOrder, key),
+    create: (range, randomOrder, key, shuffleOptions) =>
+      api.create(range, randomOrder, key, null, shuffleOptions),
     getRun: (runId) => api.getRun(runId),
     getItem: (runId, position) => api.getItem(runId, position),
     openSession: (questionId, runId, position, key, epoch) =>
@@ -1430,7 +1436,7 @@ function useResultsStep({
     let failure: string | null = null;
     let started: string | null = null;
     try {
-      // The same questions (those still available) and the same order setting, as a new run.
+      // The same questions (those still available) and the same settings, as a new run.
       const all = [...items];
       while (all.length < data.total) {
         const page = await client.results(runId, all.length);
@@ -1439,8 +1445,9 @@ function useResultsStep({
         all.push(...page.data.items);
       }
       const range = restartRange(all);
-      const key = restartKey.keyFor(JSON.stringify([token, range, data.run.random_order]));
-      const created = await client.create(range, data.run.random_order, key);
+      const { random_order: random, shuffle_options: shuffle } = data.run;
+      const key = restartKey.keyFor(JSON.stringify([token, range, random, shuffle]));
+      const created = await client.create(range, random, key, shuffle);
       if (created.ok) {
         restartKey.succeeded(key);
         started = created.data.id;

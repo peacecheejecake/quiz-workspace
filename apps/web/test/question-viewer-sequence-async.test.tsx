@@ -58,6 +58,7 @@ function run(overrides: Partial<PracticeRun> = {}): PracticeRun {
     source: 'bank',
     mock_exam_id: null,
     random_order: false,
+    shuffle_options: false,
     seed: 1,
     total: 1,
     answered: 0,
@@ -390,6 +391,28 @@ describe('sequence viewer async edges (QVIEW-W review)', () => {
     await user.click(within(panel).getByRole('button', { name: '시작' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(3));
     expect(create.mock.calls[2]?.[2]).not.toBe(create.mock.calls[0]?.[2]);
+  });
+
+  it("UX12-CHAPTERRUN-AC07 처음부터 다시 keeps the run's order and option settings", async () => {
+    const user = userEvent.setup();
+    const create = vi.fn<RunClient['create']>(async () => ({
+      ok: true,
+      data: run({ id: NEW_RUN }),
+    }));
+    const c = client({
+      create,
+      finish: vi.fn(async () => ({
+        ok: true as const,
+        data: run({ random_order: true, shuffle_options: true }),
+      })),
+    });
+    render(viewer({ step: 'results', runId: RUN }, c));
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('list', { name: '문제별 결과' });
+    await user.click(within(panel).getByRole('button', { name: '처음부터 다시' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[1]).toBe(true);
+    expect(create.mock.calls[0]?.[3]).toBe(true);
   });
 
   it('a retried 처음부터 다시 after an ambiguous failure reuses the idempotency key', async () => {
