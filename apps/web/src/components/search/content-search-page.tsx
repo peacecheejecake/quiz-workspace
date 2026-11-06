@@ -12,12 +12,12 @@
 // filter as its 질문 범위; the panel is modal like this page's excerpt panel (HOMEDLG-01) and, like
 // it, outside the URL — the home's `?panel=ask` is where saved conversations are reopened.
 import { BackLink, PageHeader } from '@quiz/ui';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { AskSearchButton } from '@/components/ask/ask-search-button';
 import { useAskState } from '@/components/ask/use-ask-state';
+import { PendingLink } from '@/components/workspaces/pending-link';
 import { WorkspaceBreadcrumb, type WorkspaceCrumb } from '@/components/workspaces/sub-page-nav';
 import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import { workspaceHomePath } from '@/lib/workspaces/home';
@@ -117,7 +117,7 @@ export function ContentSearchPage({
           <BackLink
             href={workspaceHomePath(workspace.id)}
             label="Workspace 홈"
-            linkComponent={Link}
+            linkComponent={PendingLink}
             onClick={back}
           />
         }

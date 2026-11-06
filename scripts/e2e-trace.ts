@@ -142,6 +142,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-ASK.0': ['UX12-ASK'],
   // UX12 VIEW-1: sequence arrows, footer 다시 풀기·초기화, panel body back to the top.
   'UX12-VIEW.0': ['UX12-VIEW'],
+  // UX12 VIEW-6: pending mark on page links; DOC-02 keeps its 404 (no loading boundary).
+  'UX12-NAV.0': ['UX12-NAV'],
 };
 
 const LEADING_ID = new RegExp(
