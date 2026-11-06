@@ -7,7 +7,7 @@
 // (`text`, `mode`, `document`, `section`), written in place. The search on arrival comes from the
 // address bar, not the server render: Back from the PDF viewer restores this page under the URL
 // the search wrote. Without a query in the URL the box takes focus; with one, the results do the
-// talking. Beside the search button, `AI에게 묻기` (ASK-01) opens the AI 질문 panel on this page, over
+// talking. In the page header, `AI에게 묻기` (ASK-01) opens the AI 질문 panel on this page, over
 // the search, on a new conversation with the search text in its input (not sent) and the document
 // filter as its 질문 범위; the panel is modal like this page's excerpt panel (HOMEDLG-01) and, like
 // it, outside the URL — the home's `?panel=ask` is where saved conversations are reopened.
@@ -123,6 +123,11 @@ export function ContentSearchPage({
         }
         breadcrumb={<WorkspaceBreadcrumb workspace={workspace} trail={[{ label: '본문 검색' }]} />}
         title="본문 검색"
+        actions={
+          ask.state?.available && !workspace.archived ? (
+            <AskSearchButton onAsk={askFromSearch} />
+          ) : undefined
+        }
       />
       <ContentSearchForm
         inputRef={inputRef}
@@ -130,11 +135,6 @@ export function ContentSearchPage({
         onDraftChange={setDraft}
         onSearch={search}
         searchable={searchable}
-        extraAction={
-          ask.state?.available && !workspace.archived ? (
-            <AskSearchButton onAsk={askFromSearch} />
-          ) : null
-        }
         settings={
           <ContentSearchOptions
             search={content}

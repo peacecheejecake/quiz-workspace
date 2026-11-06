@@ -2,9 +2,9 @@
 
 // SEARCH-01-AC09 the 본문 search form (docs/screens/search.md, UX7-SEARCH) at the top of the 본문
 // search page (SEARCH-02, UX9): the box with an icon-only submit (the search API runs on Enter or
-// the button, not live) and the "본문 설정" popover. Without a published document the
-// submit is disabled and a visible status message, linked by aria-describedby, says why (a
-// disabled button gets neither hover nor focus, so a tooltip alone would not reach anyone).
+// the button, not live) and the "본문 설정" popover. Without a published document the box and
+// submit are disabled and a visible status message, linked by aria-describedby, says why (a
+// disabled control gets neither hover nor focus, so a tooltip alone would not reach anyone).
 import { IconButton, Input, SearchIcon } from '@quiz/ui';
 import { useId, type FormEvent, type ReactNode, type Ref } from 'react';
 import { MAX_QUERY_CHARS } from '@/lib/search/state';
@@ -23,8 +23,6 @@ export interface ContentSearchFormProps {
   /** The content-search options, shown in the "본문 설정" popover. */
   readonly settings: ReactNode;
   readonly inputRef?: Ref<HTMLInputElement>;
-  /** Extra action after the search button (the home's `AI에게 묻기`, ASK-01). */
-  readonly extraAction?: ReactNode;
 }
 
 export function ContentSearchForm({
@@ -34,7 +32,6 @@ export function ContentSearchForm({
   searchable,
   settings,
   inputRef,
-  extraAction,
 }: ContentSearchFormProps) {
   const messageId = useId();
   const message = searchable ? null : CONTENT_SEARCH_BLOCKED;
@@ -57,6 +54,8 @@ export function ContentSearchForm({
           maxLength={MAX_QUERY_CHARS}
           autoComplete="off"
           enterKeyHint="search"
+          disabled={!searchable}
+          aria-describedby={message ? messageId : undefined}
           fieldClassName={styles.field}
           onChange={(event) => onDraftChange(event.target.value)}
         />
@@ -68,7 +67,6 @@ export function ContentSearchForm({
           disabled={!searchable}
           aria-describedby={message ? messageId : undefined}
         />
-        {extraAction}
         <SearchSettings label="본문">{settings}</SearchSettings>
       </div>
       <p

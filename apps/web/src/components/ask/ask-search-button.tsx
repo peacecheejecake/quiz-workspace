@@ -4,14 +4,11 @@
 // conversation with the search text in its input (never sent) and the search's document/chapter
 // filter as its 질문 범위. The page renders it only while new questions are available.
 import { Button } from '@quiz/ui';
-import styles from './ask.module.css';
 
 export function AskSearchButton({ onAsk }: { readonly onAsk: () => void }) {
   return (
-    <span className={styles.searchAsk}>
-      <Button size="sm" variant="ghost" aria-label="본문 검색어로 AI에게 묻기" onClick={onAsk}>
-        AI에게 묻기
-      </Button>
-    </span>
+    <Button size="sm" variant="ghost" aria-label="본문 검색어로 AI에게 묻기" onClick={onAsk}>
+      AI에게 묻기
+    </Button>
   );
 }
