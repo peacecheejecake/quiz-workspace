@@ -112,6 +112,18 @@ it('UX10-UI-AC03 only the top overlay handles a swipe', () => {
   expect(screen.getByRole('dialog', { name: '바깥' })).toBeInTheDocument();
 });
 
+it('UX10-UI-AC04 a late resize event at the same viewport size keeps the gesture', () => {
+  render(<Example />);
+  const dialog = screen.getByRole('dialog');
+  pointer(screen.getByRole('heading', { name: '대화' }), 'pointerdown', {});
+  pointer(window, 'pointermove', { clientY: 40 });
+  fireEvent(window, new Event('resize'));
+  pointer(window, 'pointermove', { clientY: 80 });
+  expect(dialog.style.translate).toBe('0px 80px');
+  pointer(window, 'pointerup', { clientY: 80 });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
 it('UX10-UI-AC04 resize cancels an active pen gesture', () => {
   render(<Example />);
   const dialog = screen.getByRole('dialog');
@@ -131,7 +143,13 @@ it('UX10-UI-AC04 resize cancels an active pen gesture', () => {
   const header = dialog.querySelector('.header');
   if (!header) throw new Error('missing header');
   pointer(header, 'pointerdown', { pointerType: 'pen' });
-  fireEvent(window, new Event('resize'));
+  const width = window.innerWidth;
+  try {
+    Object.assign(window, { innerWidth: width + 100 });
+    fireEvent(window, new Event('resize'));
+  } finally {
+    Object.assign(window, { innerWidth: width });
+  }
   pointer(window, 'pointerup', { pointerType: 'pen', clientY: 100 });
   expect(screen.getByRole('dialog')).toBeInTheDocument();
 });
