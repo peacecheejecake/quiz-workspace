@@ -1031,7 +1031,7 @@ function WorkspaceHomeContent({
             setQuestionsVersion((n) => n + 1);
           }}
           onStudyStateChanged={invalidateOverviewCache}
-          chapterActions={(chapter) =>
+          chapterActions={(chapter, { hasNote }) =>
             chapter.id === NO_CHAPTER_KEY ? (
               // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
               <>
@@ -1048,15 +1048,17 @@ function WorkspaceHomeContent({
             ) : (
               <>
                 {generating.has(chapter.id) ? <span>만드는 중</span> : null}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`${chapter.title} 정리 노트`}
-                  aria-haspopup="dialog"
-                  onClick={() => openNote(chapter.id)}
-                >
-                  정리 노트
-                </Button>
+                {hasNote ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${chapter.title} 정리 노트`}
+                    aria-haspopup="dialog"
+                    onClick={() => openNote(chapter.id)}
+                  >
+                    정리 노트
+                  </Button>
+                ) : null}
                 {chapterRunButton(chapter)}
               </>
             )

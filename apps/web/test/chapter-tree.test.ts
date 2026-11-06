@@ -8,11 +8,12 @@ import {
   dropMove,
   MAX_LEVEL,
   rowMove,
+  treeGroups,
   treePickerNodes,
   type ChapterTree,
   type TreeChapter,
 } from '../src/lib/chapters/tree';
-import { outlineChoiceNodes } from '../src/lib/questions/chapter-picker';
+import { outlineChoiceNodes, WORKSPACE_CHAPTERS } from '../src/lib/questions/chapter-picker';
 
 function chapter(id: string, parent: string | null, sort: number, level = 1): TreeChapter {
   return {
@@ -114,6 +115,7 @@ const CHAPTER_TREE: ChapterTree = {
     { document_id: 'd1', title: '교재 1', revision_id: 'r1', version: 3, chapters: TREE },
     { document_id: 'd2', title: '교재 2', revision_id: 'r2', version: 1, chapters: [] },
   ],
+  workspace: { title: 'Workspace 챕터', version: 0, chapters: [] },
 };
 
 describe('treePickerNodes', () => {
@@ -206,6 +208,51 @@ describe('outlineChoiceNodes', () => {
     ).toEqual([
       { value: 't', label: '1장', level: 1 },
       { value: 'c1', label: '1.1', level: 2 },
+    ]);
+  });
+});
+
+describe('Workspace chapters (UX12-CHAPTERADD)', () => {
+  const workspace = { title: 'Workspace 챕터', version: 4, chapters: [chapter('w', null, 0)] };
+
+  it('is one more group when it has chapters', () => {
+    const groups = treeGroups({ ...CHAPTER_TREE, workspace });
+    expect(groups.map((d) => d.title)).toEqual(['교재 1', '교재 2', 'Workspace 챕터']);
+    expect(groups[2]?.document_id).toBe(WORKSPACE_CHAPTERS);
+    expect(groups[2]?.version).toBe(4);
+  });
+
+  it('stays away while a book offers a place and it is empty', () => {
+    expect(treeGroups(CHAPTER_TREE).map((d) => d.title)).toEqual(['교재 1', '교재 2']);
+  });
+
+  it('is the place to add chapters without a book', () => {
+    const groups = treeGroups({ documents: [], workspace: { ...workspace, chapters: [] } });
+    expect(groups.map((d) => d.title)).toEqual(['Workspace 챕터']);
+  });
+
+  it('is offered to the question pickers', () => {
+    const nodes = treePickerNodes({ ...CHAPTER_TREE, workspace });
+    expect(nodes.at(-1)).toMatchObject({ value: 'w', triggerLabel: 'w (Workspace 챕터)' });
+  });
+
+  it('sends writes to the workspace routes', async () => {
+    const seen: { url: string; body: unknown }[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      seen.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response('{}');
+    }) as typeof fetch;
+    const api = createChapterApi('ws', fetchImpl);
+    await api.create(WORKSPACE_CHAPTERS, null, '장', 'k1');
+    await api.move(WORKSPACE_CHAPTERS, 4, [], 'k2');
+    await api.createNear('c1', '장', 'k3');
+    expect(seen).toEqual([
+      {
+        url: '/api/workspaces/ws/chapters',
+        body: { document_id: null, parent_id: null, title: '장' },
+      },
+      { url: '/api/workspaces/ws/chapters/tree', body: { expected_version: 4, moves: [] } },
+      { url: '/api/workspaces/ws/chapters', body: { title: '장', near_chapter_id: 'c1' } },
     ]);
   });
 });

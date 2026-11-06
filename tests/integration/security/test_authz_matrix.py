@@ -146,6 +146,7 @@ RULES: dict[str, Rule | str] = {
     "createChapter": EDIT,
     "updateChapter": EDIT,
     "moveChapters": EDIT,
+    "moveWorkspaceChapters": EDIT,
     "deleteChapter": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
@@ -321,6 +322,10 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "createChapter": {"document_id": ids["document_id"], "parent_id": None, "title": "S4"},
         "updateChapter": {"title": "S4"},
         "moveChapters": {
+            "expected_version": 0,
+            "moves": [{"chapter_id": ids["chapter_id"], "parent_id": None, "position": 0}],
+        },
+        "moveWorkspaceChapters": {
             "expected_version": 0,
             "moves": [{"chapter_id": ids["chapter_id"], "parent_id": None, "position": 0}],
         },

@@ -1,8 +1,8 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { ChapterPicker, type ChapterPickerNode } from '../src';
+import { ChapterPicker, type ChapterCreateResult, type ChapterPickerNode } from '../src';
 import { buildChapterTree, initialExpanded, visibleRows } from '../src/primitives/chapter-tree';
 import { axeViolations } from './axe';
 
@@ -281,4 +281,113 @@ describe('ChapterPicker', () => {
     expect(container.querySelectorAll('*').length).toBeLessThan(1000 * 12);
     expect(within(container).getAllByRole('combobox')[999]).toHaveTextContent('제299장');
   }, 60_000);
+});
+
+describe('새 챕터 (UX12-CHAPTERADD)', () => {
+  function CreatingHarness({
+    onCreate,
+  }: {
+    readonly onCreate: (title: string) => Promise<ChapterCreateResult>;
+  }) {
+    const [value, setValue] = useState('none');
+    const [nodes, setNodes] = useState<readonly ChapterPickerNode[]>(OUTLINE);
+    return (
+      <ChapterPicker
+        label="챕터"
+        leading={LEADING}
+        nodes={nodes}
+        value={value}
+        onValueChange={setValue}
+        onCreate={async (title) => {
+          const result = await onCreate(title);
+          if ('value' in result) {
+            setNodes((current) => [...current, { value: result.value, label: title, level: 1 }]);
+          }
+          return result;
+        }}
+      />
+    );
+  }
+
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(trigger());
+    return screen.findByRole('button', { name: '새 챕터' });
+  };
+
+  it('is absent without onCreate', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(trigger());
+    await row('챕터 없음');
+    expect(screen.queryByRole('button', { name: '새 챕터' })).toBeNull();
+  });
+
+  it('creates from the keyboard, picks the chapter, closes and returns focus', async () => {
+    const onCreate = vi.fn(async () => ({ value: 'new' }));
+    const user = userEvent.setup();
+    render(<CreatingHarness onCreate={onCreate} />);
+    (await open(user)).focus();
+    await user.keyboard('{Enter}');
+    const input = screen.getByRole('textbox', { name: '새 챕터 이름' });
+    expect(document.activeElement).toBe(input);
+    expect((screen.getByRole('button', { name: '추가' }) as HTMLButtonElement).disabled).toBe(true);
+    await user.keyboard('  시험 범위 1  {Enter}');
+    expect(onCreate).toHaveBeenCalledWith('시험 범위 1');
+    await vi.waitFor(() => expect(screen.queryByRole('tree')).toBeNull());
+    expect(trigger().textContent).toContain('시험 범위 1');
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger()));
+  });
+
+  it('Escape closes the form only, focus back on 새 챕터', async () => {
+    const user = userEvent.setup();
+    render(<CreatingHarness onCreate={vi.fn()} />);
+    await user.click(await open(user));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: '새 챕터 이름' })).toBeNull();
+    expect(screen.getByRole('tree')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '새 챕터' }));
+    await user.keyboard('{Escape}');
+    await vi.waitFor(() => expect(screen.queryByRole('tree')).toBeNull());
+  });
+
+  it('starts from the filter text, also when nothing matches', async () => {
+    const user = userEvent.setup();
+    render(<CreatingHarness onCreate={vi.fn()} />);
+    const add = await open(user);
+    await user.type(screen.getByRole('searchbox', { name: '챕터 찾기' }), '없는 말');
+    expect(screen.getByRole('status').textContent).toContain('찾는 챕터가 없습니다');
+    await user.click(add);
+    expect((screen.getByRole('textbox', { name: '새 챕터 이름' }) as HTMLInputElement).value).toBe(
+      '없는 말',
+    );
+  });
+
+  it('keeps the name and shows the failure in an alert', async () => {
+    const onCreate = vi
+      .fn<(title: string) => Promise<ChapterCreateResult>>()
+      .mockResolvedValueOnce({ error: '챕터를 저장하지 못했습니다.' })
+      .mockResolvedValueOnce({ value: 'new' });
+    const user = userEvent.setup();
+    render(<CreatingHarness onCreate={onCreate} />);
+    await user.click(await open(user));
+    await user.keyboard('범위');
+    await user.click(screen.getByRole('button', { name: '추가' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('저장하지 못했습니다');
+    expect((screen.getByRole('textbox', { name: '새 챕터 이름' }) as HTMLInputElement).value).toBe(
+      '범위',
+    );
+    await user.click(screen.getByRole('button', { name: '추가' }));
+    await vi.waitFor(() => expect(trigger().textContent).toContain('범위'));
+  });
+
+  it('does not submit in the middle of a Hangul composition', async () => {
+    const onCreate = vi.fn(async () => ({ value: 'new' }));
+    const user = userEvent.setup();
+    render(<CreatingHarness onCreate={onCreate} />);
+    await user.click(await open(user));
+    const input = screen.getByRole('textbox', { name: '새 챕터 이름' });
+    await user.keyboard('범');
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    expect(onCreate).not.toHaveBeenCalled();
+  });
 });

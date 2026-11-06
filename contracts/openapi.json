@@ -702,9 +702,17 @@
       "BookChapterOption": {
         "properties": {
           "document_id": {
-            "format": "uuid",
-            "title": "Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: a Workspace chapter.",
+            "title": "Document Id"
           },
           "document_title": {
             "title": "Document Title",
@@ -858,9 +866,30 @@
         "additionalProperties": false,
         "properties": {
           "document_id": {
-            "format": "uuid",
-            "title": "Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = a Workspace chapter.",
+            "title": "Document Id"
+          },
+          "near_chapter_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The chapter chosen when a dropdown creates one: the new chapter goes to that live book, otherwise it is a Workspace chapter. Not with `document_id` or `parent_id`.",
+            "title": "Near Chapter Id"
           },
           "parent_id": {
             "anyOf": [
@@ -883,7 +912,6 @@
           }
         },
         "required": [
-          "document_id",
           "title"
         ],
         "title": "ChapterCreateRequest",
@@ -1155,9 +1183,17 @@
       "ChapterRef": {
         "properties": {
           "document_id": {
-            "format": "uuid",
-            "title": "Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: a Workspace chapter.",
+            "title": "Document Id"
           },
           "id": {
             "format": "uuid",
@@ -1241,10 +1277,15 @@
             },
             "title": "Documents",
             "type": "array"
+          },
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceChapters",
+            "description": "The chapters without a document."
           }
         },
         "required": [
-          "documents"
+          "documents",
+          "workspace"
         ],
         "title": "ChapterTree",
         "type": "object"
@@ -1317,6 +1358,23 @@
           "chapter": {
             "$ref": "#/components/schemas/TreeChapter"
           },
+          "document_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = a Workspace chapter.",
+            "title": "Document Id"
+          },
+          "document_title": {
+            "title": "Document Title",
+            "type": "string"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1324,7 +1382,9 @@
         },
         "required": [
           "chapter",
-          "version"
+          "version",
+          "document_id",
+          "document_title"
         ],
         "title": "ChapterWrite",
         "type": "object"
@@ -2159,9 +2219,17 @@
       "DraftChapterRef": {
         "properties": {
           "document_id": {
-            "format": "uuid",
-            "title": "Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: a Workspace chapter.",
+            "title": "Document Id"
           },
           "document_title": {
             "title": "Document Title",
@@ -10456,9 +10524,17 @@
             "type": "array"
           },
           "document_id": {
-            "format": "uuid",
-            "title": "Document Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the Workspace chapters.",
+            "title": "Document Id"
           },
           "document_title": {
             "title": "Document Title",
@@ -14624,6 +14700,34 @@
           "next_cursor"
         ],
         "title": "WorkspaceAttemptPage",
+        "type": "object"
+      },
+      "WorkspaceChapters": {
+        "properties": {
+          "chapters": {
+            "description": "Outline order.",
+            "items": {
+              "$ref": "#/components/schemas/TreeChapter"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "description": "`expected_version` of the next batch move.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "title",
+          "version",
+          "chapters"
+        ],
+        "title": "WorkspaceChapters",
         "type": "object"
       },
       "WorkspaceCreate": {
@@ -28127,7 +28231,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/chapters": {
       "post": {
-        "description": "Add a chapter as the last child of `parent_id`, in the active revision. The book's text\ndoes not change: the chapter starts empty.",
+        "description": "Add a chapter as the last child of `parent_id`, in the active revision or among the\nWorkspace chapters. The book's text does not change: the chapter starts empty.",
         "operationId": "createChapter",
         "parameters": [
           {
@@ -28248,6 +28352,134 @@
           }
         ],
         "summary": "Create Chapter",
+        "tags": [
+          "chapters"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chapters/tree": {
+      "post": {
+        "description": "`moveChapters` for the Workspace chapters: a chapter of a document here is unknown.",
+        "operationId": "moveWorkspaceChapters",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterTreeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterTreeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Move Workspace Chapters",
         "tags": [
           "chapters"
         ]

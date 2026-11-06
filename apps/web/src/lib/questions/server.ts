@@ -4,6 +4,7 @@ import type { ApiClient } from '@quiz/api-client';
 import { redirect } from 'next/navigation';
 import { createServerApiClient, NotAuthenticatedError } from '@/lib/api/server';
 import { loginRedirectPath } from '@/lib/auth/routes';
+import { WORKSPACE_CHAPTERS } from './chapter-picker';
 import { classifyQuestionFailure, type QuestionFailure } from './problems';
 
 export type ApiOutcome<T> =
@@ -93,6 +94,27 @@ function outlineNodes(body: unknown): OutlineNode[] {
   return out;
 }
 
+/** The Workspace chapters (UX12-CHAPTERADD). The tree is editors' only: others have none here. */
+async function workspaceChapterOptions(
+  api: ApiClient,
+  workspaceId: string,
+): Promise<ChapterOption[]> {
+  try {
+    const { data } = await api.GET('/api/v1/workspaces/{workspace_id}/chapter-tree', {
+      params: { path: { workspace_id: workspaceId } },
+    });
+    return (data?.workspace.chapters ?? []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      level: c.level,
+      documentId: WORKSPACE_CHAPTERS,
+      documentTitle: data?.workspace.title ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Source documents (ready books) and the chapter picker: the outline nodes of each ready book's
  * current revision (the API only accepts chapters of a document's active revision). Failures
@@ -120,6 +142,7 @@ export async function loadChapterContext(
         paper: d.document_type === 'question_paper',
       }));
     const get = api.GET as unknown as UntypedGet;
+    const workspaceChapters = workspaceChapterOptions(api, workspaceId);
     const outlines = await Promise.all(
       documents.map(async (doc) => {
         try {
@@ -146,6 +169,7 @@ export async function loadChapterContext(
       documentId: doc.id,
       documentTitle: doc.title,
     }));
+    chapters.push(...(await workspaceChapters));
     // Source documents stay the books: a question's source is read from a book.
     return {
       chapters,

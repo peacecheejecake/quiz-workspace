@@ -3,7 +3,7 @@
 // Calls go to this app's own `/api/...` relay routes; FastAPI decides everything.
 import type { Schemas } from '@quiz/api-client';
 import type { ChapterPickerNode } from '@quiz/ui';
-import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
+import { chapterPickerNodes, WORKSPACE_CHAPTERS } from '@/lib/questions/chapter-picker';
 
 export type ChapterTree = Schemas['ChapterTree'];
 export type TreeDocument = Schemas['TreeDocument'];
@@ -116,13 +116,32 @@ export function canAddChild(chapters: readonly TreeChapter[], id: string): boole
   return depthOf(chapters, id) < MAX_LEVEL;
 }
 
+/**
+ * The panel's groups: each book, then the Workspace chapters as one more group when there are some
+ * or no book offers a place to add one (UX12-CHAPTERADD).
+ */
+export function treeGroups(tree: ChapterTree): TreeDocument[] {
+  const { workspace } = tree;
+  if (tree.documents.length > 0 && workspace.chapters.length === 0) return tree.documents;
+  return [
+    ...tree.documents,
+    {
+      document_id: WORKSPACE_CHAPTERS,
+      title: workspace.title,
+      revision_id: '',
+      version: workspace.version,
+      chapters: workspace.chapters,
+    },
+  ];
+}
+
 /** Every book's chapters as a `ChapterPicker` tree, without `exclude`. */
 export function treePickerNodes(
   tree: ChapterTree,
   exclude: string | null = null,
 ): ChapterPickerNode[] {
   return chapterPickerNodes(
-    tree.documents.flatMap((doc) =>
+    treeGroups(tree).flatMap((doc) =>
       doc.chapters
         .filter((c) => c.id !== exclude)
         .map((c) => ({
@@ -137,7 +156,7 @@ export function treePickerNodes(
 }
 
 export function documentOf(tree: ChapterTree, chapterId: string): TreeDocument | undefined {
-  return tree.documents.find((d) => d.chapters.some((c) => c.id === chapterId));
+  return treeGroups(tree).find((d) => d.chapters.some((c) => c.id === chapterId));
 }
 
 // --- browser API --------------------------------------------------------------------------------
@@ -180,6 +199,12 @@ export interface ChapterApi {
   create(
     documentId: string,
     parentId: string | null,
+    title: string,
+    key: string,
+  ): Promise<ChapterResult<ChapterWrite>>;
+  /** `새 챕터`: the server places it by the chapter chosen now. */
+  createNear(
+    nearChapterId: string | null,
     title: string,
     key: string,
   ): Promise<ChapterResult<ChapterWrite>>;
@@ -236,16 +261,31 @@ export function createChapterApi(workspaceId: string, fetchImpl: typeof fetch = 
       call(`/workspaces/${workspaceId}/chapters`, {
         method: 'POST',
         key,
-        body: { document_id: documentId, parent_id: parentId, title },
+        body: {
+          document_id: documentId === WORKSPACE_CHAPTERS ? null : documentId,
+          parent_id: parentId,
+          title,
+        },
+      }),
+    createNear: (nearChapterId, title, key) =>
+      call(`/workspaces/${workspaceId}/chapters`, {
+        method: 'POST',
+        key,
+        body: { title, near_chapter_id: nearChapterId },
       }),
     rename: (chapterId, title, key) =>
       call(`/chapters/${chapterId}`, { method: 'PATCH', key, body: { title } }),
     move: (documentId, expectedVersion, moves, key) =>
-      call(`/documents/${documentId}/chapters/tree`, {
-        method: 'POST',
-        key,
-        body: { expected_version: expectedVersion, moves },
-      }),
+      call(
+        documentId === WORKSPACE_CHAPTERS
+          ? `/workspaces/${workspaceId}/chapters/tree`
+          : `/documents/${documentId}/chapters/tree`,
+        {
+          method: 'POST',
+          key,
+          body: { expected_version: expectedVersion, moves },
+        },
+      ),
     remove: (chapterId, target, key) =>
       call(
         `/chapters/${chapterId}${target === null ? '' : `?move_questions_to=${encodeURIComponent(target)}`}`,

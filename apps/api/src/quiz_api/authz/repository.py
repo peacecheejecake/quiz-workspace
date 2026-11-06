@@ -119,11 +119,15 @@ RESOURCES: dict[ResourceType, ResourceBinding] = {
     ResourceType.SHARE_LINK: ResourceBinding(workspace_share_links),
     ResourceType.CHAPTER: ResourceBinding(
         chapters,
-        visible_when=exists().where(
-            documents.c.id == chapters.c.document_id,
-            documents.c.workspace_id == chapters.c.workspace_id,
-            documents.c.deleted_at.is_(None),
-            documents.c.active_revision_id == chapters.c.document_revision_id,
+        visible_when=or_(
+            # A Workspace chapter (UX12-CHAPTERADD): no document, only its workspace decides.
+            chapters.c.document_revision_id.is_(None),
+            exists().where(
+                documents.c.id == chapters.c.document_id,
+                documents.c.workspace_id == chapters.c.workspace_id,
+                documents.c.deleted_at.is_(None),
+                documents.c.active_revision_id == chapters.c.document_revision_id,
+            ),
         ),
     ),
     ResourceType.MOCK_EXAM: ResourceBinding(mock_exams, deleted_column="deleted_at"),

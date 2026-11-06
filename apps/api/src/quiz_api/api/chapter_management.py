@@ -5,6 +5,7 @@
     PATCH  /chapters/{id}                      rename
     POST   /documents/{id}/chapters/tree       batch move, `expected_version`
     DELETE /chapters/{id}?move_questions_to=   delete, moving its questions
+    POST   /workspaces/{id}/chapters/tree      batch move of the Workspace chapters
 
 Edits apply to the active revision at once (D-9), through the `chapter_edit_*` functions that are
 the only way past the published revision guard (20261106150000_chapter_edit.sql).
@@ -23,6 +24,10 @@ Common effects (C07): the whole revision's `level` and `sort_order` are recomput
 draft takes the new tree (a publish would otherwise drop `user-*` chapters and null their
 questions), the active revision's `content_hash` follows (it covers the section tree and the
 worker verifies it on load), `chapter_tree_version` goes up. Activity carries ids and counts only.
+
+Workspace chapters (UX12-CHAPTERADD, docs/questions.md §14.6) have no document or revision: the
+workspace's `workspace_chapter_trees` row stands in for the document row. Its lock comes before any
+document, and the only common effect left is its version.
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
@@ -89,7 +94,8 @@ from quiz_api.repositories.document_content import (
     DocumentRef,
     RevisionRow,
 )
-from quiz_api.repositories.questions import QuestionRepository
+from quiz_api.repositories.draft_chapters import WORKSPACE_CHAPTERS_TITLE
+from quiz_api.repositories.questions import QuestionRepository, lock_workspace_tree_shared
 
 router = APIRouter(tags=["chapters"], responses=problem_responses(503))
 
@@ -130,16 +136,36 @@ class TreeDocument(BaseModel):
     chapters: list[TreeChapter] = Field(description="Outline order.")
 
 
+class WorkspaceChapters(BaseModel):
+    title: str
+    version: int = Field(description="`expected_version` of the next batch move.")
+    chapters: list[TreeChapter] = Field(description="Outline order.")
+
+
 class ChapterTree(BaseModel):
     documents: list[TreeDocument]
+    workspace: WorkspaceChapters = Field(description="The chapters without a document.")
 
 
 class ChapterCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(default=None, description="null = a Workspace chapter.")
     parent_id: uuid.UUID | None = Field(default=None, description="null = a top-level chapter.")
     title: ChapterTitle
+    near_chapter_id: uuid.UUID | None = Field(
+        default=None,
+        description="The chapter chosen when a dropdown creates one: the new chapter goes to that "
+        "live book, otherwise it is a Workspace chapter. Not with `document_id` or `parent_id`.",
+    )
+
+    @model_validator(mode="after")
+    def _one_placement(self) -> ChapterCreateRequest:
+        if self.near_chapter_id is not None and (
+            self.document_id is not None or self.parent_id is not None
+        ):
+            raise ValueError("`near_chapter_id` decides the place alone.")
+        return self
 
 
 class ChapterUpdateRequest(BaseModel):
@@ -151,6 +177,8 @@ class ChapterUpdateRequest(BaseModel):
 class ChapterWrite(BaseModel):
     chapter: TreeChapter
     version: int
+    document_id: uuid.UUID | None = Field(description="null = a Workspace chapter.")
+    document_title: str
 
 
 class ChapterMove(BaseModel):
@@ -260,7 +288,7 @@ def _nodes(rows: Sequence[RowMapping]) -> list[TreeNode]:
 
 def _out(
     row: RowMapping,
-    document_id: uuid.UUID,
+    document_id: uuid.UUID | None,
     counts: Mapping[uuid.UUID, int],
     attached: Mapping[uuid.UUID, int],
     noted: set[tuple[uuid.UUID, str]],
@@ -352,6 +380,42 @@ def _finish(
     return edit.finish(workspace_id, document.id, loaded.content_hash)
 
 
+def _workspace_chapter(
+    edit: ChapterEditRepository, workspace_id: uuid.UUID, chapter_id: uuid.UUID
+) -> ChapterRef:
+    chapter = edit.chapter(chapter_id)
+    if (
+        chapter is None
+        or chapter.workspace_id != workspace_id
+        or chapter.document_revision_id is not None
+    ):
+        raise _not_found()
+    return chapter
+
+
+def _placement(
+    edit: ChapterEditRepository, workspace_id: uuid.UUID, body: ChapterCreateRequest
+) -> uuid.UUID | None:
+    """The document of a new chapter; None is a Workspace chapter."""
+    if body.near_chapter_id is None:
+        return body.document_id
+    near = edit.chapter(body.near_chapter_id)
+    if near is None or near.workspace_id != workspace_id:
+        raise _not_found()
+    if near.document_id is None:
+        return None
+    found = edit.editable_document(near.document_id)
+    return near.document_id if found is not None and found.revision_id is not None else None
+
+
+def _workspace_row(
+    edit: ChapterEditRepository,
+    workspace_id: uuid.UUID,
+    chapter_id: uuid.UUID,
+) -> RowMapping:
+    return next(r for r in edit.workspace_tree(workspace_id) if r["id"] == chapter_id)
+
+
 def _idempotent(
     idempotency: IdempotencyStoreDep,
     edit: ChapterEditRepository,
@@ -399,6 +463,13 @@ def get_chapter_tree(access: ReadTree, edit: EditRepo) -> ChapterTree:
     attached = edit.attached_question_counts(workspace_id)
     noted = edit.noted_sections(workspace_id)
     return ChapterTree(
+        workspace=WorkspaceChapters(
+            title=WORKSPACE_CHAPTERS_TITLE,
+            version=edit.workspace_version(workspace_id),
+            chapters=[
+                _out(r, None, counts, attached, noted) for r in edit.workspace_tree(workspace_id)
+            ],
+        ),
         documents=[
             TreeDocument(
                 document_id=book.id,
@@ -410,7 +481,7 @@ def get_chapter_tree(access: ReadTree, edit: EditRepo) -> ChapterTree:
                 ],
             )
             for book in edit.books(workspace_id)
-        ]
+        ],
     )
 
 
@@ -430,12 +501,39 @@ def create_chapter(
     idempotency: IdempotencyStoreDep,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
-    """Add a chapter as the last child of `parent_id`, in the active revision. The book's text
-    does not change: the chapter starts empty."""
+    """Add a chapter as the last child of `parent_id`, in the active revision or among the
+    Workspace chapters. The book's text does not change: the chapter starts empty."""
     workspace_id, actor_id = access.workspace_id, access.user_id
 
+    def create_in_workspace() -> ChapterWrite:
+        edit.lock_workspace_tree(workspace_id)
+        if body.parent_id is not None:
+            _workspace_chapter(edit, workspace_id, body.parent_id)
+        chapter_id = uuid.uuid4()
+        children = children_of(_nodes(edit.workspace_tree(workspace_id)))
+        try:
+            nodes = flatten(append_child(children, chapter_id, body.parent_id))
+        except ChapterTreeError as exc:
+            raise _tree_invalid(exc) from None
+        edit.create_workspace_chapter(workspace_id, chapter_id, body.parent_id, body.title)
+        edit.write_workspace_tree(workspace_id, nodes)
+        version = edit.finish_workspace(workspace_id)
+        edit.record_workspace_activity(
+            workspace_id, actor_id, "workspace.chapter_created", {"chapter_id": str(chapter_id)}
+        )
+        row = _workspace_row(edit, workspace_id, chapter_id)
+        return ChapterWrite(
+            chapter=_out(row, None, {}, {}, set()),
+            version=version,
+            document_id=None,
+            document_title=WORKSPACE_CHAPTERS_TITLE,
+        )
+
     def work() -> ChapterWrite:
-        editing = _begin(edit, content, workspace_id, body.document_id)
+        document_id = _placement(edit, workspace_id, body)
+        if document_id is None:
+            return create_in_workspace()
+        editing = _begin(edit, content, workspace_id, document_id)
         if body.parent_id is not None:
             _active_chapter(edit, editing, body.parent_id)
         chapter_id = uuid.uuid4()
@@ -444,7 +542,7 @@ def create_chapter(
             nodes = flatten(append_child(children, chapter_id, body.parent_id))
         except ChapterTreeError as exc:
             raise _tree_invalid(exc) from None
-        edit.create(workspace_id, body.document_id, chapter_id, body.parent_id, body.title)
+        edit.create(workspace_id, document_id, chapter_id, body.parent_id, body.title)
         version = _finish(edit, content, editing, nodes)
         content.record_activity(
             editing.document,
@@ -453,7 +551,12 @@ def create_chapter(
             {"chapter_id": str(chapter_id)},
         )
         row = next(r for r in edit.tree(editing.revision_id) if r["id"] == chapter_id)
-        return ChapterWrite(chapter=_out(row, body.document_id, {}, {}, set()), version=version)
+        return ChapterWrite(
+            chapter=_out(row, document_id, {}, {}, set()),
+            version=version,
+            document_id=document_id,
+            document_title=edit.book_title(document_id),
+        )
 
     return _idempotent(
         idempotency,
@@ -487,13 +590,37 @@ def update_chapter(
     workspace_id, actor_id = access.workspace.workspace_id, access.workspace.user_id
     chapter_id = access.resource_id
 
+    def rename_in_workspace() -> ChapterWrite:
+        edit.lock_workspace_tree(workspace_id)
+        _workspace_chapter(edit, workspace_id, chapter_id)
+        edit.rename_workspace_chapter(chapter_id, body.title)
+        version = edit.finish_workspace(workspace_id)
+        edit.record_workspace_activity(
+            workspace_id, actor_id, "workspace.chapter_renamed", {"chapter_id": str(chapter_id)}
+        )
+        row = _workspace_row(edit, workspace_id, chapter_id)
+        return ChapterWrite(
+            chapter=_out(
+                row,
+                None,
+                edit.question_counts(workspace_id),
+                edit.attached_question_counts(workspace_id),
+                set(),
+            ),
+            version=version,
+            document_id=None,
+            document_title=WORKSPACE_CHAPTERS_TITLE,
+        )
+
     def work() -> ChapterWrite:
         known = edit.chapter(chapter_id)
         if known is None:
             raise _not_found()
+        if known.document_id is None:
+            return rename_in_workspace()
         editing = _begin(edit, content, workspace_id, known.document_id)
         chapter = _active_chapter(edit, editing, chapter_id)
-        edit.rename(workspace_id, chapter.document_id, chapter_id, body.title)
+        edit.rename(workspace_id, known.document_id, chapter_id, body.title)
         version = _finish(edit, content, editing, None, chapter.section_key)
         content.record_activity(
             editing.document,
@@ -505,12 +632,14 @@ def update_chapter(
         return ChapterWrite(
             chapter=_out(
                 row,
-                chapter.document_id,
+                known.document_id,
                 edit.question_counts(workspace_id),
                 edit.attached_question_counts(workspace_id),
                 edit.noted_sections(workspace_id),
             ),
             version=version,
+            document_id=known.document_id,
+            document_title=edit.book_title(known.document_id),
         )
 
     return _idempotent(
@@ -593,6 +722,66 @@ def move_chapters(
     )
 
 
+@router.post(
+    "/workspaces/{workspace_id}/chapters/tree",
+    operation_id="moveWorkspaceChapters",
+    response_model=ChapterTreeResult,
+    responses=problem_responses(409),
+)
+def move_workspace_chapters(
+    access: EditWorkspace,
+    body: ChapterTreeUpdate,
+    edit: EditRepo,
+    questions: QuestionRepo,
+    idempotency: IdempotencyStoreDep,
+    idempotency_key: IdempotencyKey = None,
+) -> Any:
+    """`moveChapters` for the Workspace chapters: a chapter of a document here is unknown."""
+    workspace_id, actor_id = access.workspace_id, access.user_id
+
+    def work() -> ChapterTreeResult:
+        edit.lock_workspace_tree(workspace_id)
+        if edit.workspace_version(workspace_id) != body.expected_version:
+            raise _tree_changed()
+        children: Children = children_of(_nodes(edit.workspace_tree(workspace_id)))
+        try:
+            nodes = flatten(
+                apply_moves(
+                    children,
+                    [Move(m.chapter_id, m.parent_id, m.position) for m in body.moves],
+                )
+            )
+        except ChapterTreeError as exc:
+            raise _tree_invalid(exc) from None
+        except UnknownChapterError:
+            raise _not_found() from None
+        edit.write_workspace_tree(workspace_id, nodes)
+        version = edit.finish_workspace(workspace_id)
+        edit.record_workspace_activity(
+            workspace_id, actor_id, "workspace.chapters_moved", {"moves": len(body.moves)}
+        )
+        counts = edit.question_counts(workspace_id)
+        attached = edit.attached_question_counts(workspace_id)
+        return ChapterTreeResult(
+            version=version,
+            chapters=[
+                _out(r, None, counts, attached, set()) for r in edit.workspace_tree(workspace_id)
+            ],
+        )
+
+    return _idempotent(
+        idempotency,
+        edit,
+        questions,
+        actor_id=actor_id,
+        scope=f"POST /workspaces/{workspace_id}/chapters/tree",
+        key=idempotency_key,
+        body_hash=request_hash(body.model_dump(mode="json")),
+        success=status.HTTP_200_OK,
+        work=work,
+    )
+
+
 @router.delete(
     "/chapters/{chapter_id}",
     operation_id="deleteChapter",
@@ -653,19 +842,32 @@ def delete_chapter(
                 detail="A chapter cannot take its own questions.",
             )
         target_document: uuid.UUID | None = None
+        target_in_workspace = False
         if target_id is not None:
             target = edit.chapter(target_id)
             if target is None or target.workspace_id != workspace_id:
                 raise _not_found()
+            target_in_workspace = target.document_id is None
             if target.document_id != known.document_id:
                 target_document = target.document_id
-        # Document id order (CHMAN-01-C02): the edited one FOR UPDATE, the target's FOR SHARE.
-        if target_document is not None and target_document < known.document_id:
-            questions.lock_documents(workspace_id, document_ids=[target_document])
-        editing = _begin(edit, content, workspace_id, known.document_id)
-        if target_document is not None and target_document > known.document_id:
-            questions.lock_documents(workspace_id, document_ids=[target_document])
-        _active_chapter(edit, editing, chapter_id)
+        editing: _Editing | None = None
+        heir: uuid.UUID | None = None
+        if known.document_id is None:
+            # The tree row, then the target's document (docs/questions.md §14.6).
+            edit.lock_workspace_tree(workspace_id)
+            heir = _workspace_chapter(edit, workspace_id, chapter_id).parent_id
+            if target_document is not None:
+                questions.lock_documents(workspace_id, document_ids=[target_document])
+        else:
+            if target_in_workspace:
+                lock_workspace_tree_shared(questions.session, workspace_id)
+            # Document id order (CHMAN-01-C02): the edited one FOR UPDATE, the target's FOR SHARE.
+            if target_document is not None and target_document < known.document_id:
+                questions.lock_documents(workspace_id, document_ids=[target_document])
+            editing = _begin(edit, content, workspace_id, known.document_id)
+            if target_document is not None and target_document > known.document_id:
+                questions.lock_documents(workspace_id, document_ids=[target_document])
+            _active_chapter(edit, editing, chapter_id)
         if target_id is not None:
             found = redist.target_chapters(workspace_id, [target_id]).get(target_id)
             if found is None:
@@ -692,6 +894,26 @@ def delete_chapter(
             actor_id=actor_id,
         )
         edit.move_drafts(workspace_id, chapter_id, target_id)
+        if editing is None:
+            nodes = flatten(
+                remove_node(children_of(_nodes(edit.workspace_tree(workspace_id))), chapter_id)
+            )
+            edit.delete_workspace_chapter(chapter_id, heir)
+            edit.write_workspace_tree(workspace_id, nodes)
+            version = edit.finish_workspace(workspace_id)
+            edit.record_workspace_activity(
+                workspace_id,
+                actor_id,
+                "workspace.chapter_deleted",
+                {
+                    "chapter_id": str(chapter_id),
+                    "moved_questions": len(moving),
+                    "target_chapter_id": str(target_id) if target_id else None,
+                },
+            )
+            return ChapterDeleteResult(
+                workspace_id=workspace_id, moved_questions=len(moving), version=version
+            )
         nodes = flatten(
             remove_node(children_of(_nodes(edit.tree(editing.revision_id))), chapter_id)
         )

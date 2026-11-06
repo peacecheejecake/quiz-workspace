@@ -20,7 +20,7 @@ linked_tests: [CHMAN-01-AC01 … CHMAN-01-AC08]
 ## 목적과 정책
 
 - **즉시 적용 (D-9):** 챕터 편집은 draft·발행 없이 문서의 **활성 revision**에 바로 적용된다. 챕터 구조는 교정 대상인 본문이 아니라 문제를 묶는 분류다. 그래서 활성 revision의 불변 규칙에서 `chapter_edit` 경로 하나만 예외로 둔다(DOC-02-AC02). 본문 블록의 글자·순서는 이 화면에서 바뀌지 않는다.
-- **교재만:** 챕터는 교재(`document_type = book`, 교재·교재+문제)의 활성 revision에 있다. 문제지 문서와 아직 처리 중인 문서는 트리에 없다. 교재가 없는 Workspace에는 챕터를 추가할 곳이 없어 빈 상태 "챕터를 관리할 교재가 없습니다. 교재 PDF를 먼저 올려 주세요."만 보인다.
+- **교재와 Workspace 챕터:** 챕터는 교재(`document_type = book`, 교재·교재+문제)의 활성 revision에 있다. 문제지 문서와 아직 처리 중인 문서는 트리에 없다. 교재가 없는 Workspace에서는 어떤 문서에도 속하지 않는 **Workspace 챕터** 묶음이 빈 상태를 대신한다([UX12-CHAPTERADD](ux12-chapter-add.md), 사용자 결정 2026-11-06).
 - **안정 key:** 사용자가 추가한 장의 `section_key`는 `user-<uuid>`다. 기존 장은 이름을 바꾸거나 옮겨도 `section_key`를 유지하므로 정리 노트·요약(둘 다 `section_key`에 묶임)과 교정 발행의 문제 재연결이 그대로 이어진다.
 - **교정 draft와 복원:** 챕터 편집은 이미 있는 교정 draft에도 같은 구조로 반영되므로 draft를 발행해도 편집이 사라지지 않는다. 이전 revision을 복원한 draft도 지금 활성 revision의 트리를 이어받는다: `user-*` 장과 계층·순서가 유지되고 삭제한 장은 돌아오지 않는다. 다만 복원은 글자 교정을 되돌리는 동작이므로 파서가 만든 장의 제목은 복원본의 제목으로 돌아간다.
 - **발행 중:** 교정 draft의 발행 job이 대기·실행 중이면 편집은 409 `publish-in-progress`이고 화면은 "교정본을 발행하는 중입니다. 끝난 뒤 다시 시도해 주세요."를 보인다.
@@ -33,7 +33,7 @@ linked_tests: [CHMAN-01-AC01 … CHMAN-01-AC08]
 
 - **진입:** `문서 N` 메뉴의 `챕터 재분배` 다음에 `챕터 관리`(`requiresEdit: true`). 보기 권한·보관된 Workspace에서는 다른 편집 항목과 같이 비활성이고 이유 글자를 보인다. 그들이 `?panel=chapter-management`로 와도 panel은 열리지 않는다.
 - **panel:** 공통 `FloatingSidePanel` **modal**, 넓은 폭, 제목 "챕터 관리". 즉시 열리고 skeleton "챕터를 불러오는 중입니다.", 실패하면 role=alert와 `다시 시도`.
-- **트리:** 교재마다 문서 제목 묶음과 `챕터 추가` 버튼, 그 아래 장 목록. 행은 끌기 손잡이 · 제목 · 문제 수 · 정리 노트 표시 · `챕터 메뉴` 버튼이다. 들여쓰기는 `level`이다.
+- **트리:** 교재마다(Workspace 챕터가 있으면 그 묶음도) 문서 제목 묶음과 `챕터 추가` 버튼, 그 아래 장 목록. 행은 끌기 손잡이 · 제목 · 문제 수 · 정리 노트 표시 · `챕터 메뉴` 버튼이다. 들여쓰기는 `level`이다.
 - **행 메뉴:** `이름 바꾸기`, `하위 챕터 추가`, `위로`, `아래로`, `들여쓰기`, `내어쓰기`, `삭제`. 끌기와 같은 결과를 내는 키보드·터치 동등 경로이며, 할 수 없는 항목은 비활성이다(맨 위의 `위로`, 깊이 20의 `들여쓰기` 등).
 - **끌어서 옮기기:** 행을 끌어 다른 행 위에 놓으면 그 장의 하위 맨 끝으로 간다. 형제 사이 순서는 `위로`·`아래로`로 바꾼다. 자기·하위 행이나 깊이 20을 넘는 위치에 놓으면 아무 일도 없고 alert로 이유를 알린다. 끌기 손잡이는 pointer 전용이고 보조 기술에서는 숨긴다: 키보드·스크린 리더 경로는 행 메뉴다(WCAG 2.5.7).
 - **문제 놓기 (사용자 항목 "챕터 > drop"):** 트리 옆(좁은 폭에서는 트리 아래) `문제` 목록은 챕터 재분배와 같은 Heatmap 순서의 확정 문제다. 문제를 장 행에 끌어 놓으면 기존 `chapter-assignments`(source `manual`)로 옮긴다. 키보드·터치에서는 문제 행의 `챕터로 옮기기` `ChapterPicker`가 같은 일을 한다. 이 경로는 CHREDIST-01의 충돌 규칙을 그대로 따른다.
@@ -46,7 +46,7 @@ linked_tests: [CHMAN-01-AC01 … CHMAN-01-AC08]
 |---|---|---|---|
 | 메뉴 항목 | 활성 | 비활성 + 이유 | 비활성 + 이유 |
 | `?panel=chapter-management` | panel 열림 | 열리지 않음 | 열리지 않음 |
-| 교재 없음 | 빈 상태 | — | — |
+| 교재 없음 | `Workspace 챕터` 묶음 | — | — |
 | 다른 사람이 먼저 바꿈 | role=alert "그 사이 챕터가 바뀌어 저장하지 않았습니다. 목록을 다시 불러왔습니다." | — | — |
 | 발행 중 | role=alert 발행 안내, 트리는 그대로 | — | — |
 
@@ -62,7 +62,7 @@ Workspace FOR SHARE → 문서 FOR UPDATE → 문제 id 순 FOR UPDATE. 삭제 �
 
 ### CHMAN-01-C03 조회
 
-`GET /workspaces/{id}/chapter-tree` → `{documents: [{document_id, title, revision_id, version, chapters: [{id, parent_id, section_key, title, level, sort_order, page, question_count, attached_question_count, has_note, user_created}]}]}`. 살아 있는 교재의 활성 revision만, outline 순서. `question_count`는 그 장의 살아 있는 `CONFIRMED` 문제 수(하위 장 제외), `attached_question_count`는 초안·보관·삭제 표시까지 그 장을 가리키는 모든 문제 수로 0보다 크면 삭제에 대상이 필요하다, `has_note`는 살아 있는 정리 노트 존재 여부, `version`은 `documents.chapter_tree_version`이다. 본문·정답·해설은 없다.
+`GET /workspaces/{id}/chapter-tree` → `{documents: [{document_id, title, revision_id, version, chapters: [{id, parent_id, section_key, title, level, sort_order, page, question_count, attached_question_count, has_note, user_created}]}], workspace}`(`workspace`는 UX12-CHAPTERADD-C02). 살아 있는 교재의 활성 revision만, outline 순서. `question_count`는 그 장의 살아 있는 `CONFIRMED` 문제 수(하위 장 제외), `attached_question_count`는 초안·보관·삭제 표시까지 그 장을 가리키는 모든 문제 수로 0보다 크면 삭제에 대상이 필요하다, `has_note`는 살아 있는 정리 노트 존재 여부, `version`은 `documents.chapter_tree_version`이다. 본문·정답·해설은 없다.
 
 ### CHMAN-01-C04 생성·이름
 

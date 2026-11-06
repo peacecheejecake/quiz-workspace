@@ -2359,10 +2359,30 @@ export type paths = {
     put?: never;
     /**
      * Create Chapter
-     * @description Add a chapter as the last child of `parent_id`, in the active revision. The book's text
-     *     does not change: the chapter starts empty.
+     * @description Add a chapter as the last child of `parent_id`, in the active revision or among the
+     *     Workspace chapters. The book's text does not change: the chapter starts empty.
      */
     post: operations['createChapter'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/chapters/tree': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Move Workspace Chapters
+     * @description `moveChapters` for the Workspace chapters: a chapter of a document here is unknown.
+     */
+    post: operations['moveWorkspaceChapters'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3139,9 +3159,9 @@ export type components = {
     BookChapterOption: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
       /**
@@ -3211,9 +3231,14 @@ export type components = {
     ChapterCreateRequest: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null = a Workspace chapter.
        */
-      document_id: string;
+      document_id?: string | null;
+      /**
+       * Near Chapter Id
+       * @description The chapter chosen when a dropdown creates one: the new chapter goes to that live book, otherwise it is a Workspace chapter. Not with `document_id` or `parent_id`.
+       */
+      near_chapter_id?: string | null;
       /**
        * Parent Id
        * @description null = a top-level chapter.
@@ -3335,9 +3360,9 @@ export type components = {
     ChapterRef: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /**
        * Id
        * Format: uuid
@@ -3368,6 +3393,8 @@ export type components = {
     ChapterTree: {
       /** Documents */
       documents: components['schemas']['TreeDocument'][];
+      /** @description The chapters without a document. */
+      workspace: components['schemas']['WorkspaceChapters'];
     };
     /** ChapterTreeResult */
     ChapterTreeResult: {
@@ -3394,6 +3421,13 @@ export type components = {
     /** ChapterWrite */
     ChapterWrite: {
       chapter: components['schemas']['TreeChapter'];
+      /**
+       * Document Id
+       * @description null = a Workspace chapter.
+       */
+      document_id: string | null;
+      /** Document Title */
+      document_title: string;
       /** Version */
       version: number;
     };
@@ -3784,9 +3818,9 @@ export type components = {
     DraftChapterRef: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
       /**
@@ -7304,9 +7338,9 @@ export type components = {
       chapters: components['schemas']['RedistributionTargetChapter'][];
       /**
        * Document Id
-       * Format: uuid
+       * @description null: the Workspace chapters.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
     };
@@ -9140,6 +9174,21 @@ export type components = {
        * @description Pass as `cursor` for older attempts.
        */
       next_cursor: string | null;
+    };
+    /** WorkspaceChapters */
+    WorkspaceChapters: {
+      /**
+       * Chapters
+       * @description Outline order.
+       */
+      chapters: components['schemas']['TreeChapter'][];
+      /** Title */
+      title: string;
+      /**
+       * Version
+       * @description `expected_version` of the next batch move.
+       */
+      version: number;
     };
     /** WorkspaceCreate */
     WorkspaceCreate: {
@@ -18361,6 +18410,89 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ChapterWrite'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  moveWorkspaceChapters: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterTreeUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterTreeResult'];
         };
       };
       /** @description Unauthorized */

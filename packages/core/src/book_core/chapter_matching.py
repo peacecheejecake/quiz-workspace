@@ -77,7 +77,8 @@ def title_key(title: str) -> TitleKey:
 class BookChapter:
     id: uuid.UUID
     title: str
-    document_id: uuid.UUID
+    # None on a Workspace chapter (UX12-CHAPTERADD), which is never a matching candidate.
+    document_id: uuid.UUID | None
     document_title: str
     level: int
 

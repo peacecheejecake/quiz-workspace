@@ -183,6 +183,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SHARE.0': ['UX12-SHARE'],
   // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
   'UX12-PICKER.0': ['UX12-PICKER'],
+  // CHAPTER-8 (2026-11-06): 새 챕터 in the question's dropdown, Workspace chapters without a book.
+  'UX12-CHAPTERADD.0': ['UX12-CHAPTERADD'],
   // UX12 VIEW-7: <제목> passages in stems, each in its own box, with item lines.
   'UX12-PASSAGE.0': ['UX12-PASSAGE'],
   // UX12 EXTRACT-6: `다시 추출`, a new run on the same revision; registered questions untouched.

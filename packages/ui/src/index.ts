@@ -8,6 +8,7 @@ export { Button } from './primitives/Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './primitives/Button';
 export { ChapterPicker } from './primitives/ChapterPicker';
 export type {
+  ChapterCreateResult,
   ChapterPickerNode,
   ChapterPickerOption,
   ChapterPickerProps,

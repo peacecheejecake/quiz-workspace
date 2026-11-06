@@ -109,7 +109,11 @@ export interface QuestionsOverviewProps {
   /** `?question=` resolved outside the current filters by the server render (deep link). */
   readonly requested?: PlacedQuestion | null;
   /** Controls at the end of each chapter group header (CHNOTE-01 정리 노트). */
-  readonly chapterActions?: (chapter: HeatmapChapter) => ReactNode;
+  /** `hasNote`: the chapter can have a 정리 노트, so it has a document (UX12-CHAPTERADD). */
+  readonly chapterActions?: (
+    chapter: HeatmapChapter,
+    context: { readonly hasNote: boolean },
+  ) => ReactNode;
   /**
    * Where focus goes when the practice or run panel closes, when set by whoever opened it (a 정리
    * 노트 footnote: the note's disclosure; a chapter's 풀기). Cleared on close; otherwise focus
@@ -279,6 +283,10 @@ export function QuestionsOverview({
   const placed = useMemo(
     () => placeQuestions(overview.chapters, items),
     [overview.chapters, items],
+  );
+  const workspaceChapters = useMemo(
+    () => new Set(overview.chapters.filter((c) => c.id && !c.document_id).map((c) => c.id)),
+    [overview.chapters],
   );
   const chapters = useMemo(() => heatmapChapters(placed), [placed]);
   const itemsRef = useRef(items);
@@ -815,7 +823,11 @@ export function QuestionsOverview({
             chapters={chapters}
             selectedQuestionId={openPlaced?.item.question_id ?? null}
             headingLevel={3}
-            renderChapterActions={chapterActions}
+            renderChapterActions={
+              chapterActions &&
+              ((chapter) =>
+                chapterActions(chapter, { hasNote: !workspaceChapters.has(chapter.id) }))
+            }
             onOpen={(questionId) => {
               if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
               setQuestionParam(questionId);

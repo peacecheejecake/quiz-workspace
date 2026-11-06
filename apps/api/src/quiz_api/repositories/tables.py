@@ -471,8 +471,10 @@ chapters = Table(
     metadata,
     Column("id", Uuid, primary_key=True),
     Column("workspace_id", Uuid, nullable=False),
-    Column("document_id", Uuid, nullable=False),
-    Column("document_revision_id", Uuid, nullable=False),
+    # Both null on a Workspace chapter (UX12-CHAPTERADD, 20261106210000_workspace_chapters.sql).
+    Column("document_id", Uuid),
+    Column("document_revision_id", Uuid),
+    Column("workspace_level_of", Uuid),
     Column("parent_id", Uuid),
     Column("section_key", Text, nullable=False),
     Column("level", SmallInteger, nullable=False),
@@ -481,6 +483,13 @@ chapters = Table(
     Column("page", Integer),
     Column("heading_block_id", Text),
     _ts("created_at", nullable=False),
+)
+
+workspace_chapter_trees = Table(
+    "workspace_chapter_trees",
+    metadata,
+    Column("workspace_id", Uuid, primary_key=True),
+    Column("version", BigInteger, nullable=False),
 )
 
 content_blocks = Table(

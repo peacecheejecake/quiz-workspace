@@ -1,8 +1,18 @@
 'use client';
 
 import { mediaQueries } from '@quiz/design-tokens';
-import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
 import { cx } from '../internal/cx';
+import { Button } from './Button';
 import { FieldFrame, useFieldIds, type FieldOwnProps } from './Field';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from './icons';
 import { Input } from './Input';
@@ -19,6 +29,9 @@ import {
 
 export type { ChapterPickerNode, ChapterPickerOption } from './chapter-tree';
 
+/** What `onCreate` found: the new node's value (already in `nodes`) or the text of the failure. */
+export type ChapterCreateResult = { readonly value: string } | { readonly error: string };
+
 export interface ChapterPickerProps extends Omit<FieldOwnProps, 'label'> {
   /** Names the trigger, the popover and the tree. */
   label: string;
@@ -34,6 +47,11 @@ export interface ChapterPickerProps extends Omit<FieldOwnProps, 'label'> {
   /** Name of the filter box. */
   filterLabel?: string;
   emptyText?: string;
+  /**
+   * Shows `새 챕터` under the tree (UX12-CHAPTERADD). The new node must be in `nodes` by the time
+   * the promise resolves; the picker then chooses it and closes. It must not reject.
+   */
+  onCreate?: (title: string) => Promise<ChapterCreateResult>;
   /** Class for the field wrapper (label + control + messages). */
   fieldClassName?: string;
   id?: string;
@@ -46,6 +64,119 @@ const isSheet = () =>
 const TREE_ROW = '[role="treeitem"]';
 const NO_OPTIONS: readonly ChapterPickerOption[] = [];
 
+/** `새 챕터`: a button outside the tree that opens a name box in place. No `<form>`: the picker
+ * lives in other forms, and React carries a submit through the portal to them. */
+function NewChapter({
+  initial,
+  editingRef,
+  onCreate,
+  onCreated,
+}: {
+  readonly initial: string;
+  /** Tells the popover that Escape belongs to the name box. */
+  readonly editingRef: RefObject<boolean>;
+  readonly onCreate: (title: string) => Promise<ChapterCreateResult>;
+  readonly onCreated: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const openerRef = useRef<HTMLButtonElement>(null);
+  const backToOpener = useRef(false);
+  const trimmed = title.trim();
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+    } else if (backToOpener.current) {
+      backToOpener.current = false;
+      openerRef.current?.focus();
+    }
+  }, [editing]);
+
+  function show(next: boolean) {
+    editingRef.current = next;
+    setEditing(next);
+  }
+
+  function cancel() {
+    backToOpener.current = true;
+    setError(null);
+    show(false);
+  }
+
+  /** Radix has seen this Escape first and left the popover open (`onEscapeKeyDown`). */
+  function onEscape(event: KeyboardEvent) {
+    if (event.key === 'Escape') cancel();
+  }
+
+  async function submit() {
+    if (trimmed === '' || busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await onCreate(trimmed);
+    setBusy(false);
+    if ('value' in result) onCreated(result.value);
+    else setError(result.error);
+  }
+
+  if (!editing) {
+    return (
+      <Button
+        ref={openerRef}
+        className="create"
+        onClick={() => {
+          setTitle(initial);
+          show(true);
+        }}
+      >
+        새 챕터
+      </Button>
+    );
+  }
+  return (
+    <div className="createForm">
+      <Input
+        ref={inputRef}
+        label="새 챕터 이름"
+        autoComplete="off"
+        value={title}
+        maxLength={1000}
+        disabled={busy}
+        fieldClassName="createField"
+        onChange={(event) => setTitle(event.target.value)}
+        onKeyDown={(event) => {
+          onEscape(event);
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          void submit();
+        }}
+      />
+      <div className="createActions">
+        <Button
+          variant="primary"
+          loading={busy}
+          disabled={trimmed === ''}
+          onClick={() => void submit()}
+          onKeyDown={onEscape}
+        >
+          추가
+        </Button>
+        <Button disabled={busy} onClick={cancel} onKeyDown={onEscape}>
+          취소
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="createError">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** The tree, mounted only while the popover is open: a closed picker costs one button. */
 function ChapterTree({
   label,
@@ -54,6 +185,10 @@ function ChapterTree({
   value,
   filterLabel,
   emptyText,
+  creating,
+  editingRef,
+  onCreate,
+  onCreated,
   onChoose,
 }: {
   readonly label: string;
@@ -62,6 +197,10 @@ function ChapterTree({
   readonly value: string;
   readonly filterLabel: string;
   readonly emptyText: string;
+  readonly creating: boolean;
+  readonly editingRef: RefObject<boolean>;
+  readonly onCreate: ((title: string) => Promise<ChapterCreateResult>) | undefined;
+  readonly onCreated: (value: string) => void;
   readonly onChoose: (value: string) => void;
 }) {
   const rows = useMemo(() => buildChapterTree(nodes, leading), [nodes, leading]);
@@ -250,6 +389,14 @@ function ChapterTree({
           })}
         </ul>
       )}
+      {creating && onCreate ? (
+        <NewChapter
+          initial={query.trim()}
+          editingRef={editingRef}
+          onCreate={onCreate}
+          onCreated={onCreated}
+        />
+      ) : null}
     </>
   );
 }
@@ -274,11 +421,13 @@ export function ChapterPicker({
   disabled,
   filterLabel = '챕터 찾기',
   emptyText = '찾는 챕터가 없습니다',
+  onCreate,
   fieldClassName,
   id,
   'aria-describedby': ariaDescribedBy,
 }: ChapterPickerProps) {
   const [open, setOpen] = useState(false);
+  const editingRef = useRef(false);
   const ids = useFieldIds(id, description, error, ariaDescribedBy);
   const labelId = `${ids.id}-label`;
   const node = nodes.find((candidate) => candidate.value === value);
@@ -296,7 +445,14 @@ export function ChapterPicker({
     >
       {/* Modal like the `Select` it replaces: a tap outside closes the sheet without pressing what
           is under it. */}
-      <Popover modal open={open} onOpenChange={setOpen}>
+      <Popover
+        modal
+        open={open}
+        onOpenChange={(next) => {
+          editingRef.current = false;
+          setOpen(next);
+        }}
+      >
         <PopoverTrigger
           id={ids.id}
           role="combobox"
@@ -326,6 +482,9 @@ export function ChapterPicker({
           collisionPadding={16}
           closeLabel={`${label} 닫기`}
           className="qz-chapter-picker"
+          onEscapeKeyDown={(event) => {
+            if (editingRef.current) event.preventDefault();
+          }}
           onOpenAutoFocus={(event) => {
             if (!isSheet()) return;
             // The filter box would raise the on-screen keyboard over the sheet.
@@ -343,6 +502,14 @@ export function ChapterPicker({
             value={value}
             filterLabel={filterLabel}
             emptyText={emptyText}
+            creating={onCreate !== undefined}
+            editingRef={editingRef}
+            onCreate={onCreate}
+            onCreated={(created) => {
+              editingRef.current = false;
+              setOpen(false);
+              onValueChange?.(created);
+            }}
             onChoose={(next) => {
               setOpen(false);
               if (next !== value) onValueChange?.(next);

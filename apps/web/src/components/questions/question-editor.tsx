@@ -43,6 +43,7 @@ import {
   type QuestionFormValues,
   type SourceSnapshot,
 } from '@/lib/questions/form';
+import { useChapterCreator } from '@/lib/chapters/use-chapter-creator';
 import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
@@ -197,7 +198,12 @@ interface EditorFormProps {
 }
 
 function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: EditorFormProps) {
-  const chapterNodes = useMemo(() => chapterPickerNodes(chapters), [chapters]);
+  const [added, setAdded] = useState<readonly ChapterOption[]>([]);
+  const allChapters = useMemo(() => [...chapters, ...added], [chapters, added]);
+  const chapterNodes = useMemo(() => chapterPickerNodes(allChapters), [allChapters]);
+  const createChapter = useChapterCreator(workspaceId, (chapter) =>
+    setAdded((current) => [...current, chapter]),
+  );
   const editing = target.mode === 'edit' ? target.question : null;
   const [values, setValues] = useState<QuestionFormValues>(() =>
     editing ? formFromQuestion(editing) : emptyForm(),
@@ -290,7 +296,7 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
   }
 
   const chapterLeading = [{ value: NO_CHAPTER, label: '챕터 없음' }];
-  if (values.chapterId && !chapters.some((c) => c.id === values.chapterId)) {
+  if (values.chapterId && !allChapters.some((c) => c.id === values.chapterId)) {
     chapterLeading.push({ value: values.chapterId, label: currentChapter?.title ?? '현재 챕터' });
   }
   const documentOptions = documents.map((d) => ({ value: d.id, label: d.title }));
@@ -334,8 +340,9 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
           onValueChange={(value) =>
             update({ ...values, chapterId: value === NO_CHAPTER ? '' : value }, ['chapterId'])
           }
+          onCreate={(title) => createChapter(title, values.chapterId || null)}
           error={errors.chapterId}
-          {...(chapters.length === 0
+          {...(allChapters.length === 0
             ? { description: '목차가 준비된 문서가 없으면 챕터 없이 등록됩니다.' }
             : {})}
         />

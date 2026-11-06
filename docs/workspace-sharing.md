@@ -182,6 +182,7 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 | 하이라이트·`내 하이라이트` ([HILITE-01](screens/highlights.md)) | 자기 것만(다른 구성원 것은 보이지 않음) | ❌ — 공유 API 응답에 하이라이트 필드 없음, 선택 메뉴 없음. 예외: `include_owner_records`를 켠 링크는 Owner의 하이라이트만 `/owner-highlights`로 읽기(§12) | ❌ — `user_highlights`를 복제하지 않음(개인 기록, `question_user_states`와 같은 범위) |
 | 챕터 재분배 ([CHREDIST-01](screens/chapter-redistribution.md)) | 편집 권한 | ❌ (공유 router에 없음, 404) | 사본의 문제는 `chapter_id`·`chapter_source`를 그대로(재매핑) 가짐, 이력 행(`question_chapter_changes`)은 복제하지 않음 |
 | 챕터 관리 ([CHMAN-01](screens/chapter-management.md)) | 편집 권한 | ❌ (공유 router에 없음, 404). 편집 결과는 공유 화면에서 읽기만 | 커밋 시점의 트리를 복사(`user-*` key 유지, `chapter_tree_version`은 새로 시작). 원본 문서를 FOR SHARE로 잠가 편집 도중의 트리를 복사하지 않음 |
+| Workspace 챕터 ([UX12-CHAPTERADD](screens/ux12-chapter-add.md)) | 편집 권한 | 공유 문제의 장 이름으로 읽기만. 공유 문서 공개 여부와 무관 | 트리 행을 FOR SHARE로 잠그고 커밋 시점의 트리 전체를 새 id로 복사(문제 없는 장 포함), version은 새로 시작 |
 | 정리 노트 검색·각주 미리보기 ([CHNOTE-02](screens/chapter-note-tools.md)) | ✅ | ✅ — 미리보기는 `GET /shared/{shareId}/questions/{questionId}/preview`(발문·보기만, 발행 범위 문제만) | 사본 노트에 같은 도구 |
 
 - 챕터를 옮겨도 공유 정리 노트의 출처 일치 판정(§8)은 바뀌지 않는다(인용 문제의 상태·revision이 그대로).
