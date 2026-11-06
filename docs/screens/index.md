@@ -12,6 +12,7 @@
 | UX12-MOCKNAV | 모의고사 진입·상세 메뉴·용어 | Workspace 홈 모의고사 · 모의고사 상세 | [ux12-mock-nav.md](ux12-mock-nav.md) |
 | UX12-CHAPTERRUN | 챕터별 풀기 | Workspace 홈 Heatmap | [ux12-chapter-run.md](ux12-chapter-run.md) |
 | UX12-RESUME | 모의고사 목록의 이어 풀기 | 모의고사 dialog | [ux12-run-resume.md](ux12-run-resume.md) |
+| UX12-MOCKRESUME | 저장된 모의고사 이어 풀기 | 모의고사 dialog | [ux12-mock-resume.md](ux12-mock-resume.md) |
 | UX12-MOCKFORM | 모의고사 만들기·설정 바꾸기 화면 | 모의고사 dialog | [ux12-mock-form.md](ux12-mock-form.md) |
 | UX12-MOCKFORM2 | 모의고사 만들기 단계 순서와 문구 | 모의고사 dialog | [ux12-mock-form-order.md](ux12-mock-form-order.md) |
 | UX12-MOCKSHUFFLE | 모의고사 보기 섞기 실행 시점 | 모의고사 dialog, 풀이 패널 | [ux12-mock-shuffle.md](ux12-mock-shuffle.md) |

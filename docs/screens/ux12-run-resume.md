@@ -16,7 +16,7 @@ linked_tests: [UX12-RESUME-AC01 … UX12-RESUME-AC09]
 
 ## 결정
 
-- **대상.** 호출자 본인의 `source=bank` 묶음 가운데 이 Workspace의 것만. 저장된 모의고사의 풀이(`source=mock`)는 그 모의고사 행이 있어서 보이지 않는다.
+- **대상.** 호출자 본인의 `source=bank` 묶음 가운데 이 Workspace의 것만. 저장된 모의고사의 풀이(`source=mock`)는 이 묶음이 아니라 그 모의고사 행의 `이어 풀기`로 보인다([UX12-MOCKRESUME](ux12-mock-resume.md)).
 - **끝난 풀이.** `결과 보기`로 `finished_at`이 정해졌거나 모든 위치가 끝나 이어 풀 위치가 없으면 목록에서 사라진다.
 - **이어 풀 위치.** 묶음 순서에서 가장 앞의, 문제가 살아 있고(`eligible_question`) 제출하지 않은 위치다. 그 위치의 session이 초기화로 무효가 됐으면 그 위치는 묶음 안에서 다시 열 수 없어 건너뛴다(QVIEW-01의 `초기화됨`). 그런 위치가 하나도 없으면 행도 없다. 그래서 문제가 모두 지워진 묶음은 오류 없이 보이지 않는다.
 - **행.** 이름, 진행 `3/10`(제출한 위치 수/묶음 위치 수, 풀이 패널의 분모와 같다), 마지막으로 만진 시각(그 묶음 session의 열기·제출·채점 중 가장 늦은 시각, 없으면 만든 시각), `이어 풀기`, 행 메뉴 `지우기`. 이름은 살아 있는 문제가 모두 한 챕터에 있으면 그 챕터 제목, 아니면 `원본 풀이`다. 발문·보기·정답은 응답에 없다.
@@ -33,7 +33,7 @@ linked_tests: [UX12-RESUME-AC01 … UX12-RESUME-AC09]
 | Method | Path | 내용 |
 |---|---|---|
 | GET | `/api/v1/workspaces/{id}/practice-runs/unfinished` | 구성원. 호출자의 끝나지 않은 bank 묶음 `{items: UnfinishedRun[]}`. 비구성원·삭제된 Workspace는 404 |
-| POST | `/api/v1/practice-runs/{id}/dismiss` | 묶음 주인. 목록에서 뺀다. 204, 다시 불러도 204. 남의 묶음·모르는 id·`source=mock`은 404 |
+| POST | `/api/v1/practice-runs/{id}/dismiss` | 묶음 주인. 목록에서 뺀다. 204, 다시 불러도 204. 남의 묶음·모르는 id는 404. `source=mock` 묶음도 받는다([UX12-MOCKRESUME](ux12-mock-resume.md)) |
 
 `UnfinishedRun`: `id`, `total`, `answered`, `next_position`, `chapter_title`, `created_at`, `last_touched_at`.
 
@@ -85,7 +85,7 @@ linked_tests: [UX12-RESUME-AC01 … UX12-RESUME-AC09]
 
 - **Given:** 저장된 모의고사의 풀이를 도중에 닫았다
 - **When:** 모의고사 목록을 연다
-- **Then:** `이어 풀기` 묶음에 그 풀이가 없고 모의고사 행은 그대로다.
+- **Then:** `이어 풀기` 묶음에 그 풀이가 없다. 그 풀이는 모의고사 행에 보인다([UX12-MOCKRESUME-AC01](ux12-mock-resume.md)).
 
 ### UX12-RESUME-AC09
 
