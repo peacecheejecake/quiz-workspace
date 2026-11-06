@@ -399,7 +399,7 @@ test(
     await expect(chrome).toHaveAttribute('data-hidden', 'true', IDLE_TIMEOUT);
     await page.getByRole('button', { name: SHOW_TOOLS }).focus();
     await expect(chrome).not.toHaveAttribute('data-hidden');
-    await viewerUi.expandOutline(page).focus();
+    await viewerUi.outlineToggle(page).focus();
     await expect(chrome).not.toHaveAttribute('data-hidden');
   },
 );

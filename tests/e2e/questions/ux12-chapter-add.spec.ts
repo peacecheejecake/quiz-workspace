@@ -138,7 +138,7 @@ test(
 
     const panel = await openPanel(page, ws.id);
     await expect(ui.row(ui.group(panel, WORKSPACE_GROUP), '문제 쪽 장')).toBeVisible();
-    const book = panel.locator('section').filter({ has: ui.row(panel, CH1) });
+    const book = panel.locator('section').filter({ hasText: CH1 });
     await expect(book.locator('[data-chapter-row]').last()).toContainText('교재 쪽 장');
     await expect(outlineNodeId(owner, bookId, '교재 쪽 장')).resolves.toBeTruthy();
   },
