@@ -381,6 +381,7 @@ class PracticeRunRepository:
                     and_(
                         practice_sessions.c.practice_run_id == practice_runs.c.id,
                         practice_sessions.c.run_position == item.c.ordinality,
+                        practice_sessions.c.superseded_at.is_(None),
                     ),
                 )
             )
@@ -440,7 +441,10 @@ class PracticeRunRepository:
                     questions, eligible_question(practice_sessions.c.question_id, run.workspace_id)
                 )
             )
-            .where(practice_sessions.c.practice_run_id == run.id)
+            .where(
+                practice_sessions.c.practice_run_id == run.id,
+                practice_sessions.c.superseded_at.is_(None),
+            )
             .cte("run_sessions")
         )
         reached = select(func.coalesce(func.max(sessions.c.position), 0)).scalar_subquery()
@@ -538,7 +542,10 @@ class PracticeRunRepository:
                 case((current_session(), latest.c.result), else_=None).label("result"),
             )
             .select_from(practice_sessions.outerjoin(latest, true()))
-            .where(practice_sessions.c.practice_run_id == run.id)
+            .where(
+                practice_sessions.c.practice_run_id == run.id,
+                practice_sessions.c.superseded_at.is_(None),
+            )
             .subquery("run_sessions")
         )
         live = eligible_question(page.c.question_id, run.workspace_id)

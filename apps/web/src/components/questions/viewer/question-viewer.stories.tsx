@@ -124,6 +124,8 @@ function client(overrides: Partial<RunClient> = {}): RunClient {
         practice_session_id: sessionId,
         result: grade,
       }),
+    reopenPosition: () => ok(null),
+    openRetrySession: () => ok(STORY_SESSION),
     finish: () => ok(run({ finished_at: '2026-11-02T00:10:00Z' })),
     results: () => ok({ total: RESULTS.length, offset: 0, limit: 200, items: RESULTS }),
     flags: () => Promise.resolve({ is_favorite: true, needs_retry: false }),

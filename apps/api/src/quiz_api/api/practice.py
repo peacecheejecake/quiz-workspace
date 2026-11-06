@@ -654,6 +654,7 @@ def start_practice_session(
             return replay(stored, body_hash)
     run_id, position = body.practice_run_id, body.run_position
     run_seed: int | None = None
+    draw_new_order = body.shuffle_options
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
         if run is None:
@@ -688,7 +689,10 @@ def start_practice_session(
             practice.commit()
             return resumed
         if run.shuffle_options:
-            run_seed = run_option_seed(run.seed, position)
+            if practice.run_position_reopened(run.id, position):
+                draw_new_order = True
+            else:
+                run_seed = run_option_seed(run.seed, position)
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -698,7 +702,7 @@ def start_practice_session(
         question,
         user.id,
         epoch,
-        shuffle=body.shuffle_options,
+        shuffle=draw_new_order,
         shuffle_seed=run_seed,
         run_id=run_id,
         position=position,

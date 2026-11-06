@@ -35,25 +35,6 @@ vi.mock('../src/lib/questions/practice-open-client', async () => {
     }),
   };
 });
-vi.mock('../src/components/questions/viewer/separate-retry', () => ({
-  SeparateRetry: ({
-    onGraded,
-    onClose,
-  }: {
-    onGraded: (id: string, result: 'correct' | 'incorrect') => void;
-    onClose: () => void;
-  }) => (
-    <div>
-      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'incorrect')}>
-        retry incorrect
-      </button>
-      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'correct')}>
-        retry correct
-      </button>
-      <button onClick={onClose}>close retry</button>
-    </div>
-  ),
-}));
 vi.mock('../src/lib/questions/actions', () => ({
   getQuestionAction: vi.fn(),
   getQuestionRevisionAction: vi.fn(),
@@ -813,51 +794,6 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(
       await within(screen.getByRole('dialog')).findByRole('button', { name: /^다시 풀기$/ }),
     ).not.toHaveAttribute('aria-disabled');
-  });
-
-  it('UX11-RETURN-AC01 updates bank retry-flag eligibility after a separate grade without changing run result', async () => {
-    const user = userEvent.setup();
-    const client = fakeClient({
-      getItem: vi.fn(async () => ({
-        ok: true as const,
-        data: item({
-          attempt: {
-            attempt_id: graded.attempt_id,
-            result: 'correct',
-            submitted_answer: { selected_option_ids: ['o1'], answer_text: null },
-            correct_option_ids: ['o1'],
-            accepted_answers: null,
-            explanation: REVISION.explanation,
-            rubric: null,
-          },
-          session_state: 'graded',
-        }),
-      })),
-    });
-    render(
-      <QuestionViewer
-        mode="sequence"
-        workspaceId={WS}
-        state={{ step: 'solve', runId: RUN, position: 1 }}
-        archived={false}
-        onNavigate={noop}
-        onClose={noop}
-        client={client}
-      />,
-    );
-    const panel = screen.getByRole('dialog');
-    expect(
-      await within(panel).findByRole('button', { name: '다시 풀기 표시' }),
-    ).toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
-    await user.click(screen.getByText('retry incorrect'));
-    await user.click(screen.getByText('close retry'));
-    expect(within(panel).queryByRole('button', { name: '다시 풀기 표시' })).toBeNull();
-    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
-    await user.click(screen.getByText('retry correct'));
-    await user.click(screen.getByText('close retry'));
-    expect(within(panel).getByRole('button', { name: '다시 풀기 표시' })).toBeInTheDocument();
-    expect(client.submit).not.toHaveBeenCalled();
   });
 
   it('sequence(bank): UX9-RETRY-OPT toggles flip before the response, never busy, failures roll back', async () => {

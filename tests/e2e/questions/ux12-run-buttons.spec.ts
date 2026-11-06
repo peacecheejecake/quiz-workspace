@@ -157,7 +157,7 @@ test(
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'ux12-runbar-again', 2);
-    const [first] = s.questions as [Question, Question];
+    const [first, second] = s.questions as [Question, Question];
     const run = await createPracticeRun(s.owner, s.workspaceId, BANK_RUN);
     await signInAs(page, s.owner.user);
     await page.goto(practiceRunPath(s.workspaceId, run.id, 1));
@@ -167,7 +167,7 @@ test(
     await expect(again).toHaveAttribute('aria-disabled', 'true');
     await expect(again).toHaveAccessibleDescription(REASON);
     await again.dispatchEvent('click');
-    await expect(page.getByRole('dialog', { name: '문제 다시 풀기' })).toHaveCount(0);
+    await expect(runUi.submit(panel)).toBeVisible();
 
     await runUi.option(panel, firstOption(first)).check();
     await runUi.submit(panel).click();
@@ -182,6 +182,7 @@ test(
     await expect(again).toBeVisible();
     await expect(again).not.toHaveAttribute('aria-disabled', 'true');
     await again.click();
-    await expect(page.getByRole('dialog', { name: '문제 다시 풀기' })).toBeVisible();
+    await expect(runUi.option(panel, firstOption(second))).toBeEnabled();
+    await expect(runUi.submit(panel)).toBeVisible();
   },
 );

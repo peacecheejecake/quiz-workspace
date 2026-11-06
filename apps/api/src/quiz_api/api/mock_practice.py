@@ -295,7 +295,8 @@ def start_mock_practice_session(
                 )
             repo.commit()
             return resumed
-        if target.shuffles_options:
+        # A reopened position draws a new order below (UX12-RETRYINPLACE).
+        if target.shuffles_options and not repo.run_position_reopened(run.id, position):
             run_seed = run_option_seed(run.seed, position)
     elif not target.shown:
         # Outside a run only what the mock exam lists now can be practised.

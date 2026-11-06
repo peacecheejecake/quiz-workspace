@@ -1443,6 +1443,55 @@ def test_ux12_mockshuffle_c04_a_session_outside_a_run_and_a_retry_draw_anew(
     assert redrawn != drawn
 
 
+def test_ux12_retryinplace_c03_a_mock_position_reopens_in_mock_tables_with_a_new_order(
+    seed: Any, db: Any
+) -> None:
+    from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
+
+    owner = seed.client("ux12-inplace-mock")
+    book = Book(owner)
+    book.sources(NORMAL)
+    made = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1))
+    [question] = questions(owner, made["id"], answers=True)
+    stored = option_ids(question)
+    run = start_mock_run(owner, book.ws, made["id"], 31)
+    path = f"/mock-exam-questions/{question['id']}/practice-sessions"
+    body = {"practice_run_id": run["id"], "run_position": 1}
+    seed_of = "select shuffle_seed from public.mock_exam_practice_sessions where id = %s"
+    attempts = (
+        "select count(*) from public.mock_exam_attempts where practice_session_id = any(%s::uuid[])"
+    )
+    bank_attempts = "select count(*) from public.question_attempts where workspace_id = %s"
+
+    first = owner.ok("POST", path, body, (201,))
+    [(drawn,)] = db(seed_of, (first["id"],))
+    assert drawn == run_option_seed(run["seed"], 1)
+    owner.ok(
+        "POST",
+        f"/mock-practice-sessions/{first['id']}/submit",
+        {"selected_option_ids": question["correct_option_ids"]},
+    )
+    [(bank_before,)] = db(bank_attempts, (book.ws,))
+    reopened = owner.call("POST", f"/practice-runs/{run['id']}/items/1/reopen", {})
+    assert reopened.status_code == 204
+    assert run_item(owner, run, 1)["attempt"] is None
+
+    second = owner.ok("POST", path, body, (201,))
+    [(redrawn,)] = db(seed_of, (second["id"],))
+    assert second["id"] != first["id"]
+    assert redrawn != drawn
+    assert second["displayed_option_ids"] == shuffled_option_ids(stored, redrawn)
+    owner.ok(
+        "POST",
+        f"/mock-practice-sessions/{second['id']}/submit",
+        {"selected_option_ids": question["correct_option_ids"]},
+    )
+    [(mock_count,)] = db(attempts, ([first["id"], second["id"]],))
+    assert mock_count == 2
+    assert db(bank_attempts, (book.ws,)) == [(bank_before,)]
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["answered"] == 1
+
+
 STEM_TABLE_GFM = "| 구분 | 구분 |\n| --- | --- |\n| 1 | 2 |"
 STEM_TABLE = {
     "rows": [["구분", "구분"], ["1", "2"]],

@@ -401,3 +401,10 @@ def test_ux12_resume_list_has_no_content_and_is_an_allowlist() -> None:
         "last_touched_at",
     }  # fmt: skip
     assert "/api/v1/practice-runs/{run_id}/dismiss" in spec["paths"]
+
+
+def test_ux12_retryinplace_reopen_answers_nothing() -> None:
+    spec = json.loads(render_openapi())
+    operation = spec["paths"]["/api/v1/practice-runs/{run_id}/items/{position}/reopen"]["post"]
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation

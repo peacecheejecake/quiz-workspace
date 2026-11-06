@@ -41,6 +41,8 @@ export const RUN_BFF_PATHS = {
     `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/retry-session`,
   results: (runId: string, offset: number) =>
     `/api/practice-runs/${encodeURIComponent(runId)}/results?offset=${offset}&limit=${RUN_RESULTS_PAGE}`,
+  reopen: (runId: string, position: number) =>
+    `/api/practice-runs/${encodeURIComponent(runId)}/items/${position}/reopen`,
   finish: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}/finish`,
   session: (questionId: string) =>
     `/api/questions/${encodeURIComponent(questionId)}/practice-sessions`,
@@ -78,6 +80,7 @@ export interface PracticeRunApi {
     key: string,
     expectedResetEpoch?: number | null,
   ): Promise<RunActionResult<PracticeSession>>;
+  reopenPosition(runId: string, position: number): Promise<RunActionResult<null>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
 }
@@ -107,6 +110,7 @@ export function createPracticeRunApi(
     } catch {
       return failed('unavailable');
     }
+    if (response.status === 204) return { ok: true, data: null as T };
     let body: unknown;
     try {
       body = await response.json();
@@ -180,6 +184,8 @@ export function createPracticeRunApi(
           key,
         }),
       ),
+    reopenPosition: (runId, position) =>
+      call<null>(RUN_BFF_PATHS.reopen(runId, position), { method: 'POST' }),
     finish: async (runId) =>
       own(await call<PracticeRun>(RUN_BFF_PATHS.finish(runId), { method: 'POST' })),
     results: (runId, offset) => call<RunResults>(RUN_BFF_PATHS.results(runId, offset)),

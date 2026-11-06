@@ -11,7 +11,7 @@ import { GroupedResults } from './grouped-results';
 //            takes focus on every move, a progress bar with "n문제 중 k번째" (also announced), the
 //            QuestionBody, `제출` → result + answers + explanation, `이전 문제`, `다음 문제` (also
 //            skips an open position), `결과 보기` last. A submitted position shows its answer and
-//            result read-only (one submission per position; `처음부터 다시` starts a new run).
+//            result read-only; `다시 풀기` turns it back to solving here (UX12-RETRYINPLACE).
 //            Opening a position opens its practice session, which records the view; nothing
 //            before a submission carries an answer (C03).
 //   results  "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w", the per-position results (a row reopens that
@@ -98,7 +98,6 @@ import {
   type RevealedAnswers,
 } from './question-body';
 import { AnotherTryButton, QuestionNav } from './question-footer';
-import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
 import {
   QuestionFigures,
@@ -164,6 +163,15 @@ export interface RunClient {
   ): Promise<RunActionResult<PracticeSession>>;
   submit(sessionId: string, answer: PracticeSubmission): Promise<StudyActionResult<SubmitResult>>;
   selfGrade(sessionId: string, grade: GradeResult): Promise<StudyActionResult<SelfGradeResult>>;
+  /** `다시 풀기` in an unfinished run: the position goes back to unanswered (UX12-RETRYINPLACE). */
+  reopenPosition(runId: string, position: number): Promise<RunActionResult<null>>;
+  /** `다시 풀기` in a finished run: a session outside the run, whose record stays. */
+  openRetrySession(
+    runId: string,
+    position: number,
+    key: string,
+    expectedResetEpoch?: number | null,
+  ): Promise<RunActionResult<PracticeSession>>;
   finish(runId: string): Promise<RunActionResult<PracticeRun>>;
   results(runId: string, offset: number): Promise<RunActionResult<RunResults>>;
   /** The caller's favorite / retry flags and last graded result of a bank question (null: unknown). */
@@ -184,6 +192,9 @@ export function bankRunClient(workspaceId: string): RunClient {
       api.openSession(questionId, runId, position, key, epoch),
     submit: (sessionId, answer) => submitPracticeAction(workspaceId, sessionId, answer),
     selfGrade: (sessionId, grade) => selfGradePracticeAction(workspaceId, sessionId, grade),
+    reopenPosition: (runId, position) => api.reopenPosition(runId, position),
+    openRetrySession: (runId, position, key, epoch) =>
+      api.openRetrySession(runId, position, key, epoch),
     finish: (runId) => api.finish(runId),
     results: (runId, offset) => api.results(runId, offset),
     flags: async (questionId) => {
@@ -402,6 +413,7 @@ export function SequenceViewer({
     onFlagsSaved,
     onFlagsFailed,
     onNavigate,
+    onRetried: () => titleRef.current?.focus({ preventScroll: true }),
   });
   const results = useResultsStep({
     runId: open && view?.step === 'results' ? view.runId : null,
@@ -700,7 +712,7 @@ function usePickerStep({
 interface WorkState {
   readonly workId: string | null;
   readonly answer: PracticeAnswer;
-  readonly busy: 'submit' | 'grade' | null;
+  readonly busy: 'submit' | 'grade' | 'retry' | null;
   readonly outcome: SubmitResult | null;
   readonly selfGrade: GradeResult | null;
   readonly error: string | null;
@@ -742,6 +754,7 @@ function useSolveStep({
   onFlagsSaved,
   onFlagsFailed,
   onNavigate,
+  onRetried,
 }: {
   readonly workspaceId: string;
   readonly view: Extract<RunUrlState, { step: 'solve' }> | null;
@@ -758,15 +771,15 @@ function useSolveStep({
   readonly onFlagsSaved: ((questionId: string, flags: StudyFlags) => void) | undefined;
   readonly onFlagsFailed: ((message: string) => void) | undefined;
   readonly onNavigate: (state: RunUrlState, how: 'push' | 'replace') => void;
+  /** `다시 풀기` turned the position back to solving: the pressed button is gone. */
+  readonly onRetried: () => void;
 }) {
   const active = open && view !== null;
   const runId = view?.runId ?? null;
   const position = view?.position ?? 1;
   const [runSeq, setRunSeq] = useState(0);
   const [itemSeq, setItemSeq] = useState(0);
-  const [retryTarget, setRetryTarget] = useState<{ key: string; questionId: string } | null>(null);
   const recordReturn = useOptionalPracticeReturn()?.recordActivity;
-  if (retryTarget && (!active || retryTarget.key !== `${runId}:${position}`)) setRetryTarget(null);
 
   // An edited / archived / deleted question on screen is read again.
   const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
@@ -787,6 +800,14 @@ function useSolveStep({
   const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
+  // `다시 풀기` in a finished run: solved here on a session outside the run, whose record stays. It
+  // is not kept anywhere else, so a reload or another position shows the record again.
+  const [localRetry, setLocalRetry] = useState<{
+    readonly itemKey: string;
+    readonly session: PracticeSession;
+  } | null>(null);
+  if (localRetry && localRetry.itemKey !== itemKey) setLocalRetry(null);
+  const shownAttempt = localRetry ? null : (item?.attempt ?? null);
   // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
   const sourcePreview = useQuestionSource(
     item?.question_id
@@ -841,7 +862,8 @@ function useSolveStep({
         item?.reset_epoch,
       ),
   );
-  const session = sessionLoad?.status === 'ready' ? sessionLoad.data : null;
+  const session =
+    localRetry?.session ?? (sessionLoad?.status === 'ready' ? sessionLoad.data : null);
   const sessionId = session?.id ?? null;
   const sessionQuestion = session?.question_id ?? null;
   const onViewedRef = useRef(onViewed);
@@ -1051,7 +1073,10 @@ function useSolveStep({
   const pendingSessionId =
     work.outcome?.result === 'pending' && work.selfGrade === null
       ? (session?.id ?? null)
-      : !work.outcome && item?.session_state === 'pending_grade' && work.selfGrade === null
+      : !work.outcome &&
+          !localRetry &&
+          item?.session_state === 'pending_grade' &&
+          work.selfGrade === null
         ? item.practice_session_id
         : null;
   async function selfGrade(grade: GradeResult) {
@@ -1076,7 +1101,44 @@ function useSolveStep({
     );
   }
 
-  useHoldAnswerGuard(active && !work.outcome && !item?.attempt && run?.finished_at == null);
+  useHoldAnswerGuard(
+    active &&
+      !work.outcome &&
+      (localRetry !== null || (!item?.attempt && run?.finished_at == null)),
+  );
+
+  async function tryAgain() {
+    if (!runId || !workId || !run || work.busy) return;
+    updateWork(workId, () => ({ busy: 'retry', error: null }));
+    const inRun = run.finished_at === null;
+    let message: string | null = null;
+    try {
+      if (inRun) {
+        const result = await client.reopenPosition(runId, position);
+        if (liveWork.current !== workId) return;
+        if (result.ok) {
+          setNewSubmissions((n) => n - 1);
+          setItemSeq((n) => n + 1);
+        } else message = result.message;
+      } else {
+        const result = await client.openRetrySession(
+          runId,
+          position,
+          newKey(),
+          item?.reset_epoch ?? null,
+        );
+        if (liveWork.current !== workId) return;
+        if (result.ok && itemKey) setLocalRetry({ itemKey, session: result.data });
+        else if (!result.ok) message = result.message;
+      }
+    } catch {
+      message = RUN_FAILURE_MESSAGES.unavailable;
+    }
+    if (message === null) onRetried();
+    else if (liveWork.current === workId) {
+      updateWork(workId, () => ({ busy: null, error: message }));
+    }
+  }
 
   if (!view) {
     return {
@@ -1105,11 +1167,12 @@ function useSolveStep({
     if (!holding) onNavigate({ step: 'results', runId: view.runId }, 'replace');
   };
 
-  const revealed: RevealedAnswers | null = work.outcome ?? item?.attempt ?? null;
+  const revealed: RevealedAnswers | null = work.outcome ?? shownAttempt;
   const answered = revealed !== null;
-  const finished = run?.finished_at != null;
+  const runFinished = run?.finished_at != null;
+  const finished = runFinished && !localRetry;
   const unavailable = item !== null && !item.available;
-  const answer = work.outcome || !item?.attempt ? work.answer : attemptAnswer(item);
+  const answer = work.outcome || !shownAttempt || !item ? work.answer : attemptAnswer(item);
   const shownQuestion: AnswerQuestion | null = session ?? (item ? itemQuestion(item) : null);
   const canAnswer = !answered && !finished && !unavailable;
 
@@ -1302,9 +1365,7 @@ function useSolveStep({
         <AnotherTryButton
           // A position skipped in a finished run can no longer be submitted: nothing to wait for.
           available={!holding && !pendingSessionId && (answered || finished)}
-          onTry={() =>
-            setRetryTarget({ key: `${runId}:${position}`, questionId: item.question_id ?? '' })
-          }
+          onTry={() => void tryAgain()}
         />
       ) : null}
       {last ? (
@@ -1362,23 +1423,7 @@ function useSolveStep({
         {/* Outside `content`: the header menu opens it in every state of the position. */}
         {/* A question PDF can hold the answers of positions still to solve: cropped until the
             run ends, not only until this position was submitted (UX12-PDFPREVIEW). */}
-        <QuestionSourceDialog source={sourcePreview} wholeDocument={finished} />
-        {retryTarget && retryTarget.key === `${runId}:${position}` && active ? (
-          <SeparateRetry
-            workspaceId={workspaceId}
-            questionId={retryTarget.questionId}
-            source={source}
-            runId={view.runId}
-            position={position}
-            resetEpoch={item?.reset_epoch ?? null}
-            onGraded={(qid, result) => {
-              if (result === 'pending') pendingHere(qid);
-              else gradedHere(qid, result);
-              onGraded?.(qid, result);
-            }}
-            onClose={() => setRetryTarget(null)}
-          />
-        ) : null}
+        <QuestionSourceDialog source={sourcePreview} wholeDocument={runFinished} />
       </>
     ),
     footer,

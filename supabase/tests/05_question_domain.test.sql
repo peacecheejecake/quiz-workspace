@@ -32,7 +32,9 @@ select columns_are('public', 'practice_sessions',
         -- QVIEW-B run link
         'practice_run_id', 'run_position',
         -- UX10-QVIEW reset boundary
-        'reset_epoch']);
+        'reset_epoch',
+        -- UX12-RETRYINPLACE
+        'superseded_at']);
 select columns_are('public', 'question_attempts',
   array['id', 'workspace_id', 'question_id', 'question_revision_id', 'practice_session_id',
         'user_id', 'displayed_option_ids', 'submitted_answer', 'result', 'grading_method',

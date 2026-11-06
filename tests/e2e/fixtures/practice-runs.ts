@@ -149,6 +149,7 @@ export interface RunSummary {
 }
 
 export interface PracticeRun {
+  readonly answered: number;
   readonly id: string;
   readonly workspace_id: string;
   readonly source: 'bank' | 'mock';
