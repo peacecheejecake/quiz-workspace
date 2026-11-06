@@ -4,7 +4,7 @@
 **Route:** `/workspaces/:workspaceId/search?text=:본문검색어&mode=&document=&section=` (Workspace 홈 header의 `본문 검색` 아이콘 버튼(`이력` 앞)으로 들어가는 하위 페이지; 홈의 `?text=…`와 이전 `/workspaces/:workspaceId/search?q=…`는 이 페이지로 redirect)
 **테스트:** `tests/e2e/search/search-page.spec.ts`
 **Phase:** UX9.0 (RED) → UX9-SEARCH-W
-**연계:** [SEARCH-01](search.md)(검색 규칙·결과·발췌 panel·문제지 제외·저하 — 그대로 이 페이지에 적용), [QOV-01](questions-overview.md)(header·하위 페이지 규칙 AC13), [DOC-02](documents-editor.md)(PDF에서 보기), [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
+**연계:** [UX12-SEARCHPAGE](ux12-search-page.md)(header의 `AI에게 묻기`), [SEARCH-01](search.md)(검색 규칙·결과·발췌 panel·문제지 제외·저하 — 그대로 이 페이지에 적용), [QOV-01](questions-overview.md)(header·하위 페이지 규칙 AC13), [DOC-02](documents-editor.md)(PDF에서 보기), [디자인 시스템](../design-system.md) §5, [E2E 규칙](../e2e-strategy.md)
 
 ```yaml
 id: SEARCH-02
@@ -57,4 +57,4 @@ linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 
 - **Given:** 발행된 교재가 없는(문제지만 발행된) Workspace, 그리고 다른 사용자의 Workspace id
 - **When:** 검색 페이지를 열고; 다른 사용자의 Workspace 검색 페이지 URL과 검색 API를 직접 부른다
-- **Then:** 검색 버튼이 비활성이고 이유 "검색할 본문이 없습니다. 문서를 먼저 등록하고 발행하세요."가 `aria-describedby`로 연결된 글자로 보인다(Enter도 검색하지 않음). 다른 사용자의 Workspace 검색 페이지는 알 수 없는 Workspace와 같은 404이고 API는 문서 내용을 주지 않는다.
+- **Then:** 입력란과 검색 버튼이 모두 비활성이고(UX12 HOME-3) 이유 "검색할 본문이 없습니다. 문서를 먼저 등록하고 발행하세요."가 둘의 `aria-describedby`로 연결된 글자로 보인다(입력·Enter로 검색할 수 없음). 다른 사용자의 Workspace 검색 페이지는 알 수 없는 Workspace와 같은 404이고 API는 문서 내용을 주지 않는다.

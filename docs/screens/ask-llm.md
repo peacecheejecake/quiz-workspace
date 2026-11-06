@@ -100,7 +100,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 - **진입 — 세 곳 모두 (사용자 결정 2026-11-01 "위 세 군데 모두"):** 셋 다 같은 `?panel=ask` panel을 연다. panel은 바로 열리고 데이터를 불러오는 동안 skeleton(QOV-01-AC09).
   - **header 버튼:** Workspace header 오른쪽 아이콘 묶음(`이력`·`공유하기`) 앞에 `AI 질문` 버튼(아이콘 + 글자 "AI 질문", 접근성 이름 "AI 질문", 모든 구성원; 보관된 Workspace·기능 꺼짐에서도 보임 — 지난 대화 읽기, 이유는 panel이 보임).
   - **`문제` 메뉴:** `AI 질문` 항목은 제거했다. 새 질문은 기능이 사용 가능할 때 header에서 연다.
-  - **본문 검색의 `AI에게 묻기`:** 검색어와 선택한 문서·장 범위를 새 대화에 채우며 자동 전송하지 않는다. 보관 또는 기능 꺼짐에서는 숨긴다.
+  - **본문 검색의 `AI에게 묻기`:** 본문 검색 페이지 header의 동작 자리에 있다(UX12 HOME-3, [UX12-SEARCHPAGE](ux12-search-page.md)). 검색어와 선택한 문서·장 범위를 새 대화에 채우며 자동 전송하지 않는다. 보관 또는 기능 꺼짐에서는 숨긴다.
 - **SEARCH-01과의 관계 (사용자 결정 2026-11-01):** 세 진입점(header 버튼·`문제` 메뉴·`AI에게 묻기`) 외에는 본문 검색과 별개다. 같은 검색 파이프라인을 쓰지만 검색창·결과 목록·URL은 바뀌지 않는다. 각주가 여는 "본문 발췌" panel은 SEARCH-01의 `DocumentExcerptPanel`을 그대로 쓴다.
 - **panel:** 공통 `FloatingSidePanel`, non-modal(design-system §5.1; 다른 홈 dialog와 함께 열리고 나중에 연 것이 위 — QOV-01-AC10, 뒤로가기 규칙 QOV-01-AC14; modal 층 위에서 열 때는 아래 "panel 쌓기·뒤로가기"). **UX9와 합친 뒤(ASK-INTEG 2026-11-03):** 모든 홈 dialog가 modal이 되었으므로(HOMEDLG-01, 사용자 결정 2026-11-02 D3 "홈 밖의 floating panel도 모두 modal") AI 질문 panel도 어디서 열든 modal이다 — 열린 동안 홈은 inert이고, 홈 `?panel=` dialog 중 늘 맨 위에 쌓인다(딥링크·새로 고침에서도 마지막). 아래의 "non-modal로 열면"·"다시 열 때 위로" 규칙은 홈에서 더는 생기지 않는다. 본문 검색 페이지(SEARCH-02)의 `AI에게 묻기`는 그 페이지 위에 같은 panel을 modal로 열고 URL에 남기지 않는다(그 페이지의 "본문 발췌" panel과 같음; 대화는 저장되어 홈 `?panel=ask` 목록에서 다시 연다). 모바일(<640px)은 full-height sheet(safe-area, 입력란은 아래 고정, 화면 키보드가 올라오면 입력란이 그 위에 남음). 데스크톱 폭은 §5.1 기본(500px).
   - header: 제목 "AI 질문", 부제(대화를 열었으면 대화 제목), `대화 목록` 버튼(목록 ↔ 대화 전환, 목록이면 숨김), `새 대화` 버튼, `질문 범위` 버튼(popover), 닫기.

@@ -130,10 +130,17 @@ describe('note view model', () => {
       canCreate: false,
     });
     expect(noteView(failed, false)).toMatchObject({ canRetry: false });
-    expect(noteView(state({ available: false }), true)).toMatchObject({
-      canCreate: true,
-      createDisabled: true,
+  });
+
+  it('UX12-AIOFF-AC03 offers no action with the feature off and keeps the note readable', () => {
+    const none = { canCreate: false, canRegenerate: false, canRetry: false };
+    expect(noteView(state({ available: false }), true)).toMatchObject({ kind: 'empty', ...none });
+    expect(noteView(withNote({ available: false }), true)).toMatchObject({ kind: 'note', ...none });
+    const failed = state({
+      available: false,
+      generation: { id: 'g4', status: 'failed', job_id: null, error_code: 'x', progress: null },
     });
+    expect(noteView(failed, true)).toMatchObject({ failed: true, ...none });
   });
 
   it('marks an older version and labels versions', () => {
@@ -561,8 +568,9 @@ describe('ChapterNotePanel', () => {
     responses = [state({ available: false })];
     renderPanel();
     const dialog = await screen.findByRole('dialog', { name: '정리 노트' });
-    await within(dialog).findByText('이 환경에서는 AI 정리 노트를 사용할 수 없습니다.');
+    await within(dialog).findByText('아직 정리 노트가 없습니다.');
     expect(within(dialog).queryByRole('button', { name: '정리 노트 만들기' })).toBeNull();
+    expect(within(dialog).queryByText(/AI 서비스로 전송됩니다|사용할 수 없습니다/)).toBeNull();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 

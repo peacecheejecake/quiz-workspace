@@ -42,10 +42,14 @@ export interface DocumentLibraryOptions {
   /** Editor+ in an active workspace; otherwise nothing can be uploaded or deleted. */
   readonly canEdit: boolean;
   readonly loadFailed?: boolean;
+  /** From the server's list; every re-read list updates it. */
+  readonly summaryAvailable: boolean;
 }
 
 export interface DocumentLibrary {
   readonly documents: readonly DocumentSummary[];
+  /** This environment can create summaries, as the newest list says. */
+  readonly summaryAvailable: boolean;
   /** Every row: server documents merged with this tab's uploads (both document types). */
   readonly rows: readonly DocumentRow[];
   readonly listFailed: boolean;
@@ -77,11 +81,13 @@ export function useDocumentLibrary({
   initialDocuments,
   canEdit,
   loadFailed = false,
+  summaryAvailable: initialSummaryAvailable,
 }: DocumentLibraryOptions): DocumentLibrary {
   const client = useMemo(() => createDocumentsClient(), []);
   const { toast } = useToast();
   const router = useRouter();
   const [documents, setDocuments] = useState<readonly DocumentSummary[]>(initialDocuments);
+  const [summaryAvailable, setSummaryAvailable] = useState(initialSummaryAvailable);
   const [listFailed, setListFailed] = useState(loadFailed);
   const [uploads, dispatch] = useReducer(uploadsReducer, []);
   const [alert, setAlert] = useState<string | null>(null);
@@ -103,12 +109,15 @@ export function useDocumentLibrary({
   if (seenInitial !== initialDocuments) {
     setSeenInitial(initialDocuments);
     setDocuments(initialDocuments);
+    setSummaryAvailable(initialSummaryAvailable);
     setListFailed(loadFailed);
   }
 
   const refresh = useCallback(async () => {
     try {
-      setDocuments(await client.listDocuments(workspaceId));
+      const list = await client.listDocuments(workspaceId);
+      setDocuments(list.items);
+      setSummaryAvailable(list.summary_available);
       setListFailed(false);
     } catch (error) {
       if (error instanceof DocumentApiError && error.kind === 'unauthenticated') {
@@ -307,6 +316,7 @@ export function useDocumentLibrary({
 
   return {
     documents,
+    summaryAvailable,
     rows: buildRows(documents, uploads),
     listFailed,
     alert,

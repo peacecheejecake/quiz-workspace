@@ -344,8 +344,9 @@ test(
     await expect(submit).toBeDisabled();
     await expect(submit).toHaveAccessibleDescription(NO_BODY);
     await expect(main(page).getByText(NO_BODY)).toBeVisible();
-    await searchPageUi.box(page).fill('chlorine');
-    await searchPageUi.box(page).press('Enter');
+    const box = searchPageUi.box(page);
+    await expect(box).toBeDisabled();
+    await expect(box).toHaveAccessibleDescription(NO_BODY);
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has('text')).toBe(false);
 

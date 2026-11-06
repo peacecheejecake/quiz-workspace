@@ -401,11 +401,9 @@ function AiExplanationArea({
               {EXPL_TEXT.retry}
             </Button>
           </div>
-        ) : (
-          <p className={styles.hint}>
-            {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
-          </p>
-        )}
+        ) : mode === 'archived' ? (
+          <p className={styles.hint}>{EXPL_TEXT.archived}</p>
+        ) : null}
       </>
     );
   } else {
@@ -456,11 +454,7 @@ function AiExplanationArea({
           {EXPL_TEXT.ask}
         </AskQuestionButton>
       </div>
-      {mode === 'disabled' || mode === 'archived' ? (
-        <p className={styles.hint}>
-          {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
-        </p>
-      ) : null}
+      {mode === 'archived' ? <p className={styles.hint}>{EXPL_TEXT.archived}</p> : null}
       {load.status === 'loading' || load.status === 'error' || !state ? content : null}
       {showArea ? (
         <SectionDisclosure

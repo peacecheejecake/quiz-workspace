@@ -429,6 +429,8 @@ export interface DocumentRow {
   /** The newest import run of the PDF, whatever its kind (from the server's document list);
    * undefined while the row is not in that list yet. */
   readonly latestImportId?: string | null;
+  /** A stored summary exists: `요약` stays where summaries cannot be created (UX12-AIOFF-AC01). */
+  readonly hasSummary?: boolean;
 }
 
 /** The listed kind (the API leaves it out only for documents from before UX6-UPLOAD-B). */
@@ -476,6 +478,7 @@ function rowFromUpload(item: UploadItem, doc?: DocumentSummary): DocumentRow {
     retryable: item.failure?.retryable ?? false,
     cancellable: isCancellable(item),
     latestImportId: doc ? (doc.latest_import_id ?? null) : undefined,
+    hasSummary: doc?.has_summary,
   };
 }
 
@@ -494,6 +497,7 @@ function rowFromDocument(doc: DocumentSummary): DocumentRow {
     retryable: false,
     cancellable: false,
     latestImportId: doc.latest_import_id ?? null,
+    hasSummary: doc.has_summary,
   };
 }
 
