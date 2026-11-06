@@ -164,6 +164,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SETTINGS.0': ['UX12-SETTINGS', 'UX12-HELP'],
   // UX12 SHELL-5: header, panels and the AI 질문 composer stay in view over the virtual keyboard.
   'UX12-KEYBOARD.0': ['UX12-KEYBOARD'],
+  // UX12 SHARE-1 + SHARE-2: per-link scope switches and the owner's records, read only (D-9).
+  'UX12-SHARE.0': ['UX12-SHARE'],
 };
 
 const LEADING_ID = new RegExp(

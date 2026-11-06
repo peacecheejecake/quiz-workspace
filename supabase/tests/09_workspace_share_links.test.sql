@@ -7,7 +7,8 @@ select plan(38);
 
 -- Shape -----------------------------------------------------------------------------------------
 select columns_are('public', 'workspace_share_links',
-  array['id', 'workspace_id', 'created_by', 'token_digest', 'allow_fork', 'expires_at',
+  array['id', 'workspace_id', 'created_by', 'token_digest', 'allow_fork', 'include_notes',
+        'include_ai_explanations', 'include_summary', 'include_owner_records', 'expires_at',
         'revoked_at', 'rotated_from_id', 'created_at', 'updated_at']);
 select col_is_pk('public', 'workspace_share_links', array['id'], 'id is the primary key');
 select col_type_is('public', 'workspace_share_links', 'token_digest', 'bytea',

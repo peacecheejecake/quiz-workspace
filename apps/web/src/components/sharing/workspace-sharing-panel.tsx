@@ -43,14 +43,17 @@ import {
   type ShareActionResult,
 } from '@/lib/sharing/actions';
 import {
+  DEFAULT_SHARE_SCOPE,
   expiryDateValue,
   isShareUrl,
   localDateString,
   parseExpiryDate,
   SHARE_FAILURE_MESSAGES,
+  shareScopeOf,
   sharingState,
   type ShareFailureKind,
   type ShareLink,
+  type ShareScope,
 } from '@/lib/sharing/model';
 import { keyForAttempt, type PendingCreate } from '@/lib/workspaces/idempotency';
 import styles from './sharing.module.css';
@@ -79,6 +82,24 @@ function useIsClient(): boolean {
 }
 
 type Confirm = 'revoke' | 'rotate' | null;
+
+const SCOPE_CONTENT: readonly {
+  readonly key: Exclude<keyof ShareScope, 'include_owner_records'>;
+  readonly label: string;
+  readonly description: string;
+}[] = [
+  { key: 'include_notes', label: '정리 노트', description: '장별 최신 정리 노트를 보여 줍니다.' },
+  {
+    key: 'include_ai_explanations',
+    label: 'AI 해설',
+    description: '문제에 이미 만든 AI 해설을 보여 줍니다.',
+  },
+  {
+    key: 'include_summary',
+    label: '문서 요약',
+    description: '문서의 현재 요약을 보여 줍니다.',
+  },
+];
 
 export function WorkspaceSharingPanel({
   workspaceId,
@@ -116,6 +137,7 @@ export function WorkspaceSharingPanel({
   const [pending, startTransition] = useTransition();
   // Policy for the next link while sharing is off.
   const [draftFork, setDraftFork] = useState(false);
+  const [draftScope, setDraftScope] = useState<ShareScope>(DEFAULT_SHARE_SCOPE);
   const [expiryDraft, setExpiryDraft] = useState<string | null>(null);
   const [expiryError, setExpiryError] = useState<string | null>(null);
   // Create/rotate Idempotency-Key: kept only while the last attempt's outcome is unknown.
@@ -129,6 +151,7 @@ export function WorkspaceSharingPanel({
   const revokeRef = useRef<HTMLButtonElement>(null);
   const rotateRef = useRef<HTMLButtonElement>(null);
   const statusId = useId();
+  const scopeId = useId();
 
   const { current, active, others, lastEnded } = sharingState(links);
   const shownUrl =
@@ -181,8 +204,12 @@ export function WorkspaceSharingPanel({
       setExpiryError(SHARE_FAILURE_MESSAGES.invalidExpiry);
       return;
     }
-    const policy: SharePolicyInput = { allowFork: draftFork, expiresAt: expiry.expiresAt };
-    issue(`create:${draftFork}:${expiry.expiresAt ?? ''}`, (key) =>
+    const policy: SharePolicyInput = {
+      allowFork: draftFork,
+      expiresAt: expiry.expiresAt,
+      scope: draftScope,
+    };
+    issue(`create:${draftFork}:${expiry.expiresAt ?? ''}:${JSON.stringify(draftScope)}`, (key) =>
       createShareLinkAction(workspaceId, policy, key),
     );
   }
@@ -202,6 +229,7 @@ export function WorkspaceSharingPanel({
         setIssued(null);
         setReplayed(false);
         setDraftFork(false);
+        setDraftScope(DEFAULT_SHARE_SCOPE);
         setExpiryDraft(null);
       }
     });
@@ -224,6 +252,11 @@ export function WorkspaceSharingPanel({
   function onForkChange(next: boolean) {
     if (current) updatePolicy({ allowFork: next });
     else setDraftFork(next);
+  }
+
+  function onScopeChange(key: keyof ShareScope, next: boolean) {
+    if (current) updatePolicy({ scope: { [key]: next } });
+    else setDraftScope((scope) => ({ ...scope, [key]: next }));
   }
 
   function commitExpiry() {
@@ -291,6 +324,7 @@ export function WorkspaceSharingPanel({
   }
 
   const forkChecked = current ? current.allow_fork : draftFork;
+  const scope = current ? shareScopeOf(current) : draftScope;
   const loaded = loadState === 'ok';
 
   return (
@@ -373,7 +407,7 @@ export function WorkspaceSharingPanel({
                 {archived ? (
                   <p className={styles.note}>
                     보관된 Workspace에서는 새 링크를 만들거나 재발급할 수 없습니다. 링크 철회와 Fork
-                    허용·만료일 변경만 할 수 있습니다.
+                    허용·만료일·공유 범위 변경만 할 수 있습니다.
                   </p>
                 ) : null}
                 {others.length > 0 ? (
@@ -475,11 +509,37 @@ export function WorkspaceSharingPanel({
                 </div>
               </section>
 
+              <section className={styles.policy} aria-labelledby={scopeId}>
+                <h3 id={scopeId} className={styles.scopeTitle}>
+                  공유 범위
+                </h3>
+                <p className={styles.note}>
+                  끈 항목은 공유 화면에 보이지 않고, 이 링크로 만든 Fork에도 복사되지 않습니다.
+                </p>
+                {SCOPE_CONTENT.map(({ key, label, description }) => (
+                  <Switch
+                    key={key}
+                    label={label}
+                    description={description}
+                    checked={scope[key]}
+                    onCheckedChange={(next) => onScopeChange(key, next)}
+                    disabled={policyDisabled}
+                  />
+                ))}
+                <Switch
+                  label="내 풀이 이력·하이라이트"
+                  description="켜면 링크를 받은 사람이 내 풀이 이력(문제별 결과와 시각)과 하이라이트를 읽기 전용으로 볼 수 있습니다. 내 이름과 이메일, 제출한 답, 다른 구성원의 기록은 보이지 않고 Fork에도 복사되지 않습니다. 기본은 꺼짐입니다."
+                  checked={scope.include_owner_records}
+                  onCheckedChange={(next) => onScopeChange('include_owner_records', next)}
+                  disabled={policyDisabled}
+                />
+              </section>
+
               <section className={styles.notices} aria-label="공개 범위와 저작권">
                 <p>
-                  링크를 받은 사람은 로그인 없이 발행된 문서·문제·해설만 읽기 전용으로 볼 수
-                  있습니다. 초안, 미발행 수정본, 개인 풀이 기록·즐겨찾기는 공개되지 않으며, 링크는
-                  Workspace 멤버십이 아닙니다.
+                  {scope.include_owner_records
+                    ? '링크를 받은 사람은 로그인 없이 발행된 문서·문제·해설과 내 풀이 이력·하이라이트를 읽기 전용으로 볼 수 있습니다. 초안, 미발행 수정본, 즐겨찾기, 다른 구성원의 기록은 공개되지 않으며, 링크는 Workspace 멤버십이 아닙니다.'
+                    : '링크를 받은 사람은 로그인 없이 발행된 문서·문제·해설만 읽기 전용으로 볼 수 있습니다. 초안, 미발행 수정본, 개인 풀이 기록·즐겨찾기는 공개되지 않으며, 링크는 Workspace 멤버십이 아닙니다.'}
                 </p>
                 <p>
                   공유하거나 Fork를 허용하기 전에 PDF와 문제의 저작권·이용 권리를 확인하세요. 보기

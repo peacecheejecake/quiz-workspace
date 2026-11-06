@@ -35,7 +35,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = REPO_ROOT / "supabase/migrations/20261017224000_workspace_share_links.sql"
 SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321").rstrip("/")
 ISSUER = f"{SUPABASE_URL}/auth/v1"
-DB_ADMIN_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+DB_ADMIN_URL = os.environ.get(
+    "QUIZ_DB_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+)
 API_DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://quiz_api:change-me-local@127.0.0.1:54322/postgres"
 )

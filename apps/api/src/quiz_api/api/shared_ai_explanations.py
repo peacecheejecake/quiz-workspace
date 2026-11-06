@@ -6,7 +6,8 @@ A guest reads the newest succeeded, not superseded explanation of a published (C
 question's active revision — one that a member already made: a guest never starts one (no cost).
 Same share checks as every guest read (quiz_api.api.shared: the session cookie of this link,
 re-validated per request, so a revoked link stops at once) and the shared routes' one 404 body
-for unknown ids, other workspaces, unpublished questions and questions without an explanation.
+for unknown ids, other workspaces, unpublished questions, questions without an explanation and
+links that leave AI explanations out (UX12-SHARE).
 Never returned: ids, status, version, error codes, usage or job ids. Mock exam questions have no
 shared route (mock exams are not shared).
 """
@@ -58,6 +59,8 @@ def get_shared_question_explanation(
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SharedExplanation:
     """The AI explanation of one published question, as members see it (read-only)."""
+    if not link.include_ai_explanations:
+        raise HTTPException(status_code=404, detail=NOT_FOUND)
     settings: Settings = request.app.state.settings
     repo = ExplanationRepository(session)
     qid = _uuid(question_id)

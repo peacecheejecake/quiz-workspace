@@ -26,7 +26,7 @@ from quiz_api.authz.repository import TwoStepResourceMembership
 from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
 from quiz_api.repositories.idempotency import StoredResponse
-from quiz_api.repositories.share_links import ShareLinkRecord
+from quiz_api.repositories.share_links import ShareLinkRecord, ShareScope
 from quiz_api.settings import Environment, InsecureConfigurationError, Settings
 from quiz_api.share_secrets import (
     derive_secret,
@@ -185,11 +185,17 @@ class World(TwoStepResourceMembership):
         expires: Any,
         src: Any,
         link_id: uuid.UUID | None = None,
+        scope: ShareScope | None = None,
     ) -> ShareLinkRecord:
+        scope = scope or ShareScope()
         rec = ShareLinkRecord(
             link_id or uuid.uuid4(),
             ws,
             fork,
+            scope.include_notes,
+            scope.include_ai_explanations,
+            scope.include_summary,
+            scope.include_owner_records,
             expires,
             None,
             src,
@@ -210,9 +216,12 @@ class World(TwoStepResourceMembership):
         token_digest: bytes,
         allow_fork: bool,
         expires_at: Any,
+        scope: ShareScope | None = None,
         link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
-        rec = self._new(ws, token_digest, allow_fork, expires_at, None, link_id=link_id)
+        rec = self._new(
+            ws, token_digest, allow_fork, expires_at, None, link_id=link_id, scope=scope
+        )
         self.events.append(("share_link.created", rec.id))
         return rec
 
@@ -245,6 +254,7 @@ class World(TwoStepResourceMembership):
             link.expires_at,
             link.id,
             link_id=link_id,
+            scope=link.scope,
         )
         self.events.append(("share_link.rotated", link.id))
         return rec
@@ -549,6 +559,67 @@ def test_patch_revoke_and_rotate(api: TestClient, world: World, bearer: Any) -> 
     assert by_id[first["id"]]["share_url"] is None
     assert by_id[second["id"]]["share_url"] == second["share_url"]
     assert [e for e, _ in world.events].count("share_link.revoked") == 0
+
+
+SCOPE_FLAGS = (
+    "include_notes",
+    "include_ai_explanations",
+    "include_summary",
+    "include_owner_records",
+)
+
+
+def test_scope_defaults_keep_content_and_owner_records_stay_private(
+    api: TestClient, world: World, bearer: Any
+) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    body = api.post(_base(ws), json={}, headers=bearer(owner)).json()
+    assert [body[f] for f in SCOPE_FLAGS] == [True, True, True, False]
+    chosen = api.post(
+        _base(ws),
+        json={"include_notes": False, "include_owner_records": True},
+        headers=bearer(owner),
+    ).json()
+    assert [chosen[f] for f in SCOPE_FLAGS] == [False, True, True, True]
+
+
+@pytest.mark.parametrize("flag", SCOPE_FLAGS)
+def test_only_the_owner_changes_a_scope_flag_and_rotate_keeps_it(
+    api: TestClient, world: World, bearer: Any, flag: str
+) -> None:
+    owner, editor = uuid.uuid4(), uuid.uuid4()
+    ws = world.workspace(owner)
+    world.members[(ws, editor)] = Role.EDITOR
+    first = api.post(_base(ws), json={}, headers=bearer(owner)).json()
+    url = f"{_base(ws)}/{first['id']}"
+    wanted = not first[flag]
+
+    _problem(
+        api.patch(url, json={flag: wanted}, headers=bearer(editor)),
+        403,
+        ProblemType.INSUFFICIENT_ROLE,
+    )
+    assert api.get(_base(ws), headers=bearer(owner)).json()["items"][0][flag] is first[flag]
+    _problem(api.patch(url, json={flag: None}, headers=bearer(owner)), 422)
+    changed = api.patch(url, json={flag: wanted}, headers=bearer(owner))
+    assert changed.status_code == 200
+    assert changed.json()[flag] is wanted
+
+    rotated = api.post(f"{url}/rotate", headers=bearer(owner)).json()
+    assert rotated[flag] is wanted, "rotate copies the scope"
+    others = [f for f in SCOPE_FLAGS if f != flag]
+    assert [rotated[f] for f in others] == [first[f] for f in others]
+
+
+def test_a_scope_flag_can_change_while_archived(api: TestClient, world: World, bearer: Any) -> None:
+    owner = uuid.uuid4()
+    ws = world.workspace(owner)
+    link = api.post(_base(ws), json={}, headers=bearer(owner)).json()["id"]
+    world.status[ws] = "archived"
+    res = api.patch(f"{_base(ws)}/{link}", json={"include_notes": False}, headers=bearer(owner))
+    assert res.status_code == 200
+    assert res.json()["include_notes"] is False
 
 
 def test_archived_allows_revoke_and_policy_but_not_issue_or_rotate(

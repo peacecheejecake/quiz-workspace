@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from quiz_api.api.shared import get_search_repository, get_shared_repository
+from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemType
 from quiz_api.main import create_app
 from quiz_api.relay_client import CLIENT_HEADER, SIGNATURE_HEADER, relay_signature
@@ -140,6 +141,7 @@ def _app(links: FakeLinks, **settings: Any) -> FastAPI:
     )
     app.dependency_overrides[get_shared_repository] = lambda: links
     app.dependency_overrides[get_search_repository] = lambda: links
+    app.dependency_overrides[get_db_session] = lambda: None
     return app
 
 
@@ -199,9 +201,51 @@ def test_exchange_sets_a_scoped_httponly_cookie_and_privacy_headers(
     assert shared.json() == {
         "workspace": {"name": "공유 WS", "archived": False},
         "allow_fork": True,
+        "include_notes": True,
+        "include_ai_explanations": True,
+        "include_summary": True,
+        "include_owner_records": False,
         "expires_at": None,
         "documents": [],
     }
+
+
+SOME_ID = "00000000-0000-4000-8000-000000000000"
+SCOPE_ROUTES: dict[str, list[str]] = {
+    "include_notes": ["/chapter-notes", f"/chapters/{SOME_ID}/note"],
+    "include_ai_explanations": [f"/questions/{SOME_ID}/ai-explanation"],
+    "include_summary": [f"/documents/{SOME_ID}/summary"],
+    "include_owner_records": ["/owner-attempts", "/owner-highlights"],
+}
+
+
+@pytest.mark.parametrize(
+    ("flag", "path"), [(flag, path) for flag, paths in SCOPE_ROUTES.items() for path in paths]
+)
+def test_a_route_of_a_flag_that_is_off_answers_404_before_any_content_read(
+    api: TestClient, links: FakeLinks, flag: str, path: str
+) -> None:
+    link = links.add()
+    links.links[link.id] = replace(link, **{flag: False})  # type: ignore[arg-type]
+    found = _cookie(_exchange(api, link.id, links.secrets[link.id]))
+    assert found is not None
+    # Off is decided from the link alone: the fakes hold no content repository for these routes.
+    res = _read(api, link.id, found[1].value, path)
+    assert res.status_code == 404
+    assert res.json()["status"] == 404
+    assert "share-unavailable" not in res.json()["type"]
+
+
+def test_scope_flags_are_read_again_on_every_request(api: TestClient, links: FakeLinks) -> None:
+    link = links.add()
+    found = _cookie(_exchange(api, link.id, links.secrets[link.id]))
+    assert found is not None
+    session = found[1].value
+    assert _read(api, link.id, session).json()["include_notes"] is True
+    links.links[link.id] = replace(link, include_notes=False, include_owner_records=True)
+    body = _read(api, link.id, session).json()
+    assert (body["include_notes"], body["include_owner_records"]) == (False, True)
+    assert "owner_id" not in body
 
 
 def test_unknown_wrong_and_unusable_links_answer_one_404(api: TestClient, links: FakeLinks) -> None:

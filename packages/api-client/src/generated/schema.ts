@@ -1759,7 +1759,7 @@ export type paths = {
      * @description The AI summary of a shared document (DOCSUM-01-AC06, workspace-sharing.md §8): only a
      *     succeeded summary of the revision the guest reads now. An older revision's summary, a run in
      *     progress or failed, and anything of other workspaces answer the same 404 as a random id; no
-     *     run, usage, cost or error data.
+     *     run, usage, cost or error data. A link without summaries answers that same 404.
      */
     get: operations['getSharedDocumentSummary'];
     put?: never;
@@ -1784,11 +1784,51 @@ export type paths = {
      * @description Fork the shared workspace into a new workspace of the caller (WS-FORK-01-AC02/AC04).
      *
      *     Needs the user's Bearer JWT and the share session cookie of this link, and the link must
-     *     allow forking. Copies the published documents, questions, answers and explanations; never
-     *     drafts, other people's progress, activity or share links. 202 with the fork; poll
-     *     `GET /me/forks/{id}`.
+     *     allow forking. Copies the published documents, questions, answers and explanations, plus the
+     *     notes, AI explanations and summaries the link includes; never drafts, anyone's progress or
+     *     highlights, activity or share links. 202 with the fork; poll `GET /me/forks/{id}`.
      */
     post: operations['startWorkspaceFork'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/owner-attempts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Owner Attempts
+     * @description The owner's attempts on published questions: result and time (UX12-SHARE-AC07/AC08).
+     */
+    get: operations['listSharedOwnerAttempts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/{share_id}/owner-highlights': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Shared Owner Highlights
+     * @description The owner's highlights on text a guest can read now (UX12-SHARE-AC07/AC08).
+     */
+    get: operations['listSharedOwnerHighlights'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2523,7 +2563,8 @@ export type paths = {
     head?: never;
     /**
      * Update Share Link
-     * @description Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).
+     * @description Change `allow_fork`, `expires_at` and the scope flags (WS-SHARE-01-AC03, UX12-SHARE-AC01;
+     *     allowed on archived).
      *
      *     A revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.
      */
@@ -4607,6 +4648,26 @@ export type components = {
        * @description The public share id (`/share/{id}`).
        */
       id: string;
+      /**
+       * Include Ai Explanations
+       * @description Guests read AI explanations; forks copy them.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Guests read chapter notes; forks copy them.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description Guests read the owner's own attempts and highlights. Never forked.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Guests read document summaries; forks copy them.
+       */
+      include_summary: boolean;
       /** Revoked At */
       revoked_at: string | null;
       /**
@@ -5745,6 +5806,24 @@ export type components = {
        * @enum {string}
        */
       status: 'unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry';
+    };
+    /** OwnerRecordQuestion */
+    OwnerRecordQuestion: {
+      /**
+       * Number Label
+       * @description `<번호>번` or `번호 없음` (the printed number).
+       */
+      number_label: string;
+      /**
+       * Question Id
+       * Format: uuid
+       */
+      question_id: string;
+      /**
+       * Stem Preview
+       * @description First 40 characters of the current stem.
+       */
+      stem_preview: string;
     };
     /** PracticeOption */
     PracticeOption: {
@@ -7535,6 +7614,82 @@ export type components = {
       /** Sources */
       sources: components['schemas']['ExplanationSource'][];
     };
+    /** SharedOwnerAttempt */
+    SharedOwnerAttempt: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      question: components['schemas']['OwnerRecordQuestion'];
+      /**
+       * Question Type
+       * @enum {string}
+       */
+      question_type: 'MCQ' | 'SHORT_ANSWER' | 'ESSAY';
+      /**
+       * Result
+       * @enum {string}
+       */
+      result: 'correct' | 'incorrect' | 'pending';
+      /**
+       * Submitted At
+       * Format: date-time
+       */
+      submitted_at: string;
+    };
+    /** SharedOwnerAttemptPage */
+    SharedOwnerAttemptPage: {
+      /** Items */
+      items: components['schemas']['SharedOwnerAttempt'][];
+      /** Next Cursor */
+      next_cursor: string | null;
+    };
+    /** SharedOwnerHighlight */
+    SharedOwnerHighlight: {
+      /**
+       * Chapter Title
+       * @description Note highlights only.
+       */
+      chapter_title: string | null;
+      /**
+       * Color
+       * @enum {string}
+       */
+      color: 'yellow' | 'blue' | 'pink';
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'note' | 'explanation';
+      /** @description Explanation highlights only. */
+      question: components['schemas']['OwnerRecordQuestion'] | null;
+      /**
+       * Quote
+       * @description The highlighted text, as it stands in the shared text.
+       */
+      quote: string;
+    };
+    /** SharedOwnerHighlightPage */
+    SharedOwnerHighlightPage: {
+      /** Items */
+      items: components['schemas']['SharedOwnerHighlight'][];
+      /**
+       * Next Cursor
+       * @description A page can hold fewer than `limit` items: rows outside the share are left out.
+       */
+      next_cursor: string | null;
+    };
     /**
      * SharedQuestion
      * @description A published question with its answer and explanation; no per-user or owner fields.
@@ -7691,6 +7846,26 @@ export type components = {
        * @description When the link expires; null: never.
        */
       expires_at: string | null;
+      /**
+       * Include Ai Explanations
+       * @description AI explanations are part of this link.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Chapter notes are part of this link.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description The owner's attempts and highlights can be read through this link.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Document summaries are part of this link.
+       */
+      include_summary: boolean;
       workspace: components['schemas']['SharedWorkspaceInfo'];
     };
     /** SharedWorkspaceInfo */
@@ -7729,6 +7904,26 @@ export type components = {
        * @description The public share id (`/share/{id}`).
        */
       id: string;
+      /**
+       * Include Ai Explanations
+       * @description Guests read AI explanations; forks copy them.
+       */
+      include_ai_explanations: boolean;
+      /**
+       * Include Notes
+       * @description Guests read chapter notes; forks copy them.
+       */
+      include_notes: boolean;
+      /**
+       * Include Owner Records
+       * @description Guests read the owner's own attempts and highlights. Never forked.
+       */
+      include_owner_records: boolean;
+      /**
+       * Include Summary
+       * @description Guests read document summaries; forks copy them.
+       */
+      include_summary: boolean;
       /** Revoked At */
       revoked_at: string | null;
       /**
@@ -7770,6 +7965,26 @@ export type components = {
        * @description Future instant with a UTC offset; null or absent: no expiry.
        */
       expires_at?: string | null;
+      /**
+       * Include Ai Explanations
+       * @default true
+       */
+      include_ai_explanations?: boolean;
+      /**
+       * Include Notes
+       * @default true
+       */
+      include_notes?: boolean;
+      /**
+       * Include Owner Records
+       * @default false
+       */
+      include_owner_records?: boolean;
+      /**
+       * Include Summary
+       * @default true
+       */
+      include_summary?: boolean;
     };
     /** ShareLinkList */
     ShareLinkList: {
@@ -7785,6 +8000,14 @@ export type components = {
       allow_fork?: boolean | null;
       /** Expires At */
       expires_at?: string | null;
+      /** Include Ai Explanations */
+      include_ai_explanations?: boolean | null;
+      /** Include Notes */
+      include_notes?: boolean | null;
+      /** Include Owner Records */
+      include_owner_records?: boolean | null;
+      /** Include Summary */
+      include_summary?: boolean | null;
     };
     /** SignedReadUrl */
     SignedReadUrl: {
@@ -15340,6 +15563,148 @@ export interface operations {
       };
       /** @description Too Many Requests */
       429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listSharedOwnerAttempts: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedOwnerAttemptPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listSharedOwnerHighlights: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        /** @description The share link id (`/share/{id}`). */
+        share_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedOwnerHighlightPage'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

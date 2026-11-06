@@ -278,6 +278,19 @@ def attempts_query(
     return stmt.order_by(qa.c.submitted_at.desc(), qa.c.id.desc()).limit(limit + 1)
 
 
+@dataclass(frozen=True)
+class OwnerAttemptRecord:
+    """One attempt of a link's owner: what a guest may read (UX12-SHARE-AC07), nothing else."""
+
+    id: uuid.UUID
+    question_id: uuid.UUID
+    question_number: int | None
+    question_type: str
+    stem: str
+    result: AttemptResult
+    submitted_at: datetime
+
+
 class HistoryRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -387,6 +400,70 @@ class HistoryRepository:
             for r in rows
         ]
         return items, cursor
+
+    def owner_attempts(
+        self,
+        workspace_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        *,
+        limit: int,
+        after: Cursor | None = None,
+    ) -> tuple[list[OwnerAttemptRecord], Cursor | None]:
+        """The owner's attempts on the questions a guest can read now (live, CONFIRMED), with the
+        current stem. A pending attempt that a later row graded shows once, as that grade."""
+        qa = question_attempts
+        graded = question_attempts.alias("graded")
+        stmt = (
+            select(
+                qa.c.id,
+                qa.c.question_id,
+                questions.c.question_number,
+                questions.c.question_type,
+                question_revisions.c.stem,
+                qa.c.result,
+                qa.c.submitted_at,
+            )
+            .select_from(
+                qa.join(
+                    questions,
+                    and_(
+                        questions.c.id == qa.c.question_id,
+                        questions.c.workspace_id == qa.c.workspace_id,
+                    ),
+                ).join(
+                    question_revisions,
+                    question_revisions.c.id == questions.c.active_revision_id,
+                )
+            )
+            .where(
+                qa.c.workspace_id == workspace_id,
+                qa.c.user_id == owner_id,
+                questions.c.publication_status == "CONFIRMED",
+                questions.c.deleted_at.is_(None),
+                select(practice_sessions.c.id)
+                .where(practice_sessions.c.id == qa.c.practice_session_id, current_session())
+                .exists(),
+                ~select(graded.c.id).where(graded.c.grades_attempt_id == qa.c.id).exists(),
+            )
+        )
+        if after is not None:
+            stmt = stmt.where(tuple_(qa.c.submitted_at, qa.c.id) < tuple_(after.at, after.id))
+        rows = self._session.execute(
+            stmt.order_by(qa.c.submitted_at.desc(), qa.c.id.desc()).limit(limit + 1)
+        ).all()
+        page, cursor = _page(rows, limit, lambda r: (r.submitted_at, r.id))
+        return [
+            OwnerAttemptRecord(
+                id=r.id,
+                question_id=r.question_id,
+                question_number=r.question_number,
+                question_type=r.question_type,
+                stem=r.stem or "",
+                result=cast(AttemptResult, r.result),
+                submitted_at=r.submitted_at,
+            )
+            for r in page
+        ], cursor
 
 
 # --- label lookups (one query per kind, per page) -----------------------------------------------

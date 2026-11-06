@@ -31,6 +31,10 @@ const HOME = {
 const WORKSPACE: SharedWorkspace = {
   workspace: { name: '공유 알고리즘', archived: false },
   allow_fork: false,
+  include_notes: true,
+  include_ai_explanations: true,
+  include_summary: true,
+  include_owner_records: false,
   expires_at: null,
   documents: [{ id: DOC, title: '알고리즘 책', document_type: 'book', revision_id: DOC }],
 };
@@ -298,6 +302,35 @@ describe('SharedWorkspaceView', () => {
     expect(await screen.findByRole('dialog', { name: /1번 문제/ })).toBeInTheDocument();
     // The question panel stacked over the note hides the note's content meanwhile.
     expect(panel.querySelector('[inert][data-covered]')).not.toBeNull();
+  });
+
+  it('UX12-SHARE leaves out what the link excludes, without asking for it', async () => {
+    const seen: string[] = [];
+    const read = (path: string, body: unknown) => () => {
+      seen.push(path);
+      return json(body);
+    };
+    routes({
+      '': () => json({ ...WORKSPACE, include_notes: false, include_summary: false }),
+      '/questions': () => json({ items: [], next_cursor: null }),
+      '/chapter-notes': read('/chapter-notes', { items: [] }),
+      [`/documents/${DOC}/summary`]: read('summary', {}),
+    });
+    renderView();
+    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '정리 노트' })).toBeNull();
+    expect(screen.queryByRole('region', { name: '공유자의 기록' })).toBeNull();
+    expect(seen).toEqual([]);
+  });
+
+  it('UX12-SHARE offers 공유자의 기록 only on a link that opts in', async () => {
+    routes({
+      '': () => json({ ...WORKSPACE, include_owner_records: true }),
+      '/questions': () => json({ items: [], next_cursor: null }),
+      '/chapter-notes': () => json({ items: [] }),
+    });
+    renderView();
+    expect(await screen.findByRole('region', { name: '공유자의 기록' })).toBeInTheDocument();
   });
 
   it('shows only the missing notice for a note that no longer matches its questions', async () => {

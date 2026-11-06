@@ -12,7 +12,7 @@ deterministic owner URL reconstruction; it is never serialized into API response
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -44,6 +44,10 @@ _COLUMNS = (
     _t.c.workspace_id,
     _t.c.token_digest,
     _t.c.allow_fork,
+    _t.c.include_notes,
+    _t.c.include_ai_explanations,
+    _t.c.include_summary,
+    _t.c.include_owner_records,
     _t.c.expires_at,
     _t.c.revoked_at,
     _t.c.rotated_from_id,
@@ -54,10 +58,27 @@ _COLUMNS = (
 
 
 @dataclass(frozen=True)
+class ShareScope:
+    """What a link exposes beyond the published documents and questions (UX12-SHARE)."""
+
+    include_notes: bool = True
+    include_ai_explanations: bool = True
+    include_summary: bool = True
+    include_owner_records: bool = False
+
+    def values(self) -> dict[str, bool]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class ShareLinkRecord:
     id: uuid.UUID
     workspace_id: uuid.UUID
     allow_fork: bool
+    include_notes: bool
+    include_ai_explanations: bool
+    include_summary: bool
+    include_owner_records: bool
     expires_at: datetime | None
     revoked_at: datetime | None
     rotated_from_id: uuid.UUID | None
@@ -66,12 +87,25 @@ class ShareLinkRecord:
     status: ShareLinkStatus
     token_digest: bytes = field(repr=False)
 
+    @property
+    def scope(self) -> ShareScope:
+        return ShareScope(
+            include_notes=self.include_notes,
+            include_ai_explanations=self.include_ai_explanations,
+            include_summary=self.include_summary,
+            include_owner_records=self.include_owner_records,
+        )
+
 
 def _record(row: Any) -> ShareLinkRecord:
     return ShareLinkRecord(
         id=row.id,
         workspace_id=row.workspace_id,
         allow_fork=row.allow_fork,
+        include_notes=row.include_notes,
+        include_ai_explanations=row.include_ai_explanations,
+        include_summary=row.include_summary,
+        include_owner_records=row.include_owner_records,
         expires_at=row.expires_at,
         revoked_at=row.revoked_at,
         rotated_from_id=row.rotated_from_id,
@@ -123,23 +157,32 @@ class ShareLinkRepository:
         token_digest: bytes,
         allow_fork: bool,
         expires_at: datetime | None,
+        scope: ShareScope | None = None,
         link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
+        chosen = scope or ShareScope()
         record = self._insert(
-            workspace_id, actor_id, token_digest, allow_fork, expires_at, None, link_id=link_id
+            workspace_id,
+            actor_id,
+            token_digest,
+            allow_fork,
+            expires_at,
+            None,
+            chosen,
+            link_id=link_id,
         )
         self._event(
             record,
             actor_id,
             "share_link.created",
-            {"allow_fork": allow_fork, "expires_at": _iso(expires_at)},
+            {"allow_fork": allow_fork, "expires_at": _iso(expires_at), **chosen.values()},
         )
         return record
 
     def update_policy(
         self, link: ShareLinkRecord, actor_id: uuid.UUID, changes: dict[str, Any]
     ) -> ShareLinkRecord:
-        """Apply `allow_fork` / `expires_at` changes; unchanged values record no event."""
+        """Apply `allow_fork` / `expires_at` / scope changes; unchanged values record no event."""
         changed = {k: v for k, v in changes.items() if getattr(link, k) != v}
         if not changed:
             return link
@@ -175,6 +218,7 @@ class ShareLinkRepository:
             link.allow_fork,
             link.expires_at,
             link.id,
+            link.scope,
             link_id=link_id,
         )
         self._event(link, actor_id, "share_link.rotated", {"replacement_id": str(replacement.id)})
@@ -188,10 +232,12 @@ class ShareLinkRepository:
         allow_fork: bool,
         expires_at: datetime | None,
         rotated_from_id: uuid.UUID | None,
+        scope: ShareScope,
         *,
         link_id: uuid.UUID | None = None,
     ) -> ShareLinkRecord:
         values: dict[str, Any] = {
+            **scope.values(),
             "workspace_id": workspace_id,
             "created_by": actor_id,
             "token_digest": token_digest,

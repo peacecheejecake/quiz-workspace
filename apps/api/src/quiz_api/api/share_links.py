@@ -4,8 +4,9 @@
                                                          201 with `secret` and `share_url`
     GET  /workspaces/{id}/share-links                    every link, newest first; `share_url` for
                                                          non-revoked links (no raw `secret`)
-    PATCH /workspaces/{id}/share-links/{linkId}          allow_fork / expires_at (owner; also
-                                                         archived); revoked links are 409
+    PATCH /workspaces/{id}/share-links/{linkId}          allow_fork / expires_at / scope flags
+                                                         (owner; also archived); revoked links
+                                                         are 409
     POST /workspaces/{id}/share-links/{linkId}/revoke    owner (also archived); repeat = no-op
     POST /workspaces/{id}/share-links/{linkId}/rotate    revoke + issue a replacement with the same
                                                          policy in one transaction (owner; not
@@ -59,6 +60,7 @@ from quiz_api.repositories.share_links import (
     ShareLinkRecord,
     ShareLinkRepository,
     ShareLinkStatus,
+    ShareScope,
 )
 from quiz_api.settings import Settings
 from quiz_api.share_secrets import derive_secret, reconstruct_secret
@@ -77,6 +79,14 @@ class ShareLink(BaseModel):
     id: uuid.UUID = Field(description="The public share id (`/share/{id}`).")
     workspace_id: uuid.UUID
     allow_fork: bool = Field(description="Whether signed-in viewers may fork (default off).")
+    include_notes: bool = Field(description="Guests read chapter notes; forks copy them.")
+    include_ai_explanations: bool = Field(
+        description="Guests read AI explanations; forks copy them."
+    )
+    include_summary: bool = Field(description="Guests read document summaries; forks copy them.")
+    include_owner_records: bool = Field(
+        description="Guests read the owner's own attempts and highlights. Never forked."
+    )
     expires_at: datetime | None = Field(description="Null: never expires.")
     revoked_at: datetime | None
     status: ShareLinkStatus = Field(description="Derived from revoked_at / expires_at.")
@@ -136,9 +146,21 @@ class ShareLinkCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allow_fork: bool = False
+    include_notes: bool = True
+    include_ai_explanations: bool = True
+    include_summary: bool = True
+    include_owner_records: bool = False
     expires_at: AwareDatetime | None = Field(
         default=None, description="Future instant with a UTC offset; null or absent: no expiry."
     )
+
+    def scope(self) -> ShareScope:
+        return ShareScope(
+            include_notes=self.include_notes,
+            include_ai_explanations=self.include_ai_explanations,
+            include_summary=self.include_summary,
+            include_owner_records=self.include_owner_records,
+        )
 
 
 class ShareLinkUpdate(BaseModel):
@@ -147,12 +169,17 @@ class ShareLinkUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allow_fork: bool | None = None
+    include_notes: bool | None = None
+    include_ai_explanations: bool | None = None
+    include_summary: bool | None = None
+    include_owner_records: bool | None = None
     expires_at: AwareDatetime | None = None
 
     @model_validator(mode="after")
-    def _allow_fork_not_null(self) -> ShareLinkUpdate:
-        if "allow_fork" in self.model_fields_set and self.allow_fork is None:
-            raise ValueError("allow_fork must be true or false")
+    def _switches_not_null(self) -> ShareLinkUpdate:
+        for name in self.model_fields_set - {"expires_at"}:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} must be true or false")
         return self
 
     def changes(self) -> dict[str, Any]:
@@ -219,6 +246,10 @@ def _out(
         id=record.id,
         workspace_id=record.workspace_id,
         allow_fork=record.allow_fork,
+        include_notes=record.include_notes,
+        include_ai_explanations=record.include_ai_explanations,
+        include_summary=record.include_summary,
+        include_owner_records=record.include_owner_records,
         expires_at=record.expires_at,
         revoked_at=record.revoked_at,
         status=record.status,
@@ -305,6 +336,7 @@ def create_share_link(
             token_digest=digest,
             allow_fork=body.allow_fork,
             expires_at=body.expires_at,
+            scope=body.scope(),
             link_id=link_id,
         )
 
@@ -340,7 +372,8 @@ def update_share_link(
     settings: SettingsDep,
     key: ShareKeyDep,
 ) -> ShareLink:
-    """Change `allow_fork` and/or `expires_at` (WS-SHARE-01-AC03; allowed on archived).
+    """Change `allow_fork`, `expires_at` and the scope flags (WS-SHARE-01-AC03, UX12-SHARE-AC01;
+    allowed on archived).
 
     A revoked link is final (409 `share-link-inactive`); an expired one can get a new expiry.
     """
