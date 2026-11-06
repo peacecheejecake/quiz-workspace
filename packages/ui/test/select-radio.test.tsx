@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -181,6 +181,26 @@ describe('Select touch (UX7-SELECT)', () => {
       }
     });
   }
+
+  it('UX12-POPPERS-AC07 a tap on the open trigger closes the list and its release click does not reopen it', async () => {
+    const user = userEvent.setup();
+    render(<Select label="유형" options={TYPES} defaultValue="ALL" />);
+    const trigger = screen.getByRole('combobox', { name: '유형' });
+    await user.pointer({ keys: '[TouchA]', target: trigger });
+    await screen.findByRole('listbox');
+
+    // The open list disables the page, so the tap lands on the root element, over the trigger.
+    const press = new MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 });
+    Object.defineProperty(press, 'pointerType', { value: 'touch' });
+    document.documentElement.dispatchEvent(press);
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'));
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    // Nothing more is swallowed: a click with no press (a screen reader's activation) opens it.
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('listbox')).toBeInTheDocument();
+  });
 
   it('keeps the mouse and keyboard paths: clicking or pressing Enter on the selected option closes and refocuses the trigger', async () => {
     const user = userEvent.setup();
