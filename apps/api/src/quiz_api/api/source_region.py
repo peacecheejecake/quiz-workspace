@@ -4,7 +4,8 @@
     GET /mock-exam-questions/{id}/source-region        `보기 섞기` mock question, by its origin
 
 The response says where a question sits in its import PDF: per-page bbox unions of the
-`question_sources` rows with an import run, in page order. It carries no text, answer,
+question's own locations in the `question_sources` rows with an import run, in page order; a
+page whose union touches a printed answer line has none (QSRC-01-C06). It carries no text, answer,
 explanation or block id. `figures` are the question's images inside its own region, shown above
 the options (UX12-REEXTRACT): never text blocks or images read after an inline answer. A question
 without such a region (manual, book-only, bbox-less, deleted
@@ -86,10 +87,10 @@ def _items(regions: list[Region]) -> list[SourceRegionItem]:
 def _found(
     repo: SourceRegionRepository, workspace_id: uuid.UUID, question_id: uuid.UUID
 ) -> tuple[list[SourceRegionItem], list[SourceRegionItem]]:
-    regions = repo.question_regions(workspace_id, question_id)
+    regions, figures = repo.question_view(workspace_id, question_id)
     if not regions:
         raise HTTPException(status_code=404, detail=NOT_FOUND)
-    return _items(regions), _items(repo.question_figures(workspace_id, question_id))
+    return _items(regions), _items(figures)
 
 
 @router.get("/questions/{question_id}/source-region", operation_id="getQuestionSourceRegion")

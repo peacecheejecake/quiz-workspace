@@ -595,7 +595,14 @@ def inside(box: dict[str, float], top: float = 4.0, height: float = 6.0) -> dict
     }
 
 
-def add_block(rig: Rig, question_id: str, page: int, box: dict[str, float], kind: str) -> str:
+def add_block(
+    rig: Rig,
+    question_id: str,
+    page: int,
+    box: dict[str, float],
+    kind: str,
+    text: str = "",
+) -> str:
     """A block of the paper's revision; returns its id."""
     block = f"fig-{uuid.uuid4()}"
     with psycopg.connect(DB_ADMIN_URL, autocommit=True) as conn:
@@ -603,14 +610,15 @@ def add_block(rig: Rig, question_id: str, page: int, box: dict[str, float], kind
         conn.execute("set session_replication_role = replica")
         conn.execute(
             "insert into public.content_blocks (workspace_id, document_id, document_revision_id, "
-            "block_id, ordinal, block_type, page, provenance) "
+            "block_id, ordinal, block_type, text, page, provenance) "
             "select d.workspace_id, d.id, d.active_revision_id, %s, "
             "(select max(c.ordinal) + 1 from public.content_blocks c "
-            "where c.document_revision_id = d.active_revision_id), %s, %s, %s::jsonb "
+            "where c.document_revision_id = d.active_revision_id), %s, %s, %s, %s::jsonb "
             "from public.documents d where d.id = %s",
             (
                 block,
                 kind,
+                text,
                 page,
                 json.dumps({"locations": [{"page": page, "bbox": box}]}),
                 rig.paper,
@@ -709,3 +717,43 @@ def test_ux12_reextract_c06_publish_carries_the_figure_and_mocks_follow(seed: An
     assert ok(mock_region(rig.owner, mock["id"]))["figures"] == body["figures"]
     set_variation(mock["id"], "PARAPHRASE")
     not_found(mock_region(rig.owner, mock["id"]))
+
+
+# ---------------------------------------------------------------------------------------------
+# QSRC-01-C06: a region never reaches an inline answer line
+# ---------------------------------------------------------------------------------------------
+
+
+def test_qsrc_01_c06_evidence_read_after_the_answer_cannot_stretch_the_region(seed: Any) -> None:
+    """A captioned image in the explanation reaches the question's evidence through a label. The
+    union with it used to span the answer line printed between the two."""
+    rig = Rig(seed, "c06-stretch")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    line = {"x0": own["x0"], "y0": own["y1"] + 4, "x1": own["x1"], "y1": own["y1"] + 16}
+    add_block(rig, rig.q1, 1, line, "text", "정답: ②")
+    below = {"x0": own["x0"], "y0": own["y1"] + 30, "x1": own["x1"], "y1": own["y1"] + 70}
+    add_figure(rig, rig.q1, below)
+
+    [only] = ok(region(rig.owner, rig.q1))["regions"]
+    assert only["bbox"] == own
+    assert only["bbox"]["y1"] <= line["y0"]
+
+
+def test_qsrc_01_c06_a_region_holding_an_answer_line_is_not_shown(seed: Any) -> None:
+    """The parser can put the last option and `정답: ②` in one block, and a question that wraps
+    between columns has a union crossing the answer: nothing is shown rather than the answer."""
+    rig = Rig(seed, "c06-holds")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    add_figure(rig, rig.q1, inside(own, top=2))
+    add_block(rig, rig.q1, 1, inside(own, top=9), "text", "④ 침전\n[정답] ②\n해설: 증발이다")
+    not_found(region(rig.owner, rig.q1))
+
+    other = ok(region(rig.owner, rig.q5))
+    assert other["regions"], "only the page with the answer line goes"
+
+
+def test_qsrc_01_c06_asking_for_the_answer_is_not_an_answer_line(seed: Any) -> None:
+    rig = Rig(seed, "c06-asking")
+    own = ok(region(rig.owner, rig.q1))["regions"][0]["bbox"]
+    add_block(rig, rig.q1, 1, inside(own), "text", "다음 중 정답을 고르시오.\n정답은 몇 개인가?")
+    assert ok(region(rig.owner, rig.q1))["regions"][0]["bbox"] == own
