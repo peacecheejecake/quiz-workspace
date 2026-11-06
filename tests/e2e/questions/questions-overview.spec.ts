@@ -521,6 +521,8 @@ test(
     // Space opens it too.
     await page.keyboard.press('Space');
     await expect(thirdPanel).toBeVisible();
+    // Closing before the session opens cancels it, and only an opened session marks the view.
+    await expect(panelUi.submit(thirdPanel)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(third).toBeFocused();
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 3).id)).status).toBe('viewed');
