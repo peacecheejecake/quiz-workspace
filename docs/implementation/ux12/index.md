@@ -301,7 +301,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | VIEW-5 | 5 | 진행 | |
 | VIEW-6 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 링크 대기 표시, 첫 반응 약 450→14ms, 페이지 완료 시간은 변화 없음 |
 | DOCS-2 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 22·lint·typecheck·unit GREEN |
-| SHELL-3 | 6 | 진행 | |
+| SHELL-3 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | SHELL-4 | 6 | 진행 | |
 | SHELL-5 | 6 | 대기 | |
 | SHELL-6 | 6 | 진행 | |
