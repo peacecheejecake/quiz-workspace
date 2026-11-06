@@ -536,5 +536,32 @@
       ],
       "rest": "(가) 갑이다. (나) 을이다. 위에서 고르면?"
     }
+  },
+  {
+    "name": "a dash list under <보기> is one passage with item lines",
+    "stem": "두 항목의 합계는? <보기> - 가람 : 10 - 누리 : 20",
+    "normalized": "두 항목의 합계는?\n\n<보기>\n- 가람 : 10\n- 누리 : 20",
+    "layout": {
+      "lead": ["두 항목의 합계는?"],
+      "passages": [
+        {
+          "heading": "<보기>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "-",
+              "text": "가람 : 10",
+              "subs": []
+            },
+            {
+              "marker": "-",
+              "text": "누리 : 20",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": ""
+    }
   }
 ]
