@@ -414,8 +414,8 @@ export function SequenceViewer({
     footer = solve.footer;
     const info = solve.question;
     if (solve.attachment) {
-      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기` (hint before its submission,
-      // full after — the server decides from the session). The bank's run has none.
+      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기`, once its position is graded
+      // (UX12-RUNASK). The bank's run has none.
       header = <AskQuestionButton attachment={solve.attachment} />;
     } else if (info && source === 'bank') {
       header = (
@@ -1277,17 +1277,18 @@ function useSolveStep({
           chapterTitle: item.chapter_title ?? '챕터 없음',
         }
       : null;
-  // The mock exam position's practice session (open, or the submitted one), with the answer chosen
-  // so far; a question no longer in the mock exam (or a deleted mock exam) has none.
+  // The mock exam position's graded session (UX12-RUNASK: nothing to ask about before that); a
+  // question no longer in the mock exam (or a deleted mock exam) has none.
   const mockSessionId = session?.id ?? item?.practice_session_id ?? null;
+  const graded = answered && pendingSessionId === null;
   const attachment: AskAttachmentInput | null =
-    source === 'mock' && question && mockSessionId
+    source === 'mock' && question && mockSessionId && graded
       ? {
           kind: 'mock_exam_question',
           view: 'practice',
           mock_exam_question_id: question.questionId,
           mock_practice_session_id: mockSessionId,
-          selected_option_ids: answered ? [] : answer.selected.slice(0, 50),
+          selected_option_ids: [],
         }
       : null;
   return {

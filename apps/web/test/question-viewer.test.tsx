@@ -1160,7 +1160,7 @@ describe('QVIEW-01-C06 질문하기 by mode (ASK-01 문제 쪽 진입점)', () =
     expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
   });
 
-  it('sequence(mock): the header 질문하기 attaches the position session and the chosen answer', async () => {
+  it('UX12-RUNASK-AC01 sequence(mock): 질문하기 appears once the position is graded and attaches its session', async () => {
     const user = userEvent.setup();
     const ask = launcher();
     render(
@@ -1179,7 +1179,9 @@ describe('QVIEW-01-C06 질문하기 by mode (ASK-01 문제 쪽 진입점)', () =
     );
     const panel = screen.getByRole('dialog');
     await user.click(await within(panel).findByRole('radio', { name: '응결' }));
-    const button = within(panel).getByRole('button', { name: ASK });
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    const button = await within(panel).findByRole('button', { name: ASK });
     await user.click(button);
     expect(ask.open).toHaveBeenCalledWith(
       {
@@ -1187,10 +1189,89 @@ describe('QVIEW-01-C06 질문하기 by mode (ASK-01 문제 쪽 진입점)', () =
         view: 'practice',
         mock_exam_question_id: QID,
         mock_practice_session_id: session().id,
-        selected_option_ids: ['o2'],
+        selected_option_ids: [],
       },
       button,
     );
+  });
+
+  it('UX12-RUNASK-AC01 sequence(mock): a pending submission has no 질문하기 until it is self-graded', async () => {
+    const user = userEvent.setup();
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={WS}
+          source="mock"
+          state={{ step: 'solve', runId: RUN, position: 1 }}
+          archived={false}
+          onNavigate={noop}
+          onClose={noop}
+          client={fakeClient({
+            flags: undefined,
+            setFlags: undefined,
+            submit: vi.fn(async () => ({
+              ok: true as const,
+              data: { ...graded, state: 'pending_grade' as const, result: 'pending' as const },
+            })),
+            selfGrade: vi.fn(async () => ({
+              ok: true as const,
+              data: {
+                attempt_id: graded.attempt_id,
+                grades_attempt_id: graded.attempt_id,
+                practice_session_id: session().id,
+                result: 'correct' as const,
+              },
+            })),
+          })}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog');
+    await user.click(await within(panel).findByRole('radio', { name: '응결' }));
+    await user.click(within(panel).getByRole('button', { name: SUBMIT_UI }));
+    const correct = await within(panel).findByRole('button', { name: '맞음' });
+    expect(within(panel).queryByRole('button', { name: ASK })).toBeNull();
+    await user.click(correct);
+    await within(panel).findByRole('button', { name: ASK });
+  });
+
+  it('UX12-RUNASK-AC01 sequence(mock): a submitted position read again keeps 질문하기', async () => {
+    render(
+      <AskLauncherProvider launcher={launcher()}>
+        <QuestionViewer
+          mode="sequence"
+          workspaceId={WS}
+          source="mock"
+          state={{ step: 'solve', runId: RUN, position: 1 }}
+          archived={false}
+          onNavigate={noop}
+          onClose={noop}
+          client={fakeClient({
+            flags: undefined,
+            setFlags: undefined,
+            getItem: vi.fn(async () => ({
+              ok: true as const,
+              data: item({
+                practice_session_id: session().id,
+                session_state: 'graded',
+                attempt: {
+                  attempt_id: graded.attempt_id,
+                  result: 'incorrect',
+                  submitted_answer: { selected_option_ids: ['o2'], answer_text: null },
+                  correct_option_ids: ['o1'],
+                  accepted_answers: null,
+                  explanation: null,
+                  rubric: null,
+                },
+              }),
+            })),
+          })}
+        />
+      </AskLauncherProvider>,
+    );
+    const panel = screen.getByRole('dialog');
+    await within(panel).findByRole('button', { name: ASK });
   });
 
   it('sequence(mock): a question no longer in the mock exam has no 질문하기', async () => {

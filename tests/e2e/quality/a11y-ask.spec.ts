@@ -259,15 +259,17 @@ test(
     run = runUi.panel(page);
     await expect(runUi.mockTitle(run, 1)).toBeVisible();
     await run.getByRole('radio', { name: /^보기 가 \d$/ }).check();
+    await runUi.submit(run).click();
+    await expect(runUi.result(run)).toBeVisible();
     const opener = askUi.questionButton(run);
     await opener.click();
     const panel = askUi.panel(page);
     await expect(panel).toBeVisible();
-    await expect(askUi.chip(panel).getByText(ASK_TEXT.hint)).toBeVisible();
+    await expect(askUi.chip(panel).getByText(ASK_TEXT.afterSubmit)).toBeVisible();
     await settle(page);
-    await expectAccessible(page, 'AI 질문 panel above the mock exam run, hint-only chip');
-    const hint = await ask(panel, `${QUESTION} 힌트만`);
-    await waitDone(hint);
+    await expectAccessible(page, 'AI 질문 panel above the mock exam run, full chip');
+    const full = await ask(panel, QUESTION);
+    await waitDone(full);
     await expectAccessible(page, 'AI 질문 panel above the mock exam run, answered');
     // Escape unwinds only the AI panel; focus goes back to 질문하기.
     await page.keyboard.press('Escape');

@@ -30,6 +30,7 @@
 | UX12-VIEW | 문제 보기 컨트롤 | 풀이 panel · 범위 풀이 | [ux12-viewer.md](ux12-viewer.md) |
 | UX12-RUNBAR | 범위 풀이의 제출·이전·다음 버튼 | 범위 풀이 | [ux12-run-buttons.md](ux12-run-buttons.md) |
 | UX12-RETRYOPEN | `다시 풀기` 문제는 풀이 화면부터 열기 | 풀이 panel | [ux12-retry-open.md](ux12-retry-open.md) |
+| UX12-RUNASK | 모의고사 풀이의 `질문하기`는 채점 뒤에 | 범위 풀이 | [ux12-run-ask.md](ux12-run-ask.md) |
 | UX12-QEDIT | 보기 순서 끌기·줄바꿈 입력 | 문제 편집기 | [ux12-question-edit.md](ux12-question-edit.md) |
 | UX12-NAV | 페이지 이동 반응 | 하위 페이지 링크 | [ux12-navigation.md](ux12-navigation.md) |
 | UX12-SRCMENU | 더보기 메뉴의 원문 보기 | 풀이 panel · 범위 풀이 | [ux12-source-menu.md](ux12-source-menu.md) |
