@@ -415,7 +415,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 
 - 열기: `pointerenter` 뒤 `TOOLTIP_DELAY_MS`(300ms), 그 사이 pointer가 움직이면 마지막 좌표 기준. 키보드 `:focus-visible`이면 지연 없이 **요소에** 붙는다(pointer 좌표 없음). coarse pointer(touch)는 hover가 없으므로 tap이 연다(호출한 화면이 tap 동작을 정함 — 각주는 `문제 열기` 버튼을 둠).
 - 위치: 좌표에서 8px 아래·오른쪽, 화면 밖이면 뒤집기·밀기(16px 여백). 열린 뒤 pointer를 따라 움직이지 않는다(읽는 동안 흔들리지 않게).
-- 닫기: pointer가 trigger와 floating 둘 다에서 벗어나 120ms, Escape(floating만 닫음), blur, scroll 컨테이너가 scroll될 때. floating 안으로 옮겨 가는 동안은 유지된다(안에서 scroll 가능, §5.3 격리).
+- 닫기: pointer가 trigger와 floating 둘 다에서 벗어나 120ms, Escape(floating만 닫음), blur, scroll 컨테이너가 scroll될 때. floating 안으로 옮겨 가는 동안은 유지된다: floating 둘레 8px 틈은 floating으로 치므로 틈을 건너는 속도와 상관없다(안에서 scroll 가능, §5.3 격리).
 - 접근성: 비대화형이면 `role="tooltip"` + trigger의 `aria-describedby`(열린 동안), 안에 버튼이 있으면(touch) non-modal `role="dialog"` + 이름. `prefers-reduced-motion`이면 등장 애니메이션 없음. glass `Popover` 표면·`--shadow-floating`, 폭 `min(360px, 100vw - 32px)`, 최대 높이 `min(320px, 50vh)` 넘치면 안에서 scroll.
 
 ### 5.5 홈 dialog는 modal, 배치 고정 (v1.2.8, UX9-MODAL — 사용자 요청 "문서 관리, 중복 문제 정리 등도 modal로 변경하고 해당 dialog의 열고 닫힘에 따라 본문 layout이 변하지 않게", "정리 노트도 모달로 변경")
