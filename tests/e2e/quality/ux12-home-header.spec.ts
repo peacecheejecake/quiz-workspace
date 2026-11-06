@@ -1,4 +1,4 @@
-// UX12-HEADER (docs/screens/ux12-home-header.md): the sticky 문서 N · 풀기 line above the 문제
+// UX12-HEADER (docs/screens/ux12-home-header.md): the sticky 문서 N · 모의고사 line above the 문제
 // search, and the single 문서 N menu that took in 문서 관리 and 본문 검색.
 
 import type { Locator, Page } from '@playwright/test';
@@ -19,7 +19,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 const MENU_NAME = /^(문서|documents)\s*\d+$/i;
 const trigger = (page: Page) => main(page).getByRole('button', { name: MENU_NAME });
-const play = (page: Page) => main(page).getByRole('button', { name: /^풀기$/ });
+const play = (page: Page) => main(page).getByRole('button', { name: /^모의고사$/ });
 const askButton = (page: Page) => main(page).getByRole('button', { name: /^(AI 질문|ask ai)$/i });
 const menu = (page: Page) => page.getByRole('menu', { name: MENU_NAME });
 const item = (page: Page, name: RegExp) => menu(page).getByRole('menuitem', { name });
@@ -92,7 +92,7 @@ async function openMenu(page: Page): Promise<void> {
 }
 
 test(
-  'UX12-HEADER-AC01 the line reads 문서 N, 풀기, 이력, 공유하기 above the 문제 search and one menu holds everything',
+  'UX12-HEADER-AC01 the line reads 문서 N, 모의고사, 이력, 공유하기 above the 문제 search and one menu holds everything',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await ownerHome(page, workspaceFactory, 'ux12-hdr-01');

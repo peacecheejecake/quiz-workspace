@@ -117,6 +117,7 @@ function run(overrides: Partial<PracticeRun> = {}): PracticeRun {
     source: 'bank',
     mock_exam_id: null,
     random_order: false,
+    shuffle_options: false,
     seed: 1,
     total: 2,
     answered: 0,

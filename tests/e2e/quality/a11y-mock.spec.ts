@@ -79,7 +79,7 @@ async function keyTo(page: Page, target: Locator, key = 'Tab', max = 60): Promis
 
 /** Opens the primary practice flow using the keyboard. */
 async function openPlayByKeyboard(page: Page): Promise<Locator> {
-  const play = page.getByRole('button', { name: /^풀기$/ });
+  const play = page.getByRole('button', { name: /^모의고사$/ });
   await keyTo(page, play);
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
@@ -329,7 +329,7 @@ test(
 );
 
 test(
-  'A11Y-14 keyboard only: 풀기, both steps, 만들기, then practise to the results',
+  'A11Y-14 keyboard only: 모의고사, both steps, 만들기, then practise to the results',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await bookWorkspace(workspaceFactory, 'a11y14-keys');
@@ -514,7 +514,7 @@ test(
 );
 
 test(
-  'A11Y-15 keyboard only: 풀기, a chapter by Space, 시작, answer, 결과 보기 and back to 풀기',
+  'A11Y-15 keyboard only: 모의고사, a chapter by Space, 시작, answer, 결과 보기 and back to 모의고사',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await rangeWorkspace(workspaceFactory, 'a11y15-keys');
@@ -564,6 +564,6 @@ test(
     ).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeFocused();
+    await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeFocused();
   },
 );

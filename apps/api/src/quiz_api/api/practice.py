@@ -91,6 +91,7 @@ from quiz_api.practice_grading import (
     grade_mcq,
     grade_short_answer,
     new_shuffle_seed,
+    run_option_seed,
     shuffled_option_ids,
 )
 from quiz_api.question_rules import MAX_LONG_TEXT, MAX_OPTIONS, Issues, QuestionType, storable
@@ -528,10 +529,12 @@ def _open_session(
     epoch: int,
     *,
     shuffle: bool = False,
+    shuffle_seed: int | None = None,
     run_id: uuid.UUID | None = None,
     position: int | None = None,
 ) -> PracticeSession:
-    """A new session on the active revision; also records the caller's view."""
+    """A new session on the active revision; also records the caller's view. `shuffle_seed` (a
+    `shuffle_options` run's position) fixes the shuffle, `shuffle` draws a new one."""
     if question.publication_status != "CONFIRMED":
         raise ProblemException(
             409,
@@ -542,8 +545,8 @@ def _open_session(
     displayed: list[str] = []
     if question.question_type == "MCQ":
         displayed = [o["id"] for o in question.revision.options]
-        if shuffle:
-            seed = new_shuffle_seed()
+        if shuffle or shuffle_seed is not None:
+            seed = new_shuffle_seed() if shuffle_seed is None else shuffle_seed
             displayed = shuffled_option_ids(displayed, seed)
 
     opened = practice.open_session(
@@ -647,6 +650,7 @@ def start_practice_session(
                 )
             return replay(stored, body_hash)
     run_id, position = body.practice_run_id, body.run_position
+    run_seed: int | None = None
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
         if run is None:
@@ -680,6 +684,8 @@ def start_practice_session(
                 )
             practice.commit()
             return resumed
+        if run.shuffle_options:
+            run_seed = run_option_seed(run.seed, position)
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -690,6 +696,7 @@ def start_practice_session(
         user.id,
         epoch,
         shuffle=body.shuffle_options,
+        shuffle_seed=run_seed,
         run_id=run_id,
         position=position,
     )

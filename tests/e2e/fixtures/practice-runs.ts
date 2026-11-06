@@ -154,6 +154,7 @@ export interface PracticeRun {
   readonly source: 'bank' | 'mock';
   readonly mock_exam_id: string | null;
   readonly random_order: boolean;
+  readonly shuffle_options: boolean;
   readonly seed: number;
   readonly total: number;
   readonly finished_at: string | null;
@@ -571,7 +572,7 @@ export const runUi = {
 };
 
 /**
- * Opens the range step of a bank run by its URL (the home's 풀기 opens the 모의고사 list, and its
+ * Opens the range step of a bank run by its URL (the home's 모의고사 opens the 모의고사 list, and its
  * 만들기 without variations starts a run with a chosen range instead of this step).
  */
 export async function openQuestionMenuWithPractice(page: Page): Promise<void> {

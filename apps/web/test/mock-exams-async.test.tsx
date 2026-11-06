@@ -65,6 +65,7 @@ describe('mock run session routing', () => {
           source: 'mock',
           mock_exam_id: EXAM,
           random_order: false,
+          shuffle_options: false,
           seed: 1,
           total: 1,
           answered: 1,

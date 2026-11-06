@@ -65,7 +65,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 **레이아웃 패턴 (floating dialog — 사용자 결정 2026-11-01):** 문서 관리 dialog([DOC-01](documents-library.md))와 보관·초안 문제 dialog(QOV-01-AC15)의 목록 dialog 패턴을 따른다(MOCK-SPEC 초안의 문제 PDF 관리 dialog는 UX7-DOCS에서 문서 관리로 합쳐져 없음) — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음). `BackLink` "모의고사 목록"도 목록 → 만들기·상세처럼 기록 항목을 하나 쌓는다(push — 그 뒤 뒤로가기는 dialog를 연 채 앞의 만들기·상세로 돌아간다) (사용자 결정 2026-11-02).
 
-- **진입:** 홈의 primary `풀기`(모든 구성원, [UX12-MOCKNAV](ux12-mock-nav.md)). 목록 위 `추가`는 모든 구성원에게 보인다(사용자 결정 2026-11-06, [UX12-MOCKNAV-AC05](ux12-mock-nav.md)).
+- **진입:** 홈의 primary `모의고사`(모든 구성원, [UX12-MOCKNAV](ux12-mock-nav.md)). 목록 위 `추가`는 모든 구성원에게 보인다(사용자 결정 2026-11-06, [UX12-MOCKNAV-AC05](ux12-mock-nav.md)).
 - **목록 화면:**
   - 목록 위 동작 줄: 왼쪽 "모의고사 n개", 오른쪽 primary 버튼 `추가`(모든 구성원). 편집 권한이 없거나 보관된 Workspace에서는 같은 만들기 화면이 열리되 변형 유형이 비활성이라 변형 없는 원본 풀이만 시작하고, 모의고사는 저장하지 못한다.
   - 행: 이름(누르면 상세) · 상태 badge(`만드는 중`·`준비됨`·`일부만 만듦`·`실패`) · 메타 줄 `문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28` · `풀기`(준비됨·일부만 만듦, 모든 구성원) · 행 메뉴(편집 권한: `이름 바꾸기`·`설정 바꾸기`·`삭제`). 만드는 중이면 메타 줄 아래 공통 `ProgressBar`("문제 생성 진행률", 값 글자 "20개 중 7개").
@@ -99,7 +99,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 ## 접근성
 
-- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `풀기` 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
+- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `모의고사` 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
 - 상태 badge·"확인 필요"·"편집됨"은 글자로 전달한다(색만으로 전달하지 않음). 생성 진행은 `ProgressBar` 값 글자 + 완료·실패 때 `aria-live="polite"` 알림.
 - 행 메뉴는 Radix DropdownMenu(접근성 이름 "<이름> 메뉴"), 아이콘 버튼은 접근성 이름을 가진다. `QuestionRangePicker` 접근성은 QVIEW-01과 같다.
 - 375px에서 가로 스크롤 없음, 버튼 문구는 줄바꿈하지 않고 버튼 단위로 넘어간다.

@@ -61,6 +61,7 @@ export interface PracticeRunApi {
     randomOrder: boolean,
     key: string,
     count?: number | null,
+    shuffleOptions?: boolean,
   ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
@@ -143,11 +144,17 @@ export function createPracticeRunApi(
         ? { ok: true, data: { chapters: result.data.chapters, items: result.data.items } }
         : result;
     },
-    create: async (range, randomOrder, key, count) =>
+    create: async (range, randomOrder, key, count, shuffleOptions) =>
       own(
         await call<PracticeRun>(RUN_BFF_PATHS.create(workspaceId), {
           method: 'POST',
-          body: { source: 'bank', range, random_order: randomOrder, question_count: count ?? null },
+          body: {
+            source: 'bank',
+            range,
+            random_order: randomOrder,
+            question_count: count ?? null,
+            ...(shuffleOptions ? { shuffle_options: true } : {}),
+          },
           key,
         }),
       ),

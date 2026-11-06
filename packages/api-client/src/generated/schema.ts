@@ -6228,6 +6228,8 @@ export type components = {
       reached: number;
       /** Seed */
       seed: number;
+      /** Shuffle Options */
+      shuffle_options: boolean;
       /**
        * Source
        * @enum {string}
@@ -6267,6 +6269,12 @@ export type components = {
        * @description Shuffle seed; the server picks one if absent.
        */
       seed?: number | null;
+      /**
+       * Shuffle Options
+       * @description Shuffle each MCQ's options for this run (bank only).
+       * @default false
+       */
+      shuffle_options?: boolean;
       /**
        * Source
        * @enum {string}

@@ -297,7 +297,7 @@ test(
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
-    await expect(page.getByRole('button', { name: /^풀기$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^모의고사$/ })).toBeVisible();
     expect(new URL(page.url()).searchParams.has('practice')).toBe(false);
   },
 );
@@ -418,7 +418,7 @@ test(
     await expect.poll(() => practiceParam(page)).toBeNull();
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: /^풀기$/ }).click();
+    await page.getByRole('button', { name: /^모의고사$/ }).click();
     const play = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await play.getByRole('button', { name: /^(추가|add)$/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
