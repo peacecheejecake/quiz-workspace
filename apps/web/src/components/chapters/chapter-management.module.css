@@ -127,6 +127,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* CHMAN-01-AC08: the touch path of every row, as tall as the row and its grip. */
+@media (width < 768px), (pointer: coarse) {
+  .row .rowMenu {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
 .questionPicker {
   flex: 1 1 100%;
   min-width: 0;

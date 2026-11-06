@@ -651,7 +651,7 @@ function RowMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <IconButton label={label} icon={<MoreIcon />} disabled={busy} />
+        <IconButton className={styles.rowMenu} label={label} icon={<MoreIcon />} disabled={busy} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" aria-label={label}>
         <DropdownMenuItem onSelect={afterClose(onRename)}>이름 바꾸기</DropdownMenuItem>
