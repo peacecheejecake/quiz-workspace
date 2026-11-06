@@ -18,6 +18,7 @@
 | UX12-HOME | Heatmap 미리보기·셀 크기 | Workspace 홈 | [ux12-home.md](ux12-home.md) |
 | UX12-HEADER | 홈 상단 줄·`문서 N` 메뉴 | Workspace 홈 | [ux12-home-header.md](ux12-home-header.md) |
 | UX12-FILTER | 홈 검색·필터 줄 | Workspace 홈 | [ux12-home-filter.md](ux12-home-filter.md) |
+| UX12-HOMEFILTER | 홈 상태 필터와 툴바 배치 | Workspace 홈 | [ux12-home-status-filter.md](ux12-home-status-filter.md) |
 | UX12-EXTRACT | 초안 문제 전체 표시 | 문서 보기 | [ux12-extract.md](ux12-extract.md) |
 | UX12-SPANS | 표 병합 셀 | 문서 보기 | [ux12-spans.md](ux12-spans.md) |
 | UX12-REEXTRACT | 다시 추출·문제 그림 | 문제 검토 · 공통 문제 표시 | [ux12-reextract.md](ux12-reextract.md) |

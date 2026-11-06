@@ -124,8 +124,9 @@ export const homeUi = {
   /** The button that opens the box; named 검색 닫기 while it is open (UX12-FILTER). */
   questionSearchButton: (page: Page) =>
     homeUi.header(page).getByRole('button', { name: /^(검색|search|검색 닫기|close search)$/i }),
-  /** The status message under the 문제 search (why it is disabled). */
-  questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
+  /** The status message under the sticky line's buttons (why 검색 is disabled). */
+  questionSearchMessage: (page: Page) =>
+    main(page).getByRole('status', { name: /^(문제 검색 안내|question search (note|message))$/i }),
   /** The home's retired "본문 검색" disclosure button (SEARCH-01-AC10, retired by UX9). */
   contentSearchToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
@@ -143,8 +144,13 @@ export const homeUi = {
     page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
+  /** The chips, inside the 필터 popover (UX12-HOMEFILTER): `openStatusFilters` first. */
   statusFilters: (page: Page) =>
-    main(page).getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+    homeUi
+      .searchSettings(page, 'questions')
+      .getByRole('group', { name: /^(상태 필터|status filter)$/i }),
+  /** Why 미열람 is off under 즐겨찾기만 (empty otherwise). */
+  statusFilterNote: (page: Page) => homeUi.searchSettings(page, 'questions').getByRole('status'),
 };
 
 export type SearchScopeName = 'questions' | 'body';
@@ -338,6 +344,14 @@ export async function openSearchOptions(
   const popover = homeUi.searchSettings(page, scope);
   await expect(popover).toBeVisible();
   return popover;
+}
+
+/** Opens the home's 필터 popover (no-op when it is open) and returns its 상태 필터 chips. */
+export async function openStatusFilters(page: Page): Promise<Locator> {
+  await openSearchOptions(page, 'questions');
+  const group = homeUi.statusFilters(page);
+  await expect(group).toBeVisible();
+  return group;
 }
 
 /** Closes a scope's settings popover when it is open. */
