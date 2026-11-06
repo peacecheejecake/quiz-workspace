@@ -78,6 +78,10 @@ const keepTall = (panel: Locator) =>
     (el as HTMLElement).style.minHeight = '3000px';
   });
 
+/** UX12-OPTIONS-AC07: an MCQ grade focuses the options, a group named by the hidden result. */
+const gradedOptions = (panel: Locator) =>
+  panel.getByRole('group', { name: RESULT_TEXT.correct });
+
 async function heightOf(locator: Locator): Promise<number | undefined> {
   return (await locator.boundingBox())?.height;
 }
@@ -183,7 +187,17 @@ test(
     await expect(page.getByRole('tooltip')).toContainText(REASON);
     // RETRY-01: the header toggle stays absent before a correct result.
     await expect(panelUi.retryOn(panel)).toHaveCount(0);
+    // A press (a tap shows no tooltip) says why in a toast with nothing to act on, and changes nothing.
     await again.dispatchEvent('click');
+    const toast = page
+      .getByRole('region', { name: /알림 \(F8\)|notifications/i })
+      .locator('li')
+      .filter({ hasText: REASON });
+    await expect(toast).toHaveCount(1);
+    await expect(toast.getByRole('button')).toHaveCount(1);
+    await expect(toast.getByRole('button')).toHaveAccessibleName(/닫기|close/i);
+    await again.dispatchEvent('click');
+    await expect(toast).toHaveCount(1);
     await expect(panelUi.submit(panel)).toBeVisible();
 
     await panelUi.option(panel, firstOption(question)).check();
@@ -214,6 +228,7 @@ test(
     let panel = await openPanel(page, 1);
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     expect(await overflows(panel)).toBe(true);
+    await expect(gradedOptions(panel)).not.toBeFocused();
     await expect(panelUi.result(panel)).not.toBeFocused();
     expect(await scrollTop(panel)).toBe(0);
     await panelUi.close(panel).click();
@@ -223,7 +238,7 @@ test(
     await panelUi.option(panel, firstOption(second)).check();
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await expect(panelUi.result(panel)).toBeFocused();
+    await expect(gradedOptions(panel)).toBeFocused();
     await expect.poll(() => scrollTop(panel)).toBeGreaterThan(0);
   },
 );

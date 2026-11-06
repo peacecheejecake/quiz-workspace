@@ -24,6 +24,7 @@ import {
   RetryToggle,
   Tooltip,
   questionTypeLabels,
+  useToast,
 } from '@quiz/ui';
 import {
   useEffect,
@@ -685,7 +686,8 @@ export function StudyToggles({
 /**
  * The footer's `다시 풀기` (UX12-VIEW-AC04, D-8): always there, unavailable until this session has a
  * final result. It stays focusable (`aria-disabled`) so the tooltip reaches keyboard users and
- * pressing it does not drop focus when the new session starts.
+ * pressing it does not drop focus when the new session starts. A press says why in a toast: touch
+ * has no tooltip.
  */
 function AnotherTryButton({
   available,
@@ -696,6 +698,8 @@ function AnotherTryButton({
 }) {
   const reasonId = useId();
   const [hinted, setHinted] = useState(false);
+  const { toast, dismiss } = useToast();
+  const reasonToast = useRef<number | null>(null);
   return (
     <>
       <Tooltip open={hinted && !available} onOpenChange={setHinted} content={ANOTHER_TRY_REASON}>
@@ -703,7 +707,12 @@ function AnotherTryButton({
           aria-disabled={!available || undefined}
           aria-describedby={available ? undefined : reasonId}
           onClick={() => {
-            if (available) onTry();
+            if (available) {
+              onTry();
+              return;
+            }
+            if (reasonToast.current !== null) dismiss(reasonToast.current);
+            reasonToast.current = toast({ title: ANOTHER_TRY_REASON });
           }}
         >
           다시 풀기
