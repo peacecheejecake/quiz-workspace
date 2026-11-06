@@ -555,7 +555,7 @@ test(
     // Header: the `문서 N` menu · 풀기 and the icon buttons 이력 · 공유하기, then the 문제 search
     // (UX12-HEADER). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
-    await expect(homeUi.questionSearch(page)).toBeVisible();
+    await expect(homeUi.questionSearchButton(page)).toBeVisible();
     await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
     await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper

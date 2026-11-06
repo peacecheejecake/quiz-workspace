@@ -109,7 +109,7 @@ test(
     const xs = parts.map((part) => part.x);
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
     for (const part of parts) expect(part.y).toBe(parts[0]?.y);
-    const search = await box(homeUi.questionSearch(page));
+    const search = await box(homeUi.header(page));
     expect(search.y).toBeGreaterThanOrEqual((parts[0]?.y ?? 0) + (parts[0]?.height ?? 0));
 
     await openMenu(page);
@@ -200,7 +200,7 @@ test(
 
     await scrollTo(page, 500);
     expect((await box(line)).y).toBe(appBottom);
-    const search = await box(homeUi.questionSearch(page));
+    const search = await box(homeUi.header(page));
     expect(search.y + search.height).toBeLessThanOrEqual(appBottom);
 
     const style = await line.evaluate((el) => {

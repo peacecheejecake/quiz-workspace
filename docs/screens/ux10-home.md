@@ -6,9 +6,7 @@ linked_tests: `tests/e2e/questions/ux10-home.spec.ts`
 
 `문서 N` 메뉴 버튼 뒤의 primary 풀기 버튼으로 통합 풀이에 진입하고, 그 메뉴에 중복 풀이 및 AI 질문 항목이 없다. (UX12 HOME-4: 아이콘 전용 `문제 메뉴`는 `문서 N` 메뉴로 합쳐졌다, [UX12-HEADER](ux12-home-header.md).)
 
-### UX10-HOME-AC02
-
-검색 아래 챕터와 유형은 기본 펼침이며 접어도 선택이 유지된다. 상태 필터는 항상 보인다.
+> **UX10-HOME-AC02 폐기 (UX12 HOME-5 2026-11-06):** 챕터·유형은 검색 아래 펼침 영역이 아니라 필터 popover에 있다([UX12-FILTER](ux12-home-filter.md)). 상태 필터가 항상 보인다는 내용은 UX12-FILTER-AC01이 잇는다.
 
 ### UX10-HOME-AC03
 

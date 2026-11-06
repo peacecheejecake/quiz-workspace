@@ -37,6 +37,8 @@
 //              name with 원문/텍스트) whose current block carries aria-current="true"; block
 //              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
 //              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
+//   UX12-FILTER  under the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
+//              문제 search box, and icon button "필터" → popover "필터" (comboboxes "챕터"/"유형").
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -110,11 +112,17 @@ export const homeUi = {
   /** The retired 문제 생성 dialog (QGEN-RM): only ever expected to be absent. */
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  /** The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12, no button). */
+  /**
+   * The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12). Closed by default
+   * (UX12-FILTER): `openQuestionSearch` first, unless the URL has `q`.
+   */
   questionSearch: (page: Page) =>
     homeUi.header(page).getByRole('searchbox', {
       name: /^(문제 검색|question search|search questions)$/i,
     }),
+  /** The button that opens the box; named 검색 닫기 while it is open (UX12-FILTER). */
+  questionSearchButton: (page: Page) =>
+    homeUi.header(page).getByRole('button', { name: /^(검색|search|검색 닫기|close search)$/i }),
   /** The status message under the 문제 search (why it is disabled). */
   questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   /** The home's retired "본문 검색" disclosure button (SEARCH-01-AC10, retired by UX9). */
@@ -127,16 +135,11 @@ export const homeUi = {
     main(page).getByRole('search', { name: /^(본문 검색|body search|content search)$/i }),
   /** The status message of the 본문 search (why its button is disabled). */
   contentSearchMessage: (page: Page) => homeUi.contentSearch(page).getByRole('status'),
-  /** The "설정" text button of a search; it opens that search's settings popover. */
+  /** The button of a search's settings popover: 필터 on the home, "본문 설정" for the 본문 search. */
   searchSettingsButton: (page: Page, scope: SearchScopeName) =>
     main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
   searchSettings: (page: Page, scope: SearchScopeName) =>
-    scope === 'questions'
-      ? main(page)
-          .getByRole('search', { name: /문제 검색|question search/i })
-          .locator(':scope > div')
-          .nth(1)
-      : page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -145,11 +148,11 @@ export const homeUi = {
 
 export type SearchScopeName = 'questions' | 'body';
 const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(검색 설정|search settings)$/i,
+  questions: /^(필터|filters?)$/i,
   body: /^(본문 설정|body settings|content settings)$/i,
 };
 const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(문제 검색 설정|question search settings)$/i,
+  questions: /^(필터|filters?)$/i,
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
@@ -313,6 +316,15 @@ export async function openContentSearch(page: Page): Promise<void> {
   await expect(box).toBeVisible();
 }
 
+/** Opens the home's 문제 search (UX12-FILTER; no-op when it is open) and returns the box. */
+export async function openQuestionSearch(page: Page): Promise<Locator> {
+  const button = homeUi.questionSearchButton(page);
+  if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
+  const box = homeUi.questionSearch(page);
+  await expect(box).toBeFocused();
+  return box;
+}
+
 /** Opens a search's settings popover ("본문 설정" by default; no-op when it is open). */
 export async function openSearchOptions(
   page: Page,
@@ -334,12 +346,6 @@ export async function closeSearchOptions(
   const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
   const popover = homeUi.searchSettings(page, scope);
-  if (scope === 'questions') {
-    await button.focus();
-    await page.keyboard.press('Enter');
-    await expect(popover).toBeHidden();
-    return;
-  }
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {
