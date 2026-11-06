@@ -162,6 +162,16 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 |---|---|---|---|
 | PLAY-1 검증 보강 | 항목은 모두 완료 | 문항 수·난이도 기하 E2E, 상세 화면·저장 실패 이름 수정 E2E, MOCK-01의 낡은 `StepProgress` 문구 수정, 변형 0개일 때 `이름` 숨김 | S·없음 |
 
+### 4.8a PLAY 추가 — 모의고사 흐름(사용자 요청 2026-11-06)
+
+구현 전 점검: 아래 요청은 현재 코드에 없다. 하단 버튼에는 sticky 스타일이 있지만 사용자가 고정 안 됨을 보고했으므로 재현부터 한다.
+
+| Task | 항목 | 내용 | 비고 | 크기·의존 |
+|---|---|---|---|---|
+| MOCKUX-1 만들기 화면 | step UI, 제목, 스크롤, 범위 필터 | 만들기와 설정 바꾸기의 `문제 풀기` 제목과 단계 목록을 지우고 업로드와 비슷한 step UI를 패널 안 상단에 고정한다. 패널 제목은 `모의고사`. 좌우 스크롤 흔들림과 하단 버튼 고정 문제를 재현해 고친다. 범위 단계: `상태 필터` 접기를 지워 필터를 항상 보이고, 상태 chip에 홈과 같은 색 표시를 넣는다. `유형` 드롭다운은 체크박스 묶음(복수 선택)으로 바꾼다. `이전` 버튼을 지우고 step 표시의 1단계를 눌러 돌아간다 | 사용자 결정(2026-11-06): 체크박스는 문제 형식 필터. `모의고사 목록` 뒤로가기는 유지 | L·없음 |
+| MOCKUX-2 진입·상세·용어 | 홈 `풀기`, 상세 메뉴, 용어 | 홈 `풀기`는 모의고사 목록을 연다. 상세는 `풀기`만 버튼으로 두고 `설정 바꾸기`, `다시 만들기`, `이름 바꾸기`, `삭제`는 더보기 드롭다운으로 옮긴다. 화면 문구와 문서의 `문제 풀기`를 `모의고사`로 정리한다 | 홈 버튼 이름 `풀기`는 유지 | M·없음 |
+| MOCKUX-3 풀이 버튼 | 제출, 이전/다음 | 범위 풀이 panel의 `제출`, 이전/다음 버튼을 Heatmap 셀로 연 풀이 panel과 같게 맞춘다(이름, 순서, 모양) | 마지막 문제의 `결과 보기`는 범위 풀이에만 있다 | M·없음 |
+
 ### 4.9 DOCS — 업로드·원본
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -231,6 +241,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 6 | `shell` | SHELL-3 → SHELL-4, SHELL-5, SHELL-6 | `app/layout.tsx` 공유 |
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
+| 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -320,3 +331,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | SHARE-2 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | VIEW-7 | 5 | 완료 | Codex P2 3건 수정 후 재리뷰 통과, 첫 구현 E2E·화면 확인, 수정분 E2E는 PR CI |
 | EXTRACT-9 | 8 | 완료 | a540c198 · Codex P1(span 메모리)·P2(CI phase) 수정 후 재리뷰 통과, 표 편집 포함, 칸 병합·해제 제외, 발문 표 28개 중 병합 18개. migration·pgTAP·E2E는 PR CI에서 확인 |
+| MOCKUX-1 | 9 | 진행 | |
+| MOCKUX-2 | 9 | 진행 | |
+| MOCKUX-3 | 9 | 진행 | |
