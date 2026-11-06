@@ -377,6 +377,24 @@ describe('overlay body scroll region (axe scrollable-region-focusable)', () => {
 
   const bodyOf = (dialog: HTMLElement) => dialog.querySelector<HTMLElement>(':scope > .body');
 
+  it('UX12-VIEW-AC06 brings the body to the top when scrollKey changes, and only then', async () => {
+    const panel = (scrollKey: string | undefined, label: string) => (
+      <FloatingSidePanel open title="스크롤" scrollKey={scrollKey}>
+        <p>{label}</p>
+      </FloatingSidePanel>
+    );
+    const view = render(panel('a', '첫째'));
+    const body = bodyOf(await screen.findByRole('dialog', { name: '스크롤' }));
+    if (!body) throw new Error('no body');
+    body.scrollTop = 120;
+    view.rerender(panel('a', '내용만 바뀜'));
+    expect(body.scrollTop).toBe(120);
+    view.rerender(panel(undefined, '닫히는 중'));
+    expect(body.scrollTop).toBe(120);
+    view.rerender(panel('b', '둘째'));
+    expect(body.scrollTop).toBe(0);
+  });
+
   it('makes a long body without focusable content a named, keyboard-reachable group', async () => {
     const user = userEvent.setup();
     render(

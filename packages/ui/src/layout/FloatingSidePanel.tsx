@@ -157,6 +157,11 @@ export interface FloatingSidePanelProps {
    */
   raiseKey?: string | number;
   /**
+   * Changing this brings the body back to its top (e.g. the panel shows another question).
+   * `undefined` leaves the scroll position alone.
+   */
+  scrollKey?: string | number | undefined;
+  /**
    * Non-modal only: stays in the accessibility tree while a modal panel is open on top (a modal
    * hides everything else from assistive technology, but keeps `aria-live` regions; `off` adds no
    * announcements). For a panel whose state the modal changes, e.g. the 정리 노트 panel that
@@ -206,6 +211,7 @@ export function FloatingSidePanel({
   onOpenerResolved,
   onCloseAutoFocus,
   raiseKey,
+  scrollKey,
   staysExposedUnderModal = false,
   aboveModals = false,
   className,
@@ -413,7 +419,9 @@ export function FloatingSidePanel({
                     <IconButton label={closeLabel} icon={<CloseIcon />} />
                   </Dialog.Close>
                 </div>
-                <ScrollRegion className="body">{children}</ScrollRegion>
+                <ScrollRegion className="body" scrollKey={scrollKey}>
+                  {children}
+                </ScrollRegion>
                 {footer ? <div className="footer">{footer}</div> : null}
               </DirtyProvider>
             </LayerProvider>

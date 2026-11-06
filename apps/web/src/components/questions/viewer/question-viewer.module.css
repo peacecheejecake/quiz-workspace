@@ -298,6 +298,12 @@
   margin-inline-start: auto;
 }
 
+/* Footer controls that cannot act keep focus (aria-disabled), styled like a disabled button. */
+.footer [aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* Revision body (manage, read-only): a revision with its answers, no answer input. */
 .detailSection {
   display: grid;

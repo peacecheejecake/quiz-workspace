@@ -1201,7 +1201,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     const before = snapshot(retry);
     const seen = new Set<string>();
     const observer = new MutationObserver(() => {
-      const now = within(panel).queryByRole('button', { name: /다시 풀기/ });
+      const now = within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ });
       seen.add(now === retry ? snapshot(retry) : 'remounted');
     });
     observer.observe(panel, { subtree: true, attributes: true, childList: true });
@@ -1289,7 +1289,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.'),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
     expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(1));
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();
