@@ -167,7 +167,6 @@ test(
     const before = await rowBoxes(panel);
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toHaveText('오답입니다.');
-    await expect(panelUi.result(panel)).toBeFocused();
     await expectHidden(panelUi.result(panel));
     await expect(icon(b, 'wrong')).toBeVisible();
     await expect(icon(a, 'correct')).toBeVisible();
@@ -275,5 +274,31 @@ test(
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(/정답입니다/);
     expect(await rowHeight(option)).toBeGreaterThan(oneLine + 40);
+  },
+);
+
+test(
+  'UX12-OPTIONS-AC07 a keyboard MCQ submission moves focus to the options with a visible ring',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const label = `ux12-opt7-${randomUUID().slice(0, 8)}`;
+    const s = await seed(workspaceFactory, label, [numberedMcq(label, 1)]);
+    await openOverview(page, s);
+    const focusColor = await tokenColor(page, 'color-focus');
+    const panel = await openPanel(page, 1);
+    await panelUi.option(panel, `${label}-1 보기 나`).check();
+    await panelUi.submit(panel).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(panelUi.result(panel)).toHaveText('오답입니다.');
+    await expectHidden(panelUi.result(panel));
+    const region = panel.getByRole('group', { name: '오답입니다.' });
+    await expect(region).toBeFocused();
+    await expect(region).toHaveCSS('outline-style', 'solid');
+    await expect(region).toHaveCSS('outline-width', '2px');
+    await expect(region).toHaveCSS('outline-color', focusColor);
+    await expect(region.getByRole('radio')).toHaveCount(4);
+    const box = await region.boundingBox();
+    expect(box?.height).toBeGreaterThan(100);
   },
 );

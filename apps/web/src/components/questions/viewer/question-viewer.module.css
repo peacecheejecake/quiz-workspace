@@ -1,7 +1,7 @@
 /* QuestionViewer (QVIEW-01, docs/screens/question-viewer.md): the shared question body, the
    practice / sequence / manage / read-only modes and the range picker. Semantic tokens only. */
 
-/* Positioned: the visually hidden result line, a focus target, stays inside the scrolling body. */
+/* Positioned: the visually hidden result line stays inside the scrolling body. */
 .body {
   position: relative;
   display: grid;
@@ -213,6 +213,17 @@
 
 .result:empty {
   display: none;
+}
+
+/* An MCQ grade's focus target (UX12-OPTIONS-AC07): its sentence is hidden, these are not. */
+.answerField {
+  min-inline-size: 0;
+  border-radius: var(--radius-md);
+}
+
+.answerField:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .result:focus-visible {

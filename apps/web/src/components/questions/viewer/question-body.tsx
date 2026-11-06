@@ -10,7 +10,7 @@
 // The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
 // 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only.
 import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
-import type { Ref } from 'react';
+import { useId, type Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { StemBlocks } from '@/components/questions/stem/stem-text';
 import type { Question } from '@/lib/questions/form';
@@ -82,7 +82,8 @@ interface AnswerBodyProps {
   readonly outcome: RevealedAnswers | null;
   readonly selfGrade: GradeResult | null;
   readonly error?: string | null;
-  readonly resultRef?: Ref<HTMLParagraphElement>;
+  /** The element a submission moves focus to: the visible result (UX12-OPTIONS-AC07). */
+  readonly resultRef?: Ref<HTMLElement>;
   /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
   readonly highlighting?: ExplanationHighlighting | null;
 }
@@ -99,26 +100,35 @@ function AnswerBody({
   resultRef,
   highlighting = null,
 }: AnswerBodyProps) {
+  const resultId = useId();
+  // A hidden sentence cannot show a focus ring, so an MCQ grade focuses the options, named by it.
+  const hiddenResult =
+    outcome !== null && resultIsVisuallyHidden(question.question_type, outcome.result);
+  // Either element takes the viewer's ref, which only calls focus().
+  const focusRef = resultRef as Ref<HTMLDivElement & HTMLParagraphElement> | undefined;
   return (
     <>
       <QuestionStem stem={stem} />
-      <AnswerField
-        question={question}
-        answer={answer}
-        disabled={disabled}
-        correct={outcome?.correct_option_ids ?? null}
-        graded={outcome?.result ?? null}
-        onChange={onAnswerChange}
-      />
+      <div
+        ref={hiddenResult ? focusRef : undefined}
+        className={styles.answerField}
+        {...(hiddenResult ? { role: 'group', 'aria-labelledby': resultId, tabIndex: -1 } : {})}
+      >
+        <AnswerField
+          question={question}
+          answer={answer}
+          disabled={disabled}
+          correct={outcome?.correct_option_ids ?? null}
+          graded={outcome?.result ?? null}
+          onChange={onAnswerChange}
+        />
+      </div>
       <p
-        ref={resultRef}
+        ref={hiddenResult ? undefined : focusRef}
+        id={resultId}
         role="status"
         tabIndex={-1}
-        className={
-          outcome && resultIsVisuallyHidden(question.question_type, outcome.result)
-            ? `${styles.result} qz-visually-hidden`
-            : styles.result
-        }
+        className={hiddenResult ? `${styles.result} qz-visually-hidden` : styles.result}
         data-result={outcome ? finalResult(outcome.result, selfGrade) : undefined}
       >
         {outcome ? resultMessage(outcome.result, selfGrade) : ''}
