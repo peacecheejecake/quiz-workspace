@@ -122,7 +122,8 @@ test(
     for (const title of [CH1, CH2, '챕터 없음']) {
       await expect(chapterPlay(page, title)).toHaveText(/^\s*풀기\s*$/);
     }
-    await expect(main(page).getByRole('button', { name: /^(.+ )?풀기$/ })).toHaveCount(3);
+    // The 다시 풀기 status chip is the one other name that ends in 풀기.
+    await expect(main(page).getByRole('button', { name: /^(?!다시 ).+ 풀기$/ })).toHaveCount(3);
     await chapterPlay(page, '챕터 없음').click();
     const dialog = dialogOf(page, '챕터 없음');
     const request = page.waitForRequest(isRunRequest);
@@ -249,7 +250,7 @@ test(
 );
 
 test(
-  'UX12-CHAPTERRUN-AC04 an archived workspace starts the run without a submit',
+  'UX12-CHAPTERRUN-AC04 an archived workspace starts the run with 제출 disabled',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seedRangeWorkspace(workspaceFactory, 'ux12-chrun-04a', { studyState: false });
@@ -258,7 +259,7 @@ test(
     const { panel } = await startRun(page, s.owner, CH1, { shuffle: true });
     await expect(runUi.title(panel, 1)).toBeVisible();
     await expect(runUi.archivedNotice(panel)).toBeVisible();
-    await expect(runUi.submit(panel)).toHaveCount(0);
+    await expect(runUi.submit(panel)).toBeDisabled();
     expect(await shownOrder(panel, nth(s, 0))).toEqual(seededTexts(nth(s, 0), 1));
   },
 );

@@ -136,13 +136,16 @@ async function ready(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 }
 
-/** Full-page screenshot of the current state in every color scheme: `<name>-<scheme>.png`. */
+/**
+ * Full-page screenshot of the current state in every color scheme: `<name>-<scheme>.png`. Soft, so
+ * one run reports every changed baseline instead of stopping at the first.
+ */
 async function snap(page: Page, name: string, extraMask: Locator[] = []): Promise<void> {
   await page.addStyleTag({ content: `${FIXED_ACCOUNT_WIDTH}\n${FIXED_TIME_WIDTH}` });
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await ready(page);
-    await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, {
+    await expect.soft(page).toHaveScreenshot(`${name}-${scheme}.png`, {
       fullPage: true,
       mask: [...dynamic(page), ...extraMask],
     });
@@ -562,7 +565,7 @@ async function snapElement(page: Page, target: Locator, name: string): Promise<v
   for (const scheme of COLOR_SCHEMES) {
     await page.emulateMedia({ colorScheme: scheme });
     await ready(page);
-    await expect(target).toHaveScreenshot(`${name}-${scheme}.png`);
+    await expect.soft(target).toHaveScreenshot(`${name}-${scheme}.png`);
   }
   await page.emulateMedia({ colorScheme: 'light' });
 }
