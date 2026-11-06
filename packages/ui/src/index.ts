@@ -45,6 +45,7 @@ export {
   ChevronUpIcon,
   CloseIcon,
   FilterIcon,
+  GripIcon,
   HistoryIcon,
   MenuIcon,
   MinusIcon,

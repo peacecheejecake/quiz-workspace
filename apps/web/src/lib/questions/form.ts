@@ -200,6 +200,14 @@ export function removeOption(values: QuestionFormValues, id: string): QuestionFo
   return { ...values, options: values.options.filter((o) => o.id !== id) };
 }
 
+function placeOption(values: QuestionFormValues, from: number, to: number): QuestionFormValues {
+  if (from < 0 || to < 0 || to >= values.options.length || from === to) return values;
+  const options = [...values.options];
+  const [moved] = options.splice(from, 1);
+  if (moved) options.splice(to, 0, moved);
+  return { ...values, options };
+}
+
 /** Moves an option up (-1) or down (+1); ids travel with their text. */
 export function moveOption(
   values: QuestionFormValues,
@@ -207,12 +215,20 @@ export function moveOption(
   delta: -1 | 1,
 ): QuestionFormValues {
   const from = values.options.findIndex((o) => o.id === id);
-  const to = from + delta;
-  if (from < 0 || to < 0 || to >= values.options.length) return values;
-  const options = [...values.options];
-  const [moved] = options.splice(from, 1);
-  if (moved) options.splice(to, 0, moved);
-  return { ...values, options };
+  return placeOption(values, from, from + delta);
+}
+
+/** Moves option `id` to the place of option `overId` (drag and drop); ids travel with their text. */
+export function reorderOption(
+  values: QuestionFormValues,
+  id: string,
+  overId: string,
+): QuestionFormValues {
+  return placeOption(
+    values,
+    values.options.findIndex((o) => o.id === id),
+    values.options.findIndex((o) => o.id === overId),
+  );
 }
 
 export function addSource(values: QuestionFormValues, documentId: string): QuestionFormValues {
