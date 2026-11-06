@@ -22,6 +22,7 @@ import {
   SplitView,
   TrashIcon,
   CloseIcon,
+  GripIcon,
   ConfirmDialog,
   COPY_FEEDBACK_MS,
   CopyButton,
@@ -206,6 +207,7 @@ export default function Page() {
             <Badge tone="success">ok</Badge>
             <Button variant="primary">버튼</Button>
             <IconButton label="닫기" icon={<CloseIcon />} />
+            <GripIcon />
             <FocusRing>
               <a href="#x" className={focusRingClassName}>
                 링크

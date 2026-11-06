@@ -30,6 +30,15 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+/** Vertical drag handle: two columns of three dots. */
+export function GripIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth="3" />
+    </BaseIcon>
+  );
+}
+
 /** Horizontal ellipsis for "더보기" action menus. */
 export function MoreIcon(props: IconProps) {
   return (

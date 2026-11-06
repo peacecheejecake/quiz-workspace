@@ -19,7 +19,8 @@ import {
   type Question,
 } from '../fixtures/test.ts';
 
-test.use({ storageState: { cookies: [], origins: [] } });
+// Tall enough that every option fits in the dialog: drags start and end at measured positions.
+test.use({ storageState: { cookies: [], origins: [] }, viewport: { width: 1280, height: 1500 } });
 
 const TEXTS = ['맞는 보기', '둘째 보기', '셋째 보기', '넷째 보기'] as const;
 
