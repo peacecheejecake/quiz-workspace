@@ -237,6 +237,7 @@ describe('labels', () => {
       'AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요.',
     );
     expect(failureText('no_valid_questions')).toMatch(/^검증을 통과한 문제를 만들지 못했습니다/);
+    expect(failureText('mock_llm_disabled')).toMatch(/^이 환경에서는 AI 변형을 쓸 수 없습니다/);
     expect(failureText('other')).toBe('모의고사를 만들지 못했습니다. 다시 시도하세요.');
     expect(partialText({ requested_count: 3, created_count: 2 })).toBe(
       '3문항 중 2문항을 만들었습니다. 1개는 검증을 통과하지 못했습니다.',

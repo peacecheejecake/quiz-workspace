@@ -492,6 +492,83 @@ describe('만들기 after leaving the form', () => {
   });
 });
 
+describe('MOCK-01-C12 a round no worker took yet', () => {
+  function round(status: 'queued' | 'running') {
+    return {
+      ...exam(EXAM),
+      latest_generation: {
+        id: EXAM,
+        version: 1,
+        status,
+        job_id: null,
+        requested_count: 4,
+        created_count: 0,
+        skipped_count: 0,
+        error_code: null,
+        progress: { done: 0, total: 4 },
+        seed: 1,
+        created_at: '2026-11-02T00:00:00Z',
+        finished_at: null,
+      },
+    } satisfies MockExam;
+  }
+
+  function stubApi(reads: () => MockExam): MockExamApi {
+    return {
+      list: async () => ({ ok: true, data: { llm_available: false, items: [reads()] } }),
+      get: async () => ({ ok: true, data: reads() }),
+      create: vi.fn(),
+      regenerate: vi.fn(),
+      rename: vi.fn(),
+      remove: vi.fn(),
+      questions: async () => ({ ok: true, data: [] }),
+      editQuestion: vi.fn(),
+      removeQuestion: vi.fn(),
+      unfinishedRuns: async () => ({ ok: true, data: [] }),
+      dismissRun: vi.fn(),
+    };
+  }
+
+  const props = {
+    open: true,
+    onOpenChange: () => undefined,
+    container: null,
+    workspaceId: WS,
+    canEdit: true,
+    onViewChange: () => undefined,
+    onPractise: () => undefined,
+    onBankStarted: () => undefined,
+    onResume: () => undefined,
+  };
+
+  it('says 대기 중 with the reason in the list and keeps reading until a worker takes it', async () => {
+    let shown = round('queued');
+    render(<MockExamsPanel {...props} api={stubApi(() => shown)} view={{ view: 'list' }} />);
+
+    expect(await screen.findByText('대기 중')).toBeVisible();
+    expect(screen.getByText(/앞선 작업을 기다리고 있습니다/)).toBeVisible();
+    expect(screen.getByRole('progressbar', { name: '문제 생성 진행률' })).toBeVisible();
+
+    shown = round('running');
+    expect(await screen.findByText('만드는 중', undefined, { timeout: 4000 })).toBeVisible();
+    expect(screen.queryByText(/앞선 작업을 기다리고 있습니다/)).toBeNull();
+  });
+
+  it('says it on the detail view instead of 만드는 중', async () => {
+    render(
+      <MockExamsPanel
+        {...props}
+        api={stubApi(() => round('queued'))}
+        view={{ view: 'detail', mockExamId: EXAM }}
+      />,
+    );
+
+    expect(await screen.findByText('대기 중')).toBeVisible();
+    expect(screen.getByText(/4개 중 0개 · 앞선 작업을 기다리고 있습니다/)).toBeVisible();
+    expect(screen.queryByText(/문제를 만드는 중입니다/)).toBeNull();
+  });
+});
+
 describe('UX10-PLAY-AC01 unified bank mode', () => {
   it('keeps empty types with AI off and starts all selected questions as bank without mock config', async () => {
     vi.stubGlobal(
