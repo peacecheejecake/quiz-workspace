@@ -28,6 +28,7 @@
 | UX12-SRCMENU | 더보기 메뉴의 원문 보기 | 풀이 panel · 범위 풀이 | [ux12-source-menu.md](ux12-source-menu.md) |
 | UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
 | UX12-GLASS | floating 표면 gradient·복귀 bar 모양 | 공통 UI | [ux12-glass.md](ux12-glass.md) |
+| UX12-PICKER | 챕터 선택 트리 popover | 홈 필터 · 문제 편집기 · 초안 · 재분배 · AI 질문 · 본문 검색 | [ux12-chapter-picker.md](ux12-chapter-picker.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |
