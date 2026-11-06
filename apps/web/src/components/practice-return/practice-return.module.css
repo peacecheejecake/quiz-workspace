@@ -32,21 +32,12 @@
   gap: var(--space-1);
   max-width: calc(100vw - 2 * var(--space-4));
   /* 52px tall: the glass border replaces 1px of the block padding. */
-  padding: calc(var(--space-1) - 1px) var(--space-6);
+  padding: calc(var(--space-1) - 1px) var(--space-3);
   border-radius: var(--radius-xl);
   /* The bar swipes down from anywhere, its buttons included. */
   touch-action: none;
 }
-.control > button {
-  min-height: 44px;
-  padding-inline: var(--space-2);
-}
-.close {
+.target {
   min-width: 44px;
   min-height: 44px;
-}
-@media (width < 360px) {
-  .control {
-    padding-inline: var(--space-3);
-  }
 }

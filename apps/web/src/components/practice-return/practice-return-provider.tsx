@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, CloseIcon, IconButton, useDragDismiss, useModalLayerOpen } from '@quiz/ui';
+import { ArrowLeftIcon, CloseIcon, IconButton, useDragDismiss, useModalLayerOpen } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   createContext,
@@ -358,18 +358,17 @@ export function PracticeReturnProvider({
                       className={`${styles.control} glass-surface`}
                       onPointerDown={dragControl}
                     >
-                      <Button
-                        type="button"
-                        variant="ghost"
+                      <IconButton
+                        label="보던 문제로 돌아가기"
+                        icon={<ArrowLeftIcon />}
+                        className={styles.target}
                         onClick={returnToTarget}
                         disabled={busy}
-                      >
-                        보던 문제로 돌아가기
-                      </Button>
+                      />
                       <IconButton
                         label="복귀 버튼 닫기"
                         icon={<CloseIcon />}
-                        className={styles.close}
+                        className={styles.target}
                         onClick={dismiss}
                       />
                     </div>

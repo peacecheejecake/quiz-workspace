@@ -132,7 +132,7 @@ test.describe('phone sheet', () => {
 });
 
 test(
-  'UX12-GLASSBTN-AC03 secondary buttons on glass keep a raised fill; the return button and the footer have none',
+  'UX12-GLASSBTN-AC03 secondary buttons on glass keep a raised fill; the return icon button and the footer have none',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-03');
@@ -159,7 +159,7 @@ test(
     await expect
       .poll(() => back.evaluate((element) => getComputedStyle(element).backgroundColor))
       .toBe(TRANSPARENT);
-    expect((await surfaceOf(back)).border).not.toBe(TRANSPARENT);
+    expect((await surfaceOf(back)).border).toBe(TRANSPARENT); // icon button: no border (HOME-RETURN)
 
     const hover = await tokenColor(page, '--color-state-hover');
     await back.hover();
