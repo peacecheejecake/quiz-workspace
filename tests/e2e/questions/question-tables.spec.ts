@@ -2,7 +2,7 @@
 // option tables as aligned columns, on the synthetic questions-tables-ko paper and on registered
 // questions. Parsing and the Python/TS parity live in Vitest and pytest.
 import type { Locator, Page } from '@playwright/test';
-import { draftFor, questionPaper, truthQuestion } from '../fixtures/questions';
+import { draftFor, questionPaper, truthQuestion } from '../fixtures/questions.ts';
 import {
   choosePanelManage,
   createQuestion,
@@ -21,8 +21,8 @@ import {
   signInAs,
   test,
   type Member,
-} from '../fixtures/test';
-import { editorUi } from '../fixtures/workspace-ui';
+} from '../fixtures/test.ts';
+import { editorUi } from '../fixtures/workspace-ui.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
