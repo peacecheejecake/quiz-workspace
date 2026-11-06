@@ -953,6 +953,10 @@ html body[data-scroll-locked] {
 /* The sheet is the same popover pinned to the bottom edge. The positioner writes its place inline
    on the wrapper Radix portals, so only !important can take it back. */
 @media (width < 768px) {
+  .qz-chapter-picker > .create {
+    min-height: 44px;
+  }
+
   [data-radix-popper-content-wrapper]:has(> .qz-chapter-picker) {
     top: auto !important;
     bottom: 0 !important;
