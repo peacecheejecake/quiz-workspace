@@ -206,8 +206,9 @@ html body[data-scroll-locked] {
     max-height: 90dvh;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding-bottom: env(safe-area-inset-bottom);
-    /* Full-width sheets cover the reading area: keep them opaque for legibility. */
-    background: var(--color-glass-solid);
+    /* Full-width sheets cover the reading area: opaque for legibility. The longhand keeps the
+       gradient layer of .glass-surface (UX12 DESIGN-4). */
+    background-color: var(--color-glass-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 
@@ -271,7 +272,7 @@ html body[data-scroll-locked] {
     border-radius: 0;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-    background: var(--color-glass-solid);
+    background-color: var(--color-glass-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
 

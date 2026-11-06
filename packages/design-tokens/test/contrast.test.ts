@@ -23,6 +23,24 @@ function contrastRatio(a: string, b: string): number {
   return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
 }
 
+const toHex = (c: number[]) =>
+  `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+
+/** Source-over compositing of `top` at `alpha` on the opaque `bottom`. */
+const over = (top: number[], alpha: number, bottom: number[]) =>
+  top.map((c, i) => c * alpha + (bottom[i] ?? 0) * (1 - alpha));
+
+const channels = (hex: string) =>
+  [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
+
+/** The stops of `--glass-gradient` as `[r, g, b, alpha]`. */
+function gradientStops(theme: ThemeName): [number, number, number, number][] {
+  const value = themedTokens[theme]['glass-gradient'];
+  return [...value.matchAll(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/g)].map(
+    (m) => m.slice(1).map(Number) as [number, number, number, number],
+  );
+}
+
 const ratio = (theme: ThemeName, fg: ThemedTokenName, bg: ThemedTokenName) =>
   contrastRatio(themedTokens[theme][fg], themedTokens[theme][bg]);
 
@@ -154,6 +172,66 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
         );
       }
     }
+  });
+
+  // UX12 DESIGN-4 (D-3): a blue-to-lavender tint over the glass color. Every pair the plain glass
+  // keeps also holds on both stops, rounded to 8 bits as the browser paints them.
+  describe('glass gradient', () => {
+    const t = themedTokens[theme];
+    const solid = channels(t['color-glass-solid']);
+    const painted = (backdrop: number[]) =>
+      gradientStops(theme).map(([r, g, b, a]) => toHex(over([r, g, b], a, backdrop)));
+
+    it('runs from a blue stop to a lavender stop at a capped alpha', () => {
+      const stops = gradientStops(theme);
+      expect(stops).toHaveLength(2);
+      const [blue, lavender] = stops;
+      if (!blue || !lavender) throw new Error('glass-gradient needs two stops');
+      expect(blue[0], 'blue stop: green over red').toBeLessThan(blue[1]);
+      expect(lavender[0], 'lavender stop: red over green').toBeGreaterThan(lavender[1]);
+      for (const stop of stops) {
+        expect(stop[2], 'cool: blue is the strongest channel').toBeGreaterThan(stop[1]);
+        expect(stop[3]).toBeLessThanOrEqual(0.35);
+      }
+    });
+
+    it.each(TEXT_TOKENS)('%s stays AA on both stops', (fg) => {
+      for (const bg of painted(solid)) {
+        expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(TEXT_MIN);
+      }
+    });
+
+    it('body text stays AA on both stops over any backdrop', () => {
+      const m = /([\d.]+)\)$/.exec(t['color-glass']);
+      const alpha = Number(m?.[1]);
+      for (const backdrop of [0, 255]) {
+        const glass = over(solid, alpha, [backdrop, backdrop, backdrop]);
+        for (const bg of painted(glass)) {
+          for (const fg of ['color-text-primary', 'color-text-secondary'] as const) {
+            expect(contrastRatio(t[fg], bg), `${fg} over ${backdrop}`).toBeGreaterThanOrEqual(
+              TEXT_MIN,
+            );
+          }
+        }
+      }
+    });
+
+    it.each([
+      'color-switch-track',
+      'color-border-strong',
+      'color-success',
+      'color-danger',
+    ] as const)('%s keeps 3:1 on both stops', (fg) => {
+      for (const bg of painted(solid)) {
+        expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(NON_TEXT_MIN);
+      }
+    });
+
+    it('the hover background stands out from both stops', () => {
+      for (const bg of painted(solid)) {
+        expect(contrastRatio(t['color-state-hover'], bg), bg).toBeGreaterThanOrEqual(1.1);
+      }
+    });
   });
 
   it('hover, pressed, selected and selected-hover backgrounds are all different', () => {

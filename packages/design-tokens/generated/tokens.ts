@@ -13,6 +13,8 @@ export const themedTokens = {
     'color-focus': '#356CFF',
     'color-glass': 'rgba(246, 248, 252, 0.97)',
     'color-glass-solid': '#F6F8FC',
+    'glass-gradient':
+      'linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35))',
     'color-glass-stroke': 'rgba(255, 255, 255, 0.66)',
     'color-border-strong': '#7D8799',
     'color-on-accent': '#FFFFFF',
@@ -59,6 +61,8 @@ export const themedTokens = {
     'color-focus': '#A2B3FF',
     'color-glass': 'rgba(30, 38, 51, 0.97)',
     'color-glass-solid': '#1E2633',
+    'glass-gradient':
+      'linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05))',
     'color-glass-stroke': 'rgba(255, 255, 255, 0.12)',
     'color-border-strong': '#7A8799',
     'color-on-accent': '#11151D',

@@ -348,12 +348,16 @@ export function PracticeReturnProvider({
               <Suspense fallback={null}>
                 <PracticeRouteGate>
                   {message && !identityPending && !identityNotice && !modalOpen ? (
-                    <p className={styles.message} role="status">
+                    <p className={`${styles.message} glass-surface`} role="status">
                       {message}
                     </p>
                   ) : null}
                   {visible ? (
-                    <div ref={controlRef} className={styles.control} onPointerDown={dragControl}>
+                    <div
+                      ref={controlRef}
+                      className={`${styles.control} glass-surface`}
+                      onPointerDown={dragControl}
+                    >
                       <Button type="button" onClick={returnToTarget} disabled={busy}>
                         보던 문제로 돌아가기
                       </Button>

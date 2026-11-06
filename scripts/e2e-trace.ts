@@ -156,6 +156,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'QTABLE.0': ['QTABLE-01'],
   // UX12 VIEW-4: `원문 보기` in the question panel's menu; the body button stays.
   'UX12-SRCMENU.0': ['UX12-SRCMENU'],
+  // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
+  'UX12-GLASS.0': ['UX12-GLASS'],
 };
 
 const LEADING_ID = new RegExp(

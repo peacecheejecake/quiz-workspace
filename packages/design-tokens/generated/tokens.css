@@ -13,6 +13,7 @@
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -119,6 +120,7 @@
   --color-focus: #a2b3ff;
   --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1e2633;
+  --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
   --color-glass-stroke: rgba(255, 255, 255, 0.12);
   --color-border-strong: #7a8799;
   --color-on-accent: #11151d;
@@ -167,6 +169,7 @@
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -216,6 +219,7 @@
     --color-focus: #a2b3ff;
     --color-glass: rgba(30, 38, 51, 0.97);
     --color-glass-solid: #1e2633;
+    --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
     --color-glass-stroke: rgba(255, 255, 255, 0.12);
     --color-border-strong: #7a8799;
     --color-on-accent: #11151d;
