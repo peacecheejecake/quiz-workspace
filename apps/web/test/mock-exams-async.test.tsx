@@ -241,6 +241,8 @@ describe('만들기 after leaving the form', () => {
       questions: async () => ({ ok: true, data: [] }),
       editQuestion: vi.fn(),
       removeQuestion: vi.fn(),
+      unfinishedRuns: async () => ({ ok: true, data: [] }),
+      dismissRun: vi.fn(),
     };
     const onViewChange = vi.fn();
     const props = {
@@ -252,6 +254,7 @@ describe('만들기 after leaving the form', () => {
       onViewChange,
       onPractise: () => undefined,
       onBankStarted: () => undefined,
+      onResume: () => undefined,
       api,
     };
     const user = userEvent.setup();
@@ -344,7 +347,10 @@ it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation'
       return json(overview());
     }),
   );
-  const api = { list: async () => ({ ok: true, data: { llm_available: false, items: [] } }) };
+  const api = {
+    list: async () => ({ ok: true, data: { llm_available: false, items: [] } }),
+    unfinishedRuns: async () => ({ ok: true, data: [] }),
+  };
   const onBankStarted = vi.fn();
   const user = userEvent.setup();
   render(
@@ -358,6 +364,7 @@ it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation'
       onViewChange={() => undefined}
       onPractise={() => undefined}
       onBankStarted={onBankStarted}
+      onResume={() => undefined}
       api={api as never}
     />,
   );

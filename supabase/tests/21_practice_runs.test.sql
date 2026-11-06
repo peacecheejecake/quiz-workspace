@@ -12,7 +12,8 @@ select plan(39);
 select has_table('public', 'practice_runs', 'practice_runs exists');
 select columns_are('public', 'practice_runs',
   array['id', 'workspace_id', 'user_id', 'source', 'mock_exam_id', 'mock_exam_generation_id',
-        'range', 'random_order', 'seed', 'item_ids', 'created_at', 'finished_at']);
+        'range', 'random_order', 'seed', 'item_ids', 'created_at', 'finished_at',
+        'resume_dismissed_at']);
 select has_column('public', 'practice_sessions', 'practice_run_id', 'sessions carry the run');
 select has_column('public', 'practice_sessions', 'run_position', 'sessions carry the position');
 select col_is_null('public', 'practice_sessions', 'practice_run_id', 'the run link is optional');

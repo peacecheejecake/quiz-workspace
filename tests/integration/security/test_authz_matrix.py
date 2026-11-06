@@ -118,6 +118,9 @@ RULES: dict[str, Rule | str] = {
     "startRunItemRetrySession": OWN_WRITE,
     "listPracticeRunResults": OWN_READ,
     "finishPracticeRun": OWN_RUN_WRITE,
+    # UX12-RESUME: the list answers each member's own runs; dismissing is the creator's.
+    "listUnfinishedPracticeRuns": READ,
+    "dismissPracticeRun": OWN_RUN_WRITE,
     # questions, drafts, import (the QGEN generation routes were retired by QGEN-RM)
     "updateQuestionDraft": EDIT,
     "getQuestionImport": READ,
@@ -295,6 +298,7 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "updateMyQuestionState": {"is_favorite": True},
         "createPracticeRun": {"source": "bank", "range": {"all": True}},
         "finishPracticeRun": {},
+        "dismissPracticeRun": {},
         "mergeQuestionDuplicates": {
             "groups": [
                 {

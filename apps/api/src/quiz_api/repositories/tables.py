@@ -267,7 +267,8 @@ practice_sessions = Table(
     Column("run_position", Integer),
 )
 
-# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at changes).
+# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at and
+# resume_dismissed_at change).
 practice_runs = Table(
     "practice_runs",
     metadata,
@@ -283,6 +284,7 @@ practice_runs = Table(
     Column("item_ids", ARRAY(Uuid), nullable=False),
     _ts("created_at", nullable=False),
     _ts("finished_at"),
+    _ts("resume_dismissed_at"),
 )
 
 question_attempts = Table(

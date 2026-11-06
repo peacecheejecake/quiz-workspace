@@ -390,3 +390,14 @@ def test_ux11_retry_open_schema_never_exposes_answers_or_origin() -> None:
     props = _props(spec, schema, set(), set())
     assert {"id", "question_id", "stem", "options"} <= props
     assert not props & (ANSWER_KEYS | {"retry_origin_run_id", "retry_origin_position"})
+
+
+def test_ux12_resume_list_has_no_content_and_is_an_allowlist() -> None:
+    spec = json.loads(render_openapi())
+    schema = _response(spec, "/workspaces/{workspace_id}/practice-runs/unfinished", "get", "200")
+    props = _props(spec, schema, set(), set())
+    assert props == {
+        "items", "id", "total", "answered", "next_position", "chapter_title", "created_at",
+        "last_touched_at",
+    }  # fmt: skip
+    assert "/api/v1/practice-runs/{run_id}/dismiss" in spec["paths"]

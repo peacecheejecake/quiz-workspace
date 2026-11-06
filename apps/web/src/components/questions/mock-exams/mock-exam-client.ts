@@ -19,6 +19,7 @@ import type {
   MockExamList,
   MockExamQuestion,
   MockRange,
+  UnfinishedRun,
 } from './mock-exam-model';
 
 const PROBLEM = 'urn:quiz-workspace:problem:';
@@ -88,6 +89,9 @@ export const MOCK_BFF_PATHS = {
   questions: (id: string, answers: boolean) =>
     `/api/mock-exams/${encodeURIComponent(id)}/questions${answers ? '?include=answers' : ''}`,
   question: (id: string) => `/api/mock-exam-questions/${encodeURIComponent(id)}`,
+  unfinishedRuns: (workspaceId: string) =>
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/practice-runs/unfinished`,
+  dismissRun: (runId: string) => `/api/practice-runs/${encodeURIComponent(runId)}/dismiss`,
   session: (questionId: string) =>
     `/api/mock-exam-questions/${encodeURIComponent(questionId)}/practice-sessions`,
   submit: (sessionId: string) =>
@@ -159,6 +163,10 @@ export interface MockExamApi {
     body: Schemas['MockExamQuestionUpdate'],
   ): Promise<MockResult<MockExamQuestion>>;
   removeQuestion(id: string): Promise<MockResult<null>>;
+  /** The viewer's unfinished bank runs (UX12-RESUME). */
+  unfinishedRuns(): Promise<MockResult<readonly UnfinishedRun[]>>;
+  /** 지우기: out of that list only. */
+  dismissRun(runId: string): Promise<MockResult<null>>;
 }
 
 /** The mock exam API of `workspaceId` through the BFF (another workspace's is not found). */
@@ -207,6 +215,16 @@ export function createMockExamApi(
       call<MockExamQuestion>(MOCK_BFF_PATHS.question(id), { method: 'PATCH', body }),
     removeQuestion: async (id) => {
       const result = await call<unknown>(MOCK_BFF_PATHS.question(id), { method: 'DELETE' });
+      return result.ok ? { ok: true, data: null } : result;
+    },
+    unfinishedRuns: async () => {
+      const result = await call<{ items: UnfinishedRun[] }>(
+        MOCK_BFF_PATHS.unfinishedRuns(workspaceId),
+      );
+      return result.ok ? { ok: true, data: result.data.items } : result;
+    },
+    dismissRun: async (runId) => {
+      const result = await call<unknown>(MOCK_BFF_PATHS.dismissRun(runId), { method: 'POST' });
       return result.ok ? { ok: true, data: null } : result;
     },
   };
