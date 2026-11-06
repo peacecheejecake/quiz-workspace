@@ -99,6 +99,7 @@ import {
   seedOverviewCache,
   type OverviewCache,
 } from '@/lib/questions/overview-cache';
+import { outlineChoiceNodes } from '@/lib/questions/chapter-picker';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
@@ -850,7 +851,7 @@ function WorkspaceHomeContent({
   }
 
   // Flat for now: `OverviewChapter` has no level yet (CHAPTER-6).
-  const chapterNodes = chapterChoices.map((c) => ({ value: c.value, label: c.title, level: 1 }));
+  const chapterNodes = outlineChoiceNodes(chapterChoices);
 
   const page = (
     <div className={styles.home}>

@@ -100,12 +100,22 @@ class OverviewCounts(BaseModel):
     favorite: int = Field(description="Overlaps the status counts.")
 
 
+class OverviewChapterAncestor(BaseModel):
+    id: uuid.UUID
+    title: str
+
+
 class OverviewChapter(BaseModel):
     id: uuid.UUID | None = Field(description="null = the questions without a chapter.")
     number: int | None = Field(description="Chapter number for `3장 12번` labels, if known.")
     title: str
     document_id: uuid.UUID | None
     question_count: int = Field(description="Items of this group in `items`.")
+    level: int = Field(default=1, description="Depth in the outline; 1 = top level (CHMAN-01).")
+    ancestors: list[OverviewChapterAncestor] = Field(
+        default_factory=list,
+        description="From the top-level chapter down to the parent. Most have no group here.",
+    )
 
 
 class OverviewItem(BaseModel):
@@ -247,10 +257,12 @@ def get_question_overview(
     ]
 
     lineage = repo.chapter_lineage(r.chapter_id for r, _ in selected if r.chapter_id is not None)
+    outline = repo.chapter_ancestors(lineage)
     groups: dict[uuid.UUID | None, OverviewChapter] = {}
     for row, _ in selected:
         group = groups.get(row.chapter_id)
         if group is None:
+            above = outline.get(row.chapter_id, []) if row.chapter_id is not None else []
             group = groups[row.chapter_id] = OverviewChapter(
                 id=row.chapter_id,
                 number=chapter_number(lineage.get(row.chapter_id, []))
@@ -259,6 +271,8 @@ def get_question_overview(
                 title=row.chapter_title if row.chapter_title is not None else NO_CHAPTER_TITLE,
                 document_id=row.chapter_document_id,
                 question_count=0,
+                level=len(above) + 1,
+                ancestors=[OverviewChapterAncestor(id=i, title=t) for i, t in above],
             )
         group.question_count += 1
 

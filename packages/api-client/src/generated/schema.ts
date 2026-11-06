@@ -5887,6 +5887,11 @@ export type components = {
     };
     /** OverviewChapter */
     OverviewChapter: {
+      /**
+       * Ancestors
+       * @description From the top-level chapter down to the parent. Most have no group here.
+       */
+      ancestors?: components['schemas']['OverviewChapterAncestor'][];
       /** Document Id */
       document_id: string | null;
       /**
@@ -5894,6 +5899,12 @@ export type components = {
        * @description null = the questions without a chapter.
        */
       id: string | null;
+      /**
+       * Level
+       * @description Depth in the outline; 1 = top level (CHMAN-01).
+       * @default 1
+       */
+      level?: number;
       /**
        * Number
        * @description Chapter number for `3장 12번` labels, if known.
@@ -5904,6 +5915,16 @@ export type components = {
        * @description Items of this group in `items`.
        */
       question_count: number;
+      /** Title */
+      title: string;
+    };
+    /** OverviewChapterAncestor */
+    OverviewChapterAncestor: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
       /** Title */
       title: string;
     };

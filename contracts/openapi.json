@@ -7251,6 +7251,14 @@
       },
       "OverviewChapter": {
         "properties": {
+          "ancestors": {
+            "description": "From the top-level chapter down to the parent. Most have no group here.",
+            "items": {
+              "$ref": "#/components/schemas/OverviewChapterAncestor"
+            },
+            "title": "Ancestors",
+            "type": "array"
+          },
           "document_id": {
             "anyOf": [
               {
@@ -7275,6 +7283,12 @@
             ],
             "description": "null = the questions without a chapter.",
             "title": "Id"
+          },
+          "level": {
+            "default": 1,
+            "description": "Depth in the outline; 1 = top level (CHMAN-01).",
+            "title": "Level",
+            "type": "integer"
           },
           "number": {
             "anyOf": [
@@ -7306,6 +7320,25 @@
           "question_count"
         ],
         "title": "OverviewChapter",
+        "type": "object"
+      },
+      "OverviewChapterAncestor": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "OverviewChapterAncestor",
         "type": "object"
       },
       "OverviewCounts": {
