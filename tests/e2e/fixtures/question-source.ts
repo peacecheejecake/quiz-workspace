@@ -168,6 +168,7 @@ export const REGION_KEYS: ReadonlySet<string> = new Set([
   'question_id',
   'mock_exam_question_id',
   'regions',
+  'figures',
   'document_id',
   'document_revision_id',
   'page',
@@ -268,6 +269,36 @@ export function addImportLocation(questionId: string, page: number, bbox: BBox):
       `and import_run_id is not null order by created_at, id limit 1) returning id`,
   ).trim();
   if (!updated) throw new Error('question-source fixture: no import source row to extend');
+}
+
+/**
+ * UX12-REEXTRACT: a figure of the question, as the import stores it: an `image` block of the
+ * revision and a location with its `block_id` on the import source row. The synthetic papers
+ * print no images.
+ */
+export function addImportFigure(questionId: string, page: number, bbox: BBox): void {
+  const box = `jsonb_build_object('x0', ${bbox.x0}, 'y0', ${bbox.y0}, 'x1', ${bbox.x1}, 'y1', ${bbox.y1})`;
+  const block = `'fig-${randomUUID()}'`;
+  const location = `jsonb_build_object('page', ${page}, 'bbox', ${box}, 'block_id', ${block}::text)`;
+  const row =
+    `(select * from public.question_sources where question_id = ${id(questionId)} ` +
+    `and import_run_id is not null order by created_at, id limit 1)`;
+  const inserted = psql(
+    // Past the published-revision guard, as setMockVariation passes the append-only one.
+    `set session_replication_role = replica; ` +
+      `insert into public.content_blocks (workspace_id, document_id, document_revision_id, ` +
+      `block_id, ordinal, block_type, page, provenance) ` +
+      `select s.workspace_id, s.document_id, s.document_revision_id, ${block}, ` +
+      `(select max(c.ordinal) + 1 from public.content_blocks c ` +
+      `where c.document_revision_id = s.document_revision_id), 'image', ${page}, ` +
+      `jsonb_build_object('locations', jsonb_build_array(${location})) from ${row} s ` +
+      `returning id`,
+  ).trim();
+  if (!inserted) throw new Error('question-source fixture: no import source row for a figure');
+  psql(
+    `update public.question_sources set locations = locations || jsonb_build_array(${location}) ` +
+      `where id = (select id from ${row} s) returning id`,
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -459,6 +490,12 @@ export function watchRegionTraffic(page: Page): RegionTraffic {
 // ---------------------------------------------------------------------------------------------
 // UI contract (S6)
 // ---------------------------------------------------------------------------------------------
+
+export const figureUi = {
+  group: (scope: Locator) => scope.getByRole('group', { name: /^(문제 그림|question figures)$/i }),
+  images: (scope: Locator) =>
+    scope.getByRole('img', { name: /^(문제 그림|question figure) \d+$/i }),
+};
 
 export const sourceUi = {
   button: (scope: Locator | Page) => scope.getByRole('button', { name: BUTTON_NAME }),

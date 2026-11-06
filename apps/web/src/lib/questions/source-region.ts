@@ -5,6 +5,12 @@ import type { Schemas } from '@quiz/api-client';
 
 export type SourceRegion = Schemas['SourceRegionItem'];
 
+export interface QuestionRegions {
+  readonly regions: readonly SourceRegion[];
+  /** The question's images, drawn above its options (UX12-REEXTRACT); usually empty. */
+  readonly figures: readonly SourceRegion[];
+}
+
 export interface SourceRegionTarget {
   readonly kind: 'question' | 'mock';
   readonly id: string;
@@ -17,12 +23,12 @@ export function sourceRegionPath(target: SourceRegionTarget): string {
     : `/api/mock-exam-questions/${id}/source-region`;
 }
 
-/** The regions to show, or null when the question has none (404) or the request failed. */
+/** What to show, or null when the question has no region (404) or the request failed. */
 export async function fetchSourceRegions(
   target: SourceRegionTarget,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = (...a) => fetch(...a),
-): Promise<readonly SourceRegion[] | null> {
+): Promise<QuestionRegions | null> {
   try {
     const response = await fetchImpl(sourceRegionPath(target), {
       signal,
@@ -33,10 +39,12 @@ export async function fetchSourceRegions(
     // Always read the body (also of a 404): an unread fetch body keeps the response open.
     const text = await response.text();
     if (!response.ok) return null;
-    const body = JSON.parse(text) as { regions?: unknown };
+    const body = JSON.parse(text) as { regions?: unknown; figures?: unknown };
     if (!Array.isArray(body.regions)) return null;
     const regions = (body.regions as SourceRegion[]).filter(isDrawable);
-    return regions.length > 0 ? regions : null;
+    if (regions.length === 0) return null;
+    const figures = Array.isArray(body.figures) ? (body.figures as SourceRegion[]) : [];
+    return { regions, figures: figures.filter(isDrawable) };
   } catch (error) {
     if (signal?.aborted) throw error;
     return null;

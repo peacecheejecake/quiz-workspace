@@ -9,16 +9,19 @@
 // FloatingSidePanel named "문제 원문" (left of the question panel from 868px, else a full-screen
 // sheet that owns one history entry so Back closes only the sheet). Viewing is not practice: no
 // attempt, no heatmap state, no URL change.
-// UX12-SRCMENU: the viewers that have a header menu hold `useQuestionSource` themselves, so the
-// menu's `원문 보기` and the body button open the same dialog.
+// UX12-SRCMENU: every viewer holds `useQuestionSource` itself, so the menu's `원문 보기`, the body
+// button and the figures share one region and one opened PDF.
+// UX12-REEXTRACT: `QuestionFigures` draws the question's images above its options and asks for the
+// PDF when they enter the viewport; a question without figures still fetches none.
 import { Button, FloatingSidePanel, PreviewTooltip, usePairedSheet } from '@quiz/ui';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { loadPdfjs, openPdf, type PdfDocument, type PdfLoadingTask } from '@/lib/documents/pdfjs';
 import {
   fetchSourceRegions,
   tooltipFit,
+  type QuestionRegions,
   type SourceRegion,
   type SourceRegionTarget,
 } from '@/lib/questions/source-region';
@@ -28,29 +31,12 @@ import styles from './question-source-preview.module.css';
 export const SOURCE_BUTTON_LABEL = '문제 원문 보기';
 const LOADING_TEXT = '원문을 불러오는 중입니다';
 const FAILURE_TEXT = '원문을 불러오지 못했습니다';
-
-export interface QuestionSourcePreviewProps {
-  /** The bank question (practice, sequence(bank), manage) or mock exam question. */
-  readonly target: SourceRegionTarget;
-  /** The host is a centered modal dialog (문제 상세): the 원문 dialog stacks above it. */
-  readonly aboveModals?: boolean;
-}
+const FIGURE_FAILURE_TEXT = '그림을 불러오지 못했습니다';
 
 /** Handed to a viewer's `headerExtra`: null while the question has no region to show. */
 export interface QuestionSourceControls {
   /** `trigger`: where focus goes back when the dialog closes (it also finds the host panel). */
   readonly onShowSource: ((trigger: HTMLElement | null) => void) | null;
-}
-
-/** The body button and its dialog, for the viewers without a header menu. */
-export function QuestionSourcePreview({ target, aboveModals = false }: QuestionSourcePreviewProps) {
-  const source = useQuestionSource(target);
-  return (
-    <>
-      <QuestionSourceButton source={source} />
-      <QuestionSourceDialog source={source} aboveModals={aboveModals} />
-    </>
-  );
 }
 
 type PdfState =
@@ -121,6 +107,8 @@ function useRegionPdf(regions: readonly SourceRegion[] | null) {
 
 export type QuestionSource = ReturnType<typeof useQuestionSource>;
 
+const NO_FIGURES: readonly SourceRegion[] = [];
+
 /**
  * The region, PDF and dialog state of the question shown. A new target starts over and closes the
  * dialog. `null` (the host panel is animating out) closes it but keeps the region, so the panel's
@@ -130,21 +118,22 @@ export function useQuestionSource(target: SourceRegionTarget | null) {
   const kind = target?.kind;
   const id = target?.id;
   const key = target ? `${target.kind}:${target.id}` : null;
-  const [regions, setRegions] = useState<readonly SourceRegion[] | null>(null);
+  const [found, setFound] = useState<QuestionRegions | null>(null);
+  const regions = found?.regions ?? null;
   const [open, setOpen] = useState(false);
   const [shownKey, setShownKey] = useState(key);
   if (key !== shownKey) {
     setShownKey(key);
     setOpen(false);
-    if (key !== null) setRegions(null);
+    if (key !== null) setFound(null);
   }
 
   useEffect(() => {
     if (!kind || !id) return undefined;
     const controller = new AbortController();
     fetchSourceRegions({ kind, id }, controller.signal).then(
-      (found) => {
-        if (!controller.signal.aborted) setRegions(found);
+      (result) => {
+        if (!controller.signal.aborted) setFound(result);
       },
       () => undefined,
     );
@@ -217,7 +206,16 @@ export function useQuestionSource(target: SourceRegionTarget | null) {
     return () => host.removeAttribute('inert');
   }, [open]);
 
-  return { regions, open, pdf, anchor, show, close, onShowSource: regions ? show : null };
+  return {
+    regions,
+    figures: found?.figures ?? NO_FIGURES,
+    open,
+    pdf,
+    anchor,
+    show,
+    close,
+    onShowSource: regions ? show : null,
+  };
 }
 
 /** The body header's text button; nothing without a region. */
@@ -245,6 +243,63 @@ export function QuestionSourceButton({ source }: { readonly source: QuestionSour
           {SOURCE_BUTTON_LABEL}
         </Button>
       </PreviewTooltip>
+    </div>
+  );
+}
+
+/** The question's images (UX12-REEXTRACT-AC04): nothing without any, no PDF until in view. */
+export function QuestionFigures({ source }: { readonly source: QuestionSource }): ReactNode {
+  const { figures, pdf } = source;
+  const { start, state, fail } = pdf;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const hasFigures = figures.length > 0;
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!hasFigures || !element) return undefined;
+    if (typeof IntersectionObserver === 'undefined') {
+      start();
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      start();
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasFigures, start]);
+  if (!hasFigures) return null;
+  return (
+    <div ref={rootRef} role="group" aria-label="문제 그림" className={styles.questionFigures}>
+      {state.status === 'ready' ? (
+        <PdfRegions
+          regions={figures}
+          documents={state.documents}
+          fit="container"
+          onFailed={fail}
+          variant="figure"
+        />
+      ) : state.status === 'error' ? (
+        <div role="alert" className={styles.failure}>
+          <p>{FIGURE_FAILURE_TEXT}</p>
+          <Button type="button" onClick={start}>
+            다시 시도
+          </Button>
+        </div>
+      ) : (
+        <>
+          {figures.map(({ document_id, page, bbox }) => (
+            <div
+              key={`${document_id}:${page}:${bbox.x0}:${bbox.y0}`}
+              className={styles.figurePlaceholder}
+              style={{ aspectRatio: `${bbox.x1 - bbox.x0} / ${bbox.y1 - bbox.y0}` }}
+            />
+          ))}
+          <span role="status" className="qz-visually-hidden">
+            그림을 불러오는 중입니다
+          </span>
+        </>
+      )}
     </div>
   );
 }

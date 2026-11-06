@@ -74,6 +74,7 @@ import {
 import { NavButton } from './nav-button';
 import { QuestionBody, QuestionStem } from './question-body';
 import {
+  QuestionFigures,
   QuestionSourceButton,
   QuestionSourceDialog,
   useQuestionSource,
@@ -622,6 +623,7 @@ export function PracticeViewer({
                   kind="answer"
                   stem={ready.stem}
                   question={ready}
+                  figures={<QuestionFigures source={source} />}
                   answer={work.answer}
                   disabled={locked}
                   onAnswerChange={(answer) => {

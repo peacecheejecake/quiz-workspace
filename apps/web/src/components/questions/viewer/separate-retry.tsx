@@ -23,6 +23,7 @@ import {
 } from './practice-model';
 import { SelfGradeButtons } from './practice-viewer';
 import { QuestionBody } from './question-body';
+import { QuestionFigures, useQuestionSource } from './question-source-preview';
 
 export function SeparateRetry({
   workspaceId,
@@ -44,6 +45,10 @@ export function SeparateRetry({
   readonly onGraded?: (questionId: string, result: SubmitResult['result']) => void;
 }) {
   const [session, setSession] = useState<PracticeSession | null>(null);
+  const questionSource = useQuestionSource({
+    kind: source === 'mock' ? 'mock' : 'question',
+    id: questionId,
+  });
   const [answer, setAnswer] = useState<PracticeAnswer>(EMPTY_ANSWER);
   const [outcome, setOutcome] = useState<SubmitResult | null>(null);
   const [grade, setGrade] = useState<GradeResult | null>(null);
@@ -167,6 +172,7 @@ export function SeparateRetry({
             kind="answer"
             stem={session.stem}
             question={session}
+            figures={<QuestionFigures source={questionSource} />}
             answer={answer}
             disabled={busy || !!outcome}
             onAnswerChange={setAnswer}

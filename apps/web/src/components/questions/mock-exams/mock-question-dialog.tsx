@@ -28,7 +28,12 @@ import {
 } from '@/lib/questions/form';
 import { QuestionContentFields } from '../question-content-fields';
 import { QuestionBody } from '../viewer/question-body';
-import { QuestionSourcePreview } from '../viewer/question-source-preview';
+import {
+  QuestionFigures,
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+} from '../viewer/question-source-preview';
 import type { MockExamApi } from './mock-exam-client';
 import { needsReview, VARIATION_LABELS, type MockExamQuestion } from './mock-exam-model';
 import styles from './mock-exams.module.css';
@@ -80,6 +85,8 @@ export function MockQuestionDialog({
   const grid =
     question?.question_type === 'MCQ' ? optionGrid(question.stem, question.options) : null;
   const asks = useAskLauncher() !== null;
+  // QSRC-01 `manage(mock)`: the origin's region, `보기 섞기` questions only (API).
+  const source = useQuestionSource(question ? { kind: 'mock', id: question.id } : null);
 
   const [editing, setEditing] = useState<{ session: number; open: boolean }>({
     session: 0,
@@ -166,12 +173,13 @@ export function MockQuestionDialog({
                     확인하고 필요하면 편집하세요. 풀이 화면에는 이 안내가 보이지 않습니다.
                   </p>
                 ) : null}
-                {/* QSRC-01 `manage(mock)`: the origin's region, `보기 섞기` questions only (API). */}
-                <QuestionSourcePreview target={{ kind: 'mock', id: question.id }} aboveModals />
+                <QuestionSourceButton source={source} />
+                <QuestionSourceDialog source={source} aboveModals />
                 <QuestionBody
                   kind="revision"
                   type={question.question_type}
                   heading="문제"
+                  figures={<QuestionFigures source={source} />}
                   revision={{
                     id: question.revision.id,
                     version: question.revision.version,

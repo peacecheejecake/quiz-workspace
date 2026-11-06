@@ -23,7 +23,12 @@ import {
 } from '@/lib/questions/form';
 import { documentTitle, formatDateTime, pageText, sourceHref } from '../labels';
 import { QuestionBody } from './question-body';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionFigures,
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+} from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 /** Which part the opener asked for: focus goes to its heading. */
@@ -69,6 +74,12 @@ export function ManageViewer({
   const historyRef = useRef<HTMLHeadingElement>(null);
   const question = load.status === 'ready' ? load.question : null;
   const asks = useAskLauncher() !== null;
+  // QSRC-01 `manage`: a registered question's imported source (a draft has none).
+  const source = useQuestionSource(
+    question && question.publication_status !== 'DRAFT'
+      ? { kind: 'question', id: question.id }
+      : null,
+  );
   return (
     <ModalDialog
       open={open}
@@ -115,15 +126,14 @@ export function ManageViewer({
               </Badge>
               <span>버전 {question.revision.version}</span>
             </div>
-            {question.publication_status !== 'DRAFT' ? (
-              // QSRC-01 `manage`: a registered question's imported source (a draft has none).
-              <QuestionSourcePreview target={{ kind: 'question', id: question.id }} aboveModals />
-            ) : null}
+            <QuestionSourceButton source={source} />
+            <QuestionSourceDialog source={source} aboveModals />
             <QuestionBody
               kind="revision"
               revision={question.revision}
               type={question.question_type}
               heading="문제"
+              figures={<QuestionFigures source={source} />}
               highlighting={
                 // HILITE-01: the reader's highlights of the current explanation (not of drafts).
                 question.publication_status !== 'DRAFT'

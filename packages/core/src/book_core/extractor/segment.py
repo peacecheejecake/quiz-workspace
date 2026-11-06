@@ -498,6 +498,11 @@ def _inline_answer(text: str) -> str | None:
     return answer if answer and len(answer) <= _MAX_ANSWER_KEY_BODY else None
 
 
+def has_inline_answer(text: str) -> bool:
+    """A line of ``text`` is a printed answer (``정답: ②``): what ends a question's own region."""
+    return any(_inline_answer(line) is not None for line in text.split("\n") if line.strip())
+
+
 def _numbered_option_of_letter_list(current: RawQuestion, number: int, body: str) -> bool:
     """``1. (가)`` printed under a stem that lists ``(가) ...`` items: the next numbered option
     (not a new question) when the numbers continue the options printed so far."""

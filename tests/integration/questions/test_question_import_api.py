@@ -609,6 +609,7 @@ def test_qimport_01_ac09_drafts_are_read_page_by_page_and_summarized_without_con
             "validations",
             "chapter_id",
             "duplicate_of",  # UX7-DEDUP: ids and a number only, no content
+            "previous",  # UX12-REEXTRACT: ids, a number and field names only, no content
         }
         assert summary["duplicate_of"] == draft["duplicate_of"]
         for key in ("version", "position", "question_number", "question_type", "review_status"):
