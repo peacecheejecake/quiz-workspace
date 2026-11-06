@@ -81,6 +81,7 @@ import {
   type GradeResult,
   type PracticeAnswer,
 } from './practice-model';
+import { NavButton } from './nav-button';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
 import {
   QuestionBody,
@@ -1232,15 +1233,15 @@ function useSolveStep({
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
-        {position > 1 ? (
-          <Button size="sm" disabled={holding} onClick={() => go(position - 1)}>
-            이전
-          </Button>
-        ) : null}
+        <NavButton
+          direction="previous"
+          label="이전"
+          unavailable={position <= 1 || holding}
+          onClick={() => go(position - 1)}
+        />
         {/* Always a way forward, also while the position loads (it is skipped then). */}
         {total === null ? null : last ? (
           <Button
-            size="sm"
             variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
             disabled={holding}
             onClick={toResults}
@@ -1248,13 +1249,15 @@ function useSolveStep({
             결과 보기
           </Button>
         ) : !item || !run || canAnswer ? (
-          <Button size="sm" disabled={holding} onClick={forward}>
-            건너뛰기
-          </Button>
+          <NavButton direction="next" label="건너뛰기" unavailable={holding} onClick={forward} />
         ) : (
-          <Button size="sm" variant="primary" disabled={holding} onClick={forward}>
-            다음
-          </Button>
+          <NavButton
+            direction="next"
+            label="다음"
+            variant="primary"
+            unavailable={holding}
+            onClick={forward}
+          />
         )}
       </nav>
     </>

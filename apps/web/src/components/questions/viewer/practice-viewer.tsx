@@ -17,10 +17,8 @@
 // UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
 // session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
-  ArrowLeftIcon,
   Button,
   ConfirmDialog,
-  IconButton,
   FavoriteToggle,
   FloatingSidePanel,
   RetryToggle,
@@ -66,6 +64,7 @@ import {
   type Neighbors,
   type PracticeAnswer,
 } from './practice-model';
+import { NavButton } from './nav-button';
 import { QuestionBody, QuestionStem } from './question-body';
 import { QuestionSourcePreview } from './question-source-preview';
 import styles from './question-viewer.module.css';
@@ -463,12 +462,22 @@ export function PracticeViewer({
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
-        <NavButton target={neighbors.previous} onNavigate={onNavigate}>
-          이전 문제
-        </NavButton>
-        <NavButton target={neighbors.next} onNavigate={onNavigate}>
-          다음 문제
-        </NavButton>
+        <NavButton
+          direction="previous"
+          label="이전 문제"
+          unavailable={!neighbors.previous || !onNavigate}
+          onClick={() => {
+            if (neighbors.previous) onNavigate?.(neighbors.previous);
+          }}
+        />
+        <NavButton
+          direction="next"
+          label="다음 문제"
+          unavailable={!neighbors.next || !onNavigate}
+          onClick={() => {
+            if (neighbors.next) onNavigate?.(neighbors.next);
+          }}
+        />
       </nav>
     </div>
   ) : undefined;
@@ -682,37 +691,5 @@ export function SelfGradeButtons({
         틀림
       </Button>
     </div>
-  );
-}
-
-/**
- * Previous/next. At either end the button stays focusable (`aria-disabled`) so focus does not
- * drop out of the panel when the last question is reached.
- */
-function NavButton({
-  target,
-  onNavigate,
-  children,
-}: {
-  readonly target: string | null;
-  readonly onNavigate: ((questionId: string) => void) | undefined;
-  readonly children: string;
-}) {
-  const unavailable = !target || !onNavigate;
-  return (
-    <IconButton
-      label={children}
-      icon={
-        <ArrowLeftIcon
-          width={20}
-          height={20}
-          style={children === '다음 문제' ? { transform: 'rotate(180deg)' } : undefined}
-        />
-      }
-      aria-disabled={unavailable || undefined}
-      onClick={() => {
-        if (target && onNavigate) onNavigate(target);
-      }}
-    />
   );
 }
