@@ -78,11 +78,7 @@ export function AppShell({
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="qz-backdrop" data-layer="drawer" />
-              <Dialog.Content
-                ref={surfaceRef}
-                className="qz-drawer"
-                aria-describedby={undefined}
-              >
+              <Dialog.Content ref={surfaceRef} className="qz-drawer" aria-describedby={undefined}>
                 <LayerProvider value="var(--z-modal)">
                   <div className="header" onPointerDown={swipe}>
                     <Dialog.Title className="title">{navLabel}</Dialog.Title>

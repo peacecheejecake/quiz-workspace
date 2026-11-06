@@ -79,8 +79,7 @@ const keepTall = (panel: Locator) =>
   });
 
 /** UX12-OPTIONS-AC07: an MCQ grade focuses the options, a group named by the hidden result. */
-const gradedOptions = (panel: Locator) =>
-  panel.getByRole('group', { name: RESULT_TEXT.correct });
+const gradedOptions = (panel: Locator) => panel.getByRole('group', { name: RESULT_TEXT.correct });
 
 async function heightOf(locator: Locator): Promise<number | undefined> {
   return (await locator.boundingBox())?.height;
