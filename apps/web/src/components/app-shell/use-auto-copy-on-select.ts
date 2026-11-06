@@ -52,11 +52,11 @@ export function useAutoCopyOnSelect(): void {
     let timer: number | undefined;
     let shown: number | undefined;
 
-    const copy = () => {
+    const copy = (pressed: SelectionEnds | null) => {
       const selection = window.getSelection();
       const ends = endsOf(selection);
       // Unchanged since the press: a click that left the selection alone, such as a menu item.
-      if (!selection || !ends || sameEnds(ends, before ?? null)) return;
+      if (!selection || !ends || sameEnds(ends, pressed)) return;
       if (inEditable(ends.anchorNode) || inEditable(ends.focusNode)) return;
       const text = copyableText(selection);
       if (text.trim() === '') return;
@@ -72,14 +72,18 @@ export function useAutoCopyOnSelect(): void {
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      // A press ends the previous gesture's wait: in a double click that copy could otherwise run
+      // after this press selected the word, and this press's release would copy it again.
+      window.clearTimeout(timer);
       const eligible = event.button === 0 && event.pointerType !== 'touch';
       before = eligible && !inEditable(event.target) ? endsOf(window.getSelection()) : undefined;
     };
     const onPointerUp = () => {
       if (before === undefined) return;
-      window.clearTimeout(timer);
+      const pressed = before;
+      before = undefined;
       // The selection settles after the pointerup (double click, a click collapsing it).
-      timer = window.setTimeout(copy, 0);
+      timer = window.setTimeout(() => copy(pressed), 0);
     };
     const onPointerCancel = () => {
       before = undefined;
