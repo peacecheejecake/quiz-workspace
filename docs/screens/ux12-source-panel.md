@@ -27,9 +27,10 @@ linked_tests: [UX12-SOURCE-AC01 … UX12-SOURCE-AC06]
 - **배치:** `PdfPageDialog`는 QSRC-01과 같은 paired 배치다. viewport 868px 이상에서는 연 panel의 왼쪽에 놓이고, 그보다 좁으면 전체 화면 sheet이고 브라우저 Back은 sheet만 닫는다(design-system §5.6). PDF는 기존 `GET /documents/:id/source-url` 중계와 `PdfViewer`로 보이며 쪽 이동과 확대가 된다.
 - **전체 문서로 가기:** 두 panel 모두 `전체 문서 보기` 링크가 있다. 지금까지 원본 링크가 열던 DOC-02 주소이고 같은 탭에서 이동한다(발췌는 `?page=&block=&revision=`, 나머지는 `?page=`).
 - **공유 화면은 그대로:** 게스트의 요약 쪽 링크, 본문 발췌, 관련 본문은 공유 문서 화면으로 이동한다. 게스트 PDF는 다른 경로로 받기 때문이다.
-- **AI 질문 panel은 그대로:** AI 질문 대화의 발췌는 `PDF에서 보기`가 지금처럼 DOC-02 링크다. `sequence(mock)`의 `질문하기`로 제출 전에도 열리므로, 풀이 화면 위에 PDF 전체가 뜨면 안 된다(아래 규칙).
-- **풀이 화면은 잘린 영역만:** QSRC-01은 풀이 화면에서 PDF 전체를 보이지 않는다(PDF에 정답이 있을 수 있음). 그래서 제출 전 풀이 화면(`practice`, `sequence`)에서는 `PdfPageDialog`에 닿는 길이 없다. 관련 본문과 AI 해설은 그 위치를 제출한 뒤에만 마운트되고, 후보도 `book` 문서뿐이다(RELSRC-01-C02). 다시 풀기로 답을 비우면 함께 사라진다. `문제 원문`(QSRC-01) dialog는 제출 전후 모두 잘린 영역만 보이고 `전체 문서 보기`가 없다.
+- **AI 질문 panel:** AI 질문 대화의 발췌도 `PDF에서 보기`가 dialog를 연다. 다만 정답이 숨겨진 문제가 아래에 열려 있으면 DOC-02 링크다. 풀이 화면 위에 PDF 전체가 뜨면 안 된다(아래 규칙, [UX12-PDFPREVIEW](ux12-pdf-preview.md) DOCS-3 개정).
+- **풀이 화면은 잘린 영역만:** QSRC-01은 풀이 화면에서 PDF 전체를 보이지 않는다(PDF에 정답이 있을 수 있음). 그래서 제출 전 풀이 화면(`practice`, `sequence`)에서는 `PdfPageDialog`에 닿는 길이 없다. 관련 본문과 AI 해설은 그 위치를 제출한 뒤에만 마운트되고, 후보도 `book` 문서뿐이다(RELSRC-01-C02). 다시 풀기로 답을 비우면 함께 사라진다. `문제 원문`(QSRC-01) dialog는 제출 전에 잘린 영역만 보이고 `전체 문서 보기`가 없다.
 - **문제 상세**는 정답을 이미 보이는 화면이므로 출처 링크가 그대로 전체 PDF를 연다.
+- **인용 위치 표시와 주변 쪽:** [UX12-PDFPREVIEW](ux12-pdf-preview.md)가 정한다. `문제 원문`이 PDF를 여는 때도 거기에 있다.
 
 ## 수용 기준
 

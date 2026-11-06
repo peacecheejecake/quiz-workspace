@@ -50,6 +50,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { useHoldAnswerGuard } from '@/lib/questions/answer-guard';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import { RUN_FAILURE_MESSAGES, type RunActionResult } from '@/lib/questions/practice-run-problems';
 import {
@@ -1026,6 +1027,8 @@ function useSolveStep({
     );
   }
 
+  useHoldAnswerGuard(active && !work.outcome && !item?.attempt && run?.finished_at == null);
+
   if (!view) {
     return {
       title: null,
@@ -1307,7 +1310,9 @@ function useSolveStep({
         {progress}
         {content}
         {/* Outside `content`: the header menu opens it in every state of the position. */}
-        <QuestionSourceDialog source={sourcePreview} />
+        {/* A question PDF can hold the answers of positions still to solve: cropped until the
+            run ends, not only until this position was submitted (UX12-PDFPREVIEW). */}
+        <QuestionSourceDialog source={sourcePreview} wholeDocument={finished} />
         {retryTarget && retryTarget.key === `${runId}:${position}` && active ? (
           <SeparateRetry
             workspaceId={workspaceId}

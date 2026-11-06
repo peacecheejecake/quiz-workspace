@@ -13,8 +13,11 @@
 // button and the figures share one region and one opened PDF.
 // UX12-REEXTRACT: `QuestionFigures` draws the question's images above its options and asks for the
 // PDF when they enter the viewport; a question without figures still fetches none.
+// UX12-PDFPREVIEW: once the viewer's answers are out (`wholeDocument`) the dialog shows the whole
+// PDF at the region, marked, with the pages around it. Until then it only ever draws the crop.
 import { Button, FloatingSidePanel, PreviewTooltip, usePairedSheet } from '@quiz/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { PdfPreview } from '@/components/documents/editor/pdf-page-dialog';
 import { createEditorClient } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { loadPdfjs, openPdf, type PdfDocument, type PdfLoadingTask } from '@/lib/documents/pdfjs';
@@ -153,7 +156,6 @@ export function useQuestionSource(target: SourceRegionTarget | null) {
 
   const show = (trigger: HTMLElement | null) => {
     anchor.current = trigger;
-    pdf.start();
     setOpen(true);
   };
   // Entering sheet mode while open (a wide viewport that narrows, e.g. a rotated tablet) pushes the
@@ -308,12 +310,32 @@ export function QuestionFigures({ source }: { readonly source: QuestionSource })
 export function QuestionSourceDialog({
   source,
   aboveModals = false,
+  wholeDocument = false,
 }: {
   readonly source: QuestionSource;
   /** The host is a centered modal dialog (문제 상세): the 원문 dialog stacks above it. */
   readonly aboveModals?: boolean;
+  /**
+   * This question's answers are on screen, so the PDF around the region may be too. Regions in two
+   * documents stay cropped: one viewer shows one document.
+   */
+  readonly wholeDocument?: boolean;
 }) {
   const { regions, open, pdf, anchor, close } = source;
+  const first = regions?.[0];
+  const whole =
+    wholeDocument && first && regions?.every((r) => r.document_id === first.document_id)
+      ? first
+      : null;
+  const { start } = pdf;
+  const cropped = open && !whole;
+  useEffect(() => {
+    if (cropped) start();
+  }, [cropped, start]);
+  const highlights = useMemo(
+    () => regions?.map(({ page, bbox }) => ({ page, bbox })) ?? [],
+    [regions],
+  );
   if (!regions) return null;
   return (
     <FloatingSidePanel
@@ -332,25 +354,35 @@ export function QuestionSourceDialog({
         trigger.focus();
       }}
     >
-      <div className={styles.dialogBody}>
-        {pdf.state.status === 'error' ? (
-          <div role="alert" className={styles.failure}>
-            <p>{FAILURE_TEXT}</p>
-            <Button onClick={pdf.start}>다시 시도</Button>
-          </div>
-        ) : pdf.state.status === 'ready' ? (
-          <PdfRegions
-            regions={regions}
-            documents={pdf.state.documents}
-            fit="container"
-            onFailed={pdf.fail}
+      {whole ? (
+        open ? (
+          <PdfPreview
+            documentId={whole.document_id}
+            initialPage={whole.page}
+            highlights={highlights}
           />
-        ) : (
-          <p role="status" className={styles.message}>
-            {LOADING_TEXT}
-          </p>
-        )}
-      </div>
+        ) : null
+      ) : (
+        <div className={styles.dialogBody}>
+          {pdf.state.status === 'error' ? (
+            <div role="alert" className={styles.failure}>
+              <p>{FAILURE_TEXT}</p>
+              <Button onClick={pdf.start}>다시 시도</Button>
+            </div>
+          ) : pdf.state.status === 'ready' ? (
+            <PdfRegions
+              regions={regions}
+              documents={pdf.state.documents}
+              fit="container"
+              onFailed={pdf.fail}
+            />
+          ) : (
+            <p role="status" className={styles.message}>
+              {LOADING_TEXT}
+            </p>
+          )}
+        </div>
+      )}
     </FloatingSidePanel>
   );
 }
