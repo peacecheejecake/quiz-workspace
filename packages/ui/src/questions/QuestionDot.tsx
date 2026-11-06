@@ -1,9 +1,10 @@
 'use client';
 
-import type { ButtonHTMLAttributes, MouseEvent, Ref } from 'react';
+import type { ButtonHTMLAttributes, FocusEvent, MouseEvent, Ref } from 'react';
 import { cx } from '../internal/cx';
 import { QuestionMarker } from './QuestionMarker';
 import { QuestionPreviewPopover } from './QuestionPreviewPopover';
+import { isQuietDotFocus } from './quiet-focus';
 import {
   questionDotLabel,
   type LastGradedResult,
@@ -60,6 +61,7 @@ export function QuestionDot({
   needsRetry,
   isPendingGrading,
   onPreview,
+  onFocus,
   className,
   ref,
   ...rest
@@ -80,6 +82,12 @@ export function QuestionDot({
     event.currentTarget.focus({ preventScroll: true });
     onOpen(questionId);
   };
+  const handleFocus = (event: FocusEvent<HTMLButtonElement>) => {
+    onFocus?.(event);
+    // The Tooltip trigger's handler runs after this one (Slot calls the child's first) and skips
+    // a prevented event, so the dot takes focus without opening the preview.
+    if (isQuietDotFocus()) event.preventDefault();
+  };
   return (
     <QuestionPreviewPopover
       {...labelInput}
@@ -99,6 +107,7 @@ export function QuestionDot({
         data-favorite={isFavorite ? '' : undefined}
         data-selected={isSelected ? '' : undefined}
         onClick={handleClick}
+        onFocus={handleFocus}
         {...rest}
       >
         <QuestionMarker status={status} favorite={isFavorite} />

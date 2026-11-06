@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FavoriteToggle,
+  focusQuestionDotQuietly,
   HeatmapLegend,
   QuestionDot,
   QuestionHeatmap,
@@ -249,6 +250,28 @@ describe('QuestionDot', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
     expect(dot).toHaveFocus();
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('quiet focus keeps the preview closed; hover and later keyboard focus still open it (UX12-HOME-AC01, AC02)', async () => {
+    const user = userEvent.setup();
+    const onFocus = vi.fn();
+    render(<QuestionDot {...dotProps({ onFocus })} />);
+    const dot = screen.getByRole('button');
+
+    act(() => focusQuestionDotQuietly(dot));
+    expect(dot).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    await user.hover(dot);
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
+    await user.unhover(dot);
+    act(() => dot.blur());
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    await user.tab();
+    expect(dot).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toBeInTheDocument();
   });
 });
 

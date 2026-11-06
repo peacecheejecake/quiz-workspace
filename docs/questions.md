@@ -107,7 +107,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 
 ### 3.2 인터랙션
 
-- `hover`/키보드 `focus`: marker scale 확대 및 200ms 정도 지연 후 간단한 preview popover. 문제 유형, 번호, 챕터, 표시 상태, stem 처음 1~3줄, favorite/retry 여부. 정답은 미노출.
+- `hover`/키보드 `focus`: marker scale 확대 및 200ms 정도 지연 후 간단한 preview popover. 문제 유형, 번호, 챕터, 표시 상태, stem 처음 1~3줄, favorite/retry 여부. 정답은 미노출. 풀이 panel을 닫아 focus가 dot으로 돌아올 때는 preview를 열지 않는다(UX12-HOME-AC01, `focusQuestionDotQuietly`). 사용자가 Tab·Arrow로 옮긴 focus와 hover는 그대로 preview를 연다.
 - `click`/`Enter`/`Space`: 문제 풀이를 Floating Side Panel에 열고 학습 열람 이벤트 기록.
 - `Esc`: popover 또는 panel 닫기. 닫힌 뒤 기존 점으로 focus 복귀.
 - mobile/touch: hover 없음. 첫 tap에 패널 열기, preview는 패널 상단에 포함. 전체 페이지 문제 풀이로 전환 가능.

@@ -61,6 +61,7 @@ import {
   PopoverTrigger,
   QUESTION_DOT_STATUSES,
   QuestionDot,
+  focusQuestionDotQuietly,
   QuestionHeatmap,
   QuestionMarker,
   QuestionPreviewPopover,
@@ -186,6 +187,7 @@ const label = questionDotLabel({
 
 export default function Page() {
   void useModalLayerOpen;
+  void focusQuestionDotQuietly;
   return (
     <ThemeProvider defaultTheme="light">
       <ToastProvider>

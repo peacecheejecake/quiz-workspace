@@ -88,7 +88,8 @@ test(
 
     await dot.hover();
     await expect(overviewUi.tooltip(page)).toBeVisible();
-    await page.mouse.move(0, 0);
+    await page.mouse.move(0, 0, { steps: 4 }); // Radix closes on a move past its grace area.
+    await page.mouse.move(1, 1);
     await expect(overviewUi.tooltip(page)).toHaveCount(0);
 
     await page.keyboard.press('Tab');
