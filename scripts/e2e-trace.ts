@@ -154,6 +154,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SPANS.0': ['UX12-SPANS'],
   // UX12 EXTRACT-3..5 (2026-11-06): tables in stems and options shown as columns.
   'QTABLE.0': ['QTABLE-01'],
+  // UX12 VIEW-4: `원문 보기` in the question panel's menu; the body button stays.
+  'UX12-SRCMENU.0': ['UX12-SRCMENU'],
 };
 
 const LEADING_ID = new RegExp(

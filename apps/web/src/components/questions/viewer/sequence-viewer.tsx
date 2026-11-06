@@ -91,7 +91,12 @@ import {
 } from './question-body';
 import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+  type QuestionSourceControls,
+} from './question-source-preview';
 import {
   EMPTY_RANGE_FILTERS,
   allIds,
@@ -209,7 +214,7 @@ export interface SequenceViewerProps {
   /** Saving a position's favorite / retry flags failed (bank): the toggles rolled back. */
   readonly onFlagsFailed?: (message: string) => void;
   /** Header controls after the study toggles (bank: the screen's 문제 관리 / 문제 정보 menu). */
-  readonly headerExtra?: (question: RunQuestionInfo) => ReactNode;
+  readonly headerExtra?: (question: RunQuestionInfo, source: QuestionSourceControls) => ReactNode;
   /** A question edited, archived or deleted meanwhile: its position is read again. */
   readonly invalidated?: Invalidation | null;
   readonly client?: RunClient;
@@ -421,7 +426,7 @@ export function SequenceViewer({
               onChange={solve.changeFlags}
             />
           ) : null}
-          {headerExtra?.(info)}
+          {headerExtra?.(info, { onShowSource: solve.onShowSource })}
         </>
       );
     }
@@ -725,6 +730,12 @@ function useSolveStep({
   const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
+  // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
+  const sourcePreview = useQuestionSource(
+    item?.question_id
+      ? { kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }
+      : null,
+  );
   const returnable = !!run && !!item?.available && !!item.question_id;
   useEffect(() => {
     if (active && runId && returnable)
@@ -1015,6 +1026,7 @@ function useSolveStep({
       footer: undefined,
       question: null,
       attachment: null,
+      onShowSource: null,
       flags: null,
       changeFlags: () => undefined,
     };
@@ -1170,12 +1182,7 @@ function useSolveStep({
             )}
           </div>
         ) : null}
-        {item.question_id ? (
-          // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
-          <QuestionSourcePreview
-            target={{ kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }}
-          />
-        ) : null}
+        {item.question_id ? <QuestionSourceButton source={sourcePreview} /> : null}
         <form
           id={formId}
           className={styles.form}
@@ -1302,6 +1309,8 @@ function useSolveStep({
       <>
         {progress}
         {content}
+        {/* Outside `content`: the header menu opens it in every state of the position. */}
+        <QuestionSourceDialog source={sourcePreview} />
         {retryTarget && retryTarget.key === `${runId}:${position}` && active ? (
           <SeparateRetry
             workspaceId={workspaceId}
@@ -1323,6 +1332,7 @@ function useSolveStep({
     footer,
     question,
     attachment,
+    onShowSource: sourcePreview.onShowSource,
     flags: shownFlags,
     lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
     pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,

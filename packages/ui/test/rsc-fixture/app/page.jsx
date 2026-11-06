@@ -196,6 +196,7 @@ const numberLabels = [questionNumberLabel(12), questionTitle(null), NO_QUESTION_
 
 export default function Page() {
   void useModalLayerOpen;
+  void useDragDismiss;
   void focusQuestionDotQuietly;
   return (
     <ThemeProvider defaultTheme="light">

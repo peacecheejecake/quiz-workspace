@@ -6,7 +6,7 @@
 // menu with 편집 (the 문제 편집 dialog), 보관 and 삭제 (both confirm first; QPLAY-01-AC07/AC08/AC11;
 // 변형 출제 went with QGEN-01, QGEN-RM); everyone else gets a read-only `문제 정보` menu. The API
 // re-checks every write. Dialogs open once the menu has returned focus to its trigger, so closing
-// them brings focus back there.
+// them brings focus back there. UX12-SRCMENU: `원문 보기` is there only with a source region.
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,7 @@ import {
   MoreIcon,
 } from '@quiz/ui';
 import { useRef } from 'react';
+import type { QuestionSourceControls } from '../viewer/question-source-preview';
 import type { DetailFocus } from '../viewer/question-viewer';
 
 export interface QuestionManageActions {
@@ -28,12 +29,15 @@ export interface QuestionManageActions {
 export function QuestionManageMenu({
   busy = false,
   onShowDetail,
+  onShowSource = null,
   manage = null,
 }: {
   /** The question is being loaded for the editor, archived or deleted. */
   readonly busy?: boolean;
   /** `trigger`: the menu button, where focus goes back when the dialog closes. */
   readonly onShowDetail: (focus: DetailFocus, trigger: HTMLElement | null) => void;
+  /** Opens the 문제 원문 dialog; null = the question has no source region. */
+  readonly onShowSource?: QuestionSourceControls['onShowSource'];
   /** Editors of a non-archived workspace: the write items (null = the read-only 문제 정보 menu). */
   readonly manage?: QuestionManageActions | null;
 }) {
@@ -58,6 +62,13 @@ export function QuestionManageMenu({
       <DropdownMenuContent align="end" aria-label={label}>
         <DropdownMenuItem onSelect={() => showDetail('answers')}>정답·해설 보기</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => showDetail('history')}>수정 이력·출처</DropdownMenuItem>
+        {onShowSource ? (
+          <DropdownMenuItem
+            onSelect={() => window.setTimeout(() => onShowSource(triggerRef.current), 0)}
+          >
+            원문 보기
+          </DropdownMenuItem>
+        ) : null}
         {manage ? (
           <>
             <DropdownMenuSeparator />

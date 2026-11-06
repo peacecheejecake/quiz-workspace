@@ -20,7 +20,7 @@ vi.mock('@quiz/ui', async (original) => ({
   usePairedSheet: () => sheetMode.value,
 }));
 
-const { QuestionSourcePreview } =
+const { QuestionSourceDialog, QuestionSourcePreview, useQuestionSource } =
   await import('../src/components/questions/viewer/question-source-preview');
 const { fetchSourceRegions, fitRegion, sourceRegionPath, tooltipFit } =
   await import('../src/lib/questions/source-region');
@@ -208,5 +208,76 @@ describe('QSRC-01 tooltip budget', () => {
     const fit = tooltipFit(3, 375, 400);
     expect(2 * 17 + 2 * 12 + 3 * (24 + fit.maxHeight)).toBeLessThanOrEqual(400 - 32);
     expect(fit.maxWidth).toBeLessThanOrEqual(375 - 32);
+  });
+});
+
+describe('UX12-SRCMENU shared source state', () => {
+  const MENU = { name: '메뉴' };
+  const OTHER = '22222222-2222-4222-8222-222222222222';
+
+  /** A panel whose header control opens the dialog the way the 더보기 menu does. */
+  function Host({ id }: { readonly id: string | null }) {
+    const source = useQuestionSource(id ? { kind: 'question', id } : null);
+    const { onShowSource } = source;
+    return (
+      <div role="dialog" aria-label="문제" data-testid="host">
+        {onShowSource ? (
+          <button type="button" onClick={(event) => onShowSource(event.currentTarget)}>
+            메뉴
+          </button>
+        ) : null}
+        <QuestionSourceDialog source={source} />
+      </div>
+    );
+  }
+
+  it('offers no control without a region', async () => {
+    stubFetch(() => new Response('{}', { status: 404 }));
+    render(<Host id={ID} />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByRole('button', MENU)).toBeNull();
+  });
+
+  it('makes the panel around the trigger inert while open', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+    expect(screen.getByTestId('host').hasAttribute('inert')).toBe(true);
+  });
+
+  it('closes and reads the region again when the question changes', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const fetchMock = stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const view = render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+
+    view.rerender(<Host id={OTHER} />);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull());
+    await screen.findByRole('button', MENU);
+    expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toContain(
+      `/api/questions/${OTHER}/source-region`,
+    );
+  });
+
+  it('a closing panel keeps the region, and reopening does not reopen the dialog', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const fetchMock = stubFetch(() => Response.json({ question_id: ID, regions: [REGION] }));
+    const view = render(<Host id={ID} />);
+    fireEvent.click(await screen.findByRole('button', MENU));
+    await screen.findByRole('dialog', { name: '문제 원문' });
+
+    view.rerender(<Host id={null} />);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull());
+    expect(screen.getByRole('button', MENU)).toBeTruthy();
+
+    const requests = fetchMock.mock.calls.length;
+    view.rerender(<Host id={ID} />);
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(requests + 1));
+    await screen.findByRole('button', MENU);
+    expect(screen.queryByRole('dialog', { name: '문제 원문' })).toBeNull();
   });
 });

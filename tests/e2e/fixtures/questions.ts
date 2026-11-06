@@ -877,11 +877,14 @@ export const panelUi = {
     page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
 
-type PanelManageItem = 'answers' | 'history' | 'edit' | 'generate' | 'archive' | 'delete';
+type PanelManageItem =
+  'answers' | 'history' | 'source' | 'edit' | 'generate' | 'archive' | 'delete';
 export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
   /** UX7-BANK-2: the read items of both menus (문제 관리 and 문제 정보). */
   answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
   history: /^(수정 이력·출처|revisions and sources)$/i,
+  /** UX12-SRCMENU: only when the question has a source region. */
+  source: /^(원문 보기|show source)$/i,
   edit: /^(편집|edit)$/i,
   /** Retired by QGEN-RM: only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,

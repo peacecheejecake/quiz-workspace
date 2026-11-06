@@ -890,10 +890,11 @@ export function QuestionsOverview({
         onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
-        headerExtra={
+        headerExtra={({ onShowSource }) =>
           panelQuestion ? (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: panelQuestion.id,
@@ -912,7 +913,7 @@ export function QuestionsOverview({
                   : null
               }
             />
-          ) : undefined
+          ) : null
         }
         onCloseAutoFocus={(event) => {
           const requestedFocus = practiceReturnFocusRef?.current ?? null;
@@ -958,9 +959,10 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          headerExtra={(q) => (
+          headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: q.questionId,
