@@ -131,9 +131,14 @@ function passage(heading: string, rawBody: string): StemPassage {
 /**
  * How many of the headings open a passage and where the last of those ends: at the first item list,
  * else at the blank line or end of the text. A heading right above a list has no body, so it is no
- * passage: "<보기>" and all after it stay out of the passages.
+ * passage: "<보기>" and all after it stay out of the passages. Null when any heading's body ends in
+ * a question, even a heading past that end: the question is mixed into the text, so nothing splits.
  */
-function passagesEnd(s: string, headings: readonly Heading[]): { kept: number; end: number } {
+function passagesEnd(
+  s: string,
+  headings: readonly Heading[],
+): { kept: number; end: number } | null {
+  let stop: { kept: number; end: number } | null = null;
   let end = s.length;
   for (const [i, heading] of headings.entries()) {
     const tail = s.length - s.slice(heading.end).trimStart().length;
@@ -141,10 +146,13 @@ function passagesEnd(s: string, headings: readonly Heading[]): { kept: number; e
     const blank = BLANK_LINE.exec(s.slice(tail, limit));
     end = blank ? tail + blank.index : limit;
     const list = itemListStart(s.slice(tail, end));
-    if (list === 0) return { kept: i, end: heading.start };
-    if (list !== null) return { kept: i + 1, end: tail + list };
+    const bodyEnd = list === null ? end : tail + list;
+    if (ENDS_QUESTION.test(s.slice(heading.end, bodyEnd))) return null;
+    if (list !== null) {
+      stop ??= list === 0 ? { kept: i, end: heading.start } : { kept: i + 1, end: bodyEnd };
+    }
   }
-  return { kept: headings.length, end };
+  return stop ?? { kept: headings.length, end };
 }
 
 /**
@@ -158,12 +166,13 @@ export function stemPassageLayout(
 ): StemPassageLayout | null {
   const s = displayStem(stem);
   const found = passageHeadings(s, afterTable);
-  const { kept, end } = passagesEnd(s, found);
+  const stop = passagesEnd(s, found);
+  if (!stop) return null;
+  const { kept, end } = stop;
   const headings = found.slice(0, kept);
   const first = headings[0];
   if (!first) return null;
   const bodies = headings.map((h, i) => s.slice(h.end, headings[i + 1]?.start ?? end));
-  if (bodies.some((body) => ENDS_QUESTION.test(body))) return null;
   return {
     lead: paragraphs(displayStem(s.slice(0, first.start).trimEnd())),
     passages: headings.map((h, i) => passage(s.slice(h.start, h.end), bodies[i] as string)),

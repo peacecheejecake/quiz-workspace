@@ -508,5 +508,33 @@
       ],
       "rest": "<보기> (가) 갑이다. (나) 을이다."
     }
+  },
+  {
+    "name": "a question in a heading after the item list cancels the passages",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> 왜 그런가?",
+    "normalized": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. <추가> 왜 그런가?",
+    "layout": null
+  },
+  {
+    "name": "a question closing the last item keeps the passage before the list",
+    "stem": "옳은 것은? <자료> ∙갑 : 하나 (가) 갑이다. (나) 을이다. 위에서 고르면?",
+    "normalized": "옳은 것은?\n\n<자료>\n∙갑 : 하나\n\n(가) 갑이다.\n(나) 을이다. 위에서 고르면?",
+    "layout": {
+      "lead": ["옳은 것은?"],
+      "passages": [
+        {
+          "heading": "<자료>",
+          "intro": "",
+          "lines": [
+            {
+              "marker": "∙",
+              "text": "갑 : 하나",
+              "subs": []
+            }
+          ]
+        }
+      ],
+      "rest": "(가) 갑이다. (나) 을이다. 위에서 고르면?"
+    }
   }
 ]

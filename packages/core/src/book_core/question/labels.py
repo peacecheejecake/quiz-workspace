@@ -366,10 +366,13 @@ def _passage_headings(text: str, *, after_table: bool) -> list[tuple[int, int]]:
     return found
 
 
-def _passages_end(text: str, headings: list[tuple[int, int]]) -> tuple[int, int]:
+def _passages_end(text: str, headings: list[tuple[int, int]]) -> tuple[int, int] | None:
     """How many of ``headings`` open a passage and where the last of those ends: at the first
     item list, else at the blank line or end of the text. A heading right above a list has no
-    body, so it is no passage: ``<보기>`` and all after it stay out of the passages."""
+    body, so it is no passage: ``<보기>`` and all after it stay out of the passages. ``None``
+    when any heading's body ends in a question, even a heading past that end: the question is
+    mixed into the text, so nothing splits."""
+    stop: tuple[int, int] | None = None
     end = len(text)
     for i, (start, h_end) in enumerate(headings):
         tail = len(text) - len(text[h_end:].lstrip())
@@ -377,9 +380,12 @@ def _passages_end(text: str, headings: list[tuple[int, int]]) -> tuple[int, int]
         blank = _BLANK_LINE.search(text, tail, limit)
         end = blank.start() if blank else limit
         items = stem_item_starts(text[tail:end], require_lead=False)
-        if items:
-            return (i, start) if items[0] == 0 else (i + 1, tail + items[0])
-    return len(headings), end
+        body_end = tail + items[0] if items else end
+        if _ENDS_QUESTION.search(text[h_end:body_end]):
+            return None
+        if items and stop is None:
+            stop = (i, start) if items[0] == 0 else (i + 1, body_end)
+    return stop or (len(headings), end)
 
 
 def _passage_parts(
@@ -388,14 +394,15 @@ def _passage_parts(
     """``(lead, [(heading, body), ...], rest)`` of the passages in ``text``, ``None`` without one.
     ``after_table``: the text follows a table, so nothing need come before the first heading."""
     found = _passage_headings(text, after_table=after_table)
-    kept, end = _passages_end(text, found)
+    stop = _passages_end(text, found)
+    if stop is None:
+        return None
+    kept, end = stop
     headings = found[:kept]
     if not headings:
         return None
     ends = [start for start, _ in headings[1:]] + [end]
     bodies = [text[h_end:b_end] for (_, h_end), b_end in zip(headings, ends, strict=True)]
-    if any(_ENDS_QUESTION.search(body) for body in bodies):
-        return None
     passages = [
         (text[start:h_end], body.strip())
         for (start, h_end), body in zip(headings, bodies, strict=True)
