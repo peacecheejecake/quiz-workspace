@@ -742,7 +742,7 @@ export function PdfViewer({
   );
 
   return (
-    <div className={`${styles.viewer} ${className ?? ''}`}>
+    <div className={`${styles.viewer} ${className ?? ''}`} data-pdf-reading="">
       {toolbarHost === undefined
         ? toolbar
         : toolbarHost

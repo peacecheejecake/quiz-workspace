@@ -47,6 +47,7 @@
     border-width: 0 0 1px;
     border-color: var(--color-border);
     border-radius: 0;
+    background-image: none;
     box-shadow: none;
   }
 

@@ -61,8 +61,10 @@
   border-radius: var(--radius-sm);
 }
 
-.rowButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .rowButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .location {
@@ -105,4 +107,10 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .link:hover {
+    color: var(--color-accent-hover);
+  }
 }

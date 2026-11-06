@@ -1,5 +1,5 @@
 // Contract for the global reduced-motion rule in base.css (design-system.md §3.3, UX7-CSS).
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -39,5 +39,30 @@ describe('base.css reduced-motion rule', () => {
 
   it('keeps instant scrolling', () => {
     expect(decls['scroll-behavior']).toBe('auto !important');
+  });
+});
+
+// UX12-GLASSBTN: Lightning CSS keeps only the last of the two when the value holds var(), so the
+// standard declaration must come last or Chromium ships without blur.
+describe('backdrop-filter declaration order', () => {
+  const repo = resolve(import.meta.dirname, '../../..');
+  const roots = ['packages/design-tokens/src', 'packages/ui/src', 'apps/web/src'];
+  const cssFiles = roots.flatMap((root) =>
+    readdirSync(resolve(repo, root), { recursive: true, encoding: 'utf8' })
+      .filter((file) => file.endsWith('.css'))
+      .map((file) => resolve(repo, root, file)),
+  );
+
+  it('finds the stylesheets (guards against a vacuous scan)', () => {
+    expect(cssFiles.length).toBeGreaterThan(50);
+  });
+
+  it('declares -webkit-backdrop-filter before backdrop-filter everywhere', () => {
+    const wrong = cssFiles.filter((file) =>
+      /(?<!-webkit-)backdrop-filter:[^;]*;\s*-webkit-backdrop-filter:/.test(
+        readFileSync(file, 'utf8'),
+      ),
+    );
+    expect(wrong).toEqual([]);
   });
 });

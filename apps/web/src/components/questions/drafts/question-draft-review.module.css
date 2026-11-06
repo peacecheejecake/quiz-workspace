@@ -211,3 +211,9 @@
   padding: 0 var(--space-1);
   color: var(--color-text-secondary);
 }
+
+@media (hover: hover) {
+  .pageLink:hover {
+    color: var(--color-accent-hover);
+  }
+}

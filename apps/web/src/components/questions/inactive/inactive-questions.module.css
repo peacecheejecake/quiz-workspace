@@ -73,8 +73,10 @@
   line-clamp: 3;
 }
 
-.stemButton:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .stemButton:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (hover: hover) {

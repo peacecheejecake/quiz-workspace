@@ -278,8 +278,8 @@ button.segment:focus-visible {
    reading area, design-system §1 checklist). Desktop docks it beside the panes (inset). */
 .outlinePanel:global(.qz-panel)[data-dock-mode='overlay'] {
   background: var(--color-glass-solid);
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* Reduced motion: the outline panel opens and folds at once (DOCVIEW-01-AC02). The global reset

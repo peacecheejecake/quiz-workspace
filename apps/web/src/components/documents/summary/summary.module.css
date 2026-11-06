@@ -175,8 +175,10 @@
   cursor: pointer;
 }
 
-.chapterToggle:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .chapterToggle:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .chapterTitle {
@@ -250,4 +252,10 @@
 /* Share view: the 요약 button next to a shared document's link. */
 .sharedButton {
   margin-inline-start: var(--space-2);
+}
+
+@media (hover: hover) {
+  .pageLink:hover {
+    color: var(--color-accent-hover);
+  }
 }
