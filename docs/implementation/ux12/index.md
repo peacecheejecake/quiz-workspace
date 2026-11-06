@@ -275,3 +275,40 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
 | CHAPTER-2 | 1 | 대기 | HOME-1 뒤(`packages/ui/src/questions` 공유) |
+| DESIGN-1 | 2 | 진행 | |
+| VIEW-1 | 2 | 대기 | |
+| VIEW-2 | 2 | 대기 | |
+| EXPL-1 | 2 | 대기 | |
+| EXPL-2 | 2 | 대기 | |
+| HOME-2 | 2 | 대기 | |
+| HOME-3 | 2 | 대기 | |
+| HOME-4 | 3 | 대기 | |
+| HOME-5 | 3 | 대기 | |
+| ASK-1 | 3 | 대기 | |
+| ASK-2 | 3 | 대기 | |
+| EXTRACT-3 | 4 | 대기 | |
+| EXTRACT-4 | 4 | 대기 | |
+| EXTRACT-5 | 4 | 대기 | |
+| EXTRACT-8 | 4 | 대기 | |
+| EXTRACT-6 | 4 | 대기 | |
+| EXTRACT-7 | 4 | 대기 | |
+| DESIGN-3 | 5 | 대기 | |
+| DESIGN-4 | 5 | 대기 | |
+| SHELL-2 | 5 | 대기 | |
+| VIEW-3 | 5 | 대기 | |
+| EXPL-3 | 5 | 대기 | |
+| VIEW-4 | 5 | 대기 | |
+| VIEW-5 | 5 | 대기 | |
+| VIEW-6 | 5 | 대기 | |
+| DOCS-2 | 5 | 대기 | |
+| SHELL-3 | 6 | 대기 | |
+| SHELL-4 | 6 | 대기 | |
+| SHELL-5 | 6 | 대기 | |
+| SHELL-6 | 6 | 대기 | |
+| CHAPTER-1 | 7 | 대기 | |
+| CHAPTER-3 | 7 | 대기 | |
+| CHAPTER-4 | 7 | 대기 | |
+| CHAPTER-5 | 7 | 대기 | |
+| CHAPTER-6 | 7 | 대기 | |
+| SHARE-1 | 8 | 대기 | |
+| SHARE-2 | 8 | 대기 | |
