@@ -292,7 +292,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
 | EXTRACT-6 | 4 | 대기 | |
 | EXTRACT-7 | 4 | 대기 | |
-| DESIGN-3 | 5 | 진행 | |
+| DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
 | DESIGN-4 | 5 | 대기 | |
 | SHELL-2 | 5 | 대기 | |
 | VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
