@@ -296,7 +296,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | EXTRACT-4 | 4 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, pytest 175 GREEN |
 | EXTRACT-5 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
-| EXTRACT-6 | 4 | 진행 | |
+| EXTRACT-6 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, 원문 영역 정답 차단 추가, unit GREEN, WebKit·계약은 PR CI |
 | EXTRACT-7 | 4 | 진행 | |
 | DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
 | DESIGN-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
