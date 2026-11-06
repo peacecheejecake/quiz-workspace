@@ -58,7 +58,7 @@
 | `--color-surface` | `#FFFFFF` | 카드·읽기 화면 |
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
-| `--color-text-secondary` | `#636D82` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
+| `--color-text-secondary` | `#5F697E` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
 | `--color-accent` | `#5268D8` | primary action, navigation |
 | `--color-accent-hover` | `#4A5EC1` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
@@ -83,8 +83,8 @@
 | `--color-neutral-fill` | `#ACB6C2` | 중립 회색 채움(= `--question-status-viewed`) |
 | `--color-neutral-fill-subtle` | `#E7ECF0` | 옅은 회색 채움: 기본 badge·skeleton·progress track(= `--question-status-unseen`) |
 | `--color-scrim` | `rgba(247,248,250,.64)` | modal·drawer backdrop |
-| `--color-state-hover` | `#ECEFF4` | 버튼·메뉴 항목·탭 hover 배경 |
-| `--color-state-pressed` | `#E3E7EE` | 누르는 동안(`:active`) 배경 |
+| `--color-state-hover` | `#E6EAF1` | 버튼·메뉴 항목·탭 hover 배경 |
+| `--color-state-pressed` | `#DBE0E9` | 누르는 동안(`:active`) 배경 |
 | `--color-state-selected` | `#E4E9FB` | 선택·켜짐 상태(`aria-pressed="true"`, `data-state="on"`) 배경 — hover와 다른 accent tint |
 | `--color-state-selected-hover` | `#D2DAF7` | 선택·켜짐 상태 위 hover 배경 |
 | `--color-switch-track` | `#7D8799` | 꺼진 스위치 track 채움(표면 대비 3:1 이상, 컨트롤 경계) |
@@ -100,6 +100,8 @@
 **v1.1.1 추가:** `--color-border-strong`, `--color-on-accent`, `--color-danger`/`success`/`warning`, `--color-scrim`, typography scale(`--font-size-*`, `--line-height-*`, `--font-weight-*`), breakpoint(`--breakpoint-*`). feedback 글자색은 canvas·surface 위 텍스트로 4.5:1 이상을 만족한다.
 
 **v1.3 (PALETTE-UNIFY, 2026-11-04 사용자 요청):** Heatmap palette(red `#FF6060`, green `#00AB7B`, yellow `#F6CF35`, gray `#ACB6C2`, light gray `#E7ECF0`)를 앱 전체 feedback·중립 색에 쓴다. (1) 채움·점·아이콘·badge·알림 박스 테두리는 palette 값 그대로인 `--color-{danger,success,warning}-fill`, `--color-neutral-fill`, `--color-neutral-fill-subtle`(값이 `--question-status-*`와 같고 `tokens.test.ts`가 일치를 고정)을 쓴다. (2) 글자(오류·성공·경고 문구)는 같은 색조의 어두운 `--color-danger/success/warning`(light 4.5:1 이상, dark는 palette dark 값). (3) 비텍스트 3:1이 필요한 곳은 palette를 쓰지 않고 어두운 토큰을 유지한다: `--color-border-strong`, switch track, `aria-invalid` 입력 테두리, 객관식 채점 결과 테두리(v1.2.6)·정답 보기 2px 테두리. palette red/green은 표면 위 약 2.8:1, yellow는 약 1.4:1이라 이 용도에 부족하다. 하이라이트 색은 범위 밖이다.
+
+**v1.3.1 (UX12 DESIGN-1, 2026-11-06):** hover 배경이 경계 없는 버튼의 유일한 표시가 되면서 light hover를 강화했다. `--color-state-hover` `#ECEFF4` → `#E6EAF1`(glass 대비 1.08 → 1.13), `--color-state-pressed` `#E3E7EE` → `#DBE0E9`(hover와 구분 유지). 보조 텍스트가 hover 배경 위에서 4.5:1을 유지하도록 `--color-text-secondary` `#636D82` → `#5F697E`로 함께 낮췄다. dark는 glass 대비가 이미 1.2 이상이라 그대로 둔다.
 
 **v1.1.2 (M7.2):** `--color-text-secondary` light `#667085` → `#636D82`. 보조 텍스트가 선택·현재 항목, 메타 정보 등 `--color-surface-muted` 위에도 쓰여 4.47:1로 AA에 미달했다(axe 전 화면 검사). 같은 색조로 4.67:1(muted)·4.89:1(canvas)·5.2:1(surface)을 만족한다. 앱은 별도 선택이 없으면 OS `prefers-color-scheme`을 따라 Dark token을 적용한다(`[data-theme]`가 있으면 그 값이 우선).
 
@@ -175,7 +177,7 @@
   --color-surface: #FFFFFF;
   --color-surface-muted: #F0F3F7;
   --color-text-primary: #172033;
-  --color-text-secondary: #636D82;
+  --color-text-secondary: #5F697E;
   --color-border: #E6E9EF;
   --color-accent: #5268D8;
   --color-accent-hover: #4A5EC1;
@@ -200,8 +202,8 @@
   --color-neutral-fill: #ACB6C2;
   --color-neutral-fill-subtle: #E7ECF0;
   --color-scrim: rgba(247,248,250,.64);
-  --color-state-hover: #ECEFF4;
-  --color-state-pressed: #E3E7EE;
+  --color-state-hover: #E6EAF1;
+  --color-state-pressed: #DBE0E9;
   --color-state-selected: #E4E9FB;
   --color-state-selected-hover: #D2DAF7;
   --color-switch-track: #7D8799;
@@ -326,8 +328,8 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | `--color-state-selected` 배경 + text-primary + `aria-selected` (하단 bar 없음, UX4) |
   | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
   | 스위치 | `--color-switch-track` 채움 + 더 연한 `--color-switch-track-border` | 꺼짐: 채움 `--color-switch-track-hover`, 켜짐: 채움 `--color-accent-hover` | — | accent 채움 + `--color-switch-track-checked-border` |
-  | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 표면·배경·굵기 + `aria-pressed`/`aria-current` (왼쪽/아래 accent bar 없음, UX4) |
-  | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | 밑줄이 굵어지거나(텍스트 버튼) 밑줄 표시(링크) | — | — |
+  | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, 제목 버튼·링크, 접기/펼치기, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 표면·배경·굵기 + `aria-pressed`/`aria-current` (왼쪽/아래 accent bar 없음, UX4) |
+  | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | `linkButton`은 `--color-state-hover` + 밑줄 굵게, 본문 링크는 밑줄 표시, 목록 제목 링크는 `--color-state-hover` + 밑줄 | — | — |
 
   hover는 `@media (hover: hover)` 안에서만 적용해 터치 후 hover가 남지 않게 하고, 비활성(`:disabled`)에는 적용하지 않는다. pressed는 모든 입력에 적용한다. focus 중인 테두리 컨트롤은 hover 중에도 focus 경계 하나를 유지한다(아래 "Focus 경계는 하나"). 기능 코드는 kit `Button`/`IconButton`을 쓰고, 부득이한 버튼형 클래스도 위 토큰만 쓴다.
 - **Dropdown 메뉴 (v1.2.2, UX3b):** 성격이 다른 항목은 `DropdownMenuGroup` + `DropdownMenuLabel`(그룹 이름, `aria-labelledby`로 연결)과 `DropdownMenuSeparator`로 나눈다(예: Workspace 전환 메뉴의 "내 Workspace" 목록과 "모든 Workspace 보기"). 링크로 렌더링되는 항목(`asChild` + `<a>`/Next `Link`)은 방문·hover·focus·누름 어느 상태에서도 밑줄이 없고 메뉴 글자색(`--color-text-primary`, danger 항목은 `--color-danger`)을 유지하며, kit의 항목 스타일이 이를 보장하므로 기능 코드는 따로 지정하지 않는다. 현재 항목(`aria-current`)은 굵기로 표시한다.

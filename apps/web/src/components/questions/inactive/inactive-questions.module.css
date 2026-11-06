@@ -55,6 +55,9 @@
   display: -webkit-box;
   overflow: hidden;
   padding: 0;
+  margin-inline: calc(-1 * var(--space-1));
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-sm);
   box-sizing: border-box;
   border: 1px solid transparent;
   background: none;
@@ -72,6 +75,12 @@
 
 .stemButton:hover {
   text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .stemButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .stemButton:focus-visible {

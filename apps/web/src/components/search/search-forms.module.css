@@ -54,6 +54,12 @@
   color: var(--color-text-primary);
 }
 
+@media (hover: hover) {
+  .settingsToggle:hover {
+    background: var(--color-state-hover);
+  }
+}
+
 .settingsToggle[aria-expanded='true'] {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);

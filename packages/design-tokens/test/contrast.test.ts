@@ -167,6 +167,11 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     expect(new Set(values).size).toBe(values.length);
   });
 
+  // UX12-CONTROLS: hover is the only affordance of a borderless button, also on glass panels.
+  it('the hover background stands out from the glass surface', () => {
+    expect(ratio(theme, 'color-state-hover', 'color-glass-solid')).toBeGreaterThanOrEqual(1.13);
+  });
+
   // UX3b: the switch track border is a lighter rim than the fill it surrounds, unchecked
   // (rest and hover) and checked (accent rest and hover).
   it('switch track borders are lighter than the track fill in every state', () => {

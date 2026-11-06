@@ -509,9 +509,10 @@
   cursor: pointer;
 }
 
-/* Hover thickens the underline while the boundary stays visible. */
+/* Hover fills the background and thickens the underline; the boundary stays visible. */
 @media (hover: hover) {
   .linkButton:hover {
+    background: var(--color-state-hover);
     text-decoration-thickness: 2px;
   }
 }

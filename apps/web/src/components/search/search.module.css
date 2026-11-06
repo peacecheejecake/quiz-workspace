@@ -149,6 +149,8 @@
 
 .hitTitle {
   padding: 0;
+  margin-inline: calc(-1 * var(--space-1));
+  padding-inline: var(--space-1);
   box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -166,6 +168,12 @@
 
 .hitTitle:hover {
   text-decoration-color: currentcolor;
+}
+
+@media (hover: hover) {
+  .hitTitle:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .hitTitle:focus-visible {

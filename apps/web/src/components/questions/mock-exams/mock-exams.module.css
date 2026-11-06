@@ -77,6 +77,12 @@
   text-decoration: underline;
 }
 
+@media (hover: hover) {
+  .titleButton:hover {
+    background: var(--color-state-hover);
+  }
+}
+
 .titleButton:focus-visible,
 .questionButton:focus-visible {
   border-radius: var(--radius-sm);
