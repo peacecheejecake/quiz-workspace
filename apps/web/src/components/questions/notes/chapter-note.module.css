@@ -208,6 +208,8 @@
   gap: var(--space-1);
   margin: 0;
   padding-inline-start: var(--space-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* 내 하이라이트 (HILITE-01). */

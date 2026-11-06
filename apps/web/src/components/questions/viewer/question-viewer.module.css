@@ -39,6 +39,8 @@
 
 .option:is(:global(.qz-radio), :global(.qz-checkbox)) > :global(.text) > :global(.label) {
   font-size: var(--font-size-body-lg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .choices {
