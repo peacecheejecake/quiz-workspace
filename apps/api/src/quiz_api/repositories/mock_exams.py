@@ -168,6 +168,7 @@ _UNFINISHED_RUNS = """
              and q.removed_at is null
             left join public.mock_exam_practice_sessions s
               on s.practice_run_id = c.id and s.run_position = i.position
+             and s.superseded_at is null
         ) p
         where p.next_position is not null
         order by c.last_touched_at desc, c.id desc

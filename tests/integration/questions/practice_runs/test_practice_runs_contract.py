@@ -2162,3 +2162,18 @@ def test_ux12_retryinplace_c04_superseded_at_is_set_once_on_a_graded_run_session
     assert reopen(owner, run["id"], 1).status_code == 204
     with pytest.raises(psycopg.errors.CheckViolation):
         admin(supersede, (session["id"],))
+
+
+def test_ux12_retryinplace_a_reopened_mock_position_is_the_next_one_to_resume(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "reopen")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    mock_answer(owner, mq[1], run["id"], 2)
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["next_position"] == 3
+
+    assert reopen(owner, run["id"], 1).status_code == 204
+    expected = {"id": run["id"], "total": 3, "answered": 1, "next_position": 1}
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected
+    # Its new session is open: one row for the position, still unanswered.
+    owner.ok_response(mock_session(owner, mq[0]["id"], run["id"], 1), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected
