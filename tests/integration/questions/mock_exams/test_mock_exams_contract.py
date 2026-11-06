@@ -228,7 +228,9 @@ def start(client: Any, ws: str, cfg: dict[str, Any], rng: dict[str, Any] = ALL, 
     out: dict[str, Any] = client.ok_response(
         post_exam(client, ws, cfg, rng, **kw), "POST", "mock exam", (202,)
     )
-    assert out["latest_generation"]["status"] in {"queued", "running"}
+    # 보기 섞기 only finishes in the request (UX12-MOCKSHUFFLE-C01).
+    expected = {"queued", "running"} if out["latest_generation"]["job_id"] else {"succeeded"}
+    assert out["latest_generation"]["status"] in expected
     return out
 
 
@@ -242,7 +244,8 @@ def finish(
 ) -> dict[str, Any]:
     """Drains the newest generation's job (K1 `latest_generation.job_id`); returns the exam."""
     gen = body["latest_generation"]
-    (worker or client.worker).drain(str(gen["job_id"]))
+    if gen["job_id"]:
+        (worker or client.worker).drain(str(gen["job_id"]))
     after = exam(client, body["id"])
     assert after["latest_generation"]["id"] == gen["id"]
     assert after["latest_generation"]["status"] == expected, after["latest_generation"]
@@ -564,7 +567,6 @@ def test_mock_01_c04_remaking_is_a_new_round_and_history_rows_are_append_only(
     again = regenerate(owner, first["id"], key=key)
     assert again.status_code == 202
     assert again.json()["latest_generation"]["id"] == queued["id"]
-    seed.problem(regenerate(owner, first["id"]), 409, RUNNING)
     second = finish(owner, res.json())
     assert second["current_generation"]["version"] == 2
     new = questions(owner, first["id"])
@@ -586,6 +588,7 @@ def test_mock_01_c04_remaking_is_a_new_round_and_history_rows_are_append_only(
         {"config": config(("PARAPHRASE",), 2), "range": picked(*[q["id"] for q in down])},
     )
     assert failing.status_code == 202, failing.text[:200]
+    seed.problem(regenerate(owner, first["id"]), 409, RUNNING)
     failed = finish(owner, failing.json(), expected="failed")
     assert failed["latest_generation"]["error_code"] == "llm_unavailable"
     assert failed["current_generation"]["id"] == second["current_generation"]["id"]
@@ -695,6 +698,7 @@ def test_mock_01_c05_roles_archived_deleted_guests_and_the_feature_switch(
     seed.problem(refused, 409, LLM_DISABLED)
     allowed = post_exam(owner, book.ws, shuffle, http=off_app)
     assert allowed.status_code == 202, allowed.text[:200]
+    assert allowed.json()["status"] == "ready", "it needs no worker (UX12-MOCKSHUFFLE-C01)"
 
     # Share guests: no mock exam API at all.
     link = owner.create_link(book.ws)
@@ -750,10 +754,13 @@ def test_mock_01_c06_question_count_bounds_running_limit_rate_limit_and_idempote
     assert post_exam(owner, book.ws, config(("OPTION_SHUFFLE",), 6)).status_code == 202
 
     # Five queued/running rounds per workspace (different users, so no rate limit applies).
-    editors = [member(seed, book.ws, f"mock-c06-editor{i}", "editor") for i in range(2)]
-    res = post_exam(editors[0], book.ws, config(("OPTION_SHUFFLE",), 1))
-    assert res.status_code == 202
-    seed.problem(post_exam(editors[1], book.ws, config(("OPTION_SHUFFLE",), 1)), 409, BUSY)
+    editors = [member(seed, book.ws, f"mock-c06-editor{i}", "editor") for i in range(4)]
+    for editor in editors[:3]:
+        res = post_exam(editor, book.ws, config(("PARAPHRASE",), 1))
+        assert res.status_code == 202
+    seed.problem(post_exam(editors[3], book.ws, config(("PARAPHRASE",), 1)), 409, BUSY)
+    # 보기 섞기 only runs no job, so a full workspace still saves it (UX12-MOCKSHUFFLE-C02).
+    assert post_exam(editors[3], book.ws, config(("OPTION_SHUFFLE",), 1)).status_code == 202
 
     # Idempotency-Key: the same mock exam and round, one row.
     fresh = Book(seed.client("mock-c06-idem"))
@@ -1207,7 +1214,7 @@ def test_ux10_qview_ac01_mock_options_default_to_revision_order(seed: Any, db: A
     owner = seed.client("ux10-mock-order")
     book = Book(owner)
     book.sources(NORMAL)
-    made = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1))
+    made = make(owner, book.ws, config(("PARAPHRASE",), 1))
     [question] = questions(owner, made["id"], answers=True)
     authored = [o["id"] for o in question["options"]]
     path = f"/mock-exam-questions/{question['id']}/practice-sessions"
@@ -1228,6 +1235,212 @@ def test_ux10_qview_ac01_mock_options_default_to_revision_order(seed: Any, db: A
         {"selected_option_ids": question["correct_option_ids"]},
     )
     assert graded["result"] == "correct"
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-MOCKSHUFFLE (docs/screens/ux12-mock-shuffle.md)
+# ---------------------------------------------------------------------------------------------
+
+
+def start_mock_run(client: Any, ws: str, exam_id: str, run_seed: int) -> dict[str, Any]:
+    run: dict[str, Any] = client.ok(
+        "POST",
+        f"/workspaces/{ws}/practice-runs",
+        {"source": "mock", "mock_exam_id": exam_id, "range": ALL, "seed": run_seed},
+        (201,),
+    )
+    return run
+
+
+def run_item(client: Any, run: dict[str, Any], position: int) -> dict[str, Any]:
+    item: dict[str, Any] = client.ok("GET", f"/practice-runs/{run['id']}/items/{position}")
+    return item
+
+
+def option_ids(holder: dict[str, Any]) -> list[str]:
+    return [o["id"] for o in holder["options"]]
+
+
+def test_ux12_mockshuffle_c01_shuffle_only_is_saved_in_the_request_without_a_job(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("ux12-shuffle-c01")
+    book = Book(owner)
+    sources = {q["id"]: q for q in book.sources(NORMAL)}
+    jobs = "select count(*) from public.async_jobs where workspace_id = %s and job_type = %s"
+    res = post_exam(owner, book.ws, config(("OPTION_SHUFFLE",), 3), title="바로 시험")
+    assert res.status_code == 202, res.text[:200]
+    body = res.json()
+    assert body["status"] == "ready"
+    assert body["question_count_current"] == 3
+    gen = body["latest_generation"]
+    assert (gen["status"], gen["job_id"]) == ("succeeded", None)
+    assert (gen["requested_count"], gen["created_count"]) == (3, 3)
+    assert body["current_generation"]["id"] == gen["id"]
+    assert db(jobs, (book.ws, JOB_TYPE)) == [(0,)]
+    assert owner.ok("GET", f"/workspaces/{book.ws}/mock-exams")["items"][0]["status"] == "ready"
+
+    made = questions(owner, body["id"], answers=True)
+    assert len(made) == 3
+    for q in made:
+        source = sources[q["source"]["question_id"]]
+        assert q["variation_type"] == "OPTION_SHUFFLE"
+        assert q["options"] == source["revision"]["options"], "stored in the source order"
+        assert q["correct_option_ids"] == source["revision"]["correct_option_ids"]
+        assert q["explanation"] == source["revision"]["explanation"]
+        assert q["revision"]["version"] == 1
+        assert q["edited"] is False
+    evidence = db(
+        "select count(*) from public.mock_exam_question_revisions r "
+        "join public.mock_exam_questions q on q.active_revision_id = r.id "
+        "where q.generation_id = %s and jsonb_array_length(r.evidence) > 0",
+        (gen["id"],),
+    )
+    assert evidence == [(3,)], "the copies cite their sources like the worker's"
+
+    # Remaking and 설정 바꾸기 stay instant, as a new round.
+    remade = regenerate(owner, body["id"])
+    assert remade.status_code == 202, remade.text[:200]
+    assert remade.json()["status"] == "ready"
+    assert remade.json()["current_generation"]["version"] == 2
+    changed = regenerate(owner, body["id"], {"config": config(("OPTION_SHUFFLE",), 2)})
+    assert changed.json()["question_count_current"] == 2
+    assert db(jobs, (book.ws, JOB_TYPE)) == [(0,)]
+
+
+def test_ux12_mockshuffle_c03_a_run_draws_its_own_order_and_keeps_it(seed: Any, db: Any) -> None:
+    from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
+
+    owner = seed.client("ux12-shuffle-c03")
+    book = Book(owner)
+    book.sources(NORMAL)
+    made = make(owner, book.ws, config(("OPTION_SHUFFLE",), 4))
+    listed = questions(owner, made["id"], answers=True)
+    run = start_mock_run(owner, book.ws, made["id"], 11)
+    assert run["shuffle_options"] is False, "per question, not a run setting"
+    stored = option_ids(listed[0])
+    expected = shuffled_option_ids(stored, run_option_seed(11, 1))
+    before = run_item(owner, run, 1)
+    assert not ANSWER_KEYS & set(before)
+    assert option_ids(before) == expected
+
+    path = f"/mock-exam-questions/{listed[0]['id']}/practice-sessions"
+    opened = {"practice_run_id": run["id"], "run_position": 1}
+    session = owner.ok("POST", path, opened, (201,))
+    assert session["displayed_option_ids"] == expected
+    assert not ANSWER_KEYS & set(session)
+    assert db(
+        "select shuffle_seed from public.mock_exam_practice_sessions where id = %s",
+        (session["id"],),
+    ) == [(run_option_seed(11, 1),)]
+    assert owner.ok("POST", path, opened, (201,))["id"] == session["id"], "resumed"
+    assert option_ids(run_item(owner, run, 1)) == expected
+    assert option_ids(run_item(owner, run, 1)) == expected, "the same on every read"
+
+    graded = owner.ok(
+        "POST",
+        f"/mock-practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": listed[0]["correct_option_ids"]},
+    )
+    assert graded["result"] == "correct"
+    assert option_ids(run_item(owner, run, 1)) == expected
+    rows = db(
+        "select displayed_option_ids from public.mock_exam_attempts where practice_session_id = %s",
+        (session["id"],),
+    )
+    assert rows == [(expected,)]
+    assert db(
+        "select count(*) from public.question_attempts where workspace_id = %s", (book.ws,)
+    ) == [(0,)]
+    assert db(
+        "select count(*) from public.question_user_states where workspace_id = %s", (book.ws,)
+    ) == [(0,)]
+
+    # A new run draws anew; the stored question does not change.
+    other = start_mock_run(owner, book.ws, made["id"], 12)
+    assert [option_ids(run_item(owner, other, k)) for k in range(1, 5)] != [
+        option_ids(run_item(owner, run, k)) for k in range(1, 5)
+    ]
+    assert questions(owner, made["id"], answers=True) == listed
+    seed.problem(
+        owner.call(
+            "POST",
+            f"/workspaces/{book.ws}/practice-runs",
+            {
+                "source": "mock",
+                "mock_exam_id": made["id"],
+                "range": ALL,
+                "shuffle_options": True,
+            },
+        ),
+        422,
+    )
+
+
+def test_ux12_mockshuffle_c03_stored_orders_reshuffle_and_ai_items_keep_theirs(seed: Any) -> None:
+    from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
+
+    owner = seed.client("ux12-shuffle-mixed")
+    book = Book(owner)
+    book.sources(NORMAL)
+    made = make(owner, book.ws, config(("OPTION_SHUFFLE", "PARAPHRASE"), 4))
+    listed = questions(owner, made["id"], answers=True)
+    assert {q["variation_type"] for q in listed} == {"OPTION_SHUFFLE", "PARAPHRASE"}
+    # An older copy stored a shuffled order: here, one edited into another stored order.
+    copy = next(q for q in listed if q["variation_type"] == "OPTION_SHUFFLE")
+    owner.ok(
+        "PATCH",
+        f"/mock-exam-questions/{copy['id']}",
+        {"base_revision_id": copy["revision"]["id"], "options": copy["options"][::-1]},
+    )
+    listed = questions(owner, made["id"], answers=True)
+    run = start_mock_run(owner, book.ws, made["id"], 21)
+    for position, question in enumerate(listed, start=1):
+        shown = option_ids(run_item(owner, run, position))
+        stored = option_ids(question)
+        if question["variation_type"] == "OPTION_SHUFFLE":
+            assert shown == shuffled_option_ids(stored, run_option_seed(21, position))
+        else:
+            assert shown == stored
+
+
+def test_ux12_mockshuffle_c04_a_session_outside_a_run_and_a_retry_draw_anew(
+    seed: Any, db: Any
+) -> None:
+    from quiz_api.practice_grading import shuffled_option_ids
+
+    owner = seed.client("ux12-shuffle-c04")
+    book = Book(owner)
+    book.sources(NORMAL)
+    made = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1))
+    [question] = questions(owner, made["id"], answers=True)
+    stored = option_ids(question)
+    seed_of = "select shuffle_seed from public.mock_exam_practice_sessions where id = %s"
+
+    session = owner.ok(
+        "POST", f"/mock-exam-questions/{question['id']}/practice-sessions", {}, (201,)
+    )
+    [(drawn,)] = db(seed_of, (session["id"],))
+    assert drawn is not None
+    assert session["displayed_option_ids"] == shuffled_option_ids(stored, drawn)
+
+    run = start_mock_run(owner, book.ws, made["id"], 31)
+    opened = owner.ok(
+        "POST",
+        f"/mock-exam-questions/{question['id']}/practice-sessions",
+        {"practice_run_id": run["id"], "run_position": 1},
+        (201,),
+    )
+    owner.ok(
+        "POST",
+        f"/mock-practice-sessions/{opened['id']}/submit",
+        {"selected_option_ids": question["correct_option_ids"]},
+    )
+    retry = owner.ok("POST", f"/practice-runs/{run['id']}/items/1/retry-session", {}, (201,))
+    [(redrawn,)] = db(seed_of, (retry["id"],))
+    assert redrawn is not None
+    assert retry["displayed_option_ids"] == shuffled_option_ids(stored, redrawn)
+    assert redrawn != drawn
 
 
 STEM_TABLE_GFM = "| 구분 | 구분 |\n| --- | --- |\n| 1 | 2 |"
