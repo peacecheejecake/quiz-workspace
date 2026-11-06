@@ -827,7 +827,7 @@ function ListRow({
         <p className={styles.meta}>
           {unfinishedRunProgress({
             answered: exam.unfinished_run?.answered ?? 0,
-            total: exam.question_count_current,
+            total: exam.unfinished_run?.total ?? exam.question_count_current,
           })}{' '}
           · <time dateTime={exam.created_at}>{formatDateTime(exam.created_at)}</time>
         </p>

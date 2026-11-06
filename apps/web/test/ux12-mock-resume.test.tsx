@@ -198,3 +198,15 @@ it('UX12-MOCKRESUME-AC07 a failed 지우기 says so on the detail', async () => 
   expect(await screen.findByRole('alert')).toHaveTextContent('지우지 못했습니다.');
   expect(screen.getByRole('button', { name: '이어 풀기 3/10' })).toBeEnabled();
 });
+
+it('UX12-MOCKRESUME-AC01 a partial-range run shows its own total in the row progress', async () => {
+  render(
+    panel(
+      fakeApi({ ...EXAM, unfinished_run: { ...RUN, total: 3, answered: 2, next_position: 3 } }),
+    ),
+  );
+  const title = await screen.findByRole('button', { name: '시험' });
+  const item = title.closest('li') as HTMLElement;
+  expect(item).toHaveTextContent('2/3');
+  expect(item).not.toHaveTextContent('2/10');
+});
