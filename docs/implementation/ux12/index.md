@@ -171,6 +171,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-1 만들기 화면 | step UI, 제목, 스크롤, 범위 필터 | 만들기와 설정 바꾸기의 `문제 풀기` 제목과 단계 목록을 지우고 업로드와 비슷한 step UI를 패널 안 상단에 고정한다. 패널 제목은 `모의고사`. 좌우 스크롤 흔들림과 하단 버튼 고정 문제를 재현해 고친다. 범위 단계: `상태 필터` 접기를 지워 필터를 항상 보이고, 상태 chip에 홈과 같은 색 표시를 넣는다. `유형` 드롭다운은 체크박스 묶음(복수 선택)으로 바꾼다. `이전` 버튼을 지우고 step 표시의 1단계를 눌러 돌아간다 | 사용자 결정(2026-11-06): 체크박스는 문제 형식 필터. `모의고사 목록` 뒤로가기는 유지 | L·없음 |
 | MOCKUX-2 진입·상세·용어 | 홈 `풀기`, 상세 메뉴, 용어 | 홈 `풀기`는 모의고사 목록을 연다. 상세는 `풀기`만 버튼으로 두고 `설정 바꾸기`, `다시 만들기`, `이름 바꾸기`, `삭제`는 더보기 드롭다운으로 옮긴다. 화면 문구와 문서의 `문제 풀기`를 `모의고사`로 정리한다 | 홈 버튼 이름 `풀기`는 유지 | M·없음 |
 | MOCKUX-3 풀이 버튼 | 제출, 이전/다음 | 범위 풀이 panel의 `제출`, 이전/다음 버튼을 Heatmap 셀로 연 풀이 panel과 같게 맞춘다(이름, 순서, 모양) | 마지막 문제의 `결과 보기`는 범위 풀이에만 있다 | M·없음 |
+| MOCKUX-4 챕터별 풀기 | 홈 챕터의 `풀기` | 홈 Heatmap의 챕터마다 `풀기` 버튼을 둔다. 누르면 저장 없는 풀이로 바로 들어간다. `보기 섞기`와 `문제 순서 무작위`만 고르고 확인한 뒤 시작한다. 범위 고르기 단계와 `모의고사 목록` 버튼은 없다 | 사용자 요청(2026-11-06). 범위는 그 챕터의 확정 문제 전체. 모든 멤버 사용 가능 | M·MOCKUX-1, 2, 3 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -241,7 +242,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 6 | `shell` | SHELL-3 → SHELL-4, SHELL-5, SHELL-6 | `app/layout.tsx` 공유 |
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
-| 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
+| 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -334,3 +335,4 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-1 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 흔들림·하단 버튼은 Chromium 측정으로 전후 확인, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-2 | 9 | 완료 | Codex P1·P2는 MOCKUX-1 합류와 merge에서 반영, 모든 멤버 추가, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-3 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 공용 footer, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| MOCKUX-4 | 9 | 진행 | |
