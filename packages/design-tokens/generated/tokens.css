@@ -24,6 +24,8 @@
   --color-warning-fill: #f6cf35;
   --color-neutral-fill: #acb6c2;
   --color-neutral-fill-subtle: #e7ecf0;
+  --color-option-control: #acb6c2;
+  --color-option-control-hover: #7d8799;
   --color-scrim: rgba(247, 248, 250, 0.64);
   --color-state-hover: #eceff4;
   --color-state-pressed: #e3e7ee;
@@ -127,6 +129,8 @@
   --color-warning-fill: #f7d45a;
   --color-neutral-fill: #8591a1;
   --color-neutral-fill-subtle: #3a4554;
+  --color-option-control: #8591a1;
+  --color-option-control-hover: #7a8799;
   --color-scrim: rgba(17, 21, 29, 0.64);
   --color-state-hover: #2a3442;
   --color-state-pressed: #334051;
@@ -173,6 +177,8 @@
   --color-warning-fill: #f6cf35;
   --color-neutral-fill: #acb6c2;
   --color-neutral-fill-subtle: #e7ecf0;
+  --color-option-control: #acb6c2;
+  --color-option-control-hover: #7d8799;
   --color-scrim: rgba(247, 248, 250, 0.64);
   --color-state-hover: #eceff4;
   --color-state-pressed: #e3e7ee;
@@ -220,6 +226,8 @@
     --color-warning-fill: #f7d45a;
     --color-neutral-fill: #8591a1;
     --color-neutral-fill-subtle: #3a4554;
+    --color-option-control: #8591a1;
+    --color-option-control-hover: #7a8799;
     --color-scrim: rgba(17, 21, 29, 0.64);
     --color-state-hover: #2a3442;
     --color-state-pressed: #334051;
