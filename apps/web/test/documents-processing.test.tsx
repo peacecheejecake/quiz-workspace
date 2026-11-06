@@ -63,7 +63,7 @@ describe('DOC-01-AC05 processing rows from the documents list', () => {
     expect(processingLabel(row(null))).toBe('처리 대기 중');
     expect(processingLabel(row({ status: 'queued', started_at: null }))).toBe('처리 대기 중');
     expect(processingLabel(row({ stage: 'preparing', progress: 2 }))).toBe('처리 준비 중');
-    expect(processingLabel(row({ stage: 'parsing', progress: 15 }))).toBe('처리 중 · 파싱 중');
+    expect(processingLabel(row({ stage: 'parsing', progress: 15 }))).toBe('파싱 중');
     expect(processingLabel(row({ stage: null }))).toBe('처리 중');
     expect(row({ stage: 'indexing', progress: 60 }).job).toMatchObject({
       status: 'running',
