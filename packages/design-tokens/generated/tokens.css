@@ -5,7 +5,7 @@
   --color-surface: #ffffff;
   --color-surface-muted: #f0f3f7;
   --color-text-primary: #172033;
-  --color-text-secondary: #636d82;
+  --color-text-secondary: #5f697e;
   --color-border: #e6e9ef;
   --color-accent: #5268d8;
   --color-accent-hover: #4a5ec1;
@@ -13,6 +13,7 @@
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -24,9 +25,11 @@
   --color-warning-fill: #f6cf35;
   --color-neutral-fill: #acb6c2;
   --color-neutral-fill-subtle: #e7ecf0;
+  --color-option-control: #acb6c2;
+  --color-option-control-hover: #7d8799;
   --color-scrim: rgba(247, 248, 250, 0.64);
-  --color-state-hover: #eceff4;
-  --color-state-pressed: #e3e7ee;
+  --color-state-hover: #e6eaf1;
+  --color-state-pressed: #dbe0e9;
   --color-state-selected: #e4e9fb;
   --color-state-selected-hover: #d2daf7;
   --color-switch-track: #7d8799;
@@ -73,6 +76,7 @@
   --shadow-floating: 0 18px 56px rgba(30, 39, 59, 0.15);
   --control-height-sm: 28px;
   --control-height-md: 36px;
+  --control-gap: var(--space-1);
   --app-header-height: 56px;
   --app-sidebar-width: 232px;
   --content-max-width: 1440px;
@@ -116,6 +120,7 @@
   --color-focus: #a2b3ff;
   --color-glass: rgba(30, 38, 51, 0.97);
   --color-glass-solid: #1e2633;
+  --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
   --color-glass-stroke: rgba(255, 255, 255, 0.12);
   --color-border-strong: #7a8799;
   --color-on-accent: #11151d;
@@ -127,6 +132,8 @@
   --color-warning-fill: #f7d45a;
   --color-neutral-fill: #8591a1;
   --color-neutral-fill-subtle: #3a4554;
+  --color-option-control: #8591a1;
+  --color-option-control-hover: #7a8799;
   --color-scrim: rgba(17, 21, 29, 0.64);
   --color-state-hover: #2a3442;
   --color-state-pressed: #334051;
@@ -154,7 +161,7 @@
   --color-surface: #ffffff;
   --color-surface-muted: #f0f3f7;
   --color-text-primary: #172033;
-  --color-text-secondary: #636d82;
+  --color-text-secondary: #5f697e;
   --color-border: #e6e9ef;
   --color-accent: #5268d8;
   --color-accent-hover: #4a5ec1;
@@ -162,6 +169,7 @@
   --color-focus: #356cff;
   --color-glass: rgba(246, 248, 252, 0.97);
   --color-glass-solid: #f6f8fc;
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
   --color-glass-stroke: rgba(255, 255, 255, 0.66);
   --color-border-strong: #7d8799;
   --color-on-accent: #ffffff;
@@ -173,9 +181,11 @@
   --color-warning-fill: #f6cf35;
   --color-neutral-fill: #acb6c2;
   --color-neutral-fill-subtle: #e7ecf0;
+  --color-option-control: #acb6c2;
+  --color-option-control-hover: #7d8799;
   --color-scrim: rgba(247, 248, 250, 0.64);
-  --color-state-hover: #eceff4;
-  --color-state-pressed: #e3e7ee;
+  --color-state-hover: #e6eaf1;
+  --color-state-pressed: #dbe0e9;
   --color-state-selected: #e4e9fb;
   --color-state-selected-hover: #d2daf7;
   --color-switch-track: #7d8799;
@@ -209,6 +219,7 @@
     --color-focus: #a2b3ff;
     --color-glass: rgba(30, 38, 51, 0.97);
     --color-glass-solid: #1e2633;
+    --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
     --color-glass-stroke: rgba(255, 255, 255, 0.12);
     --color-border-strong: #7a8799;
     --color-on-accent: #11151d;
@@ -220,6 +231,8 @@
     --color-warning-fill: #f7d45a;
     --color-neutral-fill: #8591a1;
     --color-neutral-fill-subtle: #3a4554;
+    --color-option-control: #8591a1;
+    --color-option-control-hover: #7a8799;
     --color-scrim: rgba(17, 21, 29, 0.64);
     --color-state-hover: #2a3442;
     --color-state-pressed: #334051;

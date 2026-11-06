@@ -3,15 +3,13 @@
 // Workspace home `/workspaces/:id` (QOV-01, docs/screens/questions-overview.md "Workspace 홈
 // 레이아웃", UX3c): the single page of a workspace, without a sidebar.
 //
-//   Workspace header  the 문제 search (SEARCH-01-AC12: filters the heatmap as you type, no button;
-//                     its "설정" popover holds the heatmap's chapter/type filters), then two
-//                     button groups: `문서 n` · `문제` (직접 추가 / 중복 문제 정리 | 보관·초안 문제 /
-//                     모의고사 / 문제 풀기, UX4, MOCK-SYNC;
-//                     no 전체 문제 since UX7-BANK, no PDF 관리 since UX7-DOCS; AI 질문 last, ASK-01), and,
-//                     aligned right, `AI 질문` (icon + text, every member) · `본문 검색` · `이력` ·
-//                     `공유하기` (icon buttons; share for the owner only). `본문 검색` is a link to the
-//                     본문 search page (SEARCH-02, UX9: the home's collapsed 본문 search area is gone,
-//                     its place under the 문제 search left empty; its `AI에게 묻기` lives there now)
+//   Workspace header  a line that sticks under the app header (UX12-HEADER, D-7): the `문서 N` menu
+//                     (문서 관리 · 본문 검색 | 직접 추가 · 중복 문제 정리 · 챕터 재분배 | 보관·초안 문제),
+//                     the primary `풀기` and, aligned right, `AI 질문` (icon + text, every member) ·
+//                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 검색
+//                     and 필터 buttons (UX12-FILTER): the first opens the 문제 search (SEARCH-01-AC12:
+//                     filters the heatmap as you type), the second a popover with the chapter/type
+//                     filters.
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -56,13 +54,10 @@ import {
   HistoryIcon,
   IconButton,
   questionTypeLabels,
-  SearchIcon,
   Select,
   ShareIcon,
-  Tooltip,
   type QuestionType,
 } from '@quiz/ui';
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { PracticeViewerScope } from '@/components/questions/viewer/practice-viewer-scope';
@@ -80,7 +75,6 @@ import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-pane
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import { QuestionSearch } from '@/components/search/question-search';
-import { isPlainClick, markSearchEntryFromHome } from '@/components/search/search-entry';
 import searchStyles from '@/components/search/search-forms.module.css';
 import { useLiveQuery } from '@/components/search/use-live-query';
 import { listChapterNotes } from '@/lib/notes/client';
@@ -195,6 +189,8 @@ export interface WorkspaceHomeProps {
   readonly hasQuestions?: boolean | null;
   readonly documents: readonly DocumentSummary[];
   readonly documentsLoadFailed: boolean;
+  /** This environment can create document summaries (from the document list). */
+  readonly summaryAvailable: boolean;
   /** Screen ids of the parts of this page (`data-screen-id`, docs/screens/index.md). */
   readonly screenIds: {
     readonly documents: string;
@@ -208,6 +204,17 @@ export interface WorkspaceHomeProps {
     readonly redistribution?: string;
     readonly ask?: string;
   };
+}
+
+/** Keeps the dots' scroll margin true when the sticky line wraps (UX12-HEADER-AC04). */
+function trackToolbarHeight(toolbar: HTMLDivElement) {
+  const home = toolbar.parentElement;
+  if (!home || typeof ResizeObserver === 'undefined') return undefined;
+  const observer = new ResizeObserver(() => {
+    home.style.setProperty('--home-toolbar-height', `${toolbar.offsetHeight}px`);
+  });
+  observer.observe(toolbar);
+  return () => observer.disconnect();
 }
 
 export function WorkspaceHome(props: WorkspaceHomeProps) {
@@ -231,6 +238,7 @@ function WorkspaceHomeContent({
   hasQuestions = null,
   documents,
   documentsLoadFailed,
+  summaryAvailable,
   screenIds,
 }: WorkspaceHomeProps) {
   const router = useRouter();
@@ -480,6 +488,7 @@ function WorkspaceHomeContent({
     initialDocuments: documents,
     canEdit,
     loadFailed: documentsLoadFailed,
+    summaryAvailable,
   });
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
   const bookCount = bodyDocumentCount(library.documents);
@@ -847,6 +856,56 @@ function WorkspaceHomeContent({
     <div className={styles.home}>
       <h1 className="qz-visually-hidden">{workspace.name}</h1>
 
+      {/* UX12-HEADER: sticks under the app header; one line tall down to 375px, may wrap below. */}
+      <div ref={trackToolbarHeight} className={styles.toolbar} data-home-toolbar="">
+        <div className={styles.actionGroup}>
+          <QuestionMenu
+            readOnly={readOnly}
+            documentCount={bookCount}
+            searchHref={searchPagePath(workspace.id)}
+            onDocuments={() => setPanel('documents', true)}
+            onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
+            onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
+            onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
+            onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
+          />
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
+                panelHistory.push(
+                  `${pathname}${withMockView(window.location.search, { view: 'create' })}`,
+                );
+              }
+            }}
+          >
+            풀기
+          </Button>
+        </div>
+        <div className={styles.actionGroup} data-align="end">
+          {askAvailable ? (
+            <Button className={styles.askButton} onClick={openAsk}>
+              <AskIcon width={16} height={16} />
+              <span className={styles.askLabel}>AI 질문</span>
+            </Button>
+          ) : null}
+          <IconButton
+            label="이력"
+            icon={<HistoryIcon />}
+            variant="secondary"
+            onClick={() => setPanel('history', true)}
+          />
+          {isOwner ? (
+            <IconButton
+              label="공유하기"
+              icon={<ShareIcon />}
+              variant="secondary"
+              onClick={() => setPanel('share', true)}
+            />
+          ) : null}
+        </div>
+      </div>
+
       <div className={styles.header}>
         <div className={searchStyles.column}>
           <QuestionSearch
@@ -856,10 +915,12 @@ function WorkspaceHomeContent({
             searchable={hasSearchableQuestions(
               hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
             )}
-            settings={
+            filterActive={view.chapter !== null || view.type !== null}
+            filters={
               <div className={searchStyles.optionRow}>
                 <Select
                   label="챕터"
+                  hideLabel
                   options={chapterOptions}
                   value={view.chapter ?? ALL}
                   onValueChange={(value) =>
@@ -868,6 +929,7 @@ function WorkspaceHomeContent({
                 />
                 <Select
                   label="유형"
+                  hideLabel
                   options={[
                     { value: ALL, label: '전체 유형' },
                     ...TYPES.map((type) => ({ value: type, label: questionTypeLabels[type] })),
@@ -880,72 +942,6 @@ function WorkspaceHomeContent({
               </div>
             }
           />
-        </div>
-
-        <div className={styles.actions}>
-          <div className={styles.actionGroup}>
-            <Button onClick={() => setPanel('documents', true)}>
-              문서 <span className={styles.count}>{bookCount}</span>
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
-                  panelHistory.push(
-                    `${pathname}${withMockView(window.location.search, { view: 'create' })}`,
-                  );
-                }
-              }}
-            >
-              풀기
-            </Button>
-            <QuestionMenu
-              readOnly={readOnly}
-              onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
-              onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
-              onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
-              onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
-            />
-          </div>
-          <div className={styles.actionGroup} data-align="end">
-            {askAvailable ? (
-              <Button onClick={openAsk}>
-                <AskIcon width={16} height={16} />
-                AI 질문
-              </Button>
-            ) : null}
-            {/* SEARCH-02: a link to the 본문 search page, styled as the icon buttons beside it. */}
-            <Tooltip content="본문 검색">
-              <Link
-                href={searchPagePath(workspace.id)}
-                aria-label="본문 검색"
-                className="qz-icon-button qz-focus-ring"
-                data-variant="secondary"
-                data-size="md"
-                onClick={(event) => {
-                  if (isPlainClick(event)) markSearchEntryFromHome();
-                }}
-              >
-                <span className="icon" aria-hidden="true">
-                  <SearchIcon />
-                </span>
-              </Link>
-            </Tooltip>
-            <IconButton
-              label="이력"
-              icon={<HistoryIcon />}
-              variant="secondary"
-              onClick={() => setPanel('history', true)}
-            />
-            {isOwner ? (
-              <IconButton
-                label="공유하기"
-                icon={<ShareIcon />}
-                variant="secondary"
-                onClick={() => setPanel('share', true)}
-              />
-            ) : null}
-          </div>
         </div>
       </div>
 
@@ -1030,7 +1026,11 @@ function WorkspaceHomeContent({
                     ? '뷰어 권한으로는 문서를 볼 수만 있습니다.'
                     : undefined
                 }
-                summary={{ onOpen: openSummary, busy: summaryActivity.busy }}
+                summary={{
+                  onOpen: openSummary,
+                  busy: summaryActivity.busy,
+                  available: library.summaryAvailable,
+                }}
               />
             </div>
           </FloatingSidePanel>

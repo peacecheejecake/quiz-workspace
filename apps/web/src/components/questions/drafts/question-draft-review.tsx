@@ -40,7 +40,9 @@ import {
 } from '@/lib/questions/drafts';
 import { QUESTION_TYPE_LABELS } from '@/lib/questions/form';
 import styles from './question-draft-review.module.css';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemText } from '@/components/questions/stem/stem-text';
+import { optionGrid } from '@/lib/questions/stem-table';
 
 export interface DraftReviewState {
   /** Approval shown while the request is in flight (optimistic). */
@@ -166,6 +168,7 @@ const DraftItem = memo(function DraftItem({
   const blocker = approved ? null : approvalBlocker(draft);
   const status = published ? 'published' : draft.reviewStatus;
   const headingId = `draft-${draft.id}-title`;
+  const grid = draft.type === 'MCQ' ? optionGrid(draft.stem, draft.options) : null;
 
   return (
     <li
@@ -189,22 +192,45 @@ const DraftItem = memo(function DraftItem({
         {draft.answerMissing ? <Badge tone="warning">정답 없음</Badge> : null}
       </div>
 
-      <StemText stem={draft.stem} className={styles.stem} />
+      <StemText stem={grid?.stem ?? draft.stem} className={styles.stem} />
 
       {draft.type === 'MCQ' ? (
         <div className={styles.options}>
-          {draft.options.map((option, index) => (
-            <p key={option.id} className={styles.option} data-correct={option.correct || undefined}>
-              <span className={styles.optionLabel}>{index + 1}.</span>
-              <span className={styles.optionText}>{option.text}</span>
-              {option.correct ? (
-                <span className={styles.correctMark}>
-                  <CheckIcon width={14} height={14} aria-hidden="true" />
-                  정답
-                </span>
-              ) : null}
-            </p>
-          ))}
+          {grid ? (
+            <OptionGridHead grid={grid} numbered trailing className={styles.optionGridHead} />
+          ) : null}
+          {draft.options.map((option, index) => {
+            const mark = option.correct ? (
+              <span className={styles.correctMark}>
+                <CheckIcon width={14} height={14} aria-hidden="true" />
+                정답
+              </span>
+            ) : null;
+            return (
+              <p
+                key={option.id}
+                className={styles.option}
+                data-correct={option.correct || undefined}
+              >
+                {grid ? (
+                  <OptionCells
+                    grid={grid}
+                    index={index}
+                    number={`${index + 1}.`}
+                    numberClassName={styles.optionLabel}
+                    trailing={mark}
+                    reserveTrailing
+                  />
+                ) : (
+                  <>
+                    <span className={styles.optionLabel}>{index + 1}.</span>
+                    <span className={styles.optionText}>{option.text}</span>
+                    {mark}
+                  </>
+                )}
+              </p>
+            );
+          })}
         </div>
       ) : (
         <AnswerSummary draft={draft} />

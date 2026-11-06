@@ -14,6 +14,7 @@ from book_core.explain import (
     ANSWER_MISMATCH,
     FAKE_RAW_SENTINEL,
     INCOMPLETE,
+    PROMPT_VERSION,
     TRUNCATED_SUFFIX,
     AnswerMismatchError,
     ExplainCallMeta,
@@ -40,7 +41,6 @@ def mcq(stem: str = "물이 수증기가 되는 과정은?") -> ExplainQuestion:
         correct_option_ids=["opt-1"],
         accepted_answers=None,
         rubric=None,
-        explanation="사람이 쓴 해설",
     )
 
 
@@ -65,12 +65,33 @@ def test_aiexpl_01_c04_the_request_has_the_answer_and_sources_but_no_user_field(
     fields = {f.name for f in dataclasses.fields(ExplainQuestion)}
     assert not {f for f in fields if "selected" in f or "submitted" in f or "attempt" in f}
     request = build_request(question=mcq(), sources=[SOURCE], max_output_tokens=1500)
-    parts = ("물이 수증기가 되는 과정은?", "opt-1: 증발", "정답 보기 id: opt-1", "사람이 쓴 해설")
+    parts = ("물이 수증기가 되는 과정은?", "opt-1: 증발", "정답 보기 id: opt-1")
     for part in parts:
         assert part in request.prompt
     assert "[S1] 물의 순환 · 1장 · p.2" in request.prompt
     assert request.to_text_request().max_tokens == 1500
     assert request.attempt == 1
+
+
+def test_aiexpl_01_c04_the_human_explanation_has_no_way_into_the_prompt() -> None:
+    """UX12 EXPL-2: the question may have one; the request has no field to carry it."""
+    assert PROMPT_VERSION == "question.ai_explain/v2"
+    assert "explanation" not in {f.name for f in dataclasses.fields(ExplainQuestion)}
+    with pytest.raises(TypeError):
+        explain_question(  # type: ignore[call-arg]
+            kind="question",
+            question_type="MCQ",
+            stem="물이 수증기가 되는 과정은?",
+            options=OPTIONS,
+            correct_option_ids=["opt-1"],
+            accepted_answers=None,
+            rubric=None,
+            explanation="사람이 쓴 해설",
+        )
+    request = build_request(question=mcq(), sources=[SOURCE], max_output_tokens=1500)
+    for text in (request.prompt, request.system):
+        assert "기존 해설" not in text
+        assert "사람이" not in text
 
 
 def test_aiexpl_01_c04_short_answers_carry_accepted_answers_and_rubric() -> None:
@@ -82,7 +103,6 @@ def test_aiexpl_01_c04_short_answers_carry_accepted_answers_and_rubric() -> None
         correct_option_ids=None,
         accepted_answers=["증발", " "],
         rubric="핵심어 증발",
-        explanation=None,
     )
     request = build_request(question=question, sources=[], max_output_tokens=500)
     assert "정답(허용 답안): 증발" in request.prompt

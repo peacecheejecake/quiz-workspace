@@ -809,18 +809,6 @@ export function QuestionsOverview({
         >
           즐겨찾기만
         </Button>
-        <Button
-          size="sm"
-          aria-pressed={view.retry === true}
-          onClick={() => onFiltersChange({ retry: view.retry === true ? null : true })}
-        >
-          다시 풀기만
-        </Button>
-        {filtered ? (
-          <Button size="sm" variant="ghost" onClick={onResetFilters}>
-            필터 초기화
-          </Button>
-        ) : null}
       </div>
 
       {failure ? (
@@ -902,10 +890,11 @@ export function QuestionsOverview({
         onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
-        headerExtra={
+        headerExtra={({ onShowSource }) =>
           panelQuestion ? (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: panelQuestion.id,
@@ -924,7 +913,7 @@ export function QuestionsOverview({
                   : null
               }
             />
-          ) : undefined
+          ) : null
         }
         onCloseAutoFocus={(event) => {
           const requestedFocus = practiceReturnFocusRef?.current ?? null;
@@ -970,9 +959,10 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          headerExtra={(q) => (
+          headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
+              onShowSource={onShowSource}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: q.questionId,

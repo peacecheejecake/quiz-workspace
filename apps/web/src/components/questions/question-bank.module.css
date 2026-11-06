@@ -23,14 +23,43 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* The handle spans the row; the controls sit under the field so a multi-line option keeps its width. */
 .optionEditor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2) var(--space-3);
-  align-items: end;
-  padding: var(--space-3);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+}
+
+.optionEditor[data-dragging] {
+  opacity: 0.4;
+}
+
+.optionHandle {
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-md);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: grab;
+  /* Touch: the handle takes the drag instead of scrolling the dialog. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@media (hover: hover) {
+  .optionHandle:hover {
+    background: var(--color-state-hover);
+  }
+}
+
+.optionHandle:active {
+  cursor: grabbing;
 }
 
 .optionControls {
@@ -39,6 +68,33 @@
   align-items: center;
   gap: var(--space-1);
   min-height: var(--control-height-md);
+}
+
+.optionDragPreview {
+  box-sizing: border-box;
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  height: 100%;
+  padding: var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-text-primary);
+}
+
+.optionDragLabel {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label-sm);
+}
+
+.optionDragText {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 /* Helper text outside a kit field (same look as a field description). */
@@ -80,7 +136,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .noticeActions {

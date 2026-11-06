@@ -227,12 +227,14 @@ const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
 
-describe('UX10-HOME-AC02 status filter', () => {
+describe('UX12-FILTER-AC01 status filter', () => {
   it('is always visible with all statuses selected', async () => {
     const user = userEvent.setup();
     onFiltersChange.mockReset();
     render(<Screen />);
     const group = screen.getByRole('group', { name: '상태 필터' });
+    expect(within(group).queryByRole('button', { name: '다시 풀기만' })).toBeNull();
+    expect(within(group).queryByRole('button', { name: '필터 초기화' })).toBeNull();
     const retry = within(group).getByRole('button', { name: '다시 풀기' });
     expect(retry).toHaveAttribute('aria-pressed', 'true');
     await user.click(retry);
@@ -1201,7 +1203,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
     const before = snapshot(retry);
     const seen = new Set<string>();
     const observer = new MutationObserver(() => {
-      const now = within(panel).queryByRole('button', { name: /다시 풀기/ });
+      const now = within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ });
       seen.add(now === retry ? snapshot(retry) : 'remounted');
     });
     observer.observe(panel, { subtree: true, attributes: true, childList: true });
@@ -1289,7 +1291,7 @@ describe('UX9-RETRY-OPT optimistic favorite / retry toggles in the practice pane
       await screen.findByText('정답을 맞힌 문제만 다시 풀기로 표시할 수 있습니다.'),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(within(panel).queryByRole('button', { name: /다시 풀기/ })).toBeNull(),
+      expect(within(panel).queryByRole('button', { name: /다시 풀기 (표시|해제)/ })).toBeNull(),
     );
     expect(lookupOverviewQuestionAction).toHaveBeenCalledWith(WS, id(1));
     expect(within(panel).getByRole('button', { name: /즐겨찾기/ })).toBeInTheDocument();

@@ -27,6 +27,7 @@ import {
   mcqInput,
   notFoundHeading,
   openContentSearch,
+  openQuestionSearch,
   openSearchOptions,
   outlineNodeId,
   overviewUi,
@@ -387,14 +388,16 @@ test(
       main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
     ).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
+    await homeUi.openMenu(page);
     await expect(homeUi.contentSearchLink(page)).toBeVisible();
-    const questionBox = homeUi.questionSearch(page);
-    await expect(questionBox).toBeVisible();
+    await page.keyboard.press('Escape');
+    const questionBox = await openQuestionSearch(page);
     await expect(questionBox).toBeEnabled();
 
-    // 문제 설정 (next to the 문제 search) by click: chapter and type only.
+    // 필터 (next to the 문제 search) by click: chapter and type only.
     const questionSettings = homeUi.searchSettingsButton(page, 'questions');
-    await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
+    await expect(questionSettings).toHaveAttribute('aria-expanded', 'false');
+    await questionSettings.click();
     const questionPopover = homeUi.searchSettings(page, 'questions');
     await expect(questionPopover).toBeVisible();
     await expect(questionSettings).toHaveAttribute('aria-expanded', 'true');
@@ -483,19 +486,19 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // No question: the 문제 search is disabled and says why.
-    const questionBox = homeUi.questionSearch(page);
-    await expect(questionBox).toBeDisabled();
+    // No question: the button of the 문제 search is disabled and says why.
+    const questionButton = homeUi.questionSearchButton(page);
+    await expect(questionButton).toBeDisabled();
     await expect(homeUi.questionSearchMessage(page)).toHaveText(NO_QUESTIONS);
-    await expect(questionBox).toHaveAccessibleDescription(NO_QUESTIONS);
-    // No published document: the 본문 search button is disabled, Enter does not search either.
+    await expect(questionButton).toHaveAccessibleDescription(NO_QUESTIONS);
+    // No published document: the 본문 search box and button are disabled.
     await openContentSearch(page);
     const submit = searchUi.submit(page);
     await expect(submit).toBeDisabled();
     await expect(homeUi.contentSearchMessage(page)).toHaveText(NO_BODY);
     await expect(submit).toHaveAccessibleDescription(NO_BODY);
-    await searchUi.box(page).fill('chlorine');
-    await searchUi.box(page).press('Enter');
+    await expect(searchUi.box(page)).toBeDisabled();
+    await expect(searchUi.box(page)).toHaveAccessibleDescription(NO_BODY);
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has('text')).toBe(false);
 
@@ -504,9 +507,9 @@ test(
     await createQuestion(owner, ws.id, mcqInput('search01-ac09 다른 문제', ['예', '아니오']));
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    await expect(homeUi.questionSearch(page)).toBeEnabled();
+    await expect(homeUi.questionSearchButton(page)).toBeEnabled();
     await expect(homeUi.questionSearchMessage(page)).toHaveText('');
-    await homeUi.questionSearch(page).fill('chlorine');
+    await (await openQuestionSearch(page)).fill('chlorine');
     await expect(overviewUi.dots(page)).toHaveCount(1);
     await openContentSearch(page);
     await expect(searchUi.submit(page)).toBeDisabled();
@@ -727,7 +730,7 @@ test(
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
     expect(overviewRequests).toHaveLength(0);
-    const box = homeUi.questionSearch(page);
+    const box = await openQuestionSearch(page);
     const historyLength = await page.evaluate(() => window.history.length);
 
     // Typed key by key, never Enter: debounced so intermediate keystrokes do not each fire a request.
@@ -866,9 +869,9 @@ test(
     );
 
     // The 문제 search commits, its BFF read is held, and the 문서 dialog opens meanwhile.
-    await homeUi.questionSearch(page).fill('search01-ac12 chlorine');
+    await (await openQuestionSearch(page)).fill('search01-ac12 chlorine');
     await expect.poll(() => held).toBeGreaterThan(0);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     release();
     // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
@@ -886,7 +889,7 @@ test(
     await expect(homeUi.documentsDialog(page)).toHaveCount(0);
     await page.unrouteAll({ behavior: 'ignoreErrors' });
 
-    // The same for the type filter of "문제 설정".
+    // The same for the type filter of the 필터 popover.
     let releaseType: () => void = () => undefined;
     const typeReleased = new Promise<void>((resolve) => (releaseType = resolve));
     let typeHeld = 0;
@@ -949,9 +952,9 @@ test(
       },
     );
 
-    await homeUi.questionSearch(page).fill(QUERY);
+    await (await openQuestionSearch(page)).fill(QUERY);
     await expect.poll(() => held).toBeGreaterThan(0);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     await homeUi
       .documentsDialog(page)
@@ -982,7 +985,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(3);
-    const box = homeUi.questionSearch(page);
+    const box = await openQuestionSearch(page);
     await box.fill('search01-ac12 ');
     await expect(page).toHaveURL((url) => url.searchParams.get('q') === 'search01-ac12');
 
@@ -1083,7 +1086,7 @@ test.describe('SEARCH-01-AC08 touch', () => {
   test.use(iphone);
 
   test(
-    'SEARCH-01-AC08 one tap on the selected chapter at the top of the open list closes it in the 문제 설정 popover',
+    'SEARCH-01-AC08 one tap on the selected chapter at the top of the open list closes it in the 필터 popover',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       const owner = await workspaceFactory.member('search01-ac08');
@@ -1116,8 +1119,7 @@ test.describe('SEARCH-01-AC08 touch', () => {
 
       await signInAs(page, owner.user);
       await page.goto(homePath(ws.id));
-      const popover = homeUi.searchSettings(page, 'questions');
-      await expect(popover).toBeVisible();
+      const popover = await openSearchOptions(page, 'questions');
       const chapter = popover.getByRole('combobox', { name: /^(챕터|chapter)$/i });
       await expect(chapter).toHaveText(/전체 챕터|all chapters/i);
 
@@ -1222,7 +1224,7 @@ test(
     // The 문제 search on the home still filters the questions.
     await page.goto(homePath(ws.id));
     await expect(overviewUi.dots(page)).toHaveCount(2);
-    await homeUi.questionSearch(page).fill('chlorine');
+    await (await openQuestionSearch(page)).fill('chlorine');
     await expect(overviewUi.dots(page)).toHaveCount(1);
   },
 );

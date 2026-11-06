@@ -76,10 +76,25 @@
   background: transparent;
 }
 
+/* Study toggles show "on" by the icon alone (UX12-OPTIONS, QVIEW-01-C08), so they keep no fill. */
 :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
-    [data-variant='primary']
+    [data-variant='primary'],
+    .qz-study-toggle
   ) {
   background: var(--color-state-selected);
+}
+
+/*
+ * The only buttons without a visible boundary (UX12-CONTROLS): icon ghost buttons and ghost text
+ * buttons marked `borderless`. The transparent border keeps their size; hover fills the background.
+ */
+.qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+.qz-button[data-variant='ghost'][data-borderless]:not(
+    [aria-pressed],
+    [data-state='on'],
+    [data-state='off']
+  ) {
+  border-color: transparent;
 }
 
 /*
@@ -101,7 +116,8 @@
   }
 
   :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
-      [data-variant='primary']
+      [data-variant='primary'],
+      .qz-study-toggle
     ):hover:not(:disabled) {
     background: var(--color-state-selected-hover);
   }
@@ -143,6 +159,16 @@
 
 @media (forced-colors: active) {
   :is(.qz-button, .qz-icon-button) {
+    border-color: ButtonText;
+  }
+
+  /* Same selector as the transparent rule above, so the boundary returns here. */
+  .qz-icon-button[data-variant='ghost']:not([aria-pressed], [data-state='on'], [data-state='off']),
+  .qz-button[data-variant='ghost'][data-borderless]:not(
+      [aria-pressed],
+      [data-state='on'],
+      [data-state='off']
+    ) {
     border-color: ButtonText;
   }
 

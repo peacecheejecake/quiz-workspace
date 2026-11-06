@@ -18,8 +18,8 @@
 - **구현 subagent:** Task마다 **Opus 5.5 subagent 1개**(`model: "opus"`, `effort` 생략 = default)를 배정한다. 이 프로젝트의 UX12 작업에 적용하며 기존 "구현은 Sonnet" 규칙보다 우선한다. 리뷰 수정도 같은 모델로 한다.
 - **Task 수명주기:** AGENTS.md §3을 따른다. 명세 수정 → 해당 Task 직전에 RED → GREEN → 커밋 → Codex 리뷰(`HERDR_ENV=0`, 불가 시 Opus 리뷰 subagent) → main thread 재검증·merge.
 - **브랜치:** Epic 묶음마다 `feature/ux12-<topic>`, Task마다 `task/UX12-<ID>-<slug>`. 파일 범위가 겹치지 않는 Task만 병렬로, 각자 worktree에서 실행한다.
-- **점검(사용자 지시 2026-11-06):** CI가 하는 점검은 로컬에서 돌리지 않고 PR에서 확인한다. 구현 subagent는 자기 Task의 새 test만 RED → GREEN으로 확인하고 커밋한다. Lint, typecheck, 전체 unit, 전체 E2E, visual은 PR CI가 맡는다. PR에서 실패하면 main thread가 고치지 않고 해당 Task의 구현 subagent가 고친다.
-- **PR 단위:** UX10처럼 전체를 PR 하나로 모으지 않는다. §5의 Wave 묶음마다 PR을 낸다. 사용자가 시각적 변경을 확인하기 쉽고, CI 실패 범위도 좁아진다.
+- **점검(사용자 지시 2026-11-06, 개정):** Task가 끝나면 구현 subagent가 로컬에서 `make lint`, `make typecheck`, unit test만 돌린다. E2E와 visual은 자기 Task의 새 test만 RED → GREEN으로 확인하고, 전체 실행은 PR CI가 맡는다. PR에서 실패하면 해당 Task의 구현 subagent가 고친다.
+- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. 현재 통합 브랜치는 `feature/ux12-integration`이다.
 - **AC 등록:** 새 AC는 `docs/screens/ux12-*.md`와 새 phase(`UX12-<EPIC>.0`)에 둔다. 이미 GREEN인 phase에 새 AC를 넣지 않는다(§7 UX9-SPEC 해석).
 - **Visual baseline:** Task마다 재생성하지 않는다. 묶음의 마지막 QA Task에서 고정 Linux Playwright 이미지로 한 번만 재생성한다. 테두리·glass 변경은 baseline 170장 대부분을 바꾼다.
 - **Migration:** timestamp는 production 적용분(`20261106110000`) 뒤여야 한다. 공유 DB 적용은 main thread만 한다.
@@ -133,7 +133,7 @@
 |---|---|---|---|---|
 | EXPL-1 UI | 나란히 배치, 관련 본문 디자인, "작성중..." | `RelatedShell` heading을 공용 disclosure로 추출, `AI 해설 보기` 버튼 제거. 문구는 원문 그대로 | AIEXPL-01, `fixtures/ai-explanations.ts`, VISUAL-09 | S–M·없음 |
 | EXPL-2 프롬프트 | 해설 원본 참조 제거 | `explain/prompts.py`의 `기존 해설` 줄, `ExplainQuestion.explanation`과 SQL 삭제, `PROMPT_VERSION` v2, 안내 문구 수정. AI 질문 프롬프트는 범위 밖 | AIEXPL-01 C04. D-14 | S–M·없음 |
-| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, migration 불필요), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
+| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, 좁은 권한의 migration 추가), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
 
 ### 4.6 HILITE — 하이라이트
 
@@ -275,32 +275,32 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
 | CHAPTER-2 | 1 | 대기 | HOME-1 뒤(`packages/ui/src/questions` 공유) |
-| DESIGN-1 | 2 | 진행 | |
-| VIEW-1 | 2 | 진행 | |
-| VIEW-2 | 2 | 진행 | |
-| EXPL-1 | 2 | 진행 | |
-| EXPL-2 | 2 | 진행 | |
-| HOME-2 | 2 | 진행 | |
-| HOME-3 | 2 | 대기 | |
-| HOME-4 | 3 | 대기 | |
-| HOME-5 | 3 | 대기 | |
-| ASK-1 | 3 | 대기 | |
-| ASK-2 | 3 | 대기 | |
-| EXTRACT-3 | 4 | 대기 | |
-| EXTRACT-4 | 4 | 대기 | |
-| EXTRACT-5 | 4 | 대기 | |
-| EXTRACT-8 | 4 | 대기 | |
+| DESIGN-1 | 2 | 완료 | ee5864fa · Codex P2(CI phase)는 merge에서 반영, 경계 규칙·hover·--control-gap, E2E 22·Vitest GREEN |
+| VIEW-1 | 2 | 완료 | c1f6235f · Codex P2(CI phase)는 merge에서 반영, 탭 시 비활성 이유 토스트, E2E 14·Vitest 138 GREEN |
+| VIEW-2 | 2 | 완료 | 645934b7 · Codex P2(CI phase)는 merge에서 반영, 제출 후 focus 표시 추가, E2E 78·Vitest GREEN |
+| EXPL-1 | 2 | 완료 | d99c8c46 · Codex P2(CI phase)는 merge에서 반영, rebase 후 E2E 10·Vitest 31 GREEN |
+| EXPL-2 | 2 | 완료 | a52aae6c · Codex P2(옛 ID stream 차단) 수정 후 재리뷰 통과, 통합 18·pytest 18 GREEN |
+| HOME-2 | 2 | 완료 | 4fdc3183 · Codex P2 수정 후 재리뷰 통과, E2E·Vitest 40 GREEN |
+| HOME-3 | 2 | 완료 | 4fdc3183 · HOME-2와 함께 리뷰, E2E GREEN |
+| HOME-4 | 3 | 완료 | cb854650 · Codex P2(375px 넘침) 수정 후 재리뷰 통과, E2E 44 GREEN |
+| HOME-5 | 3 | 완료 | a5278ad9 · Codex P2(CI phase)는 merge에서 반영, 검색·필터 줄 재구성, E2E GREEN |
+| ASK-1 | 3 | 완료 | |
+| ASK-2 | 3 | 완료 | 0d5f7f05 · Codex P2(CI phase)는 merge에서 반영, E2E 88·Vitest 29 GREEN |
+| EXTRACT-3 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
+| EXTRACT-4 | 4 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, pytest 175 GREEN |
+| EXTRACT-5 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
+| EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
 | EXTRACT-6 | 4 | 대기 | |
 | EXTRACT-7 | 4 | 대기 | |
-| DESIGN-3 | 5 | 대기 | |
-| DESIGN-4 | 5 | 대기 | |
-| SHELL-2 | 5 | 대기 | |
-| VIEW-3 | 5 | 대기 | |
-| EXPL-3 | 5 | 대기 | |
-| VIEW-4 | 5 | 대기 | |
+| DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
+| DESIGN-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
+| SHELL-2 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 28·lint·typecheck·unit GREEN. 라이트 tint는 대비 제약으로 옅음 |
+| VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
+| EXPL-3 | 5 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, migration 20261106120000 공유 DB 적용, E2E 18·계약 26 GREEN |
+| VIEW-4 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 더보기의 원문 보기, E2E 10·lint·typecheck·unit GREEN |
 | VIEW-5 | 5 | 대기 | |
-| VIEW-6 | 5 | 대기 | |
-| DOCS-2 | 5 | 대기 | |
+| VIEW-6 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 링크 대기 표시, 첫 반응 약 450→14ms, 페이지 완료 시간은 변화 없음 |
+| DOCS-2 | 5 | 진행 | |
 | SHELL-3 | 6 | 대기 | |
 | SHELL-4 | 6 | 대기 | |
 | SHELL-5 | 6 | 대기 | |

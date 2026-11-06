@@ -131,7 +131,7 @@ import { JOB_TIMEOUT_MS } from './documents.ts';
 import { REPO_ROOT } from './local-env.ts';
 import type { DotStatus, QuestionInput, QuestionOption, QuestionType } from './questions.ts';
 import { startSummaryOffStack, type SummaryOffStack } from './summary.ts';
-import { main } from './workspace-ui.ts';
+import { HOME_MENU_NAME, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 const SCENARIO_FILE = join(REPO_ROOT, 'tests/fixtures/llm/generation-scenarios.json');
@@ -564,11 +564,11 @@ export function partialText(requested: number, created: number): RegExp {
 export const mockUi = {
   menuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(모의고사|mock exams?)$/i }),
   generateMenuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(변형 출제|generate variants?)$/i }),
   dialog: (page: Page) =>
     main(page).getByRole('dialog', { name: /^(모의고사|문제 풀기|mock exams?|practice)$/i }),

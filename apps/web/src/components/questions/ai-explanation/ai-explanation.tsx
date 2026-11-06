@@ -7,17 +7,19 @@
 //   layout    a group `AI 해설`: a toolbar (`AI 해설` generate button + `AI 질문하기`) and, only when
 //             there is something to show, the region below (none: no region at all)
 //   none      the `AI 해설` button; feature off / archived: the reason instead
-//   cached    an open disclosure `AI 해설 보기` (the result stays in view); it reads
-//             the stored one, no generation
-//   making    "AI 해설을 만드는 중" and the text so far (SSE, ASK-W's Markdown and number chips),
-//             aria-busy; also joined when someone else started it (the same stream from seq 0)
+//   cached    the heading is an open disclosure, the same one as 관련 본문 (UX12-EXPL: the result
+//             stays in view); it reads the stored one, no generation
+//   making    "작성중..." and the text so far (SSE, ASK-W's Markdown and number chips),
+//             aria-busy; also joined when someone else started it (the same stream from seq 0);
+//             `취소` beside the text for its requester and editors (UX12-EXPLCANCEL): back to the
+//             current success, or to nothing, with only a status announcement
 //   done      `AI 생성` badge, the notice, the body (every option), footnotes `[n]` and the `출처`
 //             list (→ 본문 발췌 → PDF에서 보기), "<시각> · 버전 k" and `다시 만들기` (editors)
 //   failed    role=alert with the reason + `다시 시도` (a new generation)
 // One status region announces the start and the end once each. Making one moves focus to the
 // heading; finishing never moves it. The shared, guest version is SharedAiExplanation.
 import { Badge, Button } from '@quiz/ui';
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnswerMarkdown } from '@/components/ask/ask-answer';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import askStyles from '@/components/ask/ask.module.css';
@@ -36,6 +38,7 @@ import {
   type ExplanationTarget,
 } from '@/lib/ai-explanations/client';
 import {
+  CANCELLED_CODE,
   emptyMode,
   EXPL_TEXT,
   explanationErrorText,
@@ -46,6 +49,7 @@ import {
 } from '@/lib/ai-explanations/model';
 import { createSearchClient, type SearchClient, type SearchItem } from '@/lib/search/client';
 import { formatDateTime } from '../labels';
+import { SectionDisclosure } from '../section-disclosure/section-disclosure';
 import styles from './ai-explanation.module.css';
 
 export interface QuestionOption {
@@ -83,6 +87,13 @@ interface LiveText {
   readonly text: string;
 }
 
+/** What a generation that ended without its stream's last event announces (from the server). */
+function endAnnouncement(state: ExplanationState, explanationId: string): string {
+  if (state.cancelled_id === explanationId) return EXPL_TEXT.cancelled;
+  const done = state.explanation?.id === explanationId && state.explanation.status === 'succeeded';
+  return done ? EXPL_TEXT.ready : '';
+}
+
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms);
@@ -106,12 +117,13 @@ function AiExplanationArea({
   const client = givenClient ?? defaultClient;
   const [defaultSearch] = useState(() => createSearchClient());
   const search = givenSearch ?? defaultSearch;
-  const headingId = useId();
-  const bodyId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   // The area (and its heading) appears only once there is something to show: focus moves to it
   // after the render that mounts it.
   const focusHeading = useRef(false);
+  // Cancelling removes the focused `취소`: focus goes to what replaced it.
+  const focusAfterCancel = useRef(false);
+  const createRef = useRef<HTMLButtonElement>(null);
 
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
@@ -185,7 +197,7 @@ function AiExplanationArea({
     const controller = new AbortController();
     const { signal } = controller;
     let lastEventId = 0;
-    const finish = (done: Explanation | null, failure: string | null) => {
+    const finish = (done: Explanation | null, failure: string | null, cancelled = false) => {
       if (signal.aborted) return;
       if (done) {
         setLoad((prev) =>
@@ -194,7 +206,7 @@ function AiExplanationArea({
             : prev,
         );
       }
-      setAnnouncement(failure ? '' : EXPL_TEXT.ready);
+      setAnnouncement(cancelled ? EXPL_TEXT.cancelled : failure ? '' : EXPL_TEXT.ready);
       // A regeneration that failed leaves the current success shown: it says why (below).
       setStreamFailure(failure ? { id: liveId, text: failure } : null);
       // Read the state again (fresh permissions, the stored result). Not tied to this stream's
@@ -237,6 +249,8 @@ function AiExplanationArea({
                   setLive({ id: liveId, text: '' });
                 } else if (event.type === 'done') {
                   finish(event.explanation, null);
+                } else if (event.code === CANCELLED_CODE) {
+                  finish(null, null, true);
                 } else {
                   finish(null, explanationErrorText(event.code));
                 }
@@ -251,7 +265,7 @@ function AiExplanationArea({
           if (signal.aborted) return;
           if (next && !(next.explanation?.id === liveId && isLive(next.explanation))) {
             setLoad({ status: 'ready', state: next });
-            if (next.explanation?.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
+            setAnnouncement(endAnnouncement(next, liveId));
             return;
           }
           await sleep(1000, signal);
@@ -299,6 +313,29 @@ function AiExplanationArea({
     }
   }
 
+  async function cancel(explanationId: string) {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    setRefusal(null);
+    try {
+      const next = await client.cancel(target, gate, explanationId);
+      if (!mounted.current) return;
+      // It may have ended first: then nothing was cancelled, whatever is shown now.
+      setAnnouncement(endAnnouncement(next, explanationId));
+      focusAfterCancel.current = true;
+      setLive(null);
+      setLoad({ status: 'ready', state: next });
+    } catch {
+      if (!mounted.current) return;
+      setRefusal(EXPL_TEXT.cancelFailed);
+      setReload((n) => n + 1);
+    } finally {
+      busy.current = false;
+      if (mounted.current) setPending(false);
+    }
+  }
+
   // --- excerpt panel ---------------------------------------------------------------------------
   const [excerpt, setExcerpt] = useState<{ item: SearchItem; outdated: boolean } | null>(null);
   const [excerptOpen, setExcerptOpen] = useState(false);
@@ -331,6 +368,8 @@ function AiExplanationArea({
   };
 
   let content: ReactNode;
+  // Only a finished explanation folds: progress and failures stay in view.
+  let collapsible = false;
   if (load.status === 'loading') {
     content = <p className={styles.hint}>{EXPL_TEXT.loading}</p>;
   } else if (load.status === 'error' || !state) {
@@ -358,7 +397,7 @@ function AiExplanationArea({
           <p className={styles.text}>{endedHere.text}</p>
         </div>
         {endedHere.action && (endedHere.action !== 'create' || state.available) ? (
-          <div className={styles.row}>
+          <div className={styles.controls}>
             <Button
               size="sm"
               loading={pending}
@@ -381,7 +420,19 @@ function AiExplanationArea({
     const text = live?.id === explanation.id ? live.text : '';
     content = (
       <div className={styles.done} aria-busy="true">
-        <p className={styles.progress}>{EXPL_TEXT.working}</p>
+        <div className={styles.controls}>
+          <p className={styles.progress}>{EXPL_TEXT.working}</p>
+          {state.can_cancel ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={pending}
+              onClick={() => void cancel(explanation.id)}
+            >
+              {EXPL_TEXT.cancel}
+            </Button>
+          ) : null}
+        </div>
         {text ? (
           <AnswerMarkdown text={text} sourceNumbers={null} renderCite={(n) => `[${n}]`} />
         ) : null}
@@ -395,53 +446,39 @@ function AiExplanationArea({
           <p className={styles.text}>{explanationErrorText(explanation.error_code)}</p>
         </div>
         {mode === 'create' ? (
-          <div className={styles.row}>
+          <div className={styles.controls}>
             <Button size="sm" loading={pending} onClick={() => void request('create')}>
               {EXPL_TEXT.retry}
             </Button>
           </div>
-        ) : (
-          <p className={styles.hint}>
-            {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
-          </p>
-        )}
+        ) : mode === 'archived' ? (
+          <p className={styles.hint}>{EXPL_TEXT.archived}</p>
+        ) : null}
       </>
     );
   } else {
+    collapsible = true;
     content = (
       <>
-        <div className={styles.row}>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-expanded={expanded}
-            aria-controls={bodyId}
-            onClick={() => setExpanded((open) => !open)}
-          >
-            {EXPL_TEXT.show}
-          </Button>
-        </div>
-        <div id={bodyId} hidden={!expanded}>
-          {expanded && explanation.body ? (
-            <ExplanationView
-              body={explanation.body}
-              sources={explanation.sources}
-              truncated={explanation.truncated}
-              options={options}
-              onSource={openSource}
-              meta={metaText(explanation, formatDateTime)}
-              actions={
-                state.can_regenerate ? (
-                  <div className={styles.row}>
-                    <Button size="sm" loading={pending} onClick={() => void request('regenerate')}>
-                      {EXPL_TEXT.regenerate}
-                    </Button>
-                  </div>
-                ) : null
-              }
-            />
-          ) : null}
-        </div>
+        {expanded && explanation.body ? (
+          <ExplanationView
+            body={explanation.body}
+            sources={explanation.sources}
+            truncated={explanation.truncated}
+            options={options}
+            onSource={openSource}
+            meta={metaText(explanation, formatDateTime)}
+            actions={
+              state.can_regenerate ? (
+                <div className={styles.controls}>
+                  <Button size="sm" loading={pending} onClick={() => void request('regenerate')}>
+                    {EXPL_TEXT.regenerate}
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
+        ) : null}
       </>
     );
   }
@@ -453,13 +490,22 @@ function AiExplanationArea({
       focusHeading.current = false;
       headingRef.current.focus();
     }
+    if (focusAfterCancel.current) {
+      focusAfterCancel.current = false;
+      (headingRef.current ?? createRef.current)?.focus();
+    }
   });
 
   return (
     <div role="group" aria-label={EXPL_TEXT.title} className={styles.root}>
-      <div className={styles.row}>
+      <div className={styles.controls}>
         {mode === 'create' ? (
-          <Button size="sm" loading={pending} onClick={() => void request('create')}>
+          <Button
+            ref={createRef}
+            size="sm"
+            loading={pending}
+            onClick={() => void request('create')}
+          >
             {EXPL_TEXT.create}
           </Button>
         ) : null}
@@ -467,27 +513,27 @@ function AiExplanationArea({
           {EXPL_TEXT.ask}
         </AskQuestionButton>
       </div>
-      {mode === 'disabled' || mode === 'archived' ? (
-        <p className={styles.hint}>
-          {mode === 'disabled' ? EXPL_TEXT.disabled : EXPL_TEXT.archived}
-        </p>
-      ) : null}
+      {mode === 'archived' ? <p className={styles.hint}>{EXPL_TEXT.archived}</p> : null}
       {load.status === 'loading' || load.status === 'error' || !state ? content : null}
       {showArea ? (
-        <section className={styles.area} aria-labelledby={headingId}>
-          <h3 id={headingId} ref={headingRef} tabIndex={-1} className={styles.heading}>
-            {EXPL_TEXT.title}
-          </h3>
+        <SectionDisclosure
+          title={EXPL_TEXT.title}
+          expanded={expanded}
+          onToggle={collapsible ? () => setExpanded((open) => !open) : null}
+          headingRef={headingRef}
+          after={
+            streamFailure &&
+            !refusal &&
+            explanation?.status === 'succeeded' &&
+            explanation.id !== streamFailure.id ? (
+              <p role="alert" className={styles.alert}>
+                {streamFailure.text}
+              </p>
+            ) : null
+          }
+        >
           {content}
-          {streamFailure &&
-          !refusal &&
-          explanation?.status === 'succeeded' &&
-          explanation.id !== streamFailure.id ? (
-            <p role="alert" className={styles.alert}>
-              {streamFailure.text}
-            </p>
-          ) : null}
-        </section>
+        </SectionDisclosure>
       ) : null}
       {refusal ? (
         <p role="alert" className={styles.alert}>

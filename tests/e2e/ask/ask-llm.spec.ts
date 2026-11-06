@@ -46,6 +46,7 @@ import {
   listConversations,
   NOT_FOUND_TEXT,
   openAskPanel,
+  openComposer,
   PASSAGES,
   probeSelected,
   readStream,
@@ -54,6 +55,7 @@ import {
   requestMessage,
   SECRETS,
   seedAskBook,
+  startNewConversation,
   seedAskMixed,
   seedAskPaper,
   seedSecretMockExam,
@@ -297,7 +299,7 @@ test(
     await Promise.all(held);
     await page.unroute(isAsk);
     await expect(panel.getByText(ASK_TEXT.empty)).toBeVisible();
-    await expect(askUi.input(panel)).toBeEditable();
+    await expect(await openComposer(panel)).toBeEditable();
 
     // Two quick Enters send one question (Idempotency-Key / a disabled send).
     const posts: string[] = [];
@@ -349,8 +351,8 @@ test(
       'text appeared while the answer was still being written',
     ).toBeGreaterThan(seen.lengths[0] ?? 0);
 
-    // The finished answer: badge, notice, footnote [1] → chapter 1's "가나다 원리" passage.
-    await expect(askUi.aiBadge(answer)).toBeVisible();
+    // The finished answer: no badge, the notice, footnote [1] → chapter 1's "가나다 원리" passage.
+    await expect(askUi.aiBadge(answer)).toHaveCount(0);
     await expect(answer.getByText(ASK_TEXT.notice)).toBeVisible();
     const message = await lastAnswer(s.owner, conversationId);
     expect(message.status).toBe('succeeded');
@@ -409,7 +411,7 @@ test(
     const panel = await openAskPanel(page);
 
     for (const word of [PASSAGES.paper, PASSAGES.mixed, PASSAGES.nowhere]) {
-      if (askParams(page).conversation) await askUi.newButton(panel).click();
+      if (askParams(page).conversation) await startNewConversation(panel);
       const answer = await ask(panel, `${word}을 설명해 줘`);
       await waitDone(answer);
       await expect(answer).toContainText(NOT_FOUND_TEXT);
@@ -429,7 +431,7 @@ test(
     }
 
     // Scope = chapter 2 of the book: chapter 1's passage is no evidence any more.
-    await askUi.newButton(panel).click();
+    await startNewConversation(panel);
     await askUi.scopeButton(panel).click();
     const popover = askUi.scopePopover(page);
     await expect(popover).toBeVisible();
@@ -479,12 +481,12 @@ test(
     expect(badMessage.sources.map((x) => x.number)).toEqual([1]);
     expect(badMessage.sources.every((x) => x.document_id === s.book.documentId)).toBe(true);
 
-    await askUi.newButton(panel).click();
+    await startNewConversation(panel);
     const none = await ask(panel, `${ASK_MARKERS.noAnswer} ${QUESTION}`);
     await waitDone(none);
     await expect(none).toContainText(NOT_FOUND_TEXT);
     await expect(none).not.toContainText('NO_ANSWER');
-    await expect(askUi.aiBadge(none)).toBeVisible();
+    await expect(askUi.aiBadge(none)).toHaveCount(0);
     const searched = none.getByRole('list', { name: ASK_TEXT.searched });
     await expect(searched).toBeVisible();
     await expect(searched.getByRole('listitem').first()).toContainText(s.book.title);
@@ -718,7 +720,7 @@ test(
     await expect(page).toHaveURL((url) => url.searchParams.get('conversation') === firstId);
     await expect(askUi.answers(panel)).toHaveCount(3);
 
-    await askUi.newButton(panel).click();
+    await startNewConversation(panel);
     const secondQuestion = '두 번째 대화: 가나다 원리';
     await waitDone(await ask(panel, secondQuestion));
     const secondId = conversationOf(page);
@@ -1000,7 +1002,7 @@ test(
 
       // 1,001 characters: counter, disabled send, 422.
       panel = await open(length);
-      await askUi.input(panel).fill('가'.repeat(1_001));
+      await (await openComposer(panel)).fill('가'.repeat(1_001));
       await expect(askUi.counter(panel, '1,001/1,000')).toBeVisible();
       await expect(askUi.send(panel)).toHaveAttribute('aria-disabled', 'true');
       const conv = await stackRequest<Conversation>(
@@ -1038,7 +1040,8 @@ test(
       await expect(panel.getByText(ASK_TEXT.rateLimited)).toBeVisible();
       await expect(askUi.input(panel)).toHaveValue(`${QUESTION} 3`);
 
-      // 다시 생성: a second version "답 2/2"; 이전 답 shows version 1 unchanged; the limit (2).
+      // A version made through the API (the screen has no 다시 생성, UX12-ASK): "답 2/2"; 이전 답
+      // shows version 1 unchanged; the limit (2) is the API's.
       panel = await open(regen);
       const original = await ask(panel, QUESTION);
       await waitDone(original);
@@ -1051,7 +1054,17 @@ test(
           `/ask/conversations/${regenConversation}`,
         )
       ).body?.messages.at(-1);
-      await askUi.regenerate(original).click();
+      await expect(askUi.regenerate(original)).toHaveCount(0);
+      const remade = await stackRequest(
+        stack.apiUrl,
+        regen,
+        'POST',
+        `/ask/messages/${v1?.id}/regenerate`,
+        {},
+      );
+      expect(remade.status).toBe(202);
+      await page.reload();
+      panel = askUi.panel(page);
       const latest = askUi.answers(panel).last();
       await expect(askUi.version(latest, 2, 2)).toBeVisible({ timeout: ASK_TIMEOUT_MS });
       await waitDone(latest);
@@ -1066,9 +1079,6 @@ test(
       );
       await expect(askUi.footnote(older, 1)).toBeVisible();
       await askUi.nextVersion(older).click();
-      const limited = askUi.regenerate(askUi.answers(panel).last());
-      await expect(limited).toHaveAttribute('aria-disabled', 'true');
-      await expect(panel.getByText(ASK_TEXT.regenerateLimit)).toBeVisible();
       // The regeneration counted for the per-minute limit (question + regeneration = 2).
       await askUi.input(panel).fill('세 번째 요청');
       await askUi.input(panel).press('Enter');
@@ -1168,8 +1178,8 @@ test(
     expect(seen.statuses.filter((t) => ASK_TEXT.liveDone(sources).test(t))).toHaveLength(1);
     expect(seen.statuses.length, 'no per-character announcements').toBeLessThanOrEqual(4);
 
-    // Tab order: header → the answer's footnote, sources, actions → input → send.
-    await askUi.newButton(panel).focus();
+    // Tab order: header → the answer's footnote, sources, actions → input → send → scope.
+    await askUi.listButton(panel).focus();
     const order: string[] = [];
     // WebKit (like Safari) reaches buttons with Option+Tab (sharing-owner.spec.ts).
     const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
@@ -1197,6 +1207,8 @@ test(
     expect(at(/^(출처|source) 1: /i)).toBeLessThan(at(/^(복사|copy)$/i));
     expect(at(/^(복사|copy)$/i)).toBeLessThan(at(/^(질문|question)$|문서에 대해 질문하세요/i));
     expect(at(/^(보내기|send)$/i)).toBe(order.length - 1);
+    await page.keyboard.press(tab);
+    await expect(askUi.scopeButton(panel)).toBeFocused();
 
     await askUi.footnote(answer, 1).focus();
     await page.keyboard.press('Enter');
@@ -1244,6 +1256,7 @@ test.describe('ASK-01-AC10 touch', () => {
             : false;
         })
         .toBe(true);
+      await askUi.newButton(panel).tap();
       await askUi.input(panel).tap();
       await expect(askUi.input(panel)).toBeFocused();
       await expect(askUi.input(panel)).toBeInViewport();

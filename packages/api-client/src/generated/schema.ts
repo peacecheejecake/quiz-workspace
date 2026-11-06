@@ -706,6 +706,23 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Cancel Mock Explanation */
+    post: operations['cancelMockExamQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate': {
     parameters: {
       query?: never;
@@ -1370,6 +1387,26 @@ export type paths = {
      * @description Make the explanation (202), or return the cached one (200) / the one being made (202).
      */
     post: operations['createQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/ai-explanation/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel Question Explanation
+     * @description Stop an explanation being made (its requester or an owner/editor).
+     */
+    post: operations['cancelQuestionAiExplanation'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3209,6 +3246,12 @@ export type components = {
       /** Filename */
       filename: string;
       /**
+       * Has Summary
+       * @description A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).
+       * @default false
+       */
+      has_summary?: boolean;
+      /**
        * Id
        * Format: uuid
        */
@@ -3255,6 +3298,11 @@ export type components = {
        * @enum {string}
        */
       status: 'uploading' | 'processing' | 'ready' | 'failed';
+      /**
+       * Summary Available
+       * @description This environment can create summaries.
+       */
+      summary_available: boolean;
       /** Title */
       title: string;
       /**
@@ -3290,6 +3338,11 @@ export type components = {
     DocumentList: {
       /** Items */
       items: components['schemas']['DocumentSummary'][];
+      /**
+       * Summary Available
+       * @description This environment can create summaries.
+       */
+      summary_available: boolean;
     };
     /**
      * DocumentProcessingJob
@@ -3350,6 +3403,12 @@ export type components = {
       document_type: 'book' | 'question_paper';
       /** Filename */
       filename: string;
+      /**
+       * Has Summary
+       * @description A stored summary exists (any revision), readable even where summaries cannot be created (DOCSUM-01-AC05).
+       * @default false
+       */
+      has_summary?: boolean;
       /**
        * Id
        * Format: uuid
@@ -3734,6 +3793,25 @@ export type components = {
       /** Summary Md */
       summary_md: string;
     };
+    /** ExplanationCancelRequest */
+    ExplanationCancelRequest: {
+      /**
+       * Explanation Id
+       * Format: uuid
+       * @description The explanation being made.
+       */
+      explanation_id: string;
+      /**
+       * Practice Session Id
+       * @description The caller's submitted practice session of this question.
+       */
+      practice_session_id?: string | null;
+      /**
+       * View
+       * @description `detail`: the 문제 상세 dialog (no submission needed).
+       */
+      view?: 'detail' | null;
+    };
     /** ExplanationHighlightTarget */
     ExplanationHighlightTarget: {
       /**
@@ -3814,6 +3892,11 @@ export type components = {
        */
       available: boolean;
       /**
+       * Can Cancel
+       * @description One is being made, in an active workspace, and the caller requested it or is an owner/editor.
+       */
+      can_cancel: boolean;
+      /**
        * Can Create
        * @description available, active workspace, none for this revision.
        */
@@ -3823,6 +3906,11 @@ export type components = {
        * @description An owner/editor of an active workspace, a success.
        */
       can_regenerate: boolean;
+      /**
+       * Cancelled Id
+       * @description The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.
+       */
+      cancelled_id: string | null;
       /** @description The newest explanation of this revision that is not superseded (a current success over a later failed attempt), or null. */
       explanation: components['schemas']['Explanation'] | null;
     };
@@ -5087,6 +5175,25 @@ export type components = {
       /** Version */
       version: number;
     };
+    /** MockExplanationCancelRequest */
+    MockExplanationCancelRequest: {
+      /**
+       * Explanation Id
+       * Format: uuid
+       * @description The explanation being made.
+       */
+      explanation_id: string;
+      /**
+       * Mock Practice Session Id
+       * @description The caller's submitted mock practice session of this question.
+       */
+      mock_practice_session_id?: string | null;
+      /**
+       * View
+       * @description `manage`: 모의고사 문제 관리 (owner/editor, no submission).
+       */
+      view?: 'manage' | null;
+    };
     /** MockExplanationRequest */
     MockExplanationRequest: {
       /**
@@ -5108,6 +5215,11 @@ export type components = {
        */
       available: boolean;
       /**
+       * Can Cancel
+       * @description One is being made, in an active workspace, and the caller requested it or is an owner/editor.
+       */
+      can_cancel: boolean;
+      /**
        * Can Create
        * @description available, active workspace, none for this revision.
        */
@@ -5117,6 +5229,11 @@ export type components = {
        * @description An owner/editor of an active workspace, a success.
        */
       can_regenerate: boolean;
+      /**
+       * Cancelled Id
+       * @description The newest attempt, when it was cancelled: why a live id is gone, as opposed to a failure that leaves the current success shown.
+       */
+      cancelled_id: string | null;
       explanation: components['schemas']['MockExplanation'] | null;
     };
     /**
@@ -7934,8 +8051,27 @@ export type components = {
     TableCells: {
       /** Header Rows */
       header_rows: number;
-      /** Rows */
+      /**
+       * Rows
+       * @description Rectangular grid: merged cells repeat their text.
+       */
       rows: string[][];
+      /**
+       * Spans
+       * @description Merged cells; null when none are known.
+       */
+      spans?: components['schemas']['TableCellSpan'][] | null;
+    };
+    /** TableCellSpan */
+    TableCellSpan: {
+      /** Col */
+      col: number;
+      /** Col Span */
+      col_span: number;
+      /** Row */
+      row: number;
+      /** Row Span */
+      row_span: number;
     };
     /** TextRange */
     TextRange: {
@@ -11108,6 +11244,77 @@ export interface operations {
       };
     };
   };
+  cancelMockExamQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExplanationCancelRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExplanationState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   regenerateMockExamQuestionAiExplanation: {
     parameters: {
       query?: never;
@@ -13762,6 +13969,77 @@ export interface operations {
       };
       /** @description Too Many Requests */
       429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  cancelQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ExplanationCancelRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExplanationState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

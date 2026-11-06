@@ -13,6 +13,7 @@
 // ？ ： ）) or an empty answer mark ( ) / （ ）, whose mark is not shown. The list runs from the
 // first item to a blank line or the end.
 import { displayStem, stemParagraphs } from './display-stem';
+import { hasStemTable } from './stem-table';
 
 export interface StemItem {
   /** The label as printed ("(가)", "ㄱ.", "㉠"); never renumbered. */
@@ -201,9 +202,12 @@ function strictList(labels: readonly Label[], family: number, format: Format): L
 /**
  * The stem's labelled item list with the paragraphs before and after it, or null when the stem
  * has none (it is then shown as before). Takes the stored or the displayed stem: the trailing
- * empty answer marks of the stem and of the question sentence are not shown either way.
+ * empty answer marks of the stem and of the question sentence are not shown either way. A stem
+ * with a table has none as a whole: labels in cells are no items, so the text around a table is
+ * read on its own (`stemSegments`, QTABLE-01).
  */
 export function stemItems(stem: string): StemLayout | null {
+  if (hasStemTable(stem)) return null;
   const s = displayStem(stem);
   for (const [start, end] of blocks(s)) {
     const labels = labelsIn(s, start, end);

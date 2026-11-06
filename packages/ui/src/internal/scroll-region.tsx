@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { tabbables } from './tabbable';
 
 /**
@@ -9,9 +9,22 @@ import { tabbables } from './tabbable';
  * it to scroll (WCAG 2.1.1, axe `scrollable-region-focusable`): it then becomes a tab stop,
  * named after the enclosing dialog's title. Otherwise it stays a plain, unfocusable container.
  */
-export function ScrollRegion({ className, children }: { className: string; children?: ReactNode }) {
+export function ScrollRegion({
+  className,
+  scrollKey,
+  children,
+}: {
+  className: string;
+  /** Changing this brings the region back to its top, before the new content paints. */
+  scrollKey?: string | number | undefined;
+  children?: ReactNode;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [labelledBy, setLabelledBy] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (scrollKey !== undefined && ref.current) ref.current.scrollTop = 0;
+  }, [scrollKey]);
 
   useEffect(() => {
     const el = ref.current;

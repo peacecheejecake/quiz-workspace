@@ -31,6 +31,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 import pytest
+from book_core.explain import PROMPT_VERSION
 
 pytestmark = pytest.mark.infra
 
@@ -189,6 +190,14 @@ def post(client: Any, target_id: str, kind: str = "question", **gate: str) -> ht
 
 def regenerate(client: Any, target_id: str, kind: str = "question", **gate: str) -> httpx.Response:
     res: httpx.Response = client.call("POST", f"{base(kind, target_id)}/regenerate", gate)
+    return res
+
+
+def cancel(
+    client: Any, target_id: str, explanation_id: str, kind: str = "question", **gate: str
+) -> httpx.Response:
+    body = {**gate, "explanation_id": explanation_id}
+    res: httpx.Response = client.call("POST", f"{base(kind, target_id)}/cancel", body)
     return res
 
 
@@ -595,6 +604,74 @@ def test_c03_a_failed_regeneration_never_hides_the_current_success(seed: Any, db
     assert hit["explanation"]["id"] == good["id"]
 
 
+def test_c03_an_older_prompt_version_stays_stored_and_the_question_can_be_made_again(
+    seed: Any, db: Any, off_app: Any
+) -> None:
+    """UX12 D-14: a prompt version bump leaves the rows alone and takes them out of every read."""
+    owner = seed.client("expl-c03v-owner")
+    book = Book(owner)
+    q = book.mcq()
+    old = make(owner, q["id"], view="detail")
+    assert old["status"] == "succeeded"
+    older = "question.ai_explain/v1"
+    db(
+        "update public.question_ai_explanations set prompt_version = %s where id = %s",
+        (older, old["id"]),
+    )
+    link = owner.create_link(book.ws)
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+    url = f"/questions/{q['id']}/ai-explanation"
+
+    now = state(get(owner, q["id"], view="detail"), (200,))
+    assert now["explanation"] is None
+    assert now["can_create"] is True
+    assert now["can_regenerate"] is False
+    assert guest.read(link["id"], cookie, url).status_code == 404
+    # A client still holding the old id reconnects: the row is gone from the stream as well.
+    res = owner.call("GET", f"/ai-explanations/{old['id']}/stream?view=detail")
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
+    off = type(owner)(off_app, owner.user)
+    disabled = state(off.call("GET", f"{base('question', q['id'])}?view=detail"), (200,))
+    assert disabled["explanation"] is None
+    assert disabled["can_create"] is False
+
+    fresh = make(owner, q["id"], view="detail")
+    assert fresh["status"] == "succeeded"
+    assert fresh["id"] != old["id"]
+    assert fresh["version"] == 1  # a first explanation of the new key, not a regeneration
+    stored = db(
+        "select id::text, prompt_version, status, superseded_at is not null "
+        "from public.question_ai_explanations where question_id = %s order by created_at",
+        (q["id"],),
+    )
+    assert stored == [
+        (old["id"], older, "succeeded", False),
+        (fresh["id"], PROMPT_VERSION, "succeeded", False),
+    ]
+    assert state(guest.read(link["id"], cookie, url), (200,))["body"] == fresh["body"]
+
+
+def test_c03_an_older_prompt_version_of_a_mock_question_is_gone_from_its_stream(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-c03m-owner")
+    book = Book(owner)
+    items = shuffle_exam(owner, book.ws, [book.mcq()["id"], book.mcq()["id"]])
+    item = items[0]
+    old = make(owner, item["id"], "mock", view="manage")
+    stream = f"/mock-ai-explanations/{old['id']}/stream?view=manage"
+    assert owner.call("GET", stream).status_code == 200
+    db(
+        "update public.mock_exam_question_ai_explanations set prompt_version = %s where id = %s",
+        ("question.ai_explain/v1", old["id"]),
+    )
+    res = owner.call("GET", stream)
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
+
+
 def test_c03_the_daily_limit_holds_under_concurrent_posts_across_questions(
     seed: Any, db: Any, daily_app: Any
 ) -> None:
@@ -658,7 +735,7 @@ def test_c04_input_has_the_answer_and_sources_but_no_user_answer_or_paper(
     prompt = sent[0]
     assert short["revision"]["stem"] in prompt
     assert "증발" in prompt
-    assert f"{book.label} 단답 사람 해설" in prompt
+    assert f"{book.label} 단답 사람 해설" not in prompt  # UX12 EXPL-2: not an input
     assert "햇빛이 바다와 호수의 표면을 데우면" in prompt  # the published source block
     assert user_answer not in prompt
     for paper_question in PAPER_TRUTH["questions"]:
@@ -926,7 +1003,11 @@ def test_c08_the_fake_explainer_is_deterministic_and_logs_its_calls(
 
 
 def test_c09_mock_questions_have_their_own_rows_gate_and_manage_view(
-    seed: Any, db: Any, calls: Callable[[str], int]
+    seed: Any,
+    db: Any,
+    calls: Callable[[str], int],
+    job_worker: Any,
+    prompts: Callable[[Any], list[str]],
 ) -> None:
     owner = seed.client("expl-c09-owner")
     book = Book(owner)
@@ -962,6 +1043,14 @@ def test_c09_mock_questions_have_their_own_rows_gate_and_manage_view(
     assert made["status"] == "succeeded"
     assert made["id"] != bank_expl["id"]  # never the source question's row
     assert calls(item["id"]) == 1
+    # UX12 EXPL-2: the mock revision's human explanation is not an input either.
+    [(human,)] = db(
+        "select r.explanation from public.mock_exam_question_revisions r "
+        "where r.mock_exam_question_id = %s",
+        (item["id"],),
+    )
+    assert human
+    assert human not in prompts(job_worker)[-1]
     mock_rows = db(
         "select id::text from public.mock_exam_question_ai_explanations "
         "where mock_exam_question_id = %s",
@@ -993,3 +1082,186 @@ def test_c09_mock_questions_have_their_own_rows_gate_and_manage_view(
     owner.ok("DELETE", f"/mock-exams/{item['mock_exam_id']}", None, (204,))
     implemented(res := get(viewer, item["id"], "mock", mock_practice_session_id=open_session["id"]))
     assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-EXPLCANCEL cancelling one being made
+# ---------------------------------------------------------------------------------------------
+
+
+def _cancelled(db: Callable[..., list[tuple[Any, ...]]], explanation_id: str) -> tuple[Any, ...]:
+    return db(
+        "select status, error_code, finished_at is not null, started_at is not null "
+        "from public.question_ai_explanations where id = %s",
+        (explanation_id,),
+    )[0]
+
+
+def test_ux12_explcancel_a_new_one_goes_away_twice_over_and_the_worker_calls_nothing(
+    seed: Any, db: Any, calls: Callable[[str], int]
+) -> None:
+    owner = seed.client("expl-cancel-a-owner")
+    book = Book(owner)
+    q = book.mcq()
+    started = state(post(owner, q["id"], view="detail"), (202,))
+    assert started["can_cancel"] is True
+    live = started["explanation"]
+
+    after = state(cancel(owner, q["id"], live["id"], view="detail"), (200,))
+    assert after["explanation"] is None
+    assert (after["can_create"], after["can_cancel"]) == (True, False)
+    assert after["cancelled_id"] == live["id"]
+    assert started["cancelled_id"] is None
+    assert _cancelled(db, live["id"]) == ("failed", "cancelled", True, True)
+    assert state(get(owner, q["id"], view="detail"), (200,)) == after
+
+    assert state(cancel(owner, q["id"], live["id"], view="detail"), (200,)) == after  # idempotent
+    drain(owner, live)
+    assert calls(q["id"]) == 0
+    assert _cancelled(db, live["id"]) == ("failed", "cancelled", True, True)
+    assert [e for e, _ in _events(owner, live["id"], view="detail")] == ["error"]
+    assert _events(owner, live["id"], view="detail")[0][1] == {"code": "cancelled"}
+
+    again = make(owner, q["id"], view="detail")
+    assert again["status"] == "succeeded"
+    assert again["id"] != live["id"]
+
+
+def test_ux12_explcancel_a_regeneration_falls_back_to_the_current_success(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-cancel-b-owner")
+    book = Book(owner)
+    q = book.mcq()
+    good = make(owner, q["id"], view="detail")
+    again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    assert again["version"] == 2
+    after = state(cancel(owner, q["id"], again["id"], view="detail"), (200,))
+    assert after["explanation"]["id"] == good["id"]
+    assert after["explanation"]["body"] == good["body"]
+    assert after["cancelled_id"] == again["id"]
+    assert (after["can_regenerate"], after["can_create"], after["can_cancel"]) == (
+        True,
+        False,
+        False,
+    )
+    assert [r[3] for r in rows(db, q["id"])] == [False, False]  # the success stays current
+
+
+def test_ux12_explcancel_the_requester_or_an_editor_cancels_nobody_else(seed: Any, db: Any) -> None:
+    owner = seed.client("expl-cancel-c-owner")
+    book = Book(owner)
+    q, other = book.mcq(), book.mcq()
+    requester = member(seed, book.ws, "expl-cancel-c-viewer", "viewer")
+    bystander = member(seed, book.ws, "expl-cancel-c-bystander", "viewer")
+    editor = member(seed, book.ws, "expl-cancel-c-editor", "editor")
+    outsider = seed.client("expl-cancel-c-outsider")
+
+    session = submitted(requester, q)
+    live = state(post(requester, q["id"], practice_session_id=session), (202,))
+    assert live["can_cancel"] is True
+    live_id = live["explanation"]["id"]
+
+    seen = state(get(bystander, q["id"], view="detail"), (200,))
+    assert seen["explanation"]["id"] == live_id
+    assert seen["can_cancel"] is False
+    problem(cancel(bystander, q["id"], live_id, view="detail"), 403, INSUFFICIENT_ROLE)
+    res = implemented(cancel(outsider, q["id"], live_id, view="detail"))
+    assert res.status_code == 404
+    res = implemented(cancel(owner, other["id"], live_id, view="detail"))
+    assert res.status_code == 404  # the id of another question
+    res = implemented(cancel(requester, q["id"], str(uuid.uuid4()), view="detail"))
+    assert res.status_code == 404
+    assert _cancelled(db, live_id)[:2] == ("queued", None)
+
+    assert state(get(editor, q["id"], view="detail"), (200,))["can_cancel"] is True
+    state(cancel(requester, q["id"], live_id, practice_session_id=session), (200,))
+    assert _cancelled(db, live_id)[:2] == ("failed", "cancelled")
+
+    second = state(post(requester, q["id"], practice_session_id=session), (202,))["explanation"]
+    state(cancel(editor, q["id"], second["id"], view="detail"), (200,))
+    assert _cancelled(db, second["id"])[:2] == ("failed", "cancelled")
+
+
+def test_ux12_explcancel_an_archived_workspace_refuses_and_keeps_the_row(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-cancel-d-owner")
+    book = Book(owner)
+    q = book.mcq()
+    live = state(post(owner, q["id"], view="detail"), (202,))["explanation"]
+    owner.ok("POST", f"/workspaces/{book.ws}/archive", None)
+    assert state(get(owner, q["id"], view="detail"), (200,))["can_cancel"] is False
+    problem(cancel(owner, q["id"], live["id"], view="detail"), 403, ARCHIVED)
+    assert _cancelled(db, live["id"])[:2] == ("queued", None)
+
+
+def test_ux12_explcancel_a_failed_regeneration_is_not_reported_as_cancelled(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-cancel-h-owner")
+    book = Book(owner)
+    q = book.mcq()
+    good = make(owner, q["id"], view="detail")
+    again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    db(
+        "update public.question_ai_explanations set status = 'failed', "
+        "error_code = 'llm_unavailable', started_at = now(), finished_at = now() where id = %s",
+        (again["id"],),
+    )
+    read = state(get(owner, q["id"], view="detail"), (200,))
+    assert read["explanation"]["id"] == good["id"]
+    assert read["cancelled_id"] is None
+
+
+def test_ux12_explcancel_after_the_finish_changes_nothing(seed: Any, db: Any) -> None:
+    owner = seed.client("expl-cancel-e-owner")
+    book = Book(owner)
+    q = book.mcq()
+    done = make(owner, q["id"], view="detail")
+    after = state(cancel(owner, q["id"], done["id"], view="detail"), (200,))
+    assert after["explanation"] == done
+    assert after["can_cancel"] is False
+    assert _cancelled(db, done["id"])[:2] == ("succeeded", None)
+
+
+def test_ux12_explcancel_a_cancelled_run_counts_toward_the_limits(
+    seed: Any, daily_app: Any
+) -> None:
+    owner = seed.client("expl-cancel-f-owner")
+    book = Book(owner)
+    q = book.mcq()
+    make(owner, q["id"], view="detail")
+    for _ in range(3):
+        again = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+        state(cancel(owner, q["id"], again["id"], view="detail"), (200,))
+    problem(regenerate(owner, q["id"], view="detail"), 409, REGENERATE_LIMIT)
+
+    daily = seed.client("expl-cancel-f-daily")
+    other_book = Book(daily)
+    first, second, third = other_book.mcq(), other_book.mcq(), other_book.mcq()
+    limited = type(daily)(daily_app, daily.user)
+    for question in (first, second):
+        live = state(post(limited, question["id"], view="detail"), (202,))["explanation"]
+        state(cancel(limited, question["id"], live["id"], view="detail"), (200,))
+    problem(post(limited, third["id"], view="detail"), 429, P + "explanation-daily-limit")
+
+
+def test_ux12_explcancel_a_mock_question_cancels_its_own_row(seed: Any, db: Any) -> None:
+    owner = seed.client("expl-cancel-g-owner")
+    book = Book(owner)
+    q1, q2 = book.mcq(), book.mcq()
+    items = shuffle_exam(owner, book.ws, [q1["id"], q2["id"]])
+    item = items[0]
+    viewer = member(seed, book.ws, "expl-cancel-g-viewer", "viewer")
+    started = state(post(owner, item["id"], "mock", view="manage"), (202,))
+    assert started["can_cancel"] is True
+    live_id = started["explanation"]["id"]
+    problem(cancel(viewer, item["id"], live_id, "mock", view="manage"), 403, INSUFFICIENT_ROLE)
+    after = state(cancel(owner, item["id"], live_id, "mock", view="manage"), (200,))
+    assert after["explanation"] is None
+    assert after["can_create"] is True
+    assert db(
+        "select status, error_code from public.mock_exam_question_ai_explanations where id = %s",
+        (live_id,),
+    ) == [("failed", "cancelled")]

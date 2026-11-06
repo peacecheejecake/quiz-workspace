@@ -3,6 +3,7 @@
 // this list in sync with src/index.ts.
 import {
   useModalLayerOpen,
+  useDragDismiss,
   AccountIcon,
   AlertIcon,
   ArrowLeftIcon,
@@ -14,7 +15,10 @@ import {
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
+  FilterIcon,
+  PlusIcon,
   ChevronUpIcon,
   HistoryIcon,
   SearchIcon,
@@ -22,6 +26,7 @@ import {
   SplitView,
   TrashIcon,
   CloseIcon,
+  GripIcon,
   ConfirmDialog,
   COPY_FEEDBACK_MS,
   CopyButton,
@@ -191,6 +196,7 @@ const numberLabels = [questionNumberLabel(12), questionTitle(null), NO_QUESTION_
 
 export default function Page() {
   void useModalLayerOpen;
+  void useDragDismiss;
   void focusQuestionDotQuietly;
   return (
     <ThemeProvider defaultTheme="light">
@@ -206,6 +212,7 @@ export default function Page() {
             <Badge tone="success">ok</Badge>
             <Button variant="primary">버튼</Button>
             <IconButton label="닫기" icon={<CloseIcon />} />
+            <GripIcon />
             <FocusRing>
               <a href="#x" className={focusRingClassName}>
                 링크
@@ -246,6 +253,9 @@ export default function Page() {
             <CheckIcon />
             <CopyIcon data-ms={copyFeedbackMs} />
             <ChevronDownIcon />
+            <ChevronLeftIcon />
+            <FilterIcon />
+            <PlusIcon />
             <MenuIcon />
             <MinusIcon />
             <MoreIcon />

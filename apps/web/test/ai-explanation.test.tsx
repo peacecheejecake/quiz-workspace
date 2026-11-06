@@ -90,6 +90,8 @@ function stateOf(overrides: Partial<ExplanationState> = {}): ExplanationState {
     available: true,
     can_create: true,
     can_regenerate: false,
+    can_cancel: false,
+    cancelled_id: null,
     explanation: null,
     ...overrides,
   };
@@ -100,6 +102,7 @@ function fakeClient(state: ExplanationState, created: ExplanationState = state) 
     state: vi.fn(async () => state),
     create: vi.fn(async () => created),
     regenerate: vi.fn(async () => created),
+    cancel: vi.fn(async () => created),
     shared: vi.fn(async () => null),
   } satisfies ExplanationClient;
 }
@@ -244,10 +247,13 @@ describe('AIEXPL-01 area states', () => {
     render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
-    const show = await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    const show = await within(area()).findByRole('button', { name: 'AI 해설' });
     expect(show).toHaveAttribute('aria-expanded', 'true');
+    expect(within(area()).getByRole('heading', { name: 'AI 해설', level: 3 })).toContainElement(
+      show,
+    );
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
-    expect(within(area()).queryByRole('button', { name: 'AI 해설' })).toBeNull();
+    expect(within(area()).queryByRole('button', { name: 'AI 해설 보기' })).toBeNull();
     await user.click(show);
     expect(show).toHaveAttribute('aria-expanded', 'false');
     expect(within(area()).queryByText('AI 생성')).toBeNull();
@@ -268,7 +274,7 @@ describe('AIEXPL-01 area states', () => {
     render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
-    await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    await within(area()).findByRole('button', { name: 'AI 해설' });
     expect(within(area()).getByText(/· 버전 2$/)).toBeInTheDocument();
     await user.click(within(area()).getByRole('button', { name: '다시 만들기' }));
     expect(await within(area()).findByRole('alert')).toHaveTextContent(
@@ -300,12 +306,13 @@ describe('AIEXPL-01 area states', () => {
     expect(within(area()).queryByRole('alert')).toBeNull();
   });
 
-  it('feature off and archived: the reason instead of a button', async () => {
+  it('feature off shows nothing, archived the reason instead of a button', async () => {
     const off = fakeClient(stateOf({ available: false, can_create: false }));
     const { unmount } = render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={off} />,
     );
-    expect(await within(area()).findByText(model.EXPL_TEXT.disabled)).toBeInTheDocument();
+    await waitFor(() => expect(within(area()).queryByText(model.EXPL_TEXT.loading)).toBeNull());
+    expect(within(area()).queryByText(model.EXPL_TEXT.disabled)).toBeNull();
     expect(within(area()).queryByRole('button')).toBeNull();
     unmount();
     const archived = fakeClient(stateOf({ can_create: false }));
@@ -342,7 +349,7 @@ describe('AIEXPL-01 sources keep the pinned revision', () => {
         searchClient={{ block } as never}
       />,
     );
-    await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    await within(area()).findByRole('button', { name: 'AI 해설' });
     await user.click(within(area()).getByRole('button', { name: '출처 1' }));
     const doc = '66666666-6666-4666-8666-000000000001';
     await waitFor(() => expect(block).toHaveBeenCalledWith(doc, 'b-1', PINNED));
@@ -446,15 +453,169 @@ describe('AIEXPL-01 streaming', () => {
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
     const region = area();
-    expect(await within(region).findByText('AI 해설을 만드는 중')).toBeInTheDocument();
+    expect((await within(region).findAllByText('작성중...')).length).toBeGreaterThan(0);
     expect(region.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(await within(region).findByText(/정답은 증발/)).toBeInTheDocument();
-    expect(within(region).getByRole('status')).toHaveTextContent('AI 해설을 만드는 중입니다');
+    expect(within(region).getByRole('status')).toHaveTextContent('작성중...');
     api.state.mockResolvedValue(stateOf({ can_create: false, explanation: done }));
     hold.release?.();
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
     expect(region.querySelector('[aria-busy="true"]')).toBeNull();
     expect(within(region).getByRole('status')).toHaveTextContent('AI 해설이 준비되었습니다');
+  });
+});
+
+describe('UX12-EXPLCANCEL 취소', () => {
+  const originalFetch = globalThis.fetch;
+  const live = explanation({ status: 'running', body: null, sources: [], finished_at: null });
+  const liveState = stateOf({ can_create: false, can_cancel: true, explanation: live });
+
+  /** A stream that stays open, or sends `lines` and closes. */
+  function stream(lines?: string) {
+    globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (lines) {
+            controller.enqueue(new TextEncoder().encode(lines));
+            controller.close();
+          }
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')));
+        },
+      });
+      return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+    });
+  }
+
+  beforeEach(() => stream());
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function mount(api: ExplanationClient) {
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+  }
+
+  it('a new one: 취소 beside 작성중..., then only the toolbar button, no alert', async () => {
+    const user = userEvent.setup();
+    const api = fakeClient(liveState, stateOf({ cancelled_id: live.id }));
+    mount(api);
+    const button = await within(area()).findByRole('button', { name: '취소' });
+    expect(button.closest('div')).toHaveTextContent('작성중...');
+    await user.click(button);
+    expect(api.cancel).toHaveBeenCalledWith(target, gate, live.id);
+    const create = await within(area()).findByRole('button', { name: 'AI 해설' });
+    expect(create).toHaveFocus();
+    expect(within(area()).queryByRole('region', { name: 'AI 해설' })).toBeNull();
+    expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다');
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+
+  it('a regeneration: back to the current one, with the focus on its heading', async () => {
+    const user = userEvent.setup();
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      liveState,
+      stateOf({
+        can_create: false,
+        can_regenerate: true,
+        cancelled_id: live.id,
+        explanation: current,
+      }),
+    );
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('heading', { name: 'AI 해설' })).toHaveFocus();
+    expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다');
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+
+  it('no 취소 without can_cancel', async () => {
+    mount(fakeClient({ ...liveState, can_cancel: false }));
+    expect((await within(area()).findAllByText('작성중...')).length).toBeGreaterThan(0);
+    expect(within(area()).queryByRole('button', { name: '취소' })).toBeNull();
+  });
+
+  it('finished first: the result shows and reads as ready, not as cancelled', async () => {
+    const user = userEvent.setup();
+    const done = explanation({ id: live.id });
+    const api = fakeClient(liveState, stateOf({ can_create: false, explanation: done }));
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).toHaveTextContent('AI 해설이 준비되었습니다');
+  });
+
+  it('a stream that ends early and a failed regeneration: never announced as cancelled', async () => {
+    stream('id: 1\nevent: delta\ndata: {"seq":0,"text":"일부"}\n\n');
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+    );
+    api.state.mockResolvedValueOnce(liveState);
+    mount(api);
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).not.toHaveTextContent('취소했습니다');
+  });
+
+  it('a stream that ends early after a cancel elsewhere: announced from the state', async () => {
+    stream('id: 1\nevent: delta\ndata: {"seq":0,"text":"일부"}\n\n');
+    const api = fakeClient(stateOf({ cancelled_id: live.id }));
+    api.state.mockResolvedValueOnce({ ...liveState, can_cancel: false });
+    mount(api);
+    await waitFor(() =>
+      expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다'),
+    );
+  });
+
+  it('a regeneration that failed before the click is not announced as cancelled', async () => {
+    const user = userEvent.setup();
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      liveState,
+      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+    );
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).not.toHaveTextContent('취소했습니다');
+  });
+
+  it('a refused cancel says so and keeps the state', async () => {
+    const user = userEvent.setup();
+    const api = fakeClient(liveState);
+    api.cancel.mockRejectedValueOnce(new client.ExplanationApiError('insufficientRole', 403));
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByRole('alert')).toHaveTextContent(
+      model.EXPL_TEXT.cancelFailed,
+    );
+  });
+
+  it('cancelled by someone else: the stream error shows nothing and no alert', async () => {
+    stream('id: 1\nevent: error\ndata: {"code":"cancelled"}\n\n');
+    const api = fakeClient(stateOf());
+    api.state.mockResolvedValueOnce({ ...liveState, can_cancel: false });
+    mount(api);
+    await waitFor(() =>
+      expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다'),
+    );
+    expect(await within(area()).findByRole('button', { name: 'AI 해설' })).toBeInTheDocument();
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('AIEXPL-01 client cancel', () => {
+  it('names the explanation next to the gate', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify(stateOf()), { status: 200 }),
+    );
+    await client.createExplanationClient(fetchImpl).cancel(target, gate, 'e-1');
+    const [path, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(path).toBe(`/api/questions/${QID}/ai-explanation/cancel`);
+    expect(JSON.parse(String(init?.body))).toEqual({ ...gate, explanation_id: 'e-1' });
   });
 });
 
@@ -476,12 +637,12 @@ describe('AIEXPL-01 shared (guest)', () => {
     } as never);
     render(<SharedAiExplanation shareId={WS} questionId={QID} options={OPTIONS} client={some} />);
     await screen.findByRole('region', { name: 'AI 해설' });
-    expect(within(area()).getByRole('button', { name: 'AI 해설 보기' })).toHaveAttribute(
+    expect(within(area()).getByRole('button', { name: 'AI 해설' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
-    for (const name of ['AI 해설', '다시 만들기', '출처 1']) {
+    for (const name of ['다시 만들기', '출처 1']) {
       expect(within(area()).queryByRole('button', { name })).toBeNull();
     }
     expect(within(area()).queryByText(/버전/)).toBeNull();

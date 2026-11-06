@@ -78,6 +78,10 @@
   font-weight: var(--font-weight-semibold);
 }
 
+.optionGridHead {
+  padding-inline: calc(1px + var(--space-3));
+}
+
 .optionText {
   flex: 1;
   min-width: 0;

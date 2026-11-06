@@ -1,5 +1,5 @@
-/* SEARCH-01 search forms (UX7-SEARCH): the workspace home header's 문제 search (box + "설정") and
-   the 본문 search form (box + icon submit + "설정") at the top of the 본문 search page (SEARCH-02,
+/* SEARCH-01 search forms (UX7-SEARCH): the workspace home's 문제 search (검색 · box · 필터,
+   UX12-FILTER) and the 본문 search form (box + icon submit + "설정") at the top of the 본문 search page (SEARCH-02,
    UX9). Semantic tokens only. */
 
 /* The home header's search column: the 문제 search (the space under it stays empty, UX9). */
@@ -33,12 +33,90 @@
   min-width: 0;
 }
 
+/* 검색 · box · 필터 (UX12-FILTER). The middle column opens, so the gap widens and 필터 moves over;
+   the buttons' columns are fixed because auto columns would take the free space of a 0fr one. */
+.searchLine {
+  display: grid;
+  grid-template-columns: var(--control-height-md) 0fr var(--control-height-md);
+  column-gap: var(--space-1);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  transition:
+    grid-template-columns var(--duration-panel-enter) ease,
+    column-gap var(--duration-panel-enter) ease;
+}
+
+.searchLine[data-open] {
+  grid-template-columns: var(--control-height-md) 1fr var(--control-height-md);
+  column-gap: var(--space-2);
+}
+
+/* Clips the box while it opens; the padding keeps its focus ring inside the clip. */
+.searchSlot {
+  min-width: 0;
+  margin: calc(-1 * var(--space-1));
+  padding: var(--space-1);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--duration-panel-enter) ease;
+}
+
+.searchLine[data-open] > .searchSlot {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .searchLine,
+  .searchSlot {
+    transition: none;
+  }
+}
+
+/* Active filters are out of sight in the popover, so the button says so (and its description). */
+.filterButton {
+  position: relative;
+}
+
+.filterButton[data-active]::after {
+  content: '';
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+@media (forced-colors: active) {
+  .filterButton[data-active]::after {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
+
+/* The kit caps a popover at 360px and sizes it to its content. */
+.filterPopover.filterPopover {
+  width: 360px;
+}
+
+/* One class is not enough to lift the kit's cap on a phone. */
+@media (width < 768px) {
+  .filterPopover.filterPopover {
+    width: calc(100vw - 2 * var(--space-4));
+    max-width: calc(100vw - 2 * var(--space-4));
+  }
+}
+
 /* The small "설정" text button next to a search box. */
 .settingsToggle {
   flex: none;
   padding: var(--space-1);
   box-sizing: border-box;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
@@ -52,6 +130,12 @@
 
 .settingsToggle:hover {
   color: var(--color-text-primary);
+}
+
+@media (hover: hover) {
+  .settingsToggle:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .settingsToggle[aria-expanded='true'] {
@@ -75,7 +159,7 @@
   font-weight: var(--font-weight-semibold);
 }
 
-/* A row of selects in the 문제 settings popover. */
+/* A row of selects in the 필터 popover. */
 .optionRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));

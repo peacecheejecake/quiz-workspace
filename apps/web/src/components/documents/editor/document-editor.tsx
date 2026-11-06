@@ -660,9 +660,12 @@ export function DocumentEditor({
     />
   ) : undefined;
 
-  // DOCSUM-01: the summary lives in a panel on the workspace home.
+  // DOCSUM-01: the summary lives in a panel on the workspace home; where summaries cannot be
+  // created, only a stored one is offered (UX12-AIOFF-AC01).
   const summaryLink =
-    ready && document.document_type === 'book' ? (
+    ready &&
+    document.document_type === 'book' &&
+    (document.summary_available || document.has_summary) ? (
       <Button asChild>
         <Link href={summaryPanelPath(workspaceId, documentId)}>요약</Link>
       </Button>

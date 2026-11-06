@@ -1,0 +1,64 @@
+[
+  {
+    "name": "a table between two sentences",
+    "stem": "옳은 것은? ( )\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n위에서 고르면?",
+    "normalized": "옳은 것은? ( )\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n위에서 고르면?",
+    "segments": [
+      [false, "옳은 것은? ( )"],
+      [true, "| a | b |\n| --- | --- |\n| 1 | 2 |"],
+      [false, "위에서 고르면?"]
+    ]
+  },
+  {
+    "name": "labels in cells are not items, labels before the table are",
+    "stem": "옳은 것은? (가) 갑 (나) 을\n\n| (가) x | (나) y |\n| --- | --- |\n| ㄱ. 1 | ㄴ. 2 |",
+    "normalized": "옳은 것은?\n\n(가) 갑\n(나) 을\n\n| (가) x | (나) y |\n| --- | --- |\n| ㄱ. 1 | ㄴ. 2 |",
+    "segments": [
+      [false, "옳은 것은? (가) 갑 (나) 을"],
+      [true, "| (가) x | (나) y |\n| --- | --- |\n| ㄱ. 1 | ㄴ. 2 |"]
+    ]
+  },
+  {
+    "name": "a row with another cell count is no table",
+    "stem": "표를 보시오.\n\n| a | b |\n| --- | --- |\n| 1 | 2 | 3 |",
+    "normalized": "표를 보시오.\n\n| a | b |\n| --- | --- |\n| 1 | 2 | 3 |",
+    "segments": [[false, "표를 보시오.\n\n| a | b |\n| --- | --- |\n| 1 | 2 | 3 |"]]
+  },
+  {
+    "name": "no delimiter row is no table",
+    "stem": "표를 보시오.\n\n| a | b |\n| 1 | 2 |",
+    "normalized": "표를 보시오.\n\n| a | b |\n| 1 | 2 |",
+    "segments": [[false, "표를 보시오.\n\n| a | b |\n| 1 | 2 |"]]
+  },
+  {
+    "name": "an escaped pipe stays in its cell",
+    "stem": "| a\\|b | c\\\\ |\n| --- | --- |\n| 1 | 2 |",
+    "normalized": "| a\\|b | c\\\\ |\n| --- | --- |\n| 1 | 2 |",
+    "segments": [[true, "| a\\|b | c\\\\ |\n| --- | --- |\n| 1 | 2 |"]]
+  },
+  {
+    "name": "single line breaks around a table, header only",
+    "stem": "앞 문장\n| a |\n| --- |\n뒤 문장",
+    "normalized": "앞 문장\n\n| a |\n| --- |\n\n뒤 문장",
+    "segments": [
+      [false, "앞 문장"],
+      [true, "| a |\n| --- |"],
+      [false, "뒤 문장"]
+    ]
+  },
+  {
+    "name": "two tables in a row",
+    "stem": "| a |\n| --- |\n\n| b |\n| --- |",
+    "normalized": "| a |\n| --- |\n\n| b |\n| --- |",
+    "segments": [
+      [true, "| a |\n| --- |"],
+      [true, "| b |\n| --- |"]
+    ]
+  },
+  {
+    "name": "no table",
+    "stem": "옳은 것은? A | B",
+    "normalized": "옳은 것은? A | B",
+    "segments": [[false, "옳은 것은? A | B"]]
+  }
+]

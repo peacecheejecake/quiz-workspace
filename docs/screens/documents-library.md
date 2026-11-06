@@ -1,7 +1,7 @@
 # DOC-01 — 문서 관리 (Documents 목록·PDF 업로드)
 
 **상태:** 확정 화면 요구사항 v1.4 · UX1·UX2 개정 2026-10-19 · UX3c 개정 2026-10-20 (문서 관리 floating dialog) · UX6-UPLOAD 개정 2026-10-28 (모든 PDF를 한 곳에서 여러 개 올림, 자동 분류·종류 badge·`종류 변경`) · UX6-PROGRESS 개정 2026-10-28 (단계 진행 표시) · UX7-DOCS 개정 2026-11-01 (문제 PDF 관리를 문서 관리로 통합) · UX7-DOCS-2 개정 2026-11-01 (보기 권한에도 `문제` 버튼, 종류 필터 없음 확정)
-**Route:** `/workspaces/:workspaceId?panel=documents` (Workspace header `문서 n` 버튼이 여는 non-modal floating dialog "문서 관리" — UX9-SPEC부터 modal, HOMEDLG-01; 이전 `/workspaces/:workspaceId/documents`와 폐기된 문제 PDF 관리 dialog `?panel=question-pdfs`(UX7-DOCS)는 여기로 redirect)
+**Route:** `/workspaces/:workspaceId?panel=documents` (Workspace header `문서 N` 메뉴의 `문서 관리` 항목이 여는 — UX12 HOME-4 이전에는 `문서 n` 버튼, [UX12-HEADER](ux12-home-header.md) — non-modal floating dialog "문서 관리" — UX9-SPEC부터 modal, HOMEDLG-01; 이전 `/workspaces/:workspaceId/documents`와 폐기된 문제 PDF 관리 dialog `?panel=question-pdfs`(UX7-DOCS)는 여기로 redirect)
 **테스트:** `tests/e2e/documents/documents-library.spec.ts`
 **연계:** [전체 아키텍처](../architecture.md), [디자인 시스템](../design-system.md), [E2E 규칙](../e2e-strategy.md)
 
@@ -17,7 +17,7 @@
   - **목록과 badge:** 목록은 Workspace의 모든 PDF(교재·문제지·교재+문제)를 보인다. 각 행의 제목 오른쪽, 상태 badge 앞에 종류 badge를 글자로 보인다: `교재` · `문제지` · `교재+문제`. 자동 분류를 기다리는 동안(처리 중이고 종류가 아직 없음, API `kind = null`)은 종류 badge 대신 "분석 중"이며, 분류되지 못하고 실패한 행은 종류 badge가 없다. 종류는 색이 아니라 글자로 전달한다. 문제가 있는 행(종류가 문제지·교재+문제이거나 추출 run이 있음)에는 QIMPORT-01과 같은 규칙으로 `문제 검토` 링크(추출 run이 있으면, `latest_import_id`) 또는 `문제 추출` 버튼(편집 권한, 준비 완료, run 없음)을 보인다. 교재(run 없음)에는 둘 다 없다.
   - **`종류 변경` (AC08):** 편집 권한자에게 준비 완료 행마다 `종류 변경` 메뉴 버튼(접근성 이름 "<제목> 종류 변경", Radix DropdownMenu, 키보드로 열고 고름)이 있다. 항목은 `교재`·`문제지`·`교재+문제`이고 현재 종류가 선택(checked)으로 표시된다. 고르면 바로 `PATCH /documents/{id}`(`kind`)로 저장되고 행·badge·`문서 n`이 갱신된다. 저장하는 동안 그 행의 메뉴 버튼은 비활성(`aria-disabled`, 초점은 버튼에 남음)이고 "저장 중"을 보이므로 다른 종류를 이어서 고를 수 없다. 저장이 실패하면(거절·네트워크 오류 등) 목록을 서버에서 다시 읽어 badge가 서버의 종류를 보인 뒤 이유를 알린다(`document-in-use`·`document-not-ready`는 각자의 이유, 그 밖에는 "종류를 바꾸지 못했습니다. 다시 시도하세요."). 사람이 고른 종류는 서버가 다시 분류하지 않는다(이후 교정 revision 포함). `문제지`·`교재+문제`로 바꾸면 그 PDF에 추출 run이 없을 때 추출을 시작한다(`문제 검토`가 생김). `교재`로 바꿔도 이미 추출된 초안·등록된 문제는 지우지 않는다(`문제 검토`는 남는다). 교재(교재+문제 포함)를 `문제지`로 바꾸면 검색·출제 근거·챕터 매칭에서 빠지므로, 그 PDF의 챕터 아래 등록된 문제나 등록 대기 초안(서버 등록이 진행 중인 초안 포함)이 있거나 문제의 출처로 인용되면 서버가 거절하고(409 `document-in-use`) 메뉴 아래에 이유 "이 교재의 챕터나 출처를 쓰는 문제가 있어 문제지로 바꿀 수 없습니다."를 alert로 보인다. 처리 중·실패한 행에는 메뉴가 없다(서버도 409 `document-not-ready`). 보기 권한자에게는 메뉴가 없다(서버 403).
   - **`문서 n`:** header의 `문서 n`과 홈의 문서 수는 본문이 있는 PDF(종류 `교재`·`교재+문제`)만 센다. `문제지`와 아직 분류되지 않은("분석 중") PDF는 세지 않는다.
-- **텍스트 내보내기·요약 (DOCSUM-SPEC 2026-10-29):** 준비 완료 행에 `텍스트 내보내기` 아이콘 메뉴(모든 종류, 모든 구성원; 동작과 AC는 [DOC-03](documents-text-export.md))와, `교재`·`교재+문제` 행에 `요약` 버튼(모든 구성원; 요약 panel `?panel=document-summary&document=<id>`, 동작과 AC는 [DOCSUM-01](documents-summary.md))이 생긴다. 행 순서: 제목 · 종류 badge · 상태 badge … `문제 검토`/`문제 추출` · `종류 변경` · `요약` · `텍스트 내보내기` · 삭제. 이 화면의 기존 AC는 바뀌지 않는다.
+- **텍스트 내보내기·요약 (DOCSUM-SPEC 2026-10-29):** 준비 완료 행에 `텍스트 내보내기` 아이콘 메뉴(모든 종류, 모든 구성원; 동작과 AC는 [DOC-03](documents-text-export.md))와, `교재`·`교재+문제` 행에 `요약` 버튼(모든 구성원; 기능이 꺼진 환경에서는 저장된 요약이 있는 문서만; 요약 panel `?panel=document-summary&document=<id>`, 동작과 AC는 [DOCSUM-01](documents-summary.md))이 생긴다. 행 순서: 제목 · 종류 badge · 상태 badge … `문제 검토`/`문제 추출` · `종류 변경` · `요약` · `텍스트 내보내기` · 삭제. 이 화면의 기존 AC는 바뀌지 않는다.
 
 - **문제 PDF 관리 통합 (UX7-DOCS 2026-11-01, 사용자: "문제 Pdf 관리를 문서 관리로 통합"):** 문서 관리가 문제 PDF를 다루는 유일한 곳이다. 이전 "문제 PDF 관리" dialog(QIMPORT-01, `문제` 메뉴 › `PDF 관리`, `?panel=question-pdfs`)는 없어졌다 — 그 dialog는 UX6-UPLOAD부터 업로드가 없고 문제 있는 행(문제지·교재+문제·추출 run 있음)만 문서 관리와 같은 행 형식으로 보이며 `문제 검토`/`문제 추출`을 주던 부분 목록이었다.
   - **행 동작:** 문제 있는 행의 `문제 검토` 링크(모든 구성원, `latest_import_id`의 가져오기 페이지 `?document=<id>`)와 `문제 추출` 버튼(편집 권한, 준비 완료, run 없음 — 누르면 추출을 시작하고 그 가져오기 페이지로 이동, 시작 실패는 dialog 안의 alert)은 문제 PDF 관리와 같은 규칙(QIMPORT-01 "행 동작")으로, 이미 정한 행 순서(DOCSUM-SPEC: `문제 검토`/`문제 추출` · `종류 변경` · `요약` · `텍스트 내보내기` · 삭제 또는 업로드 취소) 그대로 동작 줄 맨 앞에 둔다. 진행·처리 단계·실패 표시는 문서 관리 행의 것(AC02·AC05, UX6-PROGRESS)이 그대로 쓰인다 — 문제 PDF 관리도 같은 행을 보였으므로 따로 추가할 상태는 없다. 추출 자체의 진행·검토는 가져오기 페이지에 남는다.
@@ -60,7 +60,7 @@
 ### DOC-01-AC06
 
 - **Given:** 교재 문서, 문제지, 교재+문제 PDF가 함께 등록된 Workspace 홈
-- **When:** header의 `문서 n` 버튼을 누름
+- **When:** header의 `문서 N` 메뉴에서 `문서 관리`를 고름
 - **Then:** "문서 관리" non-modal floating dialog(UX9-SPEC 사용자 결정 2026-11-02 D3: modal — [HOMEDLG-01](home-dialogs.md); test는 UX9-MODAL이 고침)가 열리고(`?panel=documents`) 목록은 세 PDF를 모두 보이며 각 행에 종류 badge(`교재`/`문제지`/`교재+문제`, 글자)가 있다. n은 본문이 있는 PDF(교재와 교재+문제, 여기서는 2)만 센다(UX6-UPLOAD 2026-10-28; 이전 UX3c는 책 문서만 나열하고 badge 없음). 페이지 제목·설명은 없고, 편집 권한이 있으면 점선 Dropzone이 보인다. 상태 badge(예: "준비 완료")는 종류 badge 오른쪽, 메타 줄은 `<날짜 시각> · <용량>`("수정" 글자·파일 이름 없음), 파일 이름은 제목의 tooltip으로만 보인다. 삭제는 휴지통 아이콘 버튼(접근성 이름 "<제목> 삭제")이고 확인 후 목록이 줄어들며, 지운 PDF가 교재(또는 교재+문제)면 `문서 n`도 함께 줄어든다(UX3c).
 
 ### DOC-01-AC07

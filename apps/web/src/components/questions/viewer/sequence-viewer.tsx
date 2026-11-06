@@ -81,6 +81,7 @@ import {
   type GradeResult,
   type PracticeAnswer,
 } from './practice-model';
+import { NavButton } from './nav-button';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
 import {
   QuestionBody,
@@ -90,7 +91,12 @@ import {
 } from './question-body';
 import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+  type QuestionSourceControls,
+} from './question-source-preview';
 import {
   EMPTY_RANGE_FILTERS,
   allIds,
@@ -208,7 +214,7 @@ export interface SequenceViewerProps {
   /** Saving a position's favorite / retry flags failed (bank): the toggles rolled back. */
   readonly onFlagsFailed?: (message: string) => void;
   /** Header controls after the study toggles (bank: the screen's 문제 관리 / 문제 정보 menu). */
-  readonly headerExtra?: (question: RunQuestionInfo) => ReactNode;
+  readonly headerExtra?: (question: RunQuestionInfo, source: QuestionSourceControls) => ReactNode;
   /** A question edited, archived or deleted meanwhile: its position is read again. */
   readonly invalidated?: Invalidation | null;
   readonly client?: RunClient;
@@ -420,7 +426,7 @@ export function SequenceViewer({
               onChange={solve.changeFlags}
             />
           ) : null}
-          {headerExtra?.(info)}
+          {headerExtra?.(info, { onShowSource: solve.onShowSource })}
         </>
       );
     }
@@ -463,6 +469,7 @@ export function SequenceViewer({
       }}
       headerActions={header}
       footer={footer ? <div className={styles.footer}>{footer}</div> : undefined}
+      scrollKey={stepKey}
     >
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
@@ -723,6 +730,12 @@ function useSolveStep({
   const itemKey = active && runId ? `${runId}:${position}:${itemSeq}:${resetVersion}` : null;
   const itemLoad = useKeyedLoad(itemKey, () => client.getItem(runId ?? '', position));
   const item = itemLoad?.status === 'ready' ? itemLoad.data : null;
+  // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
+  const sourcePreview = useQuestionSource(
+    item?.question_id
+      ? { kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }
+      : null,
+  );
   const returnable = !!run && !!item?.available && !!item.question_id;
   useEffect(() => {
     if (active && runId && returnable)
@@ -923,11 +936,16 @@ function useSolveStep({
   }
 
   const formId = useId();
-  const resultRef = useRef<HTMLParagraphElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  const submittedHere = useRef<string | null>(null);
   useEffect(() => {
-    // The submit button leaves: keep focus in the panel, on the result.
-    if (outcomeId) resultRef.current?.focus();
+    // The submit button leaves: keep focus in the panel, on the result. Coming back to a submitted
+    // position stays at the top (UX12-VIEW-AC06).
+    if (outcomeId && outcomeId === submittedHere.current) {
+      submittedHere.current = null;
+      resultRef.current?.focus();
+    }
   }, [outcomeId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -957,6 +975,7 @@ function useSolveStep({
         return;
       }
     }
+    if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
       result.ok
         ? { busy: null, outcome: result.data }
@@ -1007,6 +1026,7 @@ function useSolveStep({
       footer: undefined,
       question: null,
       attachment: null,
+      onShowSource: null,
       flags: null,
       changeFlags: () => undefined,
     };
@@ -1162,12 +1182,7 @@ function useSolveStep({
             )}
           </div>
         ) : null}
-        {item.question_id ? (
-          // QSRC-01: bank questions and `보기 섞기` mock questions with an imported source.
-          <QuestionSourcePreview
-            target={{ kind: source === 'mock' ? 'mock' : 'question', id: item.question_id }}
-          />
-        ) : null}
+        {item.question_id ? <QuestionSourceButton source={sourcePreview} /> : null}
         <form
           id={formId}
           className={styles.form}
@@ -1232,15 +1247,15 @@ function useSolveStep({
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
-        {position > 1 ? (
-          <Button size="sm" disabled={holding} onClick={() => go(position - 1)}>
-            이전
-          </Button>
-        ) : null}
+        <NavButton
+          direction="previous"
+          label="이전"
+          unavailable={position <= 1 || holding}
+          onClick={() => go(position - 1)}
+        />
         {/* Always a way forward, also while the position loads (it is skipped then). */}
         {total === null ? null : last ? (
           <Button
-            size="sm"
             variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
             disabled={holding}
             onClick={toResults}
@@ -1248,13 +1263,15 @@ function useSolveStep({
             결과 보기
           </Button>
         ) : !item || !run || canAnswer ? (
-          <Button size="sm" disabled={holding} onClick={forward}>
-            건너뛰기
-          </Button>
+          <NavButton direction="next" label="건너뛰기" unavailable={holding} onClick={forward} />
         ) : (
-          <Button size="sm" variant="primary" disabled={holding} onClick={forward}>
-            다음
-          </Button>
+          <NavButton
+            direction="next"
+            label="다음"
+            variant="primary"
+            unavailable={holding}
+            onClick={forward}
+          />
         )}
       </nav>
     </>
@@ -1292,6 +1309,8 @@ function useSolveStep({
       <>
         {progress}
         {content}
+        {/* Outside `content`: the header menu opens it in every state of the position. */}
+        <QuestionSourceDialog source={sourcePreview} />
         {retryTarget && retryTarget.key === `${runId}:${position}` && active ? (
           <SeparateRetry
             workspaceId={workspaceId}
@@ -1313,6 +1332,7 @@ function useSolveStep({
     footer,
     question,
     attachment,
+    onShowSource: sourcePreview.onShowSource,
     flags: shownFlags,
     lastGraded: lastGraded && lastGraded.questionId === questionId ? lastGraded.result : null,
     pendingGrading: lastGraded?.questionId === questionId && lastGraded.pending,

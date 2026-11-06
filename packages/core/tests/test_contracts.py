@@ -28,6 +28,7 @@ from book_core.contracts import (
     SourceEvidence,
     SourceLocation,
     TableContent,
+    TableSpan,
     TextSpan,
     ValidationIssue,
     ValidationSeverity,
@@ -389,3 +390,36 @@ def test_draft_with_error_validation_cannot_be_approved() -> None:
     with pytest.raises(ValidationError, match="cannot be approved"):
         _generated_draft(validations=(error,), review_status=ReviewStatus.APPROVED)
     assert _generated_draft(validations=(error,)).has_blocking_issues
+
+
+def _grid() -> tuple[tuple[str, ...], ...]:
+    return (("a", "a", "b"), ("a", "a", "c"), ("d", "e", "c"))
+
+
+def test_table_spans_stay_inside_the_grid_and_apart() -> None:
+    block = TableSpan(row=0, col=0, row_span=2, col_span=2)
+    table = TableContent(rows=_grid(), spans=(block, TableSpan(row=1, col=2, row_span=2)))
+    assert TableContent.model_validate_json(table.model_dump_json()) == table
+    assert table.row_cells() == (("a", "b"), ("c",), ("d", "e"))
+    with pytest.raises(ValidationError, match="more than one cell"):
+        TableSpan(row=0, col=0)
+    with pytest.raises(ValidationError, match="exceeds the grid"):
+        TableContent(rows=_grid(), spans=(TableSpan(row=2, col=2, row_span=2),))
+    with pytest.raises(ValidationError, match="exceeds the grid"):
+        TableContent(rows=_grid(), spans=(TableSpan(row=0, col=2, col_span=2),))
+    with pytest.raises(ValidationError, match="overlap"):
+        TableContent(rows=_grid(), spans=(block, TableSpan(row=1, col=1, col_span=2)))
+
+
+def test_table_without_spans_dumps_as_before_spans_existed() -> None:
+    """Stored revisions have no `spans` key: their dumps and content hashes must not change."""
+    table = TableContent(rows=_grid(), header_rows=1)
+    assert table.model_dump() == {"rows": _grid(), "header_rows": 1}
+    assert json.loads(table.model_dump_json()) == {
+        "rows": [list(row) for row in _grid()],
+        "header_rows": 1,
+    }
+    merged = TableContent(rows=_grid(), spans=(TableSpan(row=2, col=0, col_span=2),))
+    assert merged.model_dump(mode="json")["spans"] == [
+        {"row": 2, "col": 0, "row_span": 1, "col_span": 2}
+    ]

@@ -96,6 +96,7 @@ export function QuestionRangePicker({
             <Button
               size="sm"
               variant="ghost"
+              borderless
               aria-expanded={filtersOpen}
               aria-controls={filterId}
               onClick={() => setFiltersOpen((open) => !open)}
@@ -287,6 +288,7 @@ function ChapterGroup({
         <Button
           size="sm"
           variant="ghost"
+          borderless
           aria-label={`${group.title} 펼치기`}
           tabIndex={0}
           aria-expanded={expanded}

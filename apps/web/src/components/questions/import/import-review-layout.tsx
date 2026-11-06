@@ -227,11 +227,11 @@ export function ImportReviewLayout({
   /** Re-reads the documents and the newest runs (and the running extractions' progress). */
   const refreshList = useCallback(async () => {
     try {
-      const [docs, latest] = await Promise.all([
+      const [list, latest] = await Promise.all([
         documentsClient.listDocuments(workspaceId),
         importClient.listRuns(workspaceId, REVIEW_RUNS).catch(() => null),
       ]);
-      setDocuments(docs);
+      setDocuments(list.items);
       if (latest) setRuns(latest);
       setListFailed(false);
       const working = (latest ?? []).filter(

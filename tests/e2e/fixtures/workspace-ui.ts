@@ -37,6 +37,8 @@
 //              name with 원문/텍스트) whose current block carries aria-current="true"; block
 //              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
 //              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
+//   UX12-FILTER  under the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
+//              문제 search box, and icon button "필터" → popover "필터" (comboboxes "챕터"/"유형").
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -78,18 +80,29 @@ export function searchPath(workspaceId: string): string {
   return `/workspaces/${workspaceId}/search`;
 }
 
+/** The home's one menu (UX12-HEADER): named `문서 N` like its button (Radix labels it so). */
+export const HOME_MENU_NAME = /^(문서|documents)\s*\d+$/i;
+
 export const homeUi = {
   /** The header's 문제 search (UX7-SEARCH; the unified search before). */
   header: (page: Page) =>
     main(page).getByRole('search', { name: /^(문제 검색|question search|search questions)$/i }),
-  documentsButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문서|documents)\s*\d+$/i }),
+  /**
+   * The sticky line's `문서 N` menu button. It opens the menu, not the 문서 관리 dialog: use
+   * `openDocuments` for that. The name stays for what the old button was used for: its count, its
+   * place and focus coming back to it.
+   */
+  documentsButton: (page: Page) => main(page).getByRole('button', { name: HOME_MENU_NAME }),
   historyButton: (page: Page) => main(page).getByRole('button', { name: /^(이력|history)$/i }),
   shareButton: (page: Page) => main(page).getByRole('button', { name: /^(공유하기|share)$/i }),
-  /** The header's `문제` menu button (UX4). Its menu is portalled to <body>. */
-  questionMenuButton: (page: Page) =>
-    main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i }),
-  questionMenu: (page: Page) => page.getByRole('menu', { name: /^(문제 메뉴|question menu)$/i }),
+  /** The same `문서 N` button, for the `문제` items that moved into its menu (UX12-HEADER). */
+  questionMenuButton: (page: Page) => homeUi.documentsButton(page),
+  /** The `문서 N` menu, portalled to <body>: open it with `openMenu`. */
+  questionMenu: (page: Page) => page.getByRole('menu', { name: HOME_MENU_NAME }),
+  openMenu: (page: Page, press: MenuPress = 'click') => openHomeMenu(page, press),
+  /** Opens the 문서 관리 dialog through the `문서 N` menu (UX12-HEADER). */
+  openDocuments: (page: Page, press: MenuPress = 'click') =>
+    chooseQuestionMenu(page, 'documents', press),
   questionMenuItem: (page: Page, item: QuestionMenuItem) =>
     homeUi.questionMenu(page).getByRole('menuitem', { name: QUESTION_MENU_ITEMS[item] }),
   dialog: (page: Page, name: RegExp) => main(page).getByRole('dialog', { name }),
@@ -99,34 +112,34 @@ export const homeUi = {
   /** The retired 문제 생성 dialog (QGEN-RM): only ever expected to be absent. */
   generateDialog: (page: Page) => homeUi.dialog(page, /^(문제 생성|generate questions?)$/i),
   shareDialog: (page: Page) => homeUi.dialog(page, /^(링크 공유|share link)$/i),
-  /** The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12, no button). */
+  /**
+   * The 문제 search box: filters the heatmap as you type (SEARCH-01-AC12). Closed by default
+   * (UX12-FILTER): `openQuestionSearch` first, unless the URL has `q`.
+   */
   questionSearch: (page: Page) =>
     homeUi.header(page).getByRole('searchbox', {
       name: /^(문제 검색|question search|search questions)$/i,
     }),
+  /** The button that opens the box; named 검색 닫기 while it is open (UX12-FILTER). */
+  questionSearchButton: (page: Page) =>
+    homeUi.header(page).getByRole('button', { name: /^(검색|search|검색 닫기|close search)$/i }),
   /** The status message under the 문제 search (why it is disabled). */
   questionSearchMessage: (page: Page) => homeUi.header(page).getByRole('status'),
   /** The home's retired "본문 검색" disclosure button (SEARCH-01-AC10, retired by UX9). */
   contentSearchToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(본문 검색|body search|content search)$/i }),
-  /** The home header's link to the 본문 search page (SEARCH-02, UX9). */
-  contentSearchLink: (page: Page) =>
-    main(page).getByRole('link', { name: /^(본문 검색|body search|content search)$/i }),
+  /** The 본문 search page's link in the `문서 N` menu (SEARCH-02, UX12-HEADER): open the menu first. */
+  contentSearchLink: (page: Page) => homeUi.questionMenuItem(page, 'contentSearch'),
   /** The 본문 search form (on the 본문 search page since UX9). */
   contentSearch: (page: Page) =>
     main(page).getByRole('search', { name: /^(본문 검색|body search|content search)$/i }),
   /** The status message of the 본문 search (why its button is disabled). */
   contentSearchMessage: (page: Page) => homeUi.contentSearch(page).getByRole('status'),
-  /** The "설정" text button of a search; it opens that search's settings popover. */
+  /** The button of a search's settings popover: 필터 on the home, "본문 설정" for the 본문 search. */
   searchSettingsButton: (page: Page, scope: SearchScopeName) =>
     main(page).getByRole('button', { name: SCOPE_SETTINGS_BUTTONS[scope] }),
   searchSettings: (page: Page, scope: SearchScopeName) =>
-    scope === 'questions'
-      ? main(page)
-          .getByRole('search', { name: /문제 검색|question search/i })
-          .locator(':scope > div')
-          .nth(1)
-      : page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
+    page.getByRole('dialog', { name: SCOPE_SETTINGS[scope] }),
   statusFilterToggle: (page: Page) =>
     main(page).getByRole('button', { name: /^(상태 필터|status filter)$/i }),
   statusFilters: (page: Page) =>
@@ -135,11 +148,11 @@ export const homeUi = {
 
 export type SearchScopeName = 'questions' | 'body';
 const SCOPE_SETTINGS_BUTTONS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(검색 설정|search settings)$/i,
+  questions: /^(필터|filters?)$/i,
   body: /^(본문 설정|body settings|content settings)$/i,
 };
 const SCOPE_SETTINGS: Readonly<Record<SearchScopeName, RegExp>> = {
-  questions: /^(문제 검색 설정|question search settings)$/i,
+  questions: /^(필터|filters?)$/i,
   body: /^(본문 검색 설정|body search settings|content search settings)$/i,
 };
 
@@ -148,12 +161,17 @@ type QuestionMenuItem =
   | 'create'
   | 'generate'
   | 'duplicates'
+  | 'documents'
+  | 'contentSearch'
   | 'redistribution'
   | 'inactive'
   | 'mockExams'
   | 'practice'
   | 'ask';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
+  /** UX12-HEADER: every member, like 본문 검색 below. */
+  documents: /^(문서 관리|documents)$/i,
+  contentSearch: /^(본문 검색|body search|content search)$/i,
   /** Retired by UX7-DOCS: only ever expected to be absent. */
   pdfs: /^(pdf 관리|manage pdfs?)$/i,
   create: /^(직접 추가|add question)$/i,
@@ -179,8 +197,10 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
  */
 const EDITOR_ITEMS = ['create', 'duplicates', 'redistribution'] as const;
 
-/** Every `문제` menu item in order (MOCK-SYNC, QOV-01 7). */
-const QUESTION_MENU_ORDER = [
+/** Every `문서 N` menu item in order (UX12-HEADER). */
+export const QUESTION_MENU_ORDER = [
+  QUESTION_MENU_ITEMS.documents,
+  QUESTION_MENU_ITEMS.contentSearch,
   QUESTION_MENU_ITEMS.create,
   QUESTION_MENU_ITEMS.duplicates,
   QUESTION_MENU_ITEMS.redistribution,
@@ -213,7 +233,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
   // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
   // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
-  for (const item of ['inactive'] as const) {
+  for (const item of ['documents', 'contentSearch', 'inactive'] as const) {
     await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
   }
   await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
@@ -226,11 +246,11 @@ export async function expectReadOnlyQuestionMenu(
     await expect(el).toHaveAccessibleDescription(text);
   }
   await expect(menu).toHaveAccessibleDescription(text);
-  // The arrow keys skip the disabled items (landing on 보관·초안 문제); Escape returns to the button.
+  // The arrow keys skip the disabled items (문서 관리 → 본문 검색 → 보관·초안 문제); Escape returns to
+  // the button.
   await page.keyboard.press('ArrowDown');
-  for (const item of EDITOR_ITEMS) {
-    await expect(homeUi.questionMenuItem(page, item)).not.toBeFocused();
-  }
+  await page.keyboard.press('ArrowDown');
+  await expect(homeUi.questionMenuItem(page, 'inactive')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(button).toBeFocused();
@@ -257,28 +277,52 @@ export async function expectReadOnlyQuestionMenu(
   }
 }
 
-/** Opens the header's `문제` menu and chooses `item` (UX4). */
-export async function chooseQuestionMenu(page: Page, item: QuestionMenuItem): Promise<void> {
+type MenuPress = 'click' | 'tap';
+
+/** Opens the `문서 N` menu; a press lost to a page still hydrating is pressed again. */
+async function openHomeMenu(page: Page, press: MenuPress): Promise<void> {
+  const menu = homeUi.questionMenu(page);
+  await expect(async () => {
+    if (!(await menu.isVisible())) await homeUi.questionMenuButton(page)[press]();
+    await expect(menu).toBeVisible({ timeout: 2_000 });
+  }).toPass();
+}
+
+/** Opens the header's `문서 N` menu and chooses `item` (UX12-HEADER). */
+export async function chooseQuestionMenu(
+  page: Page,
+  item: QuestionMenuItem,
+  press: MenuPress = 'click',
+): Promise<void> {
   if (item === 'mockExams') {
     const url = new URL(page.url());
     url.searchParams.append('panel', 'mock-exams');
     await page.goto(url.toString());
     return;
   }
-  await homeUi.questionMenuButton(page).click();
-  await homeUi.questionMenuItem(page, item).click();
+  await openHomeMenu(page, press);
+  await homeUi.questionMenuItem(page, item)[press]();
 }
 
 /**
- * Makes the 본문 search form available: on the home, follows the header's `본문 검색` link to the
- * search page (SEARCH-02, UX9); on the search page, a no-op.
+ * Makes the 본문 search form available: on the home, follows the `문서 N` menu's `본문 검색` link to
+ * the search page (SEARCH-02, UX12-HEADER); on the search page, a no-op.
  */
 export async function openContentSearch(page: Page): Promise<void> {
   const box = searchUi.box(page);
-  const link = homeUi.contentSearchLink(page);
-  await expect(box.or(link).first()).toBeVisible();
-  if (!(await box.isVisible())) await link.click();
+  const button = homeUi.questionMenuButton(page);
+  await expect(box.or(button).first()).toBeVisible();
+  if (!(await box.isVisible())) await chooseQuestionMenu(page, 'contentSearch');
   await expect(box).toBeVisible();
+}
+
+/** Opens the home's 문제 search (UX12-FILTER; no-op when it is open) and returns the box. */
+export async function openQuestionSearch(page: Page): Promise<Locator> {
+  const button = homeUi.questionSearchButton(page);
+  if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click();
+  const box = homeUi.questionSearch(page);
+  await expect(box).toBeFocused();
+  return box;
 }
 
 /** Opens a search's settings popover ("본문 설정" by default; no-op when it is open). */
@@ -302,12 +346,6 @@ export async function closeSearchOptions(
   const button = homeUi.searchSettingsButton(page, scope);
   if ((await button.getAttribute('aria-expanded')) !== 'true') return;
   const popover = homeUi.searchSettings(page, scope);
-  if (scope === 'questions') {
-    await button.focus();
-    await page.keyboard.press('Enter');
-    await expect(popover).toBeHidden();
-    return;
-  }
   // Escape closes the innermost layer first: a search-mode description tooltip (shown on hover or
   // keyboard focus) takes one press before the popover does.
   await expect(async () => {

@@ -195,8 +195,8 @@ export interface QuestionPaper extends PdfFile {
   readonly questions: readonly TruthQuestion[];
 }
 
-export function questionPaper(): QuestionPaper {
-  const truth = JSON.parse(readFileSync(join(PDF_DIR, 'questions-ko.truth.json'), 'utf8')) as {
+export function questionPaper(fixture = 'questions-ko'): QuestionPaper {
+  const truth = JSON.parse(readFileSync(join(PDF_DIR, `${fixture}.truth.json`), 'utf8')) as {
     file: string;
     sha256: string;
     questions: TruthQuestion[];
@@ -766,17 +766,13 @@ export async function createNumberedQuestions(
   return out;
 }
 
-/** Imports questions-ko.pdf through the public API (A4); returns the run and its drafts (A13). */
+/** Imports a question paper through the public API (A4); returns the run and its drafts (A13). */
 export async function importPaperDrafts(
   owner: Member,
   workspaceId: string,
+  paper: QuestionPaper = questionPaper(),
 ): Promise<{ run: ImportRun; drafts: Draft[] }> {
-  const { documentId, jobId } = await uploadPdf(
-    owner,
-    workspaceId,
-    questionPaper(),
-    'question_paper',
-  );
+  const { documentId, jobId } = await uploadPdf(owner, workspaceId, paper, 'question_paper');
   await waitForJob(owner, jobId);
   const run = await startImport(owner, workspaceId, documentId);
   await waitForJob(owner, run.job_id);
@@ -881,11 +877,14 @@ export const panelUi = {
     page.getByRole('alertdialog', { name: /문제를 삭제할까요|delete (this )?question/i }),
 };
 
-type PanelManageItem = 'answers' | 'history' | 'edit' | 'generate' | 'archive' | 'delete';
+type PanelManageItem =
+  'answers' | 'history' | 'source' | 'edit' | 'generate' | 'archive' | 'delete';
 export const PANEL_MANAGE_ITEMS: Readonly<Record<PanelManageItem, RegExp>> = {
   /** UX7-BANK-2: the read items of both menus (문제 관리 and 문제 정보). */
   answers: /^(정답·해설 보기|show answers?( and explanation)?)$/i,
   history: /^(수정 이력·출처|revisions and sources)$/i,
+  /** UX12-SRCMENU: only when the question has a source region. */
+  source: /^(원문 보기|show source)$/i,
   edit: /^(편집|edit)$/i,
   /** Retired by QGEN-RM: only ever expected to be absent. */
   generate: /^(변형 출제|generate variants?)$/i,

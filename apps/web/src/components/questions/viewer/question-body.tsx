@@ -1,24 +1,29 @@
 // QVIEW-01 `QuestionBody` (docs/screens/question-viewer.md "문제 본문 부품"): what every
 // QuestionViewer mode shows of one question.
 //   kind `answer` (practice, sequence): the stem, the numbered options as the answer input (or the
-//     answer box), the result status (정답/오답/채점 대기 in text, role=status) and, only once a
-//     submission revealed them, the accepted answers, rubric and explanation. Graded MCQ rows get
-//     the UX7-QDISPLAY result border with the 정답 / 내 선택 text mark (QPLAY-01-AC12).
+//     answer box), the result status (role=status; 채점 대기 and non-MCQ wording visible, an MCQ
+//     grade for assistive tech only, UX12-OPTIONS) and, only once a submission revealed them, the
+//     accepted answers, rubric and explanation. Graded MCQ rows get the UX7-QDISPLAY result border
+//     with a check/X icon and the 정답 / 내 선택 text as their description (QPLAY-01-AC12).
 //   kind `revision` (manage, read-only): a revision with its correct options marked ("정답" text +
 //     check icon), accepted answers, rubric and explanation; no answer input at all.
 // The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
-// 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only.
-import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
-import type { Ref } from 'react';
+// 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only. Options printed
+// as a table line up in columns (`optionGrid`, QTABLE-01).
+import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
+import { useId, type Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
+import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
 import { StemBlocks } from '@/components/questions/stem/stem-text';
 import type { Question } from '@/lib/questions/form';
+import { optionGrid, type OptionGrid } from '@/lib/questions/stem-table';
 import { ExplanationText, type ExplanationHighlighting } from './explanation-text';
 import {
   ANSWER_TEXT_MAX,
   finalResult,
   optionMark,
   optionTone,
+  resultIsVisuallyHidden,
   resultMessage,
   toggleOption,
   type AttemptResult,
@@ -80,7 +85,8 @@ interface AnswerBodyProps {
   readonly outcome: RevealedAnswers | null;
   readonly selfGrade: GradeResult | null;
   readonly error?: string | null;
-  readonly resultRef?: Ref<HTMLParagraphElement>;
+  /** The element a submission moves focus to: the visible result (UX12-OPTIONS-AC07). */
+  readonly resultRef?: Ref<HTMLElement>;
   /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
   readonly highlighting?: ExplanationHighlighting | null;
 }
@@ -97,22 +103,37 @@ function AnswerBody({
   resultRef,
   highlighting = null,
 }: AnswerBodyProps) {
+  const resultId = useId();
+  // A hidden sentence cannot show a focus ring, so an MCQ grade focuses the options, named by it.
+  const hiddenResult =
+    outcome !== null && resultIsVisuallyHidden(question.question_type, outcome.result);
+  // Either element takes the viewer's ref, which only calls focus().
+  const focusRef = resultRef as Ref<HTMLDivElement & HTMLParagraphElement> | undefined;
+  const grid = question.question_type === 'MCQ' ? optionGrid(stem, question.options) : null;
   return (
     <>
-      <QuestionStem stem={stem} />
-      <AnswerField
-        question={question}
-        answer={answer}
-        disabled={disabled}
-        correct={outcome?.correct_option_ids ?? null}
-        graded={outcome?.result ?? null}
-        onChange={onAnswerChange}
-      />
+      <QuestionStem stem={grid?.stem ?? stem} />
+      <div
+        ref={hiddenResult ? focusRef : undefined}
+        className={styles.answerField}
+        {...(hiddenResult ? { role: 'group', 'aria-labelledby': resultId, tabIndex: -1 } : {})}
+      >
+        <AnswerField
+          question={question}
+          grid={grid}
+          answer={answer}
+          disabled={disabled}
+          correct={outcome?.correct_option_ids ?? null}
+          graded={outcome?.result ?? null}
+          onChange={onAnswerChange}
+        />
+      </div>
       <p
-        ref={resultRef}
+        ref={hiddenResult ? undefined : focusRef}
+        id={resultId}
         role="status"
         tabIndex={-1}
-        className={styles.result}
+        className={hiddenResult ? `${styles.result} qz-visually-hidden` : styles.result}
         data-result={outcome ? finalResult(outcome.result, selfGrade) : undefined}
       >
         {outcome ? resultMessage(outcome.result, selfGrade) : ''}
@@ -129,6 +150,7 @@ function AnswerBody({
 
 function AnswerField({
   question,
+  grid,
   answer,
   disabled,
   correct,
@@ -136,6 +158,7 @@ function AnswerField({
   onChange,
 }: {
   readonly question: AnswerQuestion;
+  readonly grid: OptionGrid | null;
   readonly answer: PracticeAnswer;
   readonly disabled: boolean;
   readonly correct: readonly string[] | null;
@@ -156,38 +179,58 @@ function AnswerField({
     );
   }
   // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
-  // only colors it; the text mark below the label is the meaning, linked as the description.
+  // only colors it; the row-end icon and the hidden text linked as the description are the meaning.
+  const toneOf = (id: string) =>
+    graded ? optionTone(id, correct, answer.selected, graded) : undefined;
   const mark = (id: string) => {
     const text = graded ? optionMark(id, correct, answer.selected) : undefined;
-    return text ? <span className={styles.mark}>{text}</span> : undefined;
+    if (!text) return undefined;
+    const tone = toneOf(id);
+    return (
+      <span className={styles.mark} data-option-mark={tone ? TONE_MARK[tone] : undefined}>
+        {tone === 'chosen' ? (
+          <CloseIcon width={16} height={16} strokeWidth={3} />
+        ) : tone ? (
+          <CheckIcon width={16} height={16} strokeWidth={3} />
+        ) : null}
+        <span className="qz-visually-hidden">{text}</span>
+      </span>
+    );
   };
   const rowClass = (id: string) => {
-    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
-    return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
+    const tone = toneOf(id);
+    const row = grid ? `${styles.option} ${styles.gridOption}` : styles.option;
+    return tone ? `${row} ${TONE_CLASS[tone]}` : row;
   };
+  const head = grid ? (
+    <OptionGridHead grid={grid} numbered className={styles.optionGridHead} />
+  ) : null;
   if (!question.is_multi_answer) {
     return (
-      <RadioGroup
-        // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
-        label="보기"
-        hideLabel
-        className={styles.optionGroup}
-        orientation="vertical"
-        disabled={disabled}
-        value={answer.selected[0] ?? ''}
-        onValueChange={(id) =>
-          onChange({ ...answer, selected: toggleOption(question, answer.selected, id, true) })
-        }
-        options={question.options.map((o, index) => {
-          const description = mark(o.id);
-          return {
-            value: o.id,
-            label: <OptionLabel index={index} text={o.text} />,
-            className: rowClass(o.id),
-            ...(description ? { description } : {}),
-          };
-        })}
-      />
+      <>
+        {head}
+        <RadioGroup
+          // UX7-QDISPLAY: no visible 보기 label; the group keeps it as its accessible name.
+          label="보기"
+          hideLabel
+          className={styles.optionGroup}
+          orientation="vertical"
+          disabled={disabled}
+          value={answer.selected[0] ?? ''}
+          onValueChange={(id) =>
+            onChange({ ...answer, selected: toggleOption(question, answer.selected, id, true) })
+          }
+          options={question.options.map((o, index) => {
+            const description = mark(o.id);
+            return {
+              value: o.id,
+              label: <OptionLabel index={index} text={o.text} grid={grid} />,
+              className: rowClass(o.id),
+              ...(description ? { description } : {}),
+            };
+          })}
+        />
+      </>
     );
   }
   return (
@@ -195,11 +238,12 @@ function AnswerField({
       <legend className={styles.legend}>
         <span className="qz-visually-hidden">보기 —</span> 정답을 모두 고르세요
       </legend>
+      {head}
       {question.options.map((o, index) => (
         <Checkbox
           key={o.id}
           className={rowClass(o.id)}
-          label={<OptionLabel index={index} text={o.text} />}
+          label={<OptionLabel index={index} text={o.text} grid={grid} />}
           description={mark(o.id)}
           disabled={disabled}
           checked={answer.selected.includes(o.id)}
@@ -221,19 +265,48 @@ const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
   answer: styles.toneAnswer,
 };
 
+const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
+  correct: 'correct',
+  chosen: 'wrong',
+  answer: 'correct',
+};
+
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
  * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
- * keeps the option text as its name while its position is announced by the group.
+ * keeps the option text as its name while its position is announced by the group. `data-copy` is
+ * the hidden bold copy that reserves the hovered height (UX12-OPTIONS); a table's cells have one
+ * each (QTABLE-01).
  */
-function OptionLabel({ index, text }: { readonly index: number; readonly text: string }) {
+function OptionLabel({
+  index,
+  text,
+  grid,
+}: {
+  readonly index: number;
+  readonly text: string;
+  readonly grid: OptionGrid | null;
+}) {
+  const number = `${index + 1}.`;
+  if (grid) {
+    return (
+      <OptionCells
+        grid={grid}
+        index={index}
+        number={number}
+        numberClassName={styles.optionNumber}
+      />
+    );
+  }
   return (
-    <>
-      <span className={styles.optionNumber} aria-hidden="true">
-        {index + 1}.
-      </span>{' '}
-      {text}
-    </>
+    <span className={styles.optionCopy} data-copy={`${number} ${text}`}>
+      <span>
+        <span className={styles.optionNumber} aria-hidden="true">
+          {number}
+        </span>{' '}
+        {text}
+      </span>
+    </span>
   );
 }
 
@@ -285,29 +358,47 @@ interface RevisionBodyProps {
 /** A revision with its answers (manage, read-only): not a grading result, so no result border. */
 function RevisionBody({ revision, type, heading, highlighting = null }: RevisionBodyProps) {
   const correct = new Set(revision.correct_option_ids ?? []);
+  const grid = type === 'MCQ' ? optionGrid(revision.stem, revision.options) : null;
   return (
     <>
       <section className={styles.detailSection}>
         <h3 className={styles.detailHeading}>{heading}</h3>
-        <QuestionStem stem={revision.stem} />
+        <QuestionStem stem={grid?.stem ?? revision.stem} />
       </section>
       {type === 'MCQ' ? (
         <section className={styles.detailSection}>
           {/* UX7-QDISPLAY: no visible 보기 heading; the list keeps it as its name. */}
           {revision.is_multi_answer ? <p className={styles.detailText}>복수 정답</p> : null}
+          {grid ? (
+            <OptionGridHead grid={grid} numbered trailing className={styles.revisionGridHead} />
+          ) : null}
           <ol className={styles.optionList} aria-label="보기">
             {revision.options.map((option, i) => {
               const isCorrect = correct.has(option.id);
+              const mark = isCorrect ? (
+                <span className={styles.correctMark}>
+                  <CheckIcon width={16} height={16} />
+                  정답
+                </span>
+              ) : null;
               return (
                 <li key={option.id} className={styles.optionRow} data-correct={isCorrect}>
-                  <span className={styles.optionLabel}>{i + 1}.</span>
-                  <span className={styles.optionText}>{option.text}</span>
-                  {isCorrect ? (
-                    <span className={styles.correctMark}>
-                      <CheckIcon width={16} height={16} />
-                      정답
-                    </span>
-                  ) : null}
+                  {grid ? (
+                    <OptionCells
+                      grid={grid}
+                      index={i}
+                      number={`${i + 1}.`}
+                      numberClassName={styles.optionLabel}
+                      trailing={mark}
+                      reserveTrailing
+                    />
+                  ) : (
+                    <>
+                      <span className={styles.optionLabel}>{i + 1}.</span>
+                      <span className={styles.optionText}>{option.text}</span>
+                      {mark}
+                    </>
+                  )}
                 </li>
               );
             })}

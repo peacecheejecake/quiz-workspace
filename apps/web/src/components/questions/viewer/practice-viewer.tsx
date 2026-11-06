@@ -17,14 +17,14 @@
 // UX7-BANK-2: the header menu's 정답·해설 보기 opens a separate read-only dialog over the panel; the
 // session on screen (and an answer being chosen) stays as it is and nothing is recorded.
 import {
-  ArrowLeftIcon,
   Button,
   ConfirmDialog,
-  IconButton,
   FavoriteToggle,
   FloatingSidePanel,
   RetryToggle,
+  Tooltip,
   questionTypeLabels,
+  useToast,
 } from '@quiz/ui';
 import {
   useEffect,
@@ -66,8 +66,14 @@ import {
   type Neighbors,
   type PracticeAnswer,
 } from './practice-model';
+import { NavButton } from './nav-button';
 import { QuestionBody, QuestionStem } from './question-body';
-import { QuestionSourcePreview } from './question-source-preview';
+import {
+  QuestionSourceButton,
+  QuestionSourceDialog,
+  useQuestionSource,
+  type QuestionSourceControls,
+} from './question-source-preview';
 import styles from './question-viewer.module.css';
 
 export interface PracticeQuestion {
@@ -115,7 +121,7 @@ export interface PracticeViewerProps {
    * Header controls after the study toggles (UX7-BANK: the editors' 문제 관리 menu; UX7-BANK-2:
    * everyone else's 문제 정보 menu, shown in archived workspaces too).
    */
-  readonly headerExtra?: ReactNode;
+  readonly headerExtra?: (source: QuestionSourceControls) => ReactNode;
   /**
    * UX7-BANK: a question whose cached session must never be shown again (edited or deleted);
    * a new `seq` invalidates `questionId` once.
@@ -174,6 +180,7 @@ function newKey(): string {
 }
 
 const NO_NEIGHBORS: Neighbors = { previous: null, next: null };
+const ANOTHER_TRY_REASON = '답안을 제출하고 채점이 끝나면 다시 풀 수 있습니다.';
 
 export function PracticeViewer({
   workspaceId,
@@ -197,6 +204,8 @@ export function PracticeViewer({
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
+  const source = useQuestionSource(questionId ? { kind: 'question', id: questionId } : null);
+  const extra = headerExtra?.({ onShowSource: source.onShowSource });
 
   // One cache per workspace: another workspace starts empty (the old one is dropped).
   const [cache, setCache] = useState(() => new PracticeSessionCache(workspaceId));
@@ -358,11 +367,16 @@ export function PracticeViewer({
   }
 
   const formId = useId();
-  const resultRef = useRef<HTMLParagraphElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  const submittedHere = useRef<string | null>(null);
   useEffect(() => {
-    // The submit button leaves with the answer form: keep focus in the panel on the result.
-    if (outcomeId) resultRef.current?.focus();
+    // The submit button leaves with the answer form: keep focus in the panel on the result. A
+    // question reopened with its result stays at the top (UX12-VIEW-AC05).
+    if (outcomeId && outcomeId === submittedHere.current) {
+      submittedHere.current = null;
+      resultRef.current?.focus();
+    }
   }, [outcomeId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -384,6 +398,7 @@ export function PracticeViewer({
     if (result.ok && practiceResetVersion(workspaceId, qid) === resetVersion) {
       onGraded?.(qid, result.data.result);
     }
+    if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
       result.ok ? { busy: null, outcome: result.data } : { busy: null, error: result.message },
     );
@@ -443,15 +458,13 @@ export function PracticeViewer({
       {ready && pendingGrade ? (
         <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
-      {ready && finished ? (
-        <Button
-          variant="ghost"
-          onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
-        >
-          다시 풀기
-        </Button>
-      ) : null}
-      {ready ? (
+      {readOnly ? null : (
+        <AnotherTryButton
+          available={ready !== null && finished}
+          onTry={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
+        />
+      )}
+      {ready && (outcome || view.lastGradedResult || view.isPendingGrading) ? (
         <Button
           onClick={() => {
             resetKey.current = newKey();
@@ -463,12 +476,22 @@ export function PracticeViewer({
         </Button>
       ) : null}
       <nav className={styles.nav} aria-label="문제 이동">
-        <NavButton target={neighbors.previous} onNavigate={onNavigate}>
-          이전 문제
-        </NavButton>
-        <NavButton target={neighbors.next} onNavigate={onNavigate}>
-          다음 문제
-        </NavButton>
+        <NavButton
+          direction="previous"
+          label="이전 문제"
+          unavailable={!neighbors.previous || !onNavigate}
+          onClick={() => {
+            if (neighbors.previous) onNavigate?.(neighbors.previous);
+          }}
+        />
+        <NavButton
+          direction="next"
+          label="다음 문제"
+          unavailable={!neighbors.next || !onNavigate}
+          onClick={() => {
+            if (neighbors.next) onNavigate?.(neighbors.next);
+          }}
+        />
       </nav>
     </div>
   ) : undefined;
@@ -486,6 +509,8 @@ export function PracticeViewer({
       closeLabel="패널 닫기"
       onCloseAutoFocus={onCloseAutoFocus}
       footer={footer}
+      // Not on close: the panel keeps its place while it animates out.
+      scrollKey={questionId ? opening.key : undefined}
       headerActions={
         view && !readOnly ? (
           <>
@@ -496,11 +521,11 @@ export function PracticeViewer({
               disabled={!ready}
               onChange={(flags) => onFlagsChange(view.id, flags)}
             />
-            {headerExtra}
+            {extra}
           </>
         ) : view ? (
           // Archived: no study toggles, but the read-only 문제 정보 menu stays (UX7-BANK-2).
-          headerExtra
+          extra
         ) : undefined
       }
     >
@@ -542,7 +567,8 @@ export function PracticeViewer({
       {view ? (
         <div className={styles.body} data-screen-id={screenId}>
           {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
-          <QuestionSourcePreview target={{ kind: 'question', id: view.id }} />
+          <QuestionSourceButton source={source} />
+          <QuestionSourceDialog source={source} />
           {readOnly ? (
             <>
               <p className={styles.notice}>
@@ -665,6 +691,50 @@ export function StudyToggles({
   );
 }
 
+/**
+ * The footer's `다시 풀기` (UX12-VIEW-AC04, D-8): always there, unavailable until this session has a
+ * final result. It stays focusable (`aria-disabled`) so the tooltip reaches keyboard users and
+ * pressing it does not drop focus when the new session starts. A press says why in a toast: touch
+ * has no tooltip.
+ */
+function AnotherTryButton({
+  available,
+  onTry,
+}: {
+  readonly available: boolean;
+  readonly onTry: () => void;
+}) {
+  const reasonId = useId();
+  const [hinted, setHinted] = useState(false);
+  const { toast, dismiss } = useToast();
+  const reasonToast = useRef<number | null>(null);
+  return (
+    <>
+      <Tooltip open={hinted && !available} onOpenChange={setHinted} content={ANOTHER_TRY_REASON}>
+        <Button
+          aria-disabled={!available || undefined}
+          aria-describedby={available ? undefined : reasonId}
+          onClick={() => {
+            if (available) {
+              onTry();
+              return;
+            }
+            if (reasonToast.current !== null) dismiss(reasonToast.current);
+            reasonToast.current = toast({ title: ANOTHER_TRY_REASON });
+          }}
+        >
+          다시 풀기
+        </Button>
+      </Tooltip>
+      {available ? null : (
+        <span id={reasonId} className="qz-visually-hidden">
+          {ANOTHER_TRY_REASON}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** 맞음 / 틀림 of a pending submission (essays, short answers without accepted answers). */
 export function SelfGradeButtons({
   busy,
@@ -682,37 +752,5 @@ export function SelfGradeButtons({
         틀림
       </Button>
     </div>
-  );
-}
-
-/**
- * Previous/next. At either end the button stays focusable (`aria-disabled`) so focus does not
- * drop out of the panel when the last question is reached.
- */
-function NavButton({
-  target,
-  onNavigate,
-  children,
-}: {
-  readonly target: string | null;
-  readonly onNavigate: ((questionId: string) => void) | undefined;
-  readonly children: string;
-}) {
-  const unavailable = !target || !onNavigate;
-  return (
-    <IconButton
-      label={children}
-      icon={
-        <ArrowLeftIcon
-          width={20}
-          height={20}
-          style={children === '다음 문제' ? { transform: 'rotate(180deg)' } : undefined}
-        />
-      }
-      aria-disabled={unavailable || undefined}
-      onClick={() => {
-        if (target && onNavigate) onNavigate(target);
-      }}
-    />
   );
 }

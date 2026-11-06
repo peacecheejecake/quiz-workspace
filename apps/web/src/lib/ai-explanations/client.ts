@@ -18,6 +18,9 @@ export interface ExplanationState {
   readonly available: boolean;
   readonly can_create: boolean;
   readonly can_regenerate: boolean;
+  readonly can_cancel: boolean;
+  /** The newest attempt, when it was cancelled (a failed one leaves this null). */
+  readonly cancelled_id: string | null;
   readonly explanation: Explanation | null;
 }
 
@@ -150,6 +153,12 @@ export interface ExplanationClient {
   create(target: ExplanationTarget, gate: ExplanationGate): Promise<ExplanationState>;
   /** `다시 만들기`: a new version (owner/editor). */
   regenerate(target: ExplanationTarget, gate: ExplanationGate): Promise<ExplanationState>;
+  /** `취소`: stops the one being made and answers the state after it (UX12-EXPLCANCEL). */
+  cancel(
+    target: ExplanationTarget,
+    gate: ExplanationGate,
+    explanationId: string,
+  ): Promise<ExplanationState>;
   /** A share guest's read of an existing explanation (null: there is none). */
   shared(
     shareId: string,
@@ -182,6 +191,13 @@ export function createExplanationClient(
         await call<ExplanationState>(fetchImpl, `${explanationPaths.base(target)}/regenerate`, {
           method: 'POST',
           body: JSON.stringify(gate),
+        })
+      ).body,
+    cancel: async (target, gate, explanationId) =>
+      (
+        await call<ExplanationState>(fetchImpl, `${explanationPaths.base(target)}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({ ...gate, explanation_id: explanationId }),
         })
       ).body,
     shared: async (shareId, questionId, signal) => {

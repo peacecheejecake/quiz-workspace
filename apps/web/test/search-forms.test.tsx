@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-// SEARCH-01-AC09/AC11 (UX7-SEARCH): the home's two search forms (each with its own "설정" popover
-// and stated reason when there is nothing to search) and the result list's item click.
+// UX12-FILTER and SEARCH-01-AC09/AC11 (UX7-SEARCH): the home's search and filter line, the 본문
+// search form (a stated reason when there is nothing to search) and the result list's item click.
 import './dom-setup';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CONTENT_SEARCH_BLOCKED,
@@ -23,41 +24,120 @@ const liveQuery = (value = ''): LiveQuery => ({
     onCompositionEnd: vi.fn(),
   },
   flush: vi.fn(),
+  clear: vi.fn(),
   replace: vi.fn(),
 });
 
-describe('QuestionSearch', () => {
-  it('UX10-HOME-AC02 shows filters below the search and preserves them when collapsed', async () => {
-    const user = userEvent.setup();
-    const query = liveQuery('염소');
-    render(<QuestionSearch query={query} max={200} searchable settings={<p>챕터 필터</p>} />);
-    expect(screen.getByRole('search', { name: '문제 검색' })).toBeVisible();
-    const box = screen.getByRole('searchbox', { name: '문제 검색' });
-    expect(box).toBeEnabled();
-    expect(box).toHaveValue('염소');
-    expect(screen.queryByRole('button', { name: '검색' })).toBeNull();
-    expect(screen.queryByRole('checkbox')).toBeNull();
+function Search({
+  initial = '',
+  searchable = true,
+  filterActive = false,
+}: {
+  readonly initial?: string;
+  readonly searchable?: boolean;
+  readonly filterActive?: boolean;
+}) {
+  const [value, setValue] = useState(initial);
+  const query = {
+    ...liveQuery(value),
+    clear: () => {
+      clear();
+      setValue('');
+    },
+    flush,
+  };
+  return (
+    <>
+      <button type="button" onClick={() => setValue('외부')}>
+        URL 변경
+      </button>
+      <QuestionSearch
+        query={query}
+        max={200}
+        searchable={searchable}
+        filterActive={filterActive}
+        filters={<p>챕터 필터</p>}
+      />
+    </>
+  );
+}
 
-    const settings = screen.getByRole('button', { name: '검색 설정' });
-    expect(settings).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('챕터 필터')).toBeVisible();
-    await user.click(settings);
-    expect(settings).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText('챕터 필터')).not.toBeVisible();
-    await user.click(settings);
-    expect(screen.getByText('챕터 필터')).toBeVisible();
+const clear = vi.fn();
+const flush = vi.fn();
+const line = () => screen.getByRole('search', { name: '문제 검색' });
+const box = () => line().querySelector('input') as HTMLInputElement;
+
+describe('QuestionSearch', () => {
+  it('UX12-FILTER-AC02 opens beside the filter button and moves focus to the box', async () => {
+    const user = userEvent.setup();
+    render(<Search />);
+    expect(box().closest('[inert]')).not.toBeNull();
+    const button = screen.getByRole('button', { name: '검색' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(button);
+    expect(box()).toHaveFocus();
+    expect(box().closest('[inert]')).toBeNull();
+    const close = screen.getByRole('button', { name: '검색 닫기' });
+    expect(close).toHaveAttribute('aria-expanded', 'true');
+    expect(close).toHaveAttribute('data-variant', 'ghost');
 
     // Enter is not needed, but commits at once.
-    await user.type(box, '{Enter}');
-    expect(query.flush).toHaveBeenCalledTimes(1);
+    flush.mockClear();
+    await user.type(box(), '{Enter}');
+    expect(flush).toHaveBeenCalledTimes(1);
   });
 
-  it('is disabled with a stated reason without questions', () => {
-    render(<QuestionSearch query={liveQuery()} max={200} searchable={false} settings={null} />);
-    const box = screen.getByRole('searchbox', { name: '문제 검색' });
-    expect(box).toBeDisabled();
+  it('UX12-FILTER-AC03 closing clears the query and returns focus to the button', async () => {
+    const user = userEvent.setup();
+    clear.mockClear();
+    render(<Search initial="염소" />);
+    expect(box()).toHaveValue('염소');
+    const close = screen.getByRole('button', { name: '검색 닫기' });
+    await user.click(close);
+    expect(clear).toHaveBeenCalledTimes(1);
+    const button = screen.getByRole('button', { name: '검색' });
+    expect(button).toHaveFocus();
+    expect(box().closest('[inert]')).not.toBeNull();
+  });
+
+  it('UX12-FILTER-AC04 opens when a query arrives while closed, without taking focus', async () => {
+    const user = userEvent.setup();
+    render(<Search />);
+    const external = screen.getByRole('button', { name: 'URL 변경' });
+    await user.click(external);
+    expect(screen.getByRole('searchbox', { name: '문제 검색' })).toHaveValue('외부');
+    expect(external).toHaveFocus();
+  });
+
+  it('UX12-FILTER-AC05 is disabled with a stated reason without questions', () => {
+    render(<Search searchable={false} />);
+    const button = screen.getByRole('button', { name: '검색' });
+    expect(button).toBeDisabled();
     expect(screen.getByRole('status')).toHaveTextContent(QUESTION_SEARCH_BLOCKED);
-    expect(box).toHaveAccessibleDescription(QUESTION_SEARCH_BLOCKED);
+    expect(button).toHaveAccessibleDescription(QUESTION_SEARCH_BLOCKED);
+    expect(box()).toBeDisabled();
+  });
+
+  it('keeps a way out when the last question goes while the search is open', () => {
+    render(<Search initial="염소" searchable={false} />);
+    expect(screen.getByRole('button', { name: '검색 닫기' })).toBeEnabled();
+    expect(box()).toBeDisabled();
+  });
+
+  it('UX12-FILTER-AC06 holds the filters in a popover and says when one is set', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Search />);
+    const filter = screen.getByRole('button', { name: '필터' });
+    expect(filter).not.toHaveAttribute('data-active');
+    expect(filter).not.toHaveAccessibleDescription('필터 적용 중');
+    expect(screen.queryByText('챕터 필터')).toBeNull();
+    await user.click(filter);
+    expect(await screen.findByRole('dialog', { name: '필터' })).toHaveTextContent('챕터 필터');
+
+    rerender(<Search filterActive />);
+    expect(filter).toHaveAttribute('data-active', 'true');
+    expect(filter).toHaveAccessibleDescription('필터 적용 중');
   });
 });
 
@@ -87,7 +167,6 @@ describe('ContentSearchForm', () => {
   });
 
   it('disables the button with a stated reason without a published document', async () => {
-    const user = userEvent.setup();
     const onSearch = vi.fn();
     render(
       <ContentSearchForm
@@ -102,7 +181,10 @@ describe('ContentSearchForm', () => {
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription(CONTENT_SEARCH_BLOCKED);
     expect(screen.getByRole('status')).toHaveTextContent(CONTENT_SEARCH_BLOCKED);
-    await user.type(screen.getByRole('searchbox', { name: '본문 검색어' }), '{Enter}');
+    const box = screen.getByRole('searchbox', { name: '본문 검색어' });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription(CONTENT_SEARCH_BLOCKED);
+    fireEvent.submit(screen.getByRole('search', { name: '본문 검색' }));
     expect(onSearch).not.toHaveBeenCalled();
   });
 });

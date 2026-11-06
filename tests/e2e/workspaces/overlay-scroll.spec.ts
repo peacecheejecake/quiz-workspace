@@ -47,26 +47,25 @@ async function openSettledHome(page: Page, workspaceId: string): Promise<void> {
   await expect(askUi.headerButton(page)).toBeVisible();
 }
 
-/** Makes the page taller than the viewport and scrolls it to `y`. */
+/**
+ * Makes the page taller than the viewport and scrolls it to `y`. The spacer goes inside the home:
+ * below it the sticky line would scroll away, and a click on it would scroll the page back.
+ */
 async function makePageScrollable(page: Page, y = 400): Promise<void> {
   await page.evaluate((top) => {
     const spacer = document.createElement('div');
     spacer.setAttribute('aria-hidden', 'true');
     spacer.style.height = '4000px';
-    document.body.append(spacer);
+    const home = document.querySelector('[data-home-toolbar]')?.parentElement;
+    (home ?? document.body).append(spacer);
     window.scrollTo(0, top);
   }, y);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
 }
 
-/**
- * Opens 문서 관리 from the home without moving the page: the `문서 n` button may be scrolled out of
- * view, and a real click would first scroll it back (the test moving the page, not the overlay).
- */
+/** Opens 문서 관리 from the home: the `문서 N` button is sticky, so this never moves the page. */
 async function openDocumentsInPlace(page: Page): Promise<Locator> {
-  const button = homeUi.documentsButton(page);
-  await button.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
-  await button.dispatchEvent('click');
+  await homeUi.openDocuments(page);
   const dialog = homeUi.documentsDialog(page);
   await expect(dialog).toBeVisible();
   return dialog;
@@ -216,7 +215,6 @@ async function expectSwipesContained(
   const scroller = await overlayScroller(dialog);
 
   expectContained(await swipe(page, header, -160, undefined, browserName));
-  expectContained(await swipe(page, header, 160, undefined, browserName));
 
   await scrollTo(scroller, 'bottom');
   expectContained(await swipe(page, scroller, -160, scroller, browserName));
@@ -225,6 +223,9 @@ async function expectSwipesContained(
 
   await scrollTo(scroller, 'middle');
   expectOverlayScrolls(await swipe(page, scroller, -160, scroller, browserName));
+
+  // Last: pulling the header down dismisses the overlay (UX12 DESIGN-3).
+  expectContained(await swipe(page, header, 160, undefined, browserName));
 }
 
 test.describe('phone (touch)', () => {

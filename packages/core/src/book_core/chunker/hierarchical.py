@@ -222,12 +222,14 @@ def detect_language(text: str) -> str | None:
 
 def _table_lines(block: Block) -> tuple[list[str], list[str]]:
     if block.table is not None:
-        rows = [" | ".join(row) for row in block.table.rows]
+        cells = block.table.row_cells()
         header_rows = block.table.header_rows
-    else:
-        rows = [line for line in block.text.split("\n") if line.strip()]
-        header_rows = 0
-    return rows[:header_rows], rows[header_rows:]
+        # A row whose cells are all hidden by spans has no line of its own.
+        return (
+            [" | ".join(row) for row in cells[:header_rows] if row],
+            [" | ".join(row) for row in cells[header_rows:] if row],
+        )
+    return [], [line for line in block.text.split("\n") if line.strip()]
 
 
 _CAPTION_START = re.compile(

@@ -72,7 +72,7 @@
 .publishActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .history {
@@ -420,25 +420,11 @@
 }
 
 .tableScroll {
-  overflow-x: auto;
+  composes: tableScroll from '../../shared/printed-table.module.css';
 }
 
 .table {
-  border-collapse: collapse;
-  font-size: var(--font-size-body);
-}
-
-.table th,
-.table td {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--color-border);
-  text-align: start;
-  vertical-align: top;
-}
-
-.table th {
-  background: var(--color-surface-muted);
-  font-weight: var(--font-weight-semibold);
+  composes: table from '../../shared/printed-table.module.css';
 }
 
 .fieldLabel {
@@ -492,7 +478,7 @@
 
 .editActions {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .linkButton {
@@ -509,9 +495,10 @@
   cursor: pointer;
 }
 
-/* Hover thickens the underline while the boundary stays visible. */
+/* Hover fills the background and thickens the underline; the boundary stays visible. */
 @media (hover: hover) {
   .linkButton:hover {
+    background: var(--color-state-hover);
     text-decoration-thickness: 2px;
   }
 }
@@ -567,6 +554,11 @@
 .optionLabel {
   flex: 0 0 auto;
   font-weight: var(--font-weight-semibold);
+}
+
+.optionGridHead {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
 }
 
 .questionActions {

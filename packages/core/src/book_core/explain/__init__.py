@@ -1,7 +1,7 @@
 """AI explanations of a question after submission (AIEXPL-01, questions.md §13).
 
 - ``models``: the explanation's input DTO (the question revision only: never a user's answer);
-- ``prompts``: ``build_request`` (the `question.ai_explain/v1` request and its tagged output
+- ``prompts``: ``build_request`` (the `question.ai_explain/v2` request and its tagged output
   format, passage budgets, the coverage re-request note);
 - ``output``: streaming display text with the early answer check, parsing, validation (answer
   mismatch, option coverage) and citation renumbering (the ASK rules);

@@ -156,11 +156,17 @@
   overflow-wrap: anywhere;
 }
 
+.compareGridHead {
+  padding-inline-start: var(--space-5);
+}
+
 .compareOptions {
   display: grid;
   gap: var(--space-1);
   margin: 0;
   padding-inline-start: var(--space-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* The answer is marked by text and an icon, never by color alone. */

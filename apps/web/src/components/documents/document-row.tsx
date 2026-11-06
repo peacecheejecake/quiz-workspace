@@ -5,7 +5,7 @@
 // until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
 // "<date time> · <size>", the live progress — upload progress, parse/index progress,
 // the failure reason with retry — `요약` (DOCSUM-01, ready 교재 / 교재+문제 rows, with "요약 중" while a
-// run is queued/running), `텍스트 내보내기` (DOC-03) and a trash icon button to delete, or to cancel
+// run is queued/running; where summaries cannot be created only with a stored one), `텍스트 내보내기` (DOC-03) and a trash icon button to delete, or to cancel
 // an upload (UX12-DOCS-1). Upload and processing are one
 // step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
 // long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
@@ -24,6 +24,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import type { DocumentKind } from '@/lib/documents/client-api';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
+import { PendingLink } from '@/components/workspaces/pending-link';
 import { DocumentKindMenu } from './document-kind-menu';
 import { TextExportMenu } from './text-export-menu';
 import styles from './documents.module.css';
@@ -84,6 +85,8 @@ export interface RowSummaryAction {
   readonly onOpen: (documentId: string, opener: HTMLElement) => void;
   /** Documents with a queued/running summary run ("요약 중"). */
   readonly busy: ReadonlySet<string>;
+  /** This environment can create summaries; otherwise only stored ones are offered (D-14). */
+  readonly available: boolean;
 }
 
 /** Ready 교재 / 교재+문제 rows offer `요약` (문제지, processing and failed rows do not). */
@@ -127,9 +130,9 @@ export function DocumentRowItem({
       {row.title}
     </Link>
   ) : href ? (
-    <Link href={href} className={styles.title}>
+    <PendingLink href={href} className={styles.title}>
       {row.title}
-    </Link>
+    </PendingLink>
   ) : (
     <span className={styles.title}>{row.title}</span>
   );
@@ -179,7 +182,7 @@ export function DocumentRowItem({
             다시 시도
           </Button>
         ) : null}
-        {summary && row.documentId && summarizable(row) ? (
+        {summary && row.documentId && summarizable(row) && (summary.available || row.hasSummary) ? (
           <SummaryRowButton documentId={row.documentId} title={row.title} action={summary} />
         ) : null}
         {textExport && row.documentId && row.status === 'ready' ? (

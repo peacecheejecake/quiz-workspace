@@ -13,6 +13,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   /** Disables the button, sets `aria-busy` and shows a spinner next to the label. */
   loading?: boolean;
+  /**
+   * Ghost only: hides the border for back, header trigger, expand/collapse, 더 보기 and list title
+   * buttons (UX12-CONTROLS). Other ghost text buttons keep their boundary.
+   */
+  borderless?: boolean;
   /** Render the single child (e.g. a link) with button styles instead of a `<button>`. */
   asChild?: boolean;
   ref?: Ref<HTMLButtonElement>;
@@ -22,6 +27,7 @@ export function Button({
   variant = 'secondary',
   size = 'md',
   loading = false,
+  borderless = false,
   asChild = false,
   disabled,
   className,
@@ -32,7 +38,13 @@ export function Button({
   const classes = cx('qz-button', 'qz-focus-ring', className);
   if (asChild) {
     return (
-      <Slot.Root data-variant={variant} data-size={size} className={classes} {...rest}>
+      <Slot.Root
+        data-variant={variant}
+        data-size={size}
+        data-borderless={borderless || undefined}
+        className={classes}
+        {...rest}
+      >
         {children}
       </Slot.Root>
     );
@@ -42,6 +54,7 @@ export function Button({
       type={type ?? 'button'}
       data-variant={variant}
       data-size={size}
+      data-borderless={borderless || undefined}
       data-loading={loading || undefined}
       aria-busy={loading || undefined}
       disabled={disabled || loading}

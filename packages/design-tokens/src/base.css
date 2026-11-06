@@ -2,10 +2,14 @@
  * Token-only base styles from docs/design-system.md §3.3. Import after tokens.css.
  * Glass is reserved for interaction layers (floating panels, popovers, top bar); the opaque
  * tinted --color-glass-solid is the fallback when blur is unsupported or the user prefers reduced
- * transparency, so the layer keeps the same color either way.
+ * transparency, so the layer keeps the same color either way. --glass-gradient (UX12 DESIGN-4) is
+ * a longhand layer above the color: the `background` shorthand of the fallbacks drops it, and a
+ * surface that only needs an opaque base sets `background-color` to keep it.
  */
 .glass-surface {
-  background: var(--color-glass);
+  background-color: var(--color-glass);
+  background-image: var(--glass-gradient);
+  background-origin: border-box;
   border: 1px solid var(--color-glass-stroke);
   box-shadow: var(--shadow-floating);
   backdrop-filter: blur(var(--glass-blur));

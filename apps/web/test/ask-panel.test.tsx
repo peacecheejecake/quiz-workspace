@@ -4,7 +4,7 @@
 // and its retry, a conversation of another workspace in the URL, an answer stream that ends in an
 // `error` whose reconciliation read fails.
 import './dom-setup';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -127,6 +127,16 @@ function props(client: AskClient, patch: Partial<AskPanelProps> = {}): AskPanelP
   };
 }
 
+/** The question input; on the conversation list the FAB opens the composer first. */
+async function composer(): Promise<HTMLElement> {
+  const input = () => screen.queryByRole('textbox', { name: '질문' });
+  const fab = () => screen.queryByRole('button', { name: '새 대화' });
+  await waitFor(() => expect(input() ?? fab()).not.toBeNull());
+  const button = input() ? null : fab();
+  if (button) fireEvent.click(button);
+  return screen.findByRole('textbox', { name: '질문' });
+}
+
 describe('UX10-AI availability', () => {
   it('hides the send action while retaining stored conversation access', async () => {
     const client = fakeClient();
@@ -161,7 +171,7 @@ describe('UX11-AI-DIRECT composer', () => {
     const pending = deferred<MessageAccepted>();
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     render(<AskPanel {...props(client, { conversationId: CONV })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '첫 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     expect(input).toHaveValue('');
@@ -176,7 +186,7 @@ describe('UX11-AI-DIRECT composer', () => {
     const pending = deferred<MessageAccepted>();
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     render(<AskPanel {...props(client, { conversationId: CONV })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '실패 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     await user.type(input, '새 글');
@@ -201,7 +211,7 @@ describe('UX11-AI-DIRECT composer', () => {
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     const p = props(client, { conversationId: CONV, recovery });
     const view = render(<AskPanel {...p} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '원래 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     view.unmount();
@@ -220,7 +230,7 @@ describe('UX11-AI-DIRECT composer', () => {
     const recovery = createAskRecoveryStore();
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     const view = render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '비공개 질문{Enter}');
+    await user.type(await composer(), '비공개 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     view.unmount();
     recovery.deactivate();
@@ -245,7 +255,7 @@ describe('UX11-AI-DIRECT composer', () => {
     await waitFor(() => expect(recovery.valid(recovery.token())).toBe(true));
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '첫 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     await user.type(input, '새 글');
@@ -282,7 +292,7 @@ describe('UX11-AI-DIRECT composer', () => {
     await waitFor(() => expect(recovery.valid(recovery.token())).toBe(true));
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     render(<AskPanel {...props(client, { conversationId: CONV, recovery })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '수락된 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     offline = true;
@@ -317,7 +327,7 @@ describe('UX11-AI-DIRECT composer', () => {
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     const p = props(client, { recovery });
     render(<AskPanel {...p} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '첫 질문{Enter}');
+    await user.type(await composer(), '첫 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     offline = true;
     pending.resolve(accepted('첫 질문'));
@@ -338,9 +348,10 @@ describe('UX11-AI-DIRECT composer', () => {
       const client = fakeClient({ ask: vi.fn(() => pending.promise) });
       const p = props(client);
       render(<AskPanel {...p} />);
-      await user.type(await screen.findByRole('textbox', { name: '질문' }), '이전 질문{Enter}');
+      await user.type(await composer(), '이전 질문{Enter}');
       await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
-      await user.click(screen.getByRole('button', { name: label }));
+      await user.click(screen.getByRole('button', { name: '대화 목록' }));
+      if (label === '새 대화') await user.click(await screen.findByRole('button', { name: label }));
       pending.resolve(accepted('이전 질문'));
       expect(await screen.findByRole('group', { name: '확인할 답변' })).toHaveTextContent(
         '이전 질문',
@@ -367,14 +378,14 @@ describe('UX11-AI-DIRECT composer', () => {
     const p = props(client, { recovery, conversationId: CONV });
     const first = render(<AskPanel {...p} />);
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '기존 질문{Enter}');
+    await user.type(await composer(), '기존 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     first.unmount();
     pending.resolve(accepted('기존 질문'));
     await waitFor(() => expect(recovery.getReceipts()).toHaveLength(1));
     render(<AskPanel {...p} />);
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    const draft = await screen.findByRole('textbox', { name: '질문' });
+    const draft = await composer();
     await user.type(draft, '새 draft');
     await user.click(await screen.findByRole('button', { name: '답변 확인' }));
     await screen.findByText(/네트워크 연결을 확인/);
@@ -397,11 +408,11 @@ describe('UX11-AI-DIRECT composer', () => {
     const client = fakeClient({ ask });
     const p = props(client, { recovery });
     const first = render(<AskPanel {...p} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '같은 질문{Enter}');
+    await user.type(await composer(), '같은 질문{Enter}');
     await screen.findByText(/네트워크 연결을 확인/);
     first.unmount();
     render(<AskPanel {...p} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '같은 질문{Enter}');
+    await user.type(await composer(), '같은 질문{Enter}');
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
     expect(ask.mock.calls[1]).toEqual(ask.mock.calls[0]);
     expect(client.create).toHaveBeenCalledTimes(1);
@@ -417,11 +428,11 @@ describe('UX11-AI-DIRECT composer', () => {
     const client = fakeClient({ ask });
     const p = props(client, { recovery });
     const first = render(<AskPanel {...p} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '원래 질문{Enter}');
+    await user.type(await composer(), '원래 질문{Enter}');
     await screen.findByText(/네트워크 연결을 확인/);
     first.unmount();
     render(<AskPanel {...p} />);
-    await user.type(await screen.findByRole('textbox', { name: '질문' }), '다른 질문{Enter}');
+    await user.type(await composer(), '다른 질문{Enter}');
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
     expect(client.get).toHaveBeenCalledWith(CONV);
     expect(client.create).toHaveBeenCalledTimes(1);
@@ -445,11 +456,14 @@ describe('UX11-AI-DIRECT composer', () => {
         .mockImplementation(async (_id, body) => accepted(body.question));
       const client = fakeClient({ ask, create });
       render(<AskPanel {...props(client, { recovery })} />);
-      const input = await screen.findByRole('textbox', { name: '질문' });
+      const input = await composer();
       await user.type(input, '첫 질문{Enter}');
       await screen.findByText(/네트워크 연결을 확인/);
-      await user.click(screen.getByRole('button', { name: '새 대화' }));
-      await user.type(input, `${nextQuestion}{Enter}`);
+      await user.click(screen.getByRole('button', { name: '대화 목록' }));
+      await user.click(await screen.findByRole('button', { name: '새 대화' }));
+      const next = await composer();
+      await user.clear(next);
+      await user.type(next, `${nextQuestion}{Enter}`);
       await waitFor(() => expect(ask).toHaveBeenCalledTimes(2));
       expect(create).toHaveBeenCalledTimes(2);
       expect(ask.mock.calls[1]?.[0]).toBe(secondId);
@@ -462,13 +476,113 @@ describe('UX11-AI-DIRECT composer', () => {
     const pending = deferred<MessageAccepted>();
     const client = fakeClient({ ask: vi.fn(() => pending.promise) });
     render(<AskPanel {...props(client, { conversationId: CONV })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await user.type(input, '실패 질문{Enter}');
     await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
     expect(input).toHaveValue('');
     pending.reject(new AskApiError('network'));
     await waitFor(() => expect(input).toHaveValue('실패 질문'));
     expect(screen.queryByRole('group', { name: '보내지 못한 질문' })).toBeNull();
+  });
+});
+
+describe('UX12-ASK screens', () => {
+  it('UX12-ASK-AC03 keeps a draft across the list and moves focus with the screens', async () => {
+    const user = userEvent.setup();
+    render(<AskPanel {...props(fakeClient())} />);
+    expect(screen.queryByRole('textbox', { name: '질문' })).toBeNull();
+    await user.click(await screen.findByRole('button', { name: '새 대화' }));
+    const input = await screen.findByRole('textbox', { name: '질문' });
+    expect(input).toHaveFocus();
+    await user.type(input, '쓰던 질문');
+    await user.click(screen.getByRole('button', { name: '대화 목록' }));
+    const fab = await screen.findByRole('button', { name: '새 대화' });
+    expect(fab).toHaveFocus();
+    await user.click(fab);
+    const again = await screen.findByRole('textbox', { name: '질문' });
+    expect(again).toHaveValue('쓰던 질문');
+    expect(again).toHaveFocus();
+  });
+
+  it('UX12-ASK-AC03 shows a failed new question on the list, where no composer holds it', async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({
+      ask: vi.fn(async () => Promise.reject(new AskApiError('network'))),
+    });
+    render(<AskPanel {...props(client)} />);
+    await user.type(await composer(), '실패 질문{Enter}');
+    await screen.findByText(/네트워크 연결을 확인/);
+    expect(screen.queryByRole('group', { name: '보내지 못한 질문' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '대화 목록' }));
+    expect(await screen.findByRole('group', { name: '보내지 못한 질문' })).toBeVisible();
+  });
+
+  it('UX12-ASK-AC02 moves focus to the title when the list has no FAB', async () => {
+    const user = userEvent.setup();
+    const client = fakeClient({ get: vi.fn(async () => conversation()) });
+    const unavailable = { ...STATE, available: false, reason: 'disabled' as const };
+    const p = props(client, { askState: unavailable, conversationId: CONV });
+    const view = render(<AskPanel {...p} />);
+    await user.click(await screen.findByRole('button', { name: '대화 목록' }));
+    view.rerender(<AskPanel {...p} conversationId={null} />);
+    expect(screen.queryByRole('button', { name: '새 대화' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'AI 질문' })).toHaveFocus();
+    expect(screen.getByText('이 환경에서는 AI 질문을 사용할 수 없습니다.')).toBeVisible();
+    await screen.findByText(/Workspace 문서에 대해 물어보세요/);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('UX12-ASK-AC07 keeps focus on the button when 보내기 becomes 답변 중지', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<MessageAccepted>();
+    const client = fakeClient({ ask: vi.fn(() => pending.promise) });
+    render(<AskPanel {...props(client)} />);
+    await user.type(await composer(), '질문');
+    const send = screen.getByRole('button', { name: '보내기' });
+    await user.click(send);
+    pending.resolve({
+      ...accepted('질문'),
+      answer: message({
+        id: 'a1',
+        role: 'assistant',
+        status: 'streaming',
+        question_message_id: 'q1',
+        text: '',
+      }),
+    });
+    const stop = await screen.findByRole('button', { name: '답변 중지' });
+    expect(stop).toBe(send);
+    expect(stop).toHaveFocus();
+  });
+
+  it('UX12-ASK-AC08 offers 다시 시도 only on a failed or stopped last answer', async () => {
+    const turn = (status: AskMessage['status']) =>
+      conversation({
+        messages: [
+          message({ id: 'q1', role: 'user', text: '질문' }),
+          message({ id: 'a1', role: 'assistant', status, question_message_id: 'q1', text: '답' }),
+        ],
+      });
+    const shown = render(
+      <AskPanel
+        {...props(fakeClient({ get: vi.fn(async () => turn('succeeded')) }), {
+          conversationId: CONV,
+        })}
+      />,
+    );
+    await screen.findByText('답');
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '다시 생성' })).toBeNull();
+    expect(screen.queryByText('AI 생성')).toBeNull();
+    shown.unmount();
+    render(
+      <AskPanel
+        {...props(fakeClient({ get: vi.fn(async () => turn('stopped')) }), {
+          conversationId: CONV,
+        })}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: '다시 시도' })).toBeVisible();
   });
 });
 
@@ -480,7 +594,7 @@ describe('AI 질문 panel request races', () => {
       const client = fakeClient({ ask: vi.fn(() => pending.promise) });
       const p = props(client);
       const view = render(<AskPanel {...p} />);
-      await user.type(screen.getByRole('textbox', { name: '질문' }), '가나다 원리{Enter}');
+      await user.type(await composer(), '가나다 원리{Enter}');
       await waitFor(() => expect(client.ask).toHaveBeenCalledTimes(1));
       view.rerender(
         <AskPanel
@@ -508,7 +622,7 @@ describe('AI 질문 panel request races', () => {
     const get = vi.fn(async () => conversation());
     const client = fakeClient({ ask, get });
     render(<AskPanel {...props(client, { conversationId: CONV })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
 
     await user.type(input, '가나다 원리{Enter}');
@@ -626,7 +740,7 @@ describe('AI 질문 panel request races', () => {
       .mockResolvedValue(conversation({ messages: recovered }));
     const client = fakeClient({ ask, get });
     render(<AskPanel {...props(client, { conversationId: CONV })} />);
-    const input = await screen.findByRole('textbox', { name: '질문' });
+    const input = await composer();
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
     await user.type(input, '가나다 원리{Enter}');
     await screen.findByText(/네트워크 연결을 확인/);
@@ -720,7 +834,7 @@ describe('AI 질문 panel request races', () => {
     expect(screen.getByText('최종 답')).toBeVisible();
 
     // The next answer streams; the first stream's late `done` does not clear its text.
-    await user.type(screen.getByRole('textbox', { name: '질문' }), '다음 질문{Enter}');
+    await user.type(await composer(), '다음 질문{Enter}');
     await waitFor(() => expect(streams).toHaveLength(2));
     push(1, 'id: 1\nevent: delta\ndata: {"seq":1,"text":"새 답 일부"}\n\n');
     expect(await screen.findByText(/새 답 일부/)).toBeVisible();

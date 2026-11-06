@@ -1,12 +1,13 @@
 'use client';
 
-// One answer of the AI 질문 panel (ASK-01 "답 메시지"): `AI 생성` badge, the answer's Markdown
-// subset (the DOCSUM renderer's parser: HTML, links and images stay text) with its footnote buttons,
-// the `출처` list, the state lines (progress, stopped, failed, not found, uncited, truncated), the
-// action row (`복사`, `도움이 안 됨`, `다시 생성` / `다시 시도`) and the answer versions ("답 k/n").
+// One answer of the AI 질문 panel (ASK-01 "답 메시지"): the answer's Markdown subset (the DOCSUM
+// renderer's parser: HTML, links and images stay text) with its footnote buttons, the `출처` list,
+// the state lines (progress, stopped, failed, not found, uncited, truncated), the action row
+// (`복사`, `도움이 안 됨`, `다시 시도` on a failed or stopped answer) and the answer versions
+// ("답 k/n"; UX12-ASK removed `다시 생성`, older conversations still hold versions).
 // While it streams the article is aria-busy and the model's `[Sn]` tags show as number chips; the
 // validated `[n]` footnotes replace them when it is done.
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger, RadioGroup } from '@quiz/ui';
+import { Button, Popover, PopoverContent, PopoverTrigger, RadioGroup } from '@quiz/ui';
 import { Fragment, useId, useState, type ReactNode } from 'react';
 import { parseSummaryMarkdown, type InlineNode } from '@/lib/documents/summary';
 import type { AskMessage, AskSource, FeedbackReason } from '@/lib/ask/client';
@@ -26,9 +27,9 @@ export interface AnswerActions {
   readonly onSource: (message: AskMessage, source: AskSource) => void;
   readonly onCopy: (message: AskMessage) => void;
   readonly onFeedback: (message: AskMessage, reason: FeedbackReason) => Promise<void>;
-  /** `다시 생성` / `다시 시도` (only on the latest version of the last question). */
+  /** `다시 시도` of a failed or stopped answer (only the latest version of the last question). */
   readonly onAgain: ((message: AskMessage) => void) | null;
-  /** Why `다시 생성` / `다시 시도` is not possible (text under it; aria-disabled). */
+  /** Why `다시 시도` is not possible (text under it; aria-disabled). */
   readonly againBlocked: string | null;
 }
 
@@ -57,8 +58,7 @@ export function AskAnswer({
   const sourceNumbers = finished ? new Set(message.sources.map((s) => s.number)) : null;
   const byNumber = new Map(message.sources.map((s) => [s.number, s]));
   const writing = !pending && (message.status === 'streaming' || (busy && text.length > 0));
-  const againLabel =
-    message.status === 'failed' || message.status === 'stopped' ? '다시 시도' : '다시 생성';
+  const retryable = message.status === 'failed' || message.status === 'stopped';
   const againReasonId = useId();
 
   return (
@@ -86,12 +86,9 @@ export function AskAnswer({
           </Button>
         </div>
       ) : null}
-      <div className={styles.answerHead}>
-        <Badge tone="accent">AI 생성</Badge>
-        {busy ? (
-          <p className={styles.progress}>{writing ? ASK_TEXT.writing : ASK_TEXT.searching}</p>
-        ) : null}
-      </div>
+      {busy ? (
+        <p className={styles.progress}>{writing ? ASK_TEXT.writing : ASK_TEXT.searching}</p>
+      ) : null}
 
       {message.degraded.includes('attachment_only') ? (
         <p className={styles.notice}>{ASK_TEXT.attachmentOnly}</p>
@@ -173,7 +170,7 @@ export function AskAnswer({
           {message.status !== 'failed' ? (
             <FeedbackButton message={message} onFeedback={actions.onFeedback} />
           ) : null}
-          {actions.onAgain ? (
+          {retryable && actions.onAgain ? (
             <Button
               size="sm"
               variant="ghost"
@@ -183,12 +180,12 @@ export function AskAnswer({
                 if (!actions.againBlocked) actions.onAgain?.(message);
               }}
             >
-              {againLabel}
+              다시 시도
             </Button>
           ) : null}
         </div>
       ) : null}
-      {finished && actions.onAgain && actions.againBlocked ? (
+      {finished && retryable && actions.onAgain && actions.againBlocked ? (
         <p id={againReasonId} className={styles.notice}>
           {actions.againBlocked}
         </p>

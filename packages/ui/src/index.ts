@@ -40,13 +40,17 @@ export {
   CheckIcon,
   CopyIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   CloseIcon,
+  FilterIcon,
+  GripIcon,
   HistoryIcon,
   MenuIcon,
   MinusIcon,
   MoreIcon,
+  PlusIcon,
   SearchIcon,
   ShareIcon,
   TrashIcon,
@@ -216,3 +220,4 @@ export {
 export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';
 
 export { useModalLayerOpen } from './internal/layer';
+export { useDragDismiss, type DragDismissOptions, type DragEdge } from './internal/swipe-dismiss';

@@ -38,6 +38,7 @@ export function UserMenu({ email }: { email: string | undefined }) {
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
+          borderless
           size="sm"
           className={styles.trigger}
           aria-label={email ? `계정 ${email}` : '계정'}
