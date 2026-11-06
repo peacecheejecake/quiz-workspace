@@ -30,6 +30,7 @@ from book_core.contracts import (
     Section,
     SourceLocation,
     TableContent,
+    TableSpan,
 )
 
 SHA = "0" * 64
@@ -180,6 +181,33 @@ def test_section_with_only_a_table_split_between_rows_with_header_repeated() -> 
     (parent,) = {c.parent_id for c in parts}
     assert result.parents[0].id == parent
     assert result.parents[0].content == f"표 3. 단계 목록\n{text}"
+
+
+def test_table_lines_carry_a_merged_cell_once() -> None:
+    rows = (
+        ("안내", "안내"),
+        ("응집", "결합"),
+        ("응집", "침전"),
+        ("끝", "끝"),
+        ("끝", "끝"),
+    )
+    spans = (
+        TableSpan(row=0, col=0, col_span=2),
+        TableSpan(row=1, col=0, row_span=2),
+        TableSpan(row=3, col=0, row_span=2, col_span=2),
+    )
+    table = TableContent(rows=rows, header_rows=1, spans=spans)
+    text = "\n".join(" | ".join(r) for r in rows)
+    result = chunk_revision(_revision([B(BlockType.TABLE, text, "s1", table=table)]))
+    assert result.children[0].content == "안내\n응집 | 결합\n침전\n끝"
+
+
+def test_table_lines_without_spans_keep_every_cell() -> None:
+    rows = (("a", "b"), ("a", "b"), ("", ""))
+    table = TableContent(rows=rows, header_rows=1)
+    text = "\n".join(" | ".join(r) for r in rows)
+    result = chunk_revision(_revision([B(BlockType.TABLE, text, "s1", table=table)]))
+    assert result.children[0].content == "a | b\na | b\n | "
 
 
 def test_oversized_table_row_stays_whole() -> None:

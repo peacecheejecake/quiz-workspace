@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 import pytest
-from book_core.contracts import Block, BlockType, SourceLocation, TableContent
+from book_core.contracts import Block, BlockType, SourceLocation, TableContent, TableSpan
 from book_core.structure import apply_edits
 from quiz_api.document_content import (
     BlockEditRefused,
@@ -93,6 +93,20 @@ def test_table_text_is_reparsed_into_cells_and_must_be_a_grid() -> None:
     }
     with pytest.raises(BlockEditRefused, match="grid"):
         edit_block(table, "가 | 나\n다", source_sha256=SHA)
+
+
+def test_a_table_edit_drops_spans_and_an_unchanged_save_keeps_them() -> None:
+    table = TableContent(
+        rows=(("a", "a"), ("c", "d")),
+        header_rows=1,
+        spans=(TableSpan(row=0, col=0, col_span=2),),
+    )
+    block = _block(BlockType.TABLE, "a | a\nc | d", table=table)
+    assert edit_block(block, "a | a\nc | d", source_sha256=SHA) is None
+    edited = edit_block(block, "a | a\nc | 라", source_sha256=SHA)
+    assert edited is not None
+    assert edited.table == TableContent(rows=(("a", "a"), ("c", "라")), header_rows=1)
+    assert "spans" not in block_attributes(edited)["table"]
 
 
 def test_refusals_never_quote_the_text() -> None:

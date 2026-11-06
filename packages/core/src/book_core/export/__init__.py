@@ -22,7 +22,7 @@ from enum import StrEnum
 
 from book_core.contracts.document import Block, BlockType, DocumentRevision
 
-__all__ = ["FIGURE_PLACEHOLDER", "ExportFormat", "render_revision"]
+__all__ = ["FIGURE_PLACEHOLDER", "ExportFormat", "md_table", "render_revision"]
 
 MAX_MARKDOWN_HEADING = 6
 FIGURE_PLACEHOLDER = "[그림 p.{page}]"
@@ -70,7 +70,8 @@ def _txt_cell(cell: str) -> str:
     return _one_line(cell)
 
 
-def _md_table(block: Block) -> str:
+def md_table(block: Block) -> str:
+    """A table block as a GFM table (also how a question stem stores it, QTABLE-01)."""
     assert block.table is not None  # noqa: S101 - callers check
     rows = [[_md_cell(cell) for cell in row] for row in block.table.rows]
     width = len(rows[0])
@@ -105,7 +106,7 @@ def _render_block(block: Block, fmt: ExportFormat, depth: int) -> str | None:
             return text
         return "#" * min(depth + 1, MAX_MARKDOWN_HEADING) + " " + text
     if block.type is BlockType.TABLE and block.table is not None:
-        return _md_table(block) if fmt is ExportFormat.MARKDOWN else _txt_table(block)
+        return md_table(block) if fmt is ExportFormat.MARKDOWN else _txt_table(block)
     if not block.text.strip():
         return None
     return _md_paragraph(block.text) if fmt is ExportFormat.MARKDOWN else _paragraph(block.text)

@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "fixture_id": "questions-tables-ko",
+  "file": "questions-tables-ko.pdf",
+  "language": "ko",
+  "sha256": "f85bdcd0b1908a9b0a10580d5113942af83694168b798059a30910a29e7b923e",
+  "synthetic": true,
+  "title": "제2회 합성 확인 평가 — 정수 처리 단계",
+  "page_count": 2,
+  "pages": [
+    {
+      "page": 1,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "합성 확인 평가 · 테스트용",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 154.58,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 1 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "width": 595.28,
+      "height": 841.89,
+      "noise": [
+        {
+          "kind": "running_header",
+          "text": "합성 확인 평가 · 테스트용",
+          "bbox": {
+            "x0": 64.0,
+            "y0": 36.52,
+            "x1": 154.58,
+            "y1": 45.02
+          }
+        },
+        {
+          "kind": "page_number",
+          "text": "- 2 -",
+          "bbox": {
+            "x0": 290.43,
+            "y0": 798.41,
+            "x1": 304.85,
+            "y1": 806.91
+          }
+        }
+      ]
+    }
+  ],
+  "kind": "questions",
+  "instructions": "※ 이 평가지는 소프트웨어 테스트를 위해 작성된 합성 자료입니다. 다음 물음에 답하시오.",
+  "answer_key_page": 2,
+  "answer_key_lines": [
+    "1. ②",
+    "2. ①"
+  ],
+  "questions": [
+    {
+      "number": 1,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "다음 표를 보고 물음에 답하시오.",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "응집"
+        },
+        {
+          "label": "②",
+          "text": "침전"
+        },
+        {
+          "label": "③",
+          "text": "여과"
+        },
+        {
+          "label": "④",
+          "text": "소독"
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "②"
+        ],
+        "accepted_answers": null
+      },
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 138.0,
+        "x1": 531.28,
+        "y1": 326.5
+      },
+      "figure": null,
+      "stem_table": {
+        "rows": [
+          [
+            "단계",
+            "주요 작용",
+            "예시 체류 시간"
+          ],
+          [
+            "응집",
+            "미세 입자 결합",
+            "약 30분"
+          ],
+          [
+            "침전",
+            "플록 가라앉힘",
+            "약 3시간"
+          ]
+        ],
+        "header_rows": 1
+      },
+      "stem_after": "위 표에서 체류 시간이 가장 긴 단계는?",
+      "option_table": null
+    },
+    {
+      "number": 2,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "단계와 주요 작용이 옳은 것은?",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "응집 | 미세 입자 결합"
+        },
+        {
+          "label": "②",
+          "text": "침전 | 플록 가라앉힘"
+        },
+        {
+          "label": "③",
+          "text": "여과 | 남은 입자 제거"
+        },
+        {
+          "label": "④",
+          "text": "소독 | 미생물 억제"
+        }
+      ],
+      "answer": {
+        "correct_option_labels": [
+          "①"
+        ],
+        "accepted_answers": null
+      },
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 350.0,
+        "x1": 531.28,
+        "y1": 502.5
+      },
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": {
+        "rows": [
+          [
+            "",
+            "단계",
+            "주요 작용"
+          ],
+          [
+            "①",
+            "응집",
+            "미세 입자 결합"
+          ],
+          [
+            "②",
+            "침전",
+            "플록 가라앉힘"
+          ],
+          [
+            "③",
+            "여과",
+            "남은 입자 제거"
+          ],
+          [
+            "④",
+            "소독",
+            "미생물 억제"
+          ]
+        ],
+        "header_rows": 1
+      }
+    },
+    {
+      "number": 3,
+      "question_type": "MCQ",
+      "multi_select": false,
+      "stem": "단계와 체류 시간이 옳은 것은?",
+      "option_style": "circled",
+      "options": [
+        {
+          "label": "①",
+          "text": "응집 | 약 30분"
+        },
+        {
+          "label": "②",
+          "text": "침전 | 약 3시간"
+        },
+        {
+          "label": "③",
+          "text": "여과 | 약 1시간"
+        },
+        {
+          "label": "④",
+          "text": "소독 | 약 30분"
+        }
+      ],
+      "answer": null,
+      "page": 1,
+      "bbox": {
+        "x0": 64.0,
+        "y0": 526.0,
+        "x1": 531.28,
+        "y1": 678.5
+      },
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": {
+        "rows": [
+          [
+            "단계",
+            "예시 체류 시간"
+          ],
+          [
+            "①응집",
+            "약 30분"
+          ],
+          [
+            "②침전",
+            "약 3시간"
+          ],
+          [
+            "③여과",
+            "약 1시간"
+          ],
+          [
+            "④소독",
+            "약 30분"
+          ]
+        ],
+        "header_rows": 1
+      }
+    }
+  ]
+}

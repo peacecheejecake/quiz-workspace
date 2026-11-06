@@ -280,6 +280,7 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
   type_uncertain: '문제 유형을 확실히 알 수 없습니다. 유형이 맞는지 확인해 주세요.',
   figure_missing: '문제에서 말하는 그림을 PDF에서 찾지 못했습니다. 원본과 비교해 확인해 주세요.',
   reading_order_repaired: 'PDF에 인쇄된 순서로 다시 읽어 정리했습니다.',
+  table_in_stem: '표를 PDF에서 읽어 문제 내용에 넣었습니다. 병합된 칸은 원본과 다를 수 있습니다.',
   option_count_outlier:
     '이 문서의 다른 문제와 보기 수가 다릅니다. 원본과 비교해 보기를 확인해 주세요.',
   options_on_next_question:
@@ -296,13 +297,14 @@ const ISSUE_MESSAGES: Readonly<Record<string, string>> = {
 /**
  * Codes that describe the extraction, not the draft's content: the optional AI assist did not
  * apply (provider unavailable, unusable output), so the rule-based draft was kept as read from
- * the PDF, or the blocks were put back in printed order. Shown as a note, never a reason to
- * check the draft.
+ * the PDF, the blocks were put back in printed order, or a table went into the stem. Shown as a
+ * note, never a reason to check the draft.
  */
 const ASSIST_NOTE_CODES: ReadonlySet<string> = new Set([
   'llm_unavailable',
   'llm_output_invalid',
   'reading_order_repaired',
+  'table_in_stem',
 ]);
 
 /** A validation that is only a note about the extraction (not something to check). */

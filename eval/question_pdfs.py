@@ -192,9 +192,9 @@ def _own(question: RawQuestion, blocks: Sequence[Block]) -> list[Block]:
 
 
 def _dropped_tables(question: RawQuestion, blocks: Sequence[Block]) -> int:
-    """Tables inside the question that are neither options nor in the stem (the stem keeps only
-    an option table's header rows)."""
+    """Tables inside the question that are neither options nor in the stem."""
     used = {line.block.id for option in question.options for line in option.lines}
+    used |= {line.block.id for line in question.stem_lines}
     return sum(1 for b in _own(question, blocks) if b.type is BlockType.TABLE and b.id not in used)
 
 

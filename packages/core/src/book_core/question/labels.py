@@ -91,6 +91,78 @@ def loose_text(text: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------
+# Tables in a stem (questions.md §4 11, QTABLE-01): GFM pipe tables. `apps/web` mirrors these
+# rules in `stem-table.ts`; tests/fixtures/question-tables.json holds their shared cases.
+
+_PIPE_DELIMITER_CELL = re.compile(r":?-+:?")
+
+
+def _pipe_cells(line: str) -> list[str] | None:
+    """Cells of a ``| a | b |`` row (``\\|`` stays inside its cell), ``None`` for another line."""
+    line = line.strip()
+    if len(line) < 2 or line[0] != "|":
+        return None
+    cells: list[str] = []
+    start = 1
+    i = 1
+    while i < len(line):
+        if line[i] == "\\":
+            i += 2
+            continue
+        if line[i] == "|":
+            cells.append(line[start:i].strip())
+            start = i + 1
+        i += 1
+    return cells if start == len(line) else None
+
+
+def _is_pipe_table(rows: list[list[str]]) -> bool:
+    """A header row, a delimiter row and the same number of cells in every row."""
+    return (
+        len(rows) >= 2
+        and all(_PIPE_DELIMITER_CELL.fullmatch(cell) for cell in rows[1])
+        and len({len(row) for row in rows}) == 1
+    )
+
+
+def split_pipe_blocks(text: str) -> list[tuple[bool, str]]:
+    """``text`` as ``(is table, segment)`` in order, segments stripped and empty ones dropped.
+
+    A table is a run of consecutive ``| ... |`` lines that passes ``_is_pipe_table``; any other
+    run (a row with another cell count, no delimiter row) stays text, whole.
+    """
+    segments: list[tuple[bool, str]] = []
+    plain: list[str] = []
+
+    def flush() -> None:
+        body = "\n".join(plain).strip()
+        plain.clear()
+        if body:
+            segments.append((False, body))
+
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        end = i
+        rows: list[list[str]] = []
+        while end < len(lines) and (cells := _pipe_cells(lines[end])) is not None:
+            rows.append(cells)
+            end += 1
+        if _is_pipe_table(rows):
+            flush()
+            segments.append((True, "\n".join(line.strip() for line in lines[i:end])))
+        else:
+            plain += lines[i : max(end, i + 1)]
+        i = max(end, i + 1)
+    flush()
+    return segments
+
+
+def has_pipe_table(text: str) -> bool:
+    return any(is_table for is_table, _ in split_pipe_blocks(text))
+
+
+# ------------------------------------------------------------------------------------------
 # Stem items (questions.md §4 11, STEM-ITEMS): ``(가) ...`` ``(나) ...`` printed between the
 # question sentence and the options. Option labels (``①``-``⑳``, ``❶``, ``➀``) and ``1.`` are
 # never item labels.
@@ -207,7 +279,18 @@ def stem_item_starts(text: str) -> list[int]:
 
 def break_stem_items(text: str) -> str:
     """``text`` with each stem item on its own line and a blank line between the question
-    sentence and the first item (``stem_item_starts``); unchanged without an item list."""
+    sentence and the first item (``stem_item_starts``); unchanged without an item list. Only the
+    text around a pipe table is read: its cells are never items, and it stands apart from that
+    text by blank lines."""
+    segments = split_pipe_blocks(text)
+    if not any(is_table for is_table, _ in segments):
+        return _break_items(text)
+    return "\n\n".join(
+        segment if is_table else _break_items(segment) for is_table, segment in segments
+    )
+
+
+def _break_items(text: str) -> str:
     starts = stem_item_starts(text)
     item_end = len(text)
     if not starts:

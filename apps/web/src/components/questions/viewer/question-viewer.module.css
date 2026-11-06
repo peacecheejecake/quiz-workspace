@@ -20,6 +20,7 @@
  */
 .stem {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   margin: 0;
   font-size: var(--font-size-body-lg);
@@ -91,6 +92,24 @@
   content: attr(data-copy);
   font-weight: var(--font-weight-semibold);
   visibility: hidden;
+}
+
+/* QTABLE-01: the label column fills the row, so every row has the same tracks as the header. */
+.gridOption > :global(.text) {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+/* Inset by what precedes the cells of a row: its border, padding, 24px control and gap. */
+.optionGridHead {
+  padding-inline: calc(2px + var(--space-3) + 24px + var(--space-2))
+    calc(2px + var(--space-3) + var(--space-5));
+  font-size: var(--font-size-body-lg);
+}
+
+.revisionGridHead {
+  padding-inline: calc(1px + var(--space-3));
+  font-size: var(--font-size-body-lg);
 }
 
 .choices {

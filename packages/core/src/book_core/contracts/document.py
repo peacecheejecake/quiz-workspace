@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 from book_core.contracts.common import (
     CoreModel,
@@ -70,14 +75,38 @@ class Section(CoreModel):
     heading_block_id: Identifier | None = None
 
 
+class TableSpan(CoreModel):
+    """A merged cell: it starts at ``row``/``col`` and covers ``row_span`` x ``col_span`` cells."""
+
+    row: Annotated[int, Field(ge=0)]
+    col: Annotated[int, Field(ge=0)]
+    row_span: Annotated[int, Field(ge=1)] = 1
+    col_span: Annotated[int, Field(ge=1)] = 1
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.row_span * self.col_span == 1:
+            raise ValueError("a table span must cover more than one cell")
+        return self
+
+    def cells(self) -> Iterator[tuple[int, int]]:
+        """Every (row, col) the span covers, its start cell first."""
+        return itertools.product(
+            range(self.row, self.row + self.row_span), range(self.col, self.col + self.col_span)
+        )
+
+
 class TableContent(CoreModel):
     """Cells of a table block as a rectangular grid (spanning cells repeat their text).
 
-    The first ``header_rows`` rows are column headers.
+    The first ``header_rows`` rows are column headers. ``spans`` lists the merged cells; ``None``
+    means none are known: revisions parsed before spans existed, and tables edited since. It is
+    left out of dumps when ``None``, so those revisions keep their stored content and hash.
     """
 
     rows: Annotated[tuple[tuple[str, ...], ...], Field(min_length=1)]
     header_rows: Annotated[int, Field(ge=0)] = 0
+    spans: Annotated[tuple[TableSpan, ...], Field(min_length=1)] | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -85,7 +114,28 @@ class TableContent(CoreModel):
             raise ValueError("table rows must have the same number of cells")
         if self.header_rows > len(self.rows):
             raise ValueError("header_rows exceeds row count")
+        cells = [cell for span in self.spans or () for cell in span.cells()]
+        if len(set(cells)) != len(cells):
+            raise ValueError("table spans overlap")
+        if any(r >= len(self.rows) or c >= len(self.rows[0]) for r, c in cells):
+            raise ValueError("table span exceeds the grid")
         return self
+
+    @model_serializer(mode="wrap")
+    def _dump(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        dumped: dict[str, Any] = handler(self)
+        if self.spans is None:
+            del dumped["spans"]
+        return dumped
+
+    def row_cells(self) -> tuple[tuple[str, ...], ...]:
+        """The rows with each merged cell's text only at its start: the cells a span hides are
+        left out, so a row can have fewer cells or none."""
+        hidden = {cell for span in self.spans or () for cell in tuple(span.cells())[1:]}
+        return tuple(
+            tuple(text for c, text in enumerate(row) if (r, c) not in hidden)
+            for r, row in enumerate(self.rows)
+        )
 
 
 class Block(CoreModel):
