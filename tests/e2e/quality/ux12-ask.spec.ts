@@ -10,6 +10,7 @@ import {
   askPath,
   askThroughApi,
   askUi,
+  conversationOf,
   deleteConversation,
   getConversation,
   messageAction,
@@ -76,8 +77,7 @@ const scrollBody = (panel: Locator, to: 'top' | 'end') =>
     to,
   );
 
-const titlePattern = (title: string) =>
-  new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+const titlePattern = (title: string) => new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
 /** The FAB sits at the panel's bottom end corner, whatever the list's length. */
 async function expectFabAtCorner(panel: Locator): Promise<void> {
@@ -191,7 +191,7 @@ test(
 );
 
 test(
-  'UX12-ASK-AC03 a draft and its scope survive the list, a lost question stays recoverable and sends once',
+  'UX12-ASK-AC03 a draft and its scope survive the list, a lost question stays recoverable and goes out once more',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await askWorkspace(workspaceFactory, 'ux12-ask-03');
@@ -217,7 +217,7 @@ test(
     await expect(askUi.scopeText(panel)).toContainText(s.book.title);
 
     // The accepted turn's response is lost: the question is in the recovery area on the list, and
-    // the kept draft goes out again with the same key.
+    // the kept draft goes out once, in the explicit new conversation (UX11-AI-DIRECT-AC03).
     const keys: string[] = [];
     await page.route('**/api/ask/conversations/*/messages', async (route) => {
       keys.push(route.request().headers()['idempotency-key'] ?? '');
@@ -229,6 +229,10 @@ test(
     await input.press('Enter');
     await expect(panel.getByRole('alert')).toBeVisible();
     await expect(input).toHaveValue('작성 중인 질문');
+    // The lost turn did land: its answer finishes first (one running answer per user).
+    await expect(page).toHaveURL((url) => url.searchParams.has('conversation'));
+    const landed = (await getConversation(s.owner, conversationOf(page))).body as Conversation;
+    await waitForAnswer(s.owner, landed.messages.at(-1)?.id ?? '');
     await askUi.listButton(panel).click();
     await expect(panel.getByRole('group', { name: '보내지 못한 질문' })).toContainText(
       '작성 중인 질문',
@@ -237,7 +241,7 @@ test(
     await expect(input).toHaveValue('작성 중인 질문');
     await input.press('Enter');
     await expect.poll(() => keys.length).toBe(2);
-    expect(keys[1]).toBe(keys[0]);
+    expect(keys[1]).not.toBe(keys[0]);
     await expect(askUi.userMessages(panel)).toHaveCount(1);
     await waitDone(askUi.answers(panel).last());
   },
@@ -303,6 +307,16 @@ test(
         expect(copy.y + copy.height, 'the last message clears the composer').toBeLessThanOrEqual(
           field.y,
         );
+
+        // The card is the field: one line tall, no boundary or ring of its own.
+        expect(field.height).toBeLessThan(60);
+        await input.focus();
+        expect(
+          await input.evaluate((el) => {
+            const css = getComputedStyle(el);
+            return [css.borderTopStyle, css.outlineStyle, css.resize];
+          }),
+        ).toEqual(['none', 'none', 'none']);
 
         await scrollBody(panel, 'top');
         await expect(input).toBeInViewport();

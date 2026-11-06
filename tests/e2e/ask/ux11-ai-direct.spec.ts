@@ -1,6 +1,8 @@
 import {
   askUi,
   openAskPanel,
+  openComposer,
+  startNewConversation,
   seedAskBook,
   createSecretQuestion,
   createConversation,
@@ -45,7 +47,7 @@ test(
       await gate;
       await route.continue();
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('가나다 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -84,7 +86,7 @@ test(
       await gate;
       await route.fulfill({ status: 503, body: '{}' });
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('첫 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -179,7 +181,7 @@ test(
       await gate;
       await route.fulfill({ status: 503, body: '{}' });
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('닫힌 동안 실패한 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -350,7 +352,7 @@ test(
       await gate;
       await route.fulfill({ status: 503, body: '{}' });
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('오프라인 실패 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -398,7 +400,7 @@ test(
       await gate;
       await route.continue();
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('수락된 원래 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -458,7 +460,7 @@ test(
         await route.fulfill({ response });
       }
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await expect(panel.getByRole('button', { name: '보내기' })).toBeVisible();
     await input.fill('응답이 유실된 질문');
@@ -471,7 +473,7 @@ test(
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     panel = await openAskPanel(page);
-    const retry = askUi.input(panel);
+    const retry = await openComposer(panel);
     await expect(retry).toBeEditable();
     await retry.fill('응답이 유실된 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -576,7 +578,7 @@ test(
         await route.abort('failed');
       } else await route.continue();
     });
-    const input = askUi.input(panel);
+    const input = await openComposer(panel);
     await expect(input).toBeEditable();
     await input.fill('첫 번째 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
@@ -585,7 +587,7 @@ test(
     );
     await input.press('Enter');
     await expect(panel.getByRole('alert')).toBeVisible();
-    await panel.getByRole('button', { name: '새 대화' }).click();
+    await startNewConversation(panel);
     await input.fill('다른 질문');
     await expect(panel.getByRole('button', { name: '보내기' })).not.toHaveAttribute(
       'aria-disabled',
