@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ToastProvider, useToast } from '../feedback/Toast';
 import { DialogClose, ModalDialog } from '../layout/ModalDialog';
 import { Button } from './Button';
+import { ChapterPicker } from './ChapterPicker';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -205,5 +206,27 @@ export const Menu: Story = {
           'text color and never show an underline (visited, hover, focus, active).',
       },
     },
+  },
+};
+
+const CHAPTER_NODES = [
+  { value: 'c1', label: '1장 물의 순환', level: 1 },
+  { value: 's11', label: '1.1 증발과 응결', level: 2 },
+  { value: 's12', label: '1.2 강수와 유출', level: 2 },
+  { value: 'c2', label: '2장 정수 처리', level: 1 },
+];
+
+export const ChapterTreePopover: Story = {
+  render: function Render() {
+    const [value, setValue] = useState('s11');
+    return (
+      <ChapterPicker
+        label="챕터"
+        leading={[{ value: 'none', label: '챕터 없음' }]}
+        nodes={CHAPTER_NODES}
+        value={value}
+        onValueChange={setValue}
+      />
+    );
   },
 };

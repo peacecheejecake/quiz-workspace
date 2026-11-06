@@ -166,6 +166,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-KEYBOARD.0': ['UX12-KEYBOARD'],
   // UX12 SHARE-1 + SHARE-2: per-link scope switches and the owner's records, read only (D-9).
   'UX12-SHARE.0': ['UX12-SHARE'],
+  // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
+  'UX12-PICKER.0': ['UX12-PICKER'],
 };
 
 const LEADING_ID = new RegExp(

@@ -503,7 +503,9 @@ function Marker({ favorite }: { favorite: boolean }) {
 
 ### Foundation
 
-`ThemeProvider`, `Tokens`, `Typography`, `Icon`, `FocusRing`, `Surface`, `GlassSurface`, `Divider`, `Button`, `IconButton`, `Badge`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `SegmentedControl`, `Tabs`, `Tooltip`, `Popover`, `Dropdown`, `Dropzone`, `Skeleton`, `ProgressBar`, `StepProgress`, `Toast`.
+`ThemeProvider`, `Tokens`, `Typography`, `Icon`, `FocusRing`, `Surface`, `GlassSurface`, `Divider`, `Button`, `IconButton`, `Badge`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `SegmentedControl`, `Tabs`, `Tooltip`, `Popover`, `Dropdown`, `Dropzone`, `Skeleton`, `ProgressBar`, `StepProgress`, `Toast`, `ChapterPicker`.
+
+`ChapterPicker` (UX12 CHAPTER-1 2026-11-06, [UX12-PICKER](screens/ux12-chapter-picker.md)): 챕터 하나를 고르는 곳은 모두 `Select`가 아니라 이 트리 popover다(여러 개를 고르는 `QuestionRangePicker`는 따로). 트리거는 `Select`와 같은 모양의 `combobox`, 내용은 `modal` kit `Popover` 안의 찾기 입력란과 `role="tree"`(순서 목록의 `level`을 스택으로 중첩, 접기/펼치기, 고른 경로 자동 펼침, 화살표·Home·End·Enter 키보드). 내용은 열린 동안에만 렌더링하므로 한 화면에 수백 개를 둘 수 있다(QIMP-REVIEW-SCALE; `nodes` 배열은 공유한다). modal `FloatingSidePanel` 안에서는 그 layer 위에 뜬다. 768px 미만은 화면 아래에 붙은 불투명 sheet(폭 100vw, 최대 70dvh, safe-area)이고 focus는 키보드를 올리지 않도록 트리 행에 간다.
 
 `ProgressBar` (v1.2.3, UX5-UI): 한 단계 작업(변형 생성·묶음 생성·등록·Fork)의 진행률은 모두 이 공통 컴포넌트다(여러 단계인 업로드·처리·가져오기는 아래 `StepProgress`, UX6-PROGRESS; `role="progressbar"`, 이름 필수, `value` 없음 = indeterminate로 `aria-valuenow` 없음). 값이 바뀌면 fill 폭이 `--duration-progress`(600ms) `--easing-standard`로 부드럽게 이어진다 — 서버가 보고하는 단계(예: 2→40→60→90%) 사이를 끊김 없이 잇기만 하고 보고되지 않은 진행률을 지어내지 않는다. `prefers-reduced-motion`에서는 transition 없이 바로 바뀐다. indeterminate는 fill이 아니라 막대 안을 천천히 지나는 반투명 줄(reduced motion에서는 멈춘 줄)이고 fill은 0%에 머문다 — 그래서 값이 생길 때(예: 준비 중 → 10%) fill이 앞으로만 움직인다(UX6-PROGRESS 2026-10-28; 이전 30% 고정 fill은 10%로 뒤로 갔다).
 

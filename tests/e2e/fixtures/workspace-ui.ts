@@ -38,7 +38,8 @@
 //              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
 //              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
 //   UX12-FILTER  under the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
-//              문제 search box, and icon button "필터" → popover "필터" (comboboxes "챕터"/"유형").
+//              문제 search box, and icon button "필터" → popover "필터" (combobox "챕터" = tree popover
+//              UX12-PICKER, combobox "유형" = Select).
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a
@@ -549,9 +550,48 @@ export async function runSearch(
   await searchUi.box(page).press('Enter');
 }
 
-/** Picks `option` in a filter combobox (Radix Select / listbox popup). */
+/**
+ * The chapter tree popover (UX12-PICKER): combobox trigger with `aria-haspopup="dialog"`, popover
+ * dialog named by the label, searchbox "챕터 찾기"/"장 찾기", tree of treeitems (`aria-label` = the
+ * title) with buttons "<제목> 펼치기"/"<제목> 접기". Portalled to <body>; only in the DOM while open.
+ */
+export const chapterPickerUi = {
+  rows: (page: Page) => page.getByRole('tree').getByRole('treeitem'),
+  row: (page: Page, name: RegExp | string) =>
+    page
+      .getByRole('tree')
+      .getByRole('treeitem', typeof name === 'string' ? { name, exact: true } : { name }),
+  filter: (page: Page) =>
+    page.getByRole('searchbox', { name: /^((챕터|장) 찾기|find (chapter|section))$/i }),
+  expand: (page: Page, title: string) =>
+    page.getByRole('tree').getByRole('button', { name: `${title} 펼치기`, exact: true }),
+  collapse: (page: Page, title: string) =>
+    page.getByRole('tree').getByRole('button', { name: `${title} 접기`, exact: true }),
+};
+
+/** Opens every collapsed row of the open chapter tree. */
+async function expandChapterTree(page: Page): Promise<void> {
+  await page.getByRole('tree').waitFor();
+  const next = page
+    .getByRole('tree')
+    .getByRole('button', { name: /펼치기$/ })
+    .first();
+  while ((await next.count()) > 0) await next.click();
+}
+
+/**
+ * Picks `option` in a filter combobox: a Radix Select / listbox popup, or the chapter tree popover
+ * (UX12-PICKER), which it expands first so that sub-chapters are reachable.
+ */
 export async function chooseFilter(page: Page, combobox: Locator, option: RegExp): Promise<void> {
+  // Read first: an open Select hides the combobox from the accessibility tree.
+  const tree = (await combobox.getAttribute('aria-haspopup')) === 'dialog';
   await combobox.click();
+  if (tree) {
+    await expandChapterTree(page);
+    await chapterPickerUi.row(page, option).click();
+    return;
+  }
   await page.getByRole('option', { name: option }).click();
 }
 

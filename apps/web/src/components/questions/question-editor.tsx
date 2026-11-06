@@ -8,6 +8,7 @@
 // a content change, a success or an `idempotency-key-reused` conflict mint a new one.
 import {
   Button,
+  ChapterPicker,
   CloseIcon,
   DialogClose,
   IconButton,
@@ -17,7 +18,7 @@ import {
   useToast,
   useUnsavedChanges,
 } from '@quiz/ui';
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { FormNotice } from '@/components/auth/form-notice';
 import {
   createQuestionAction,
@@ -42,10 +43,10 @@ import {
   type QuestionFormValues,
   type SourceSnapshot,
 } from '@/lib/questions/form';
+import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
 import { QUESTION_FAILURE_MESSAGES } from '@/lib/questions/problems';
 import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
-import { chapterLabel } from './labels';
 import { FieldMessage, QuestionContentFields } from './question-content-fields';
 import styles from './question-bank.module.css';
 
@@ -196,6 +197,7 @@ interface EditorFormProps {
 }
 
 function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: EditorFormProps) {
+  const chapterNodes = useMemo(() => chapterPickerNodes(chapters), [chapters]);
   const editing = target.mode === 'edit' ? target.question : null;
   const [values, setValues] = useState<QuestionFormValues>(() =>
     editing ? formFromQuestion(editing) : emptyForm(),
@@ -287,13 +289,9 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
     }
   }
 
-  const multiDocs = new Set(chapters.map((c) => c.documentId)).size > 1;
-  const chapterOptions = [
-    { value: NO_CHAPTER, label: '챕터 없음' },
-    ...chapters.map((c) => ({ value: c.id, label: chapterLabel(c, multiDocs) })),
-  ];
+  const chapterLeading = [{ value: NO_CHAPTER, label: '챕터 없음' }];
   if (values.chapterId && !chapters.some((c) => c.id === values.chapterId)) {
-    chapterOptions.push({ value: values.chapterId, label: currentChapter?.title ?? '현재 챕터' });
+    chapterLeading.push({ value: values.chapterId, label: currentChapter?.title ?? '현재 챕터' });
   }
   const documentOptions = documents.map((d) => ({ value: d.id, label: d.title }));
   for (const s of values.sources) {
@@ -328,9 +326,10 @@ function EditorForm({ workspaceId, target, stemId, chapters, documents, save }: 
       />
 
       <div className={styles.row}>
-        <Select
+        <ChapterPicker
           label="챕터"
-          options={chapterOptions}
+          leading={chapterLeading}
+          nodes={chapterNodes}
           value={values.chapterId || NO_CHAPTER}
           onValueChange={(value) =>
             update({ ...values, chapterId: value === NO_CHAPTER ? '' : value }, ['chapterId'])

@@ -6,6 +6,12 @@ export { Badge } from './primitives/Badge';
 export type { BadgeProps, BadgeTone } from './primitives/Badge';
 export { Button } from './primitives/Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './primitives/Button';
+export { ChapterPicker } from './primitives/ChapterPicker';
+export type {
+  ChapterPickerNode,
+  ChapterPickerOption,
+  ChapterPickerProps,
+} from './primitives/ChapterPicker';
 export { Checkbox } from './primitives/Checkbox';
 export type { CheckboxProps } from './primitives/Checkbox';
 export {

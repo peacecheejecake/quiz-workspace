@@ -64,6 +64,7 @@ import {
   type SelectedImportDraft,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
+import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import {
@@ -199,6 +200,19 @@ export function QuestionImport({
   );
   const [chapterOptions, setChapterOptions] =
     useState<readonly BookChapterOption[]>(initialChapters);
+  const chapterNodes = useMemo(
+    () =>
+      chapterPickerNodes(
+        chapterOptions.map((o) => ({
+          id: o.id,
+          title: o.title,
+          level: o.level,
+          documentId: o.document_id,
+          documentTitle: o.document_title,
+        })),
+      ),
+    [chapterOptions],
+  );
   /** Drafts whose chapter change is being saved. */
   const [savingChapter, setSavingChapter] = useState<ReadonlySet<string>>(new Set());
   const [listFailed, setListFailed] = useState(loadFailed);
@@ -550,6 +564,7 @@ export function QuestionImport({
               number={draftNumber(draft)}
               info={draft.chapter}
               options={chapterOptions}
+              nodes={chapterNodes}
               readOnly={!canEdit || draft.publishedQuestionId !== null}
               disabled={publishing || savingChapter.has(draft.id)}
               onChange={(chapterId) => void changeChapter(draft, chapterId)}
@@ -558,7 +573,7 @@ export function QuestionImport({
         </>
       );
     },
-    [canEdit, changeChapter, chapterOptions, publishing, savingChapter],
+    [canEdit, changeChapter, chapterNodes, chapterOptions, publishing, savingChapter],
   );
 
   function markRefused(refused: readonly RefusedDraft[]) {

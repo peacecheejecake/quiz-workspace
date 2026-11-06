@@ -12,6 +12,7 @@ import {
   Badge,
   Breadcrumb,
   Button,
+  ChapterPicker,
   CheckIcon,
   Checkbox,
   ChevronDownIcon,
@@ -225,6 +226,11 @@ export default function Page() {
             <Textarea label="메모" />
             <Checkbox label="동의" />
             <Switch label="알림" />
+            <ChapterPicker
+              label="챕터"
+              nodes={[{ value: 'a', label: '1장', level: 1 }]}
+              value="a"
+            />
             <Select
               label="유형"
               defaultValue="MCQ"

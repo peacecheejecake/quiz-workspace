@@ -1,7 +1,7 @@
 // Display helpers of the question editor and the shared workspace view (the QBANK-01 list and
 // detail panel that also used them were retired by UX7-BANK).
 import type { Question } from '@/lib/questions/form';
-import type { ChapterOption, DocumentOption } from '@/lib/questions/server';
+import type { DocumentOption } from '@/lib/questions/server';
 
 export type QuestionSource = Question['sources'][number];
 
@@ -25,11 +25,6 @@ export function documentTitle(
   documentId: string | null,
 ): string {
   return documents.find((d) => d.id === documentId)?.title ?? '출처 문서';
-}
-
-/** Chapter option label; the document title disambiguates when several books are ready. */
-export function chapterLabel(chapter: ChapterOption, withDocument: boolean): string {
-  return withDocument ? `${chapter.title} (${chapter.documentTitle})` : chapter.title;
 }
 
 export function formatDateTime(iso: string): string {

@@ -50,6 +50,7 @@
 // (QSEARCH-CACHE; non-empty 문제 search debounced 350ms, clearing to empty restores in 0ms).
 import {
   Button,
+  ChapterPicker,
   FloatingSidePanel,
   HistoryIcon,
   IconButton,
@@ -158,6 +159,7 @@ import { useStagedDialogs } from './use-staged-dialogs';
 import styles from './workspace-home.module.css';
 
 const ALL = '__all__';
+const ALL_CHAPTERS = [{ value: ALL, label: '전체 챕터' }];
 const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
 
 function effectiveOverviewFilters(
@@ -847,10 +849,8 @@ function WorkspaceHomeContent({
     applyHeatmapUrl(patchSearch(merged, { q: null }));
   }
 
-  const chapterOptions = [
-    { value: ALL, label: '전체 챕터' },
-    ...chapterChoices.map((c) => ({ value: c.value, label: c.title })),
-  ];
+  // Flat for now: `OverviewChapter` has no level yet (CHAPTER-6).
+  const chapterNodes = chapterChoices.map((c) => ({ value: c.value, label: c.title, level: 1 }));
 
   const page = (
     <div className={styles.home}>
@@ -918,13 +918,14 @@ function WorkspaceHomeContent({
             filterActive={view.chapter !== null || view.type !== null}
             filters={
               <div className={searchStyles.optionRow}>
-                <Select
+                <ChapterPicker
                   label="챕터"
                   hideLabel
-                  options={chapterOptions}
+                  leading={ALL_CHAPTERS}
+                  nodes={chapterNodes}
                   value={view.chapter ?? ALL}
                   onValueChange={(value) =>
-                    value && changeFilters({ chapter: value === ALL ? null : value })
+                    changeFilters({ chapter: value === ALL ? null : value })
                   }
                 />
                 <Select

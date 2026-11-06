@@ -40,8 +40,8 @@
 //   reason text otherwise). Modal FloatingSidePanel (role=dialog, aria-modal="true") named
 //   "챕터 재분배" with close button "챕터 재분배 닫기"; `?panel=chapter-redistribution`.
 //   List step: the QuestionRangePicker (fixtures/range-picker.ts), rows carry the text badge
-//   "직접 정함" for `manual`; combobox "옮길 챕터" (option "챕터 없음" first, then chapters by
-//   document); button "이동 (n)" with reason texts "옮길 문제를 고르세요" / "옮길 챕터를
+//   "직접 정함" for `manual`; combobox "옮길 챕터" (tree popover, UX12-PICKER: "챕터 없음"
+//   first, then chapters, by document with several books); button "이동 (n)" with reason texts "옮길 문제를 고르세요" / "옮길 챕터를
 //   고르세요" (aria-describedby); checkbox "직접 정한 챕터도 다시 추천"; button "자동 추천 보기"
 //   with the scope text "선택한 n문제" / "전체 문제". Empty: "옮길 확정 문제가 없습니다".
 //   Preview step: back button/link "목록으로"; summary text "바뀔 문제 k개 · 그대로 u개 · 추천
@@ -316,6 +316,15 @@ export async function tabTo(page: Page, target: Locator, max = 60): Promise<void
 /** Chooses `option` in a focused select / combobox with the keyboard only. */
 export async function keyboardChoose(page: Page, select: Locator, option: string): Promise<void> {
   await expect(select).toBeFocused();
+  // UX12-PICKER: the filter takes the title (a typed key moves there from the tree), Enter picks.
+  if ((await select.getAttribute('aria-haspopup')) === 'dialog') {
+    await page.keyboard.press('Enter');
+    await page.getByRole('tree').waitFor();
+    await page.keyboard.type(option);
+    await page.getByRole('tree').getByRole('treeitem', { name: option, exact: true }).waitFor();
+    await page.keyboard.press('Enter');
+    return;
+  }
   const native = (await select.evaluate((el) => el.tagName)) === 'SELECT';
   if (native) {
     for (let i = 0; i < 40; i++) {
@@ -350,19 +359,8 @@ export async function expectNoHorizontalScroll(page: Page, scope: Locator): Prom
   expect(own, 'panel has no horizontal scroll').toBeLessThanOrEqual(0);
 }
 
-/** Picks `option` in the `옮길 챕터` select (native select or a Radix listbox). */
+/** Picks a top-level `option` in the `옮길 챕터` tree popover (UX12-PICKER). */
 export async function chooseTarget(page: Page, dialog: Locator, option: string): Promise<void> {
-  const select = redistUi.target(dialog);
-  if ((await select.evaluate((el) => el.tagName)) === 'SELECT') {
-    const label = await select.evaluate(
-      (el, text) =>
-        [...(el as HTMLSelectElement).options].find((o) => o.text.trim().startsWith(text))?.text ??
-        '',
-      option,
-    );
-    await select.selectOption({ label });
-  } else {
-    await select.click();
-    await page.getByRole('option', { name: new RegExp(`^\\s*${escape(option)}`) }).click();
-  }
+  await redistUi.target(dialog).click();
+  await page.getByRole('tree').getByRole('treeitem', { name: option, exact: true }).click();
 }

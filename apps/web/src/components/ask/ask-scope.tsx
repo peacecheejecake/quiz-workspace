@@ -5,14 +5,23 @@
 // list and chapter outline as the 본문 search's 본문 설정 (question papers are never offered; FastAPI
 // intersects the ids with the workspace's published books anyway). The choice applies from the next
 // message on.
-import { FilterIcon, IconButton, Popover, PopoverContent, PopoverTrigger, Select } from '@quiz/ui';
-import { useId, useState } from 'react';
+import {
+  ChapterPicker,
+  FilterIcon,
+  IconButton,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Select,
+} from '@quiz/ui';
+import { useId, useMemo, useState } from 'react';
 import type { AskScope } from '@/lib/ask/client';
 import { EMPTY_SCOPE, isEmptyScope } from '@/lib/ask/model';
-import type { OutlineItem } from '@/lib/search/client';
+import { outlinePickerNodes, type OutlineItem } from '@/lib/search/client';
 import styles from './ask.module.css';
 
 const ALL = '__all__';
+const ALL_SECTIONS = [{ value: ALL, label: '전체 장' }];
 
 export interface ScopeDocument {
   readonly id: string;
@@ -39,6 +48,7 @@ export function AskScopePopover({
   const documentId = scope.document_ids[0] ?? null;
   const chapterId = scope.chapter_ids[0] ?? null;
   const narrowed = !isEmptyScope(scope);
+  const nodes = useMemo(() => outlinePickerNodes(chapters ?? []), [chapters]);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -73,17 +83,17 @@ export function AskScopePopover({
             onChange(value === ALL ? EMPTY_SCOPE : { document_ids: [value], chapter_ids: [] });
           }}
         />
-        <Select
+        <ChapterPicker
           label="장"
-          options={[
-            { value: ALL, label: '전체 장' },
-            ...(chapters ?? []).map((c) => ({ value: c.id, label: c.title, textValue: c.title })),
-          ]}
+          filterLabel="장 찾기"
+          emptyText="찾는 장이 없습니다"
+          leading={ALL_SECTIONS}
+          nodes={nodes}
           value={chapters ? (chapterId ?? ALL) : ''}
           placeholder={documentId ? '장 목록을 불러오는 중…' : '문서를 먼저 선택하세요'}
           disabled={!documentId || chapters === null}
           onValueChange={(value) => {
-            if (!value || !documentId) return;
+            if (!documentId) return;
             onChange({ document_ids: [documentId], chapter_ids: value === ALL ? [] : [value] });
           }}
         />
