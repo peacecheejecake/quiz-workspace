@@ -129,6 +129,8 @@ workspace
  └── async_job
 ```
 
+챕터 트리 예외(UX12 CHAPTER-3, D-9): 발행 revision의 내용은 불변이지만 장 제목·계층·순서와 블록의 장 연결은 `chapter_edit` 경로(SECURITY DEFINER)로 활성 revision에 바로 쓴다. `documents.chapter_tree_version`이 낙관적 잠금이고 `content_hash`는 같은 트랜잭션에서 다시 계산한다. 계약은 [CHMAN-01](screens/chapter-management.md), 규칙은 [questions.md](questions.md) §14.5.
+
 정규화된 구조 및 핵심 제약:
 - `profiles(user_id FK auth.users, display_name, created_at)`, `workspace_memberships(workspace_id, user_id, role, created_at)`; MVP는 owner 1인이고 다인 공유는 후속이지만 권한 모델은 미리 정의한다.
 - `workspaces(id, name, owner_id, status, archived_at, deleted_at)`.

@@ -168,6 +168,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SHARE.0': ['UX12-SHARE'],
   // UX12 CHAPTER-1: the chapter tree popover that replaces six single-choice dropdowns.
   'UX12-PICKER.0': ['UX12-PICKER'],
+  // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).
+  'CHMAN.0': ['CHMAN-01'],
 };
 
 const LEADING_ID = new RegExp(
