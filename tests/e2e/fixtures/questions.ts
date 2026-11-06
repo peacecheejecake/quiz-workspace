@@ -188,6 +188,7 @@ export interface TruthQuestion {
     readonly accepted_answers: readonly string[] | null;
   } | null;
   readonly page: number;
+  readonly figure?: { readonly caption: string };
 }
 
 export interface QuestionPaper extends PdfFile {
