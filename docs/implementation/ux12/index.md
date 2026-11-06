@@ -153,6 +153,12 @@
 |---|---|---|---|---|
 | VIEW-7 제시문 | 제시문 내 줄바꿈, 제시문 사이 구분, 제시문마다 영역 구분 | `<제목>` 형태의 제시문과 `(가)` 항목을 나누어 각각 박스로 표시한다. `∙`, `-` 항목은 줄을 나눈다. 표시 단계에서 처리해 이미 등록된 문제에도 적용하고, 추출기에도 같은 규칙을 넣는다 | QPLAY-01, questions.md §4. TS/Python parity | M·없음 |
 
+### 4.4b VIEW 추가 — 항목형 제시문(사용자 보고 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| VIEW-8 항목 줄바꿈 | 제시문 줄바꿈, 영역 구분 | 한 줄로 붙은 `- 항목` 나열을 항목마다 줄바꿈하고 제시문 영역으로 구분한다. 저장된 문제는 표시에서, 새 추출은 줄을 보존해서 처리한다 | M·VIEW-7 |
+
 ### 4.5 EXPL — AI 해설
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -283,7 +289,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -381,7 +387,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-7 | 10 | 완료 | Codex 지적 없음, 지우기는 resume_dismissed_at 컬럼(migration 20261106180000), lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
-| DESIGN-5 | 10 | 완료 | Codex P2 수정, 블러 원인(Lightning CSS의 -webkit 순서) 수정, PDF 위 유리는 불투명, Heatmap 1.3은 기존값, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| DESIGN-5 | 10 | 완료 | Codex P2 수정, 블러 원인(Lightning CSS의 -webkit 순서) 수정, PDF 위 블러 허용, Heatmap 1.3은 기존값이라 변화 없음(DESIGN-6에서 처리), lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-9 | 10 | 완료 | 실행마다 섞기, 보기 섞기만이면 작업 없이 준비됨(문제 행은 저장), migration 20261106190000, Codex P2(CI phase)는 merge에서 반영, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-10 | 10 | 완료 | 원인은 추출과 같은 큐(코드·재현으로 입증, production 수치는 미확인), quiz.ondemand 큐와 대기 중 표시, Codex 지적 없음, lint·typecheck·unit GREEN |
@@ -389,6 +395,8 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
 | CHAPTER-8 | 10 | 완료 | Workspace 챕터(migration 20261106210000), dropdown 새 챕터, 잠금 순서 통일, Codex 재리뷰 통과, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-11 | 10 | 진행 | |
+| VIEW-8 | 10 | 진행 | |
+| DESIGN-6 | 10 | 진행 | Heatmap 기본 28px, hover 1.5배 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
