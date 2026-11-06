@@ -2,7 +2,7 @@
 // SEARCH-01-AC09/AC11 (UX7-SEARCH): the home's two search forms (each with its own "설정" popover
 // and stated reason when there is nothing to search) and the result list's item click.
 import './dom-setup';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -87,7 +87,6 @@ describe('ContentSearchForm', () => {
   });
 
   it('disables the button with a stated reason without a published document', async () => {
-    const user = userEvent.setup();
     const onSearch = vi.fn();
     render(
       <ContentSearchForm
@@ -102,7 +101,10 @@ describe('ContentSearchForm', () => {
     expect(submit).toBeDisabled();
     expect(submit).toHaveAccessibleDescription(CONTENT_SEARCH_BLOCKED);
     expect(screen.getByRole('status')).toHaveTextContent(CONTENT_SEARCH_BLOCKED);
-    await user.type(screen.getByRole('searchbox', { name: '본문 검색어' }), '{Enter}');
+    const box = screen.getByRole('searchbox', { name: '본문 검색어' });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription(CONTENT_SEARCH_BLOCKED);
+    fireEvent.submit(screen.getByRole('search', { name: '본문 검색' }));
     expect(onSearch).not.toHaveBeenCalled();
   });
 });
