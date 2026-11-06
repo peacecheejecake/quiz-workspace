@@ -19,7 +19,7 @@
 //      | {source: "mock", mock_exam_id, range: RunRange, random_order, seed?}
 //      RunRange = {all?: boolean, chapter_ids?: string[], question_ids?: string[],
 //                  excluded_question_ids?: string[], filters?: {status?: DotStatus[],
-//                  favorite?: boolean, retry?: boolean, type?: QuestionType}}
+//                  favorite?: boolean, retry?: boolean, types?: QuestionType[]}}
 //      (`all` / `chapter_ids` select whole groups; `question_ids` adds single questions;
 //      `excluded_question_ids` removes questions from those groups; filters narrow the result the
 //      way the overview's `status` / `favorite` / `retry` / `type` query does) → 201 PracticeRun.
@@ -130,7 +130,7 @@ export interface RunRange {
     readonly status?: readonly DotStatus[];
     readonly favorite?: boolean;
     readonly retry?: boolean;
-    readonly type?: QuestionType;
+    readonly types?: readonly QuestionType[];
   };
 }
 
@@ -513,7 +513,6 @@ export const runUi = {
   question: rangePickerUi.question,
   questions: rangePickerUi.questions,
   selected: rangePickerUi.selected,
-  filterToggle: rangePickerUi.filterToggle,
   filters: rangePickerUi.filters,
   incorrectFilter: rangePickerUi.incorrectFilter,
   retryFilter: (panel: Locator) =>

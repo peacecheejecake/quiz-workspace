@@ -147,7 +147,7 @@ const DIALOGS: readonly HomeDialog[] = [
     name: '문제 풀기',
     panel: 'mock-exams',
     dialog: (page) =>
-      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
+      page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i, includeHidden: true }),
     open: (page) => page.getByRole('button', { name: /^풀기$/ }).click(),
     opener: (page) => page.getByRole('button', { name: /^풀기$/ }),
   },
@@ -470,7 +470,7 @@ const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
   {
     name: '문제 풀기',
     dialog: (page) =>
-      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
+      page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i, includeHidden: true }),
     open: (page) => domClick(page.getByRole('button', { name: /^풀기$/ })),
   },
   {

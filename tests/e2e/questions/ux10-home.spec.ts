@@ -123,9 +123,8 @@ test(
     await page.goto(overviewPath(workspace.id));
     await expect(overviewUi.markers(page)).toHaveCount(1);
     await page.getByRole('button', { name: /^풀기$/ }).click();
-    const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+    const dialog = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await dialog.getByRole('button', { name: /^(다음|next)$/i }).click();
-    await dialog.getByRole('button', { name: /^(상태 필터|status filter)$/i }).click();
     const group = dialog.getByRole('group', { name: /^(상태 필터|status filter)$/i });
     for (const label of ['안 푼 문제', '본 문제', '틀린 문제', '맞힌 문제', '다시 풀기']) {
       const chip = group.getByRole('button', { name: label, exact: true });
