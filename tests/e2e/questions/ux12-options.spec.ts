@@ -239,12 +239,12 @@ test(
       [panelUi.retryOn(panel), panelUi.retryOff(panel)],
     ] as const;
     for (const [off, on] of toggles) {
-      const iconOff = await off.locator('svg').innerHTML();
+      const iconOff = await off.locator('svg').evaluate((svg) => svg.outerHTML);
       await off.click();
       await expect(on).toBeVisible();
       await moveAway(page);
       await expect(on).toHaveCSS('background-color', TRANSPARENT);
-      expect(await on.locator('svg').innerHTML()).not.toBe(iconOff);
+      expect(await on.locator('svg').evaluate((svg) => svg.outerHTML)).not.toBe(iconOff);
       await on.hover();
       await expect(on).toHaveCSS('background-color', hover);
       await moveAway(page);
