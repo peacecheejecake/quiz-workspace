@@ -134,12 +134,14 @@ export function createPracticeRunApi(
 
   return {
     async rangeQuestions(query) {
+      // No type checked is no question (UX12-MOCKFORM3); the API's empty `type` means every type.
+      if (query.types.length === 0) return { ok: true, data: { chapters: [], items: [] } };
       const params = new URLSearchParams();
       if (query.status.length === 0) params.set('status', 'none');
       else for (const status of query.status) params.append('status', status);
       if (query.favorite) params.set('favorite', 'true');
       if (query.retry) params.set('retry', 'true');
-      for (const type of query.types) params.append('type', type);
+      if (query.types.length < 3) for (const type of query.types) params.append('type', type);
       const search = params.toString();
       const result = await call<QuestionOverview>(
         `${RUN_BFF_PATHS.overview(workspaceId)}${search ? `?${search}` : ''}`,

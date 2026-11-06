@@ -5,7 +5,7 @@
 import type { Schemas } from '@quiz/api-client';
 import type { QuestionDotStatus } from '@quiz/ui';
 import type { RangeFilterState, RangeGroup } from '../viewer/range-model';
-import { allIds, EMPTY_RANGE_FILTERS, triState } from '../viewer/range-model';
+import { ALL_QUESTION_TYPES, allIds, EMPTY_RANGE_FILTERS, triState } from '../viewer/range-model';
 import { displayStem } from '@/lib/questions/display-stem';
 import { NO_CHAPTER_KEY } from '@/lib/questions/overview-placement';
 
@@ -356,7 +356,8 @@ export function filtersFromRange(range: MockRange | null | undefined): RangeFilt
     status: (f.status ?? EMPTY_RANGE_FILTERS.status) as QuestionDotStatus[],
     favorite: f.favorite === true,
     retry: f.retry === true,
-    types: f.types ?? [],
+    // A range saved without `types` was made over every type.
+    types: f.types ?? ALL_QUESTION_TYPES,
   };
 }
 

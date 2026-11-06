@@ -6,8 +6,9 @@
 // selected), one checkbox per chapter (title + count, mixed when partly selected) with its own
 // expand button (aria-expanded; groups start collapsed and only an expanded group renders its
 // rows — a long one virtualized), the home's status filter chips (its colour swatches, next to
-// the label) always shown in a "상태 필터" group, a "유형" checkbox group (none = every type), and
-// "선택 n문제". Controlled: the caller loads the questions for the filters and owns
+// the label) always shown in a "상태 필터" group, a "유형" checkbox group (every type checked by default; a type without
+// questions is disabled and unchecked; none checked shows no question, UX12-MOCKFORM3), and
+// "선택 n문제" on the `전체 선택` row. Controlled: the caller loads the questions for the filters and owns
 // the selection. Native Tab order (chapter checkbox → expand → question checkboxes), Space toggles;
 // the list's controls carry an explicit tabIndex so WebKit (Safari's default: Tab skips buttons)
 // stops on them too.
@@ -24,12 +25,14 @@ import {
 import { useId, useState, type ReactNode, type UIEvent } from 'react';
 import type { QuestionType } from './question-body';
 import {
+  ALL_QUESTION_TYPES,
   allIds,
   EMPTY_RANGE_FILTERS,
   isRangeFiltered,
   RANGE_STEM_CHARS,
   toggleIds,
   triState,
+  typesIn,
   type RangeFilterState,
   type RangeGroup,
   type RangeQuestion,
@@ -65,7 +68,7 @@ const STATUS_CHIPS: readonly { readonly status: QuestionDotStatus; readonly labe
   { status: 'correct', label: '맞힌 문제' },
   { status: 'retry', label: '다시 풀기' },
 ];
-const TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
+const TYPES = ALL_QUESTION_TYPES;
 
 export function QuestionRangePicker({
   groups,
@@ -82,7 +85,23 @@ export function QuestionRangePicker({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const visible = groups ? allIds(groups) : [];
   const count = visible.filter((id) => selected.has(id)).length;
-  const filtered = filters ? isRangeFiltered(filters) : false;
+  // The types the loaded questions have, not the current filter's result: a type seen once stays
+  // available, so unchecking one never disables another. Until a read with every type checked has
+  // finished (a saved range may start narrower) no type is known to be missing.
+  const [seenTypes, setSeenTypes] = useState<readonly QuestionType[]>([]);
+  const [typesKnown, setTypesKnown] = useState(false);
+  if (groups) {
+    const found = typesIn(groups).filter((type) => !seenTypes.includes(type));
+    if (found.length > 0) {
+      setSeenTypes(TYPES.filter((t) => seenTypes.includes(t) || found.includes(t)));
+    }
+    if (!typesKnown && !busy && filters && filters.types.length === TYPES.length) {
+      setTypesKnown(true);
+    }
+  }
+  const typeEnabled = (type: QuestionType) => !typesKnown || seenTypes.includes(type);
+  const available = TYPES.filter(typeEnabled);
+  const filtered = filters ? isRangeFiltered(filters, available) : false;
   const empty = groups !== null && visible.length === 0;
   const reset = () => onFiltersChange?.(EMPTY_RANGE_FILTERS);
 
@@ -131,24 +150,26 @@ export function QuestionRangePicker({
               </Button>
             ) : null}
           </div>
-          <fieldset className={styles.typeGroup}>
-            <legend className={styles.typeLegend}>유형</legend>
-            {TYPES.map((type) => (
-              <Checkbox
-                key={type}
-                label={questionTypeLabels[type]}
-                checked={filters.types.includes(type)}
-                onCheckedChange={(checked) =>
-                  onFiltersChange({
-                    ...filters,
-                    types: TYPES.filter((t) =>
-                      t === type ? checked === true : filters.types.includes(t),
-                    ),
-                  })
-                }
-              />
-            ))}
-            <p className={styles.hint}>고르지 않으면 모든 유형을 보여 줍니다.</p>
+          <fieldset className={styles.typeGroup} aria-label="유형">
+            {TYPES.map((type) => {
+              const enabled = typeEnabled(type);
+              return (
+                <Checkbox
+                  key={type}
+                  label={questionTypeLabels[type]}
+                  disabled={!enabled}
+                  checked={enabled && filters.types.includes(type)}
+                  onCheckedChange={(checked) => {
+                    const next = TYPES.filter((t) =>
+                      t === type ? checked === true : typeEnabled(t) && filters.types.includes(t),
+                    );
+                    // Every available type checked is the unfiltered state, kept as every type.
+                    const all = available.every((t) => next.includes(t));
+                    onFiltersChange({ ...filters, types: all ? TYPES : next });
+                  }}
+                />
+              );
+            })}
           </fieldset>
         </>
       ) : null}
@@ -177,12 +198,6 @@ export function QuestionRangePicker({
         )
       ) : (
         <>
-          <Checkbox
-            label="전체 선택"
-            tabIndex={0}
-            checked={triState(visible, selected)}
-            onCheckedChange={() => onSelectedChange(toggleIds(selected, visible))}
-          />
           <ul className={styles.groups} aria-label="범위">
             {groups.map((group) => (
               <ChapterGroup
@@ -204,9 +219,19 @@ export function QuestionRangePicker({
           </ul>
         </>
       )}
-      <p className={styles.selectedCount} aria-live="polite">
-        {countText(count)}
-      </p>
+      <div className={styles.selectRow}>
+        {!error && groups !== null && !empty ? (
+          <Checkbox
+            label="전체 선택"
+            tabIndex={0}
+            checked={triState(visible, selected)}
+            onCheckedChange={() => onSelectedChange(toggleIds(selected, visible))}
+          />
+        ) : null}
+        <p className={styles.selectedCount} aria-live="polite">
+          {countText(count)}
+        </p>
+      </div>
     </div>
   );
 }

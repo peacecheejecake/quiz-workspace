@@ -92,7 +92,7 @@
 //   FloatingSidePanel inside <main> named "모의고사" (`?panel=mock-exams[&mock=new|<id>]`), close
 //   button "모의고사 닫기"; while loading `[aria-busy="true"]` + status "불러오는 중"; each view's
 //   title is a heading that gets focus (list and create: "모의고사", detail: the mock exam's
-//   name); BackLink "모의고사 목록" on create/detail.
+//   name); BackLink "모의고사 목록" on detail; on create a header icon button before the title ("모의고사 목록" on 범위, "이전 단계" on 옵션).
 //   List: text "모의고사 n개", floating icon button "추가" (every member; UX12-MOCKNAV-AC05,
 //   UX12 MOCKLIST), list "모의고사 목록" with unfinished bank runs and mock exams newest first;
 //   a mock exam listitem has the label "모의고사": button named by the title (opens the detail), status

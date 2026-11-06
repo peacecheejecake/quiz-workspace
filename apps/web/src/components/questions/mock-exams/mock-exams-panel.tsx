@@ -18,6 +18,7 @@
 // with the dialog open (user decision 2026-11-02, QOV-01-AC14); the home owns the history.
 // FastAPI decides every permission; the controls only follow the role it reported to the page.
 import {
+  ArrowLeftIcon,
   Badge,
   BackLink,
   Button,
@@ -133,6 +134,8 @@ export function MockExamsPanel({
   // the person left the form (closed the panel, went back to the list, opened another view or a
   // new 만들기) keeps the mock exam it made but never navigates or touches the newer form.
   const [formOpening, setFormOpening] = useState(0);
+  // The create form's step lives here so the header's back button can move it.
+  const [createStep, setCreateStep] = useState<0 | 1>(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   /** The opening a creation may still show its answer in (null: not on 만들기). */
@@ -146,6 +149,11 @@ export function MockExamsPanel({
     liveView.current = { open, view };
   });
   const reload = () => setReads((n) => n + 1);
+  const [seenView, setSeenView] = useState(view.view);
+  if (view.view !== seenView) {
+    setSeenView(view.view);
+    setCreateStep(0);
+  }
 
   // Read on every opening, then again while a mock exam is being made.
   const [wasOpen, setWasOpen] = useState(open);
@@ -157,6 +165,7 @@ export function MockExamsPanel({
     }
     // A new opening of the panel is a new 만들기 too (see formOpening).
     setFormOpening((n) => n + 1);
+    setCreateStep(0);
     setCreating(false);
     setCreateError(null);
   }
@@ -461,6 +470,8 @@ export function MockExamsPanel({
       ) : (
         <MockExamForm
           key={formOpening}
+          step={createStep}
+          onStepChange={setCreateStep}
           workspaceId={workspaceId}
           mode="create"
           initial={newOptions(exams.length, llmAvailable)}
@@ -524,11 +535,23 @@ export function MockExamsPanel({
         }
       }}
       titleRef={titleRef}
+      headerStart={
+        view.view === 'create' ? (
+          <IconButton
+            label={createStep === 1 ? '이전 단계' : '모의고사 목록'}
+            disabled={creating}
+            icon={<ArrowLeftIcon />}
+            onClick={() =>
+              createStep === 1 ? setCreateStep(0) : onViewChange({ view: 'list' }, 'push')
+            }
+          />
+        ) : undefined
+      }
       closeLabel="모의고사 닫기"
       mobileLayout="full"
     >
       <div className={styles.body} data-screen-id={screenId}>
-        {view.view !== 'list' ? (
+        {view.view !== 'list' && view.view !== 'create' ? (
           // Mounted before the form's steps in the same fixed area, so it stays above them.
           <FloatingPanelPinned>
             <BackLink

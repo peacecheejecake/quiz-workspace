@@ -202,3 +202,19 @@ it('UX12-MOCKNAV-AC05 offers no variation in the form without edit rights', asyn
   expect(screen.getByText('변형 출제에는 편집 권한이 필요합니다.')).toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeDisabled();
 });
+
+it('UX12-MOCKNAV-AC05 the create view has a header back button to the list, not a BackLink', async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ chapters: [], items: [], counts: {} }), { status: 200 }),
+    ),
+  );
+  const onViewChange = renderPanel(true, { view: 'create' });
+  const back = await screen.findByRole('button', { name: '모의고사 목록' });
+  expect(screen.queryByRole('link', { name: '모의고사 목록' })).toBeNull();
+  await user.click(back);
+  expect(onViewChange).toHaveBeenCalledWith({ view: 'list' }, 'push');
+});

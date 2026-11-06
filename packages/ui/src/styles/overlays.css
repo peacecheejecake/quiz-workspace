@@ -170,6 +170,11 @@ html body[data-scroll-locked] {
     border-bottom: 1px solid var(--color-border);
   }
 
+  /* A step list (UX12-MOCKFORM3) is not a header: no divider under it. */
+  > .pinned:has(> .qz-step-list) {
+    border-bottom: 0;
+  }
+
   > .body {
     flex: 1 1 auto;
     min-height: 0;
