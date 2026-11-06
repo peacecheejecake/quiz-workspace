@@ -31,7 +31,8 @@ export function useAnimatedHeight<T extends HTMLElement>() {
     };
 
     const update = () => {
-      if (!el.isConnected) return;
+      // A dragged surface keeps its height; the attribute's removal re-measures (useDragDismiss).
+      if (!el.isConnected || el.hasAttribute('data-dragging')) return;
       const animating = el.style.height !== '';
       const from = animating ? el.offsetHeight : settled;
       el.style.height = '';
@@ -72,7 +73,7 @@ export function useAnimatedHeight<T extends HTMLElement>() {
       }
       update();
     });
-    mutation.observe(el, { childList: true });
+    mutation.observe(el, { childList: true, attributeFilter: ['data-dragging'] });
     if (body) mutation.observe(body, { childList: true, characterData: true, subtree: true });
     el.addEventListener('transitionend', clear);
 

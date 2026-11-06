@@ -3,6 +3,7 @@
 // this list in sync with src/index.ts.
 import {
   useModalLayerOpen,
+  useDragDismiss,
   AccountIcon,
   AlertIcon,
   ArrowLeftIcon,

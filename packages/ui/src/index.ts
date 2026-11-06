@@ -219,3 +219,4 @@ export {
 export type { FindBlock, FindResult, FoundMatch } from './reading/find-in-note';
 
 export { useModalLayerOpen } from './internal/layer';
+export { useDragDismiss, type DragDismissOptions, type DragEdge } from './internal/swipe-dismiss';

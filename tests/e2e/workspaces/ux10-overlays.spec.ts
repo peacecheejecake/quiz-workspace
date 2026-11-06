@@ -1,5 +1,5 @@
 import { expect, homeUi, overviewPath, signInAs, test, wsUi } from '../fixtures/test.ts';
-import { drag, inlineTranslate, line } from '../fixtures/overlay-drag.ts';
+import { drag, expectSettled, line } from '../fixtures/overlay-drag.ts';
 import type { Locator } from '@playwright/test';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -142,8 +142,8 @@ test(
     await expect(dialog).toBeVisible();
     // UX12 DESIGN-3: a drag against the panel's direction moves it a little, then springs back.
     const seen = await drag(dialog.locator(':scope > .header .title'), line(-100, 0));
-    expect(seen.at(-1)).toMatch(/^-[\d.]+px 0px$/);
-    await expect.poll(() => inlineTranslate(dialog)).toBe('');
+    expect(seen.at(-1)).toMatch(/^-[\d.]+px$/);
+    await expectSettled(dialog);
     await expect(dialog).toBeVisible();
   },
 );

@@ -762,6 +762,37 @@ html body[data-scroll-locked] {
 }
 
 /* Header gestures do not interfere with scrolling the overlay body. */
-:is(.qz-panel, .qz-modal) > .header {
+:is(.qz-panel, .qz-modal, .qz-drawer) > .header {
   touch-action: none;
+}
+
+/* A surface dragged off screen (useDragDismiss) has already left: no exit keyframes. */
+:is(.qz-panel, .qz-modal, .qz-drawer)[data-swiped][data-state='closed'] {
+  animation: none !important;
+}
+
+:is(.qz-panel, .qz-modal, .qz-drawer)[data-dragging] {
+  user-select: none;
+}
+
+.qz-panel > .header > .grabber {
+  display: none;
+}
+
+@media (width < 768px) {
+  .qz-panel > .header {
+    position: relative;
+  }
+
+  .qz-panel > .header > .grabber {
+    position: absolute;
+    top: var(--space-1);
+    left: 50%;
+    display: block;
+    width: var(--space-8);
+    height: var(--space-1);
+    border-radius: var(--radius-pill);
+    background: var(--color-border-strong);
+    transform: translateX(-50%);
+  }
 }

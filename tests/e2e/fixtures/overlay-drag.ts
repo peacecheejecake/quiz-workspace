@@ -1,6 +1,7 @@
 // A touch drag as pointer events, step by step: Playwright has no swipe API and CDP is
-// Chromium-only. Reads the surface's inline `translate` after every step, before the release.
-import type { Locator } from '@playwright/test';
+// Chromium-only. Reads the surface's inline `translate` after every step, before the release;
+// browsers serialize a horizontal move without its zero (`120px`, not `120px 0px`).
+import { expect, type Locator } from '@playwright/test';
 
 export interface DragOptions {
   /** `closest()` selector of the surface that moves; defaults to any overlay surface. */
@@ -69,7 +70,9 @@ export function line(dx: number, dy: number, count = 4): (readonly [number, numb
   return Array.from({ length: count }, (_, i) => [(dx * (i + 1)) / count, (dy * (i + 1)) / count]);
 }
 
-/** The inline `translate` of a surface: empty once it is back in place. */
-export function inlineTranslate(surface: Locator): Promise<string> {
-  return surface.evaluate((element) => (element as HTMLElement).style.translate);
+/** The surface finished springing back: nothing inline is left on it. */
+export async function expectSettled(surface: Locator): Promise<void> {
+  await expect(surface).not.toHaveAttribute('data-dragging');
+  await expect(surface).not.toHaveAttribute('data-swiped');
+  expect(await surface.evaluate((element) => (element as HTMLElement).style.translate)).toBe('');
 }

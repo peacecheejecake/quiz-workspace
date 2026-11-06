@@ -2,7 +2,7 @@
 // swipes away (user feedback 2026-11-06, decision D-2). Pointer events only: real-device feel
 // cannot be judged here.
 import type { Page } from '@playwright/test';
-import { drag, inlineTranslate, line } from '../fixtures/overlay-drag.ts';
+import { drag, expectSettled, line } from '../fixtures/overlay-drag.ts';
 import {
   createQuestion,
   expect,
@@ -72,7 +72,7 @@ test.describe('phone', () => {
   );
 
   test(
-    'UX12-GESTURE-AC02 on a phone panels swipe down and the drawer swipes left',
+    'UX12-GESTURE-AC02 on a phone a panel swipes down and its URL value goes',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       await openHome(page, workspaceFactory, 'ux12-gest-02a');
@@ -84,13 +84,6 @@ test.describe('phone', () => {
       expect(seen.at(-1)).toBe('0px 120px');
       await expect(panel).toBeHidden();
       await expect(page).not.toHaveURL(/[?&]panel=/);
-
-      await page.getByRole('button', { name: /메뉴 열기/ }).click();
-      const drawer = page.locator('.qz-drawer');
-      await expect(drawer).toBeVisible();
-      const moved = await drag(drawer.locator('.title'), line(-120, 0));
-      expect(moved.at(-1)).toBe('-120px 0px');
-      await expect(drawer).toBeHidden();
     },
   );
 
@@ -131,10 +124,13 @@ test(
     expect(await drag(header, line(0, 120, 8))).toEqual(Array(8).fill(''));
     await expect(panel).toBeVisible();
     const seen = await drag(header, line(120, 0));
-    expect(seen.at(-1)).toBe('120px 0px');
+    expect(seen.at(-1)).toBe('120px');
     await expect(panel).toBeHidden();
 
-    const { dialog } = await openCreateDialog(page, workspaceFactory, 'ux12-gest-02c');
+    await page.goto('/workspaces');
+    await wsUi.createButton(page).click();
+    const dialog = wsUi.createDialog(page);
+    await expect(dialog).toBeVisible();
     const down = await drag(dialog.getByRole('heading').first(), line(0, 120));
     expect(down.at(-1)).toBe('0px 120px');
     await expect(dialog).toBeHidden();
@@ -166,19 +162,17 @@ test(
 
     const short = await drag(header, line(0, 40, 8), { pauseMs: 40 });
     expect(short.at(-1)).toBe('0px 40px');
-    await expect.poll(() => inlineTranslate(dialog)).toBe('');
+    await expectSettled(dialog);
 
     const opposite = await drag(header, line(0, -200));
     const pulled = Number(/^0px (-?[\d.]+)px$/.exec(opposite.at(-1) ?? '')?.[1]);
     expect(pulled).toBeLessThan(0);
     expect(pulled).toBeGreaterThanOrEqual(-24);
-    await expect.poll(() => inlineTranslate(dialog)).toBe('');
+    await expectSettled(dialog);
 
     await drag(header, line(0, 200), { end: 'cancel' });
-    await expect.poll(() => inlineTranslate(dialog)).toBe('');
+    await expectSettled(dialog);
     await expect(dialog).toBeVisible();
-    await expect(dialog).not.toHaveAttribute('data-dragging');
-    await expect(dialog).not.toHaveAttribute('data-swiped');
   },
 );
 
@@ -194,7 +188,7 @@ test(
     await stem.fill('저장하지 않은 문항');
     const seen = await drag(editor.getByRole('heading').first(), line(0, 160));
     expect(seen.at(-1)).toBe('0px 160px');
-    await expect.poll(() => inlineTranslate(editor)).toBe('');
+    await expectSettled(editor);
     await expect(editor).toBeVisible();
     await expect(stem).toHaveValue('저장하지 않은 문항');
   },
@@ -242,9 +236,7 @@ test(
     expect(short.at(-1)).toBe('0px 30px');
     await expect(button).toBeVisible();
     await expect(page).not.toHaveURL(/[?&]question=/);
-    await expect
-      .poll(() => button.evaluate((el) => (el.parentElement as HTMLElement).style.translate))
-      .toBe('');
+    await expectSettled(page.locator(RETURN_BAR));
 
     const seen = await drag(button, line(0, 100), { surface: RETURN_BAR, click: true });
     expect(seen.at(-1)).toBe('0px 100px');

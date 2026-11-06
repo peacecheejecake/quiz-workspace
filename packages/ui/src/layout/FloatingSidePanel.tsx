@@ -22,7 +22,7 @@ import { containOverscroll } from '../internal/overscroll-guard';
 import { currentOpener, watchOpeners } from '../internal/opener';
 import { ScrollRegion } from '../internal/scroll-region';
 import { handOffFocus } from '../internal/tabbable';
-import { useSwipeDismiss } from '../internal/swipe-dismiss';
+import { panelEdges, useDragDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from '../primitives/icons';
 
@@ -253,14 +253,17 @@ export function FloatingSidePanel({
     onOpenChange?.(next);
   };
   const layer = useFloatingLayer(isOpen, raiseKey, aboveModals, modal);
-  const swipe = useSwipeDismiss(
-    contentRef,
-    layer.rank,
-    modal,
-    side === 'end' ? 'right' : 'left',
-    () => handleOpenChange(false),
-  );
   const registry = useDirtyRegistry();
+  const swipe = useDragDismiss({
+    surface: contentRef,
+    rank: layer.rank,
+    enabled: modal,
+    edges: () => panelEdges(side, window.innerWidth),
+    close: () => {
+      if (dirtyProp || registry.dirty) return false;
+      handleOpenChange(false);
+    },
+  });
   useModalStackEntry(modal && isOpen, () => handleOpenChange(false));
   useEffect(watchOpeners, []);
   const backdrop = useBackdropClose(closeOnBackdropClick && !dirtyProp && !registry.dirty, () =>
@@ -396,6 +399,7 @@ export function FloatingSidePanel({
             <LayerProvider value={layer.zIndex}>
               <DirtyProvider value={registry.report}>
                 <div className="header" onPointerDown={swipe}>
+                  {modal ? <span className="grabber" aria-hidden="true" /> : null}
                   {headerStart ? <div className="start">{headerStart}</div> : null}
                   <div className="heading">
                     <Dialog.Title

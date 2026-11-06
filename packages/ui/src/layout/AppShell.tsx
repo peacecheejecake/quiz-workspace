@@ -1,10 +1,12 @@
 'use client';
 
 import { Dialog } from 'radix-ui';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { cx } from '../internal/cx';
 import { LayerProvider, useFloatingLayer } from '../internal/layer';
+import { useMergedRefs } from '../internal/merge-refs';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
+import { useDragDismiss } from '../internal/swipe-dismiss';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon, MenuIcon } from '../primitives/icons';
 
@@ -48,12 +50,20 @@ export function AppShell({
 }: AppShellProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const drawerOpen = mobileNavOpen ?? uncontrolledOpen;
-  useFloatingLayer(!!sidebar && drawerOpen, undefined, false, true);
+  const layer = useFloatingLayer(!!sidebar && drawerOpen, undefined, false, true);
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useMergedRefs(guardOverscroll, drawerRef);
   const setDrawerOpen = (open: boolean) => {
     if (mobileNavOpen === undefined) setUncontrolledOpen(open);
     onMobileNavOpenChange?.(open);
   };
+  const swipe = useDragDismiss({
+    surface: drawerRef,
+    rank: layer.rank,
+    edges: ['left'],
+    close: () => setDrawerOpen(false),
+  });
 
   return (
     <div className={cx('qz-app-shell', className)} data-has-sidebar={sidebar ? true : undefined}>
@@ -69,12 +79,12 @@ export function AppShell({
             <Dialog.Portal>
               <Dialog.Overlay className="qz-backdrop" data-layer="drawer" />
               <Dialog.Content
-                ref={guardOverscroll}
+                ref={surfaceRef}
                 className="qz-drawer"
                 aria-describedby={undefined}
               >
                 <LayerProvider value="var(--z-modal)">
-                  <div className="header">
+                  <div className="header" onPointerDown={swipe}>
                     <Dialog.Title className="title">{navLabel}</Dialog.Title>
                     <Dialog.Close asChild>
                       <IconButton label={closeMenuLabel} icon={<CloseIcon />} />
