@@ -330,7 +330,7 @@ test(
     await mockUi.backToList(dialog).click();
     const row = mockUi.row(dialog, '중간 점검');
     await expect(row).toContainText(STATUS_TEXT.ready);
-    await expect(row).toContainText(/문제 4개|4 questions/i);
+    await expect(row).toContainText(/\b0\/4\b|4 questions/i);
     await expect(row).toContainText(/문구 변형, 정오 반전|paraphrase, invert/i);
     await mockUi.close(dialog).click();
     await expect(overviewUi.markers(page)).toHaveCount(6);
@@ -421,7 +421,7 @@ test(
     await page.reload();
     let dialog = await openMockExams(page);
     await expect(mockUi.count(dialog, 2)).toBeVisible();
-    await mockUi.open(mockUi.row(dialog, '중간 점검'), '중간 점검').click();
+    await mockUi.openDetail(mockUi.row(dialog, '중간 점검'), '중간 점검');
     await expect(mockUi.questions(dialog)).toHaveCount(4);
     await mockUi.backToList(dialog).click();
 
@@ -447,7 +447,7 @@ test(
     await field.fill('기말 대비');
     await field.press('Enter');
     await expect(mockUi.row(dialog, '기말 대비')).toBeVisible();
-    await mockUi.open(mockUi.row(dialog, '기말 대비'), '기말 대비').click();
+    await mockUi.openDetail(mockUi.row(dialog, '기말 대비'), '기말 대비');
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
     // The detail header's rename: Escape cancels it and focus returns to `더보기`.
     await mockUi.chooseDetailAction(dialog, 'rename');
@@ -656,9 +656,11 @@ test(
     let dialog = await openMockExams(page);
     const row = mockUi.row(dialog, '권한 점검');
     await expect(row).toBeVisible();
-    await expect(mockUi.practise(row)).toBeVisible();
+    await expect(mockUi.rowTitle(row)).toBeVisible();
     await expect(mockUi.add(dialog)).toHaveCount(1);
-    await expect(mockUi.rowMenu(row, '권한 점검')).toHaveCount(0);
+    await mockUi.rowMenu(row, '권한 점검').click();
+    await expect(mockUi.menuAction(page, /./)).toHaveText(['상세 보기']);
+    await page.keyboard.press('Escape');
     const config = { variation_types: ['OPTION_SHUFFLE'] as VariationType[], question_count: 1 };
     await expectProblem(
       await createMockExamRequest(viewer, s.workspaceId, { title: 'x', config, range: ALL }),
@@ -698,8 +700,7 @@ test(
     const archivedRow = mockUi.row(dialog, '권한 점검');
     await expect(archivedRow).toBeVisible();
     await expect(mockUi.add(dialog)).toHaveCount(1);
-    await expect(mockUi.rowMenu(archivedRow, '권한 점검')).toHaveCount(0);
-    await mockUi.open(archivedRow, '권한 점검').click();
+    await mockUi.openDetail(archivedRow, '권한 점검');
     await expect(mockUi.more(dialog)).toHaveCount(0);
     await mockUi.practise(dialog).click();
     const practice = mockUi.practicePanel(page);

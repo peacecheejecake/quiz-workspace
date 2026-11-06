@@ -886,7 +886,7 @@ test(
     await list
       .getByRole('listitem')
       .filter({ hasText: name })
-      .getByRole('button', { name: /^(풀기|practi[sc]e|start)$/i })
+      .getByRole('button', { name, exact: true })
       .click();
     let mockRun = runUi.panel(page);
     await runUi.start(mockRun).click();
@@ -935,12 +935,12 @@ test(
       const startMock = async (unfinished = false): Promise<Locator> => {
         await p.goto(homePath(s.workspaceId, 'panel=mock-exams'));
         const row = mockUi.row(mockUi.dialog(p), name);
-        // With an unfinished run the row leads with 이어 풀기 and 풀기 is in its menu.
+        // A row's title starts or resumes the run; a new run from the start is in its menu.
         if (unfinished) {
           await mockUi.rowMenu(row, name).click();
-          await mockUi.menuAction(p, /^(풀기|practi[cs]e)$/i).click();
+          await mockUi.menuAction(p, /^(처음부터 풀기|practi[cs]e from the start)$/i).click();
         } else {
-          await mockUi.practise(row).click();
+          await mockUi.rowTitle(row).click();
         }
         await runUi.start(runUi.panel(p)).click();
         const r = runUi.panel(p);

@@ -180,7 +180,7 @@ test(
     await page.goto(mockExamsPath(s.workspaceId));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(mockUi.row(list, mockImported.title)).click();
+    await mockUi.rowTitle(mockUi.row(list, mockImported.title)).click();
     const mockPanel = mockUi.practicePanel(page);
     await runUi.start(mockPanel).click();
     await expect(runUi.mockTitle(mockPanel, 1)).toBeVisible();

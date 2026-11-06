@@ -123,10 +123,10 @@ test(
     await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const list = mockUi.dialog(page);
     const row = list
-      .getByRole('list', { name: /^(이어 풀기 목록|unfinished runs)$/i })
+      .getByRole('list', { name: /^(모의고사 목록|mock exams?)$/i })
       .getByRole('listitem');
     await expect(row).toContainText('0/3');
-    const resume = row.getByRole('button', { name: /(이어 풀기|resume)$/i });
+    const resume = row.getByRole('button').first();
     await resume.click();
 
     const panel = runUi.panel(page);

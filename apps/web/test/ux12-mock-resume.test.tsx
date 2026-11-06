@@ -65,30 +65,52 @@ it('UX12-MOCKRESUME-AC01 needs a run and a playable exam', () => {
   expect(canResume({ ...EXAM, question_count_current: 0 } as never)).toBe(false);
 });
 
-it('UX12-MOCKRESUME-AC01 a row leads with 이어 풀기 and keeps 풀기 in its menu', async () => {
+it('UX12-MOCKRESUME-AC01 a row has no button but its title and keeps 처음부터 풀기 in its menu', async () => {
   const onPractise = vi.fn();
-  render(panel(fakeApi(), { onPractise }));
-  const button = await screen.findByRole('button', { name: '시험 이어 풀기 3/10' });
-  expect(button).toHaveTextContent('이어 풀기 3/10');
-  expect(screen.queryByRole('button', { name: '풀기' })).toBeNull();
+  const onResume = vi.fn();
+  render(panel(fakeApi(), { onPractise, onResume }));
+  const title = await screen.findByRole('button', { name: '시험' });
+  const item = title.closest('li') as HTMLElement;
+  expect(item).toHaveTextContent('3/10');
+  expect(item).toHaveTextContent('모의고사');
+  expect(within(item).queryByRole('button', { name: /풀기/ })).toBeNull();
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: '시험 메뉴' }));
   const items = await screen.findAllByRole('menuitem');
   expect(items.map((i) => i.textContent)).toEqual([
-    '풀기',
-    '이어 풀기 지우기',
+    '상세 보기',
+    '처음부터 풀기',
     '이름 바꾸기',
     '설정 바꾸기',
     '삭제',
   ]);
-  await user.click(screen.getByRole('menuitem', { name: '풀기' }));
+  await user.click(screen.getByRole('menuitem', { name: '처음부터 풀기' }));
   await waitFor(() => expect(onPractise).toHaveBeenCalledOnce());
+  expect(onResume).not.toHaveBeenCalled();
 });
 
-it('UX12-MOCKRESUME-AC01 a row without a run keeps 풀기 as its button', async () => {
-  render(panel(fakeApi({ ...EXAM, unfinished_run: null })));
-  expect(await screen.findByRole('button', { name: '풀기' })).toBeEnabled();
-  expect(screen.queryByRole('button', { name: /이어 풀기/ })).toBeNull();
+it('UX12-MOCKRESUME-AC01 a row without a run starts the exam from its title', async () => {
+  const onPractise = vi.fn();
+  render(panel(fakeApi({ ...EXAM, unfinished_run: null }), { onPractise }));
+  const user = userEvent.setup();
+  const title = await screen.findByRole('button', { name: '시험' });
+  expect(title.closest('li')).toHaveTextContent('0/');
+  expect(
+    within(title.closest('li') as HTMLElement).queryByRole('button', { name: /풀기/ }),
+  ).toBeNull();
+  await user.click(title);
+  expect(onPractise).toHaveBeenCalledOnce();
+});
+
+it('UX12-MOCKRESUME-AC01 a row that cannot be practised opens its detail from the title', async () => {
+  const onViewChange = vi.fn();
+  render(
+    panel(fakeApi({ ...EXAM, unfinished_run: null, question_count_current: 0, status: 'failed' }), {
+      onViewChange,
+    }),
+  );
+  await userEvent.setup().click(await screen.findByRole('button', { name: '시험' }));
+  expect(onViewChange).toHaveBeenCalledWith({ view: 'detail', mockExamId: 'exam' }, 'push');
 });
 
 it('UX12-MOCKRESUME-AC02 the detail shows one button and moves 풀기 to 더보기', async () => {
@@ -119,11 +141,19 @@ it('UX12-MOCKRESUME-AC02 a viewer gets the menu only for the run', async () => {
   expect(items.map((i) => i.textContent)).toEqual(['풀기', '이어 풀기 지우기']);
 });
 
-it('UX12-MOCKRESUME-AC03 이어 풀기 hands over the run and its next position', async () => {
+it('UX12-MOCKRESUME-AC02 a viewer list row menu is 상세 보기 and 처음부터 풀기', async () => {
+  render(panel(fakeApi(), { canEdit: false }));
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '시험 메뉴' }));
+  const items = await screen.findAllByRole('menuitem');
+  expect(items.map((i) => i.textContent)).toEqual(['상세 보기', '처음부터 풀기']);
+});
+
+it('UX12-MOCKRESUME-AC03 the title hands over the run and its next position', async () => {
   const onResume = vi.fn();
   render(panel(fakeApi(), { onResume }));
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '시험 이어 풀기 3/10' }));
+  await user.click(await screen.findByRole('button', { name: '시험' }));
   expect(onResume).toHaveBeenCalledWith('run', 4);
 });
 
@@ -139,19 +169,22 @@ it('UX12-MOCKRESUME-AC03 the detail reads the exam again when the run closes', a
   expect(await screen.findByRole('button', { name: '이어 풀기 4/10' })).toBeEnabled();
 });
 
-it('UX12-MOCKRESUME-AC07 이어 풀기 지우기 drops the run and brings 풀기 back', async () => {
-  const api = fakeApi();
-  render(panel(api));
+it('UX12-MOCKRESUME-AC07 이어 풀기 지우기 is not in the list row menu', async () => {
+  render(panel(fakeApi()));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: '시험 메뉴' }));
-  api.list.mockResolvedValue({
-    ok: true,
-    data: { items: [{ ...EXAM, unfinished_run: null }], llm_available: false },
-  });
+  expect(screen.queryByRole('menuitem', { name: '이어 풀기 지우기' })).toBeNull();
+});
+
+it('UX12-MOCKRESUME-AC07 이어 풀기 지우기 on the detail drops the run and brings 풀기 back', async () => {
+  const api = fakeApi();
+  render(panel(api, DETAIL));
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '더보기' }));
+  api.get.mockResolvedValue({ ok: true, data: { ...EXAM, unfinished_run: null } });
   await user.click(await screen.findByRole('menuitem', { name: '이어 풀기 지우기' }));
   await waitFor(() => expect(api.dismissRun).toHaveBeenCalledWith('run'));
-  const list = await screen.findByRole('list', { name: '모의고사 목록' });
-  expect(await within(list).findByRole('button', { name: '풀기' })).toBeEnabled();
+  expect(await screen.findByRole('button', { name: '풀기' })).toBeEnabled();
 });
 
 it('UX12-MOCKRESUME-AC07 a failed 지우기 says so on the detail', async () => {

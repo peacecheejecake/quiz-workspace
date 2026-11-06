@@ -58,13 +58,6 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.runName {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
 .itemMain {
   display: grid;
   gap: var(--space-1);
@@ -80,8 +73,9 @@
 }
 
 .titleButton {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
+  min-height: var(--control-height-sm);
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
   box-sizing: border-box;
   background: transparent;
@@ -125,6 +119,11 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--control-gap);
+}
+
+.itemActions {
+  align-self: center;
+  align-items: center;
 }
 
 .itemActions > *,
@@ -347,4 +346,29 @@
 /* An error takes its own line above the buttons of the panel's footer. */
 .footerLine {
   flex-basis: 100%;
+}
+
+/* UX12 MOCKLIST: the list's floating 추가 button. Zero-height sticky row, so it overlays the list
+   bottom-right while scrolling; the list keeps room under its last row. */
+.fab {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  overflow: visible;
+}
+
+.fabButton {
+  align-self: flex-end;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-floating);
+  transform: translateY(-100%);
+}
+
+.listWithFab {
+  padding-bottom: calc(44px + var(--space-6));
 }

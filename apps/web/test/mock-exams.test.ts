@@ -220,11 +220,10 @@ describe('labels', () => {
   it('words the list meta, progress, failures, partial rounds and the replace confirmation', () => {
     expect(
       metaText({
-        question_count_current: 18,
         config: { variation_types: ['INVERT_POLARITY', 'PARAPHRASE'], question_count: 18 },
       }),
-    ).toBe('문제 18개 · 문구 변형, 정오 반전');
-    // The row then adds " · " and a <time> with the creation time.
+    ).toBe('문구 변형, 정오 반전');
+    // The row shows "answered/total · <time>" (unfinishedRunProgress) above this option line.
     expect(formatDateTime('2026-11-01T06:28:00Z')).toBe('2026. 11. 1. 오후 3:28');
     const generation = {
       requested_count: 20,

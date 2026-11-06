@@ -101,12 +101,10 @@ export function variationText(types: readonly VariationType[]): string {
     .join(', ');
 }
 
-/** The list row's meta line before its timestamp: "문제 18개 · 문구 변형, 정오 반전" (the row
- *  adds " · " and a `<time>` with "2026. 11. 1. 오후 3:28"). */
-export function metaText(exam: Pick<MockExam, 'question_count_current' | 'config'>) {
-  return [`문제 ${exam.question_count_current}개`, variationText(exam.config.variation_types)].join(
-    ' · ',
-  );
+/** The list row's option line under "푼문제/전체문제 · 날짜": "문구 변형, 정오 반전" (empty without
+ *  options, then the row shows no line). */
+export function metaText(exam: Pick<MockExam, 'config'>): string {
+  return variationText(exam.config.variation_types);
 }
 
 /** "2회차": the round whose questions are shown (null before the first one finished). */
@@ -377,4 +375,27 @@ export function selectionFromRange(groups: readonly RangeGroup[], range: MockRan
   }
   for (const id of range.excluded_question_ids ?? []) out.delete(id);
   return out;
+}
+
+export type MockListRow =
+  | { readonly kind: 'run'; readonly id: string; readonly at: string; readonly run: UnfinishedRun }
+  | { readonly kind: 'exam'; readonly id: string; readonly at: string; readonly exam: MockExam };
+
+/**
+ * One list for unfinished bank runs and mock exams, newest first by the date the row shows
+ * (`last_touched_at` of a run, `created_at` of an exam), ties broken by id.
+ */
+export function mergeListRows(
+  runs: readonly UnfinishedRun[],
+  exams: readonly MockExam[],
+): MockListRow[] {
+  const rows: MockListRow[] = [
+    ...runs.map((run) => ({ kind: 'run' as const, id: run.id, at: run.last_touched_at, run })),
+    ...exams.map((exam) => ({ kind: 'exam' as const, id: exam.id, at: exam.created_at, exam })),
+  ];
+  return rows.sort((a, b) => {
+    const diff = Date.parse(b.at) - Date.parse(a.at);
+    if (diff !== 0 && !Number.isNaN(diff)) return diff;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
 }
