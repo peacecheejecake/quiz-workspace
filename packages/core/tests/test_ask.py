@@ -44,10 +44,7 @@ def test_ux12_askmd_citation_cleanup_keeps_markdown_whitespace() -> None:
         "끝  [S9] ."
     )
     assert validate_citations(raw, ["S1"]).text == (
-        "- 가 [1]\n    - 나 다.\n"
-        "줄 끝  \n다음 줄\n\n"
-        "```py\nif a:\n    b  =  1 [1]\n```\n"
-        "끝."
+        "- 가 [1]\n    - 나 다.\n줄 끝  \n다음 줄\n\n```py\nif a:\n    b  =  1 [1]\n```\n끝."
     )
 
 
