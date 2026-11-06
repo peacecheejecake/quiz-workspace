@@ -57,7 +57,7 @@ export function QuestionPreviewPopover({
         <RadixTooltip.Portal>
           <RadixTooltip.Content
             side={side}
-            sideOffset={6}
+            sideOffset={12}
             collisionPadding={POPPER_COLLISION_PADDING}
             className="qz-popover glass-surface qz-question-preview"
             style={layerStyle}

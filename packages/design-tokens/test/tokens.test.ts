@@ -270,18 +270,16 @@ describe('density (design-system.md §4, v1.2.2)', () => {
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
     expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
-    expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
+    expect(staticTokens['heatmap-cell-touch']).toBe('28px'); // UX12 DESIGN-6: reverses UX9-STROKE's 24px
     expect(staticTokens['heatmap-dot']).toBe('16px');
-    expect(staticTokens['heatmap-gap']).toBe('0px');
-    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.3'); // UX12 D-12: was 1.18
+    expect(staticTokens['heatmap-gap']).toBe('7px'); // UX12 DESIGN-6: the marker fills the cell
+    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.5'); // UX12 DESIGN-6: was 1.3
   });
 
   it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {
-    // A heatmap marker's SVG box is the cell; the drawn square is 18/24 of the viewBox.
-    const drawn = (cell: number) => (cell * 18) / 24;
+    // UX12 DESIGN-6: the drawn square is the cell; the grid gap spaces the neighbours.
     for (const cell of [px('heatmap-cell'), px('heatmap-cell-touch')]) {
-      const pitch = cell + px('heatmap-gap');
-      expect(pitch - drawn(cell)).toBeLessThanOrEqual(drawn(cell) / 3);
+      expect(px('heatmap-gap')).toBeLessThanOrEqual(cell / 3);
       expect(cell).toBeGreaterThanOrEqual(24);
     }
   });

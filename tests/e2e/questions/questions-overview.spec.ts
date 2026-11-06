@@ -72,7 +72,7 @@ import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const HOVER_SCALE = 1.3;
+const HOVER_SCALE = 1.5;
 const BOOK = book('book-ko');
 const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
