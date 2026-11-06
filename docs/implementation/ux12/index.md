@@ -271,6 +271,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DESIGN-2 | 1 | 진행 | |
 | HOME-1 | 1 | 진행 | |
 | HILITE-1 | 1 | 진행 | |
-| DOCS-1 | 1 | 진행 | |
+| DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
 | CHAPTER-2 | 1 | 대기 | HOME-1 뒤(`packages/ui/src/questions` 공유) |
