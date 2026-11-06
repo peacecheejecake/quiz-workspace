@@ -157,6 +157,26 @@ describe('generated tokens.css', () => {
   });
 });
 
+// UX12 DESIGN-4: Playwright cannot emulate prefers-reduced-transparency, so the rule is read here.
+describe('glass-surface base styles', () => {
+  const base = readFileSync(resolve(import.meta.dirname, '../src/base.css'), 'utf8');
+
+  it('layers the gradient over the glass color', () => {
+    const decls = base.slice(base.indexOf('.glass-surface {'));
+    expect(decls.slice(0, decls.indexOf('}'))).toMatch(
+      /background-color: var\(--color-glass\);\s+background-image: var\(--glass-gradient\);/,
+    );
+  });
+
+  it.each(['@media (prefers-reduced-transparency: reduce)', '@supports not'])(
+    '%s falls back to the flat solid color (the shorthand drops the gradient)',
+    (rule) => {
+      const block = base.slice(base.indexOf(rule));
+      expect(block.slice(0, block.indexOf('}'))).toContain('background: var(--color-glass-solid);');
+    },
+  );
+});
+
 describe('generated TS module', () => {
   it.each(['light', 'dark'] as const)('%s values equal the generated CSS', (theme) => {
     const decls = theme === 'light' ? genLight : genDark;

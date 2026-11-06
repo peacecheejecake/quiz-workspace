@@ -26,6 +26,7 @@
 | UX12-QEDIT | 보기 순서 끌기·줄바꿈 입력 | 문제 편집기 | [ux12-question-edit.md](ux12-question-edit.md) |
 | UX12-NAV | 페이지 이동 반응 | 하위 페이지 링크 | [ux12-navigation.md](ux12-navigation.md) |
 | UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
+| UX12-GLASS | floating 표면 gradient·복귀 bar 모양 | 공통 UI | [ux12-glass.md](ux12-glass.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |

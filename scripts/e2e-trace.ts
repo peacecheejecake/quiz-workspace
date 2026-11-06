@@ -154,6 +154,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SPANS.0': ['UX12-SPANS'],
   // UX12 EXTRACT-3..5 (2026-11-06): tables in stems and options shown as columns.
   'QTABLE.0': ['QTABLE-01'],
+  // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
+  'UX12-GLASS.0': ['UX12-GLASS'],
 };
 
 const LEADING_ID = new RegExp(
