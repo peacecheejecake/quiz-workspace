@@ -14,7 +14,7 @@
 - **Hover:** hover가 있는 장치(`@media (hover: hover)`)에서 행 어디든 올리면 동작한다. 비활성 행은 반응하지 않는다. 키보드는 기존 focus ring을 쓴다.
 - **채점 결과:** 객관식은 `정답`·`내 선택`·`정답 · 내 선택`·`정답입니다.`·`오답입니다.` 글자가 보이지 않는다. 대신 정답 보기 행에 체크, 오답으로 고른 행에 X 아이콘을 둔다(`data-option-mark="correct|wrong"`, 아이콘 색은 행 테두리 색). 아이콘 자리는 제출 전부터 비워 두어 제출해도 줄바꿈과 행 위치가 그대로다. 글자는 `qz-visually-hidden`으로 남는다: 결과 문장은 `role="status"`이고, 행 표시는 radio/checkbox의 `aria-describedby`다. 숨긴 글자에는 focus ring이 보일 수 없으므로 제출 뒤 focus는 보기 영역으로 간다: 이 영역은 `role="group"`이고 이름이 결과 문장이며 키보드로 제출하면 focus ring이 보인다. 채점 대기·직접 채점 문구와 단답형·서술형의 결과 문구는 보이는 그대로다.
 - **즐겨찾기·다시 풀기:** 켜진 toggle(`.qz-study-toggle[data-state='on']`)에는 `--color-state-selected` 채움이 없다. 아이콘의 fill·stroke 반전과 이름 변화가 상태를 전달한다. hover·pressed는 꺼진 toggle과 같다.
-- **줄바꿈:** 보기 글자의 줄바꿈을 그대로 보인다(`white-space: pre-wrap`): 답을 받는 보기 행, 정리 노트의 문제 미리보기, 모의고사 문제 미리보기. 편집기 입력은 VIEW-3이다.
+- **줄바꿈:** 보기 글자의 줄바꿈을 그대로 보인다(`white-space: pre-wrap`): 답을 받는 보기 행, 정리 노트의 문제 미리보기, 모의고사 문제 미리보기, PDF 가져오기의 원본 비교, 중복 문제 정리. 편집기 입력은 VIEW-3이다.
 
 ## 수용 기준
 
