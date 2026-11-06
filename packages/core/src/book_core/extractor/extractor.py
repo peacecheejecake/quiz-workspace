@@ -79,7 +79,7 @@ from book_core.question import (
 
 logger = logging.getLogger("book_core.extractor")
 
-EXTRACTOR_VERSION = "book-core-question-extractor/1"
+EXTRACTOR_VERSION = "book-core-question-extractor/2"
 
 _OUTLIER_MIN_QUESTIONS = 10
 """Multiple-choice questions before a document has a common option count."""

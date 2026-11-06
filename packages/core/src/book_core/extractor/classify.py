@@ -29,7 +29,8 @@ Evidence:
 - **page share** (reported, not decisive): pages where such a question starts or the answer
   key is printed, over pages with text.
 
-Rule (``CLASSIFIER_VERSION`` 1; calibrate with ``eval/classify_pdfs.py`` on local PDFs):
+Rule (``CLASSIFIER_VERSION`` 2: the thresholds of 1, on blocks in ``reading_order``; calibrate
+with ``eval/classify_pdfs.py`` on local PDFs):
 
 - fewer than ``MIN_STRONG_QUESTIONS`` strong questions -> ``book``;
 - coverage >= ``PAPER_COVERAGE`` -> ``question_paper``;
@@ -62,7 +63,7 @@ from book_core.extractor.segment import (
 )
 from book_core.question import answer_option_keys, canonical_key
 
-CLASSIFIER_VERSION = "book-core-content-classifier/1"
+CLASSIFIER_VERSION = "book-core-content-classifier/2"
 
 ContentKind = Literal["book", "question_paper", "mixed"]
 Confidence = Literal["high", "low"]
