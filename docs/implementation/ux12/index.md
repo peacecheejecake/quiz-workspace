@@ -212,6 +212,13 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | DOCS-1 업로드 | step 폭 고정, 숫자 정렬, 문구, 취소 버튼 | `.steps` 고정 basis, `%`는 `5ch` tabular. `.marker` `line-height: 1`, 한 단계 작게. `processingLabel`이 단계명만 반환. `structuring`→`구조 분석 중`, `chunking`→`색인 준비 중`으로 바꿔 `분석 중` 중복을 막는다. 취소는 `IconButton` + `TrashIcon` | DOC-01-AC05, `workspace-ui.ts` locator | S·없음 |
 | DOCS-2 원본 패널 | 원본 링크 → floating dialog | 현재 같은 탭 이동 지점: 가져오기 초안, 문제 상세 출처, 관련 본문 PDF, 검색 발췌, 요약 쪽 링크, 공유 화면 4곳. `SourceComparePanel`에 `initialPage`, 공용 `PdfPageDialog`. 풀이 화면은 전체 PDF 금지(QSRC-01) | QIMPORT-01·02, RELSRC-01, QVIEW-01. D-13 | M·CHAPTER-1과 순서 조정 |
 
+### 4.9a DOCS 추가 — PDF 미리보기와 헤더(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| DOCS-3 출처 미리보기 | 문제·해설 패널의 PDF 출처 | 출처를 누르면 floating dialog에 해당 부분과 주변 페이지의 PDF 미리보기를 보인다 | M·DOCS-2 |
+| DOCS-4 PDF 헤더 | 간격, 배경, 유리, 다시 보기 | PDF 헤더의 간격과 배경색을 정리하고 glassmorphism을 적용한다. 숨겨진 헤더를 탭과 hover로 다시 볼 수 있게 한다 | M·DESIGN-5 |
+
 ### 4.10 CHAPTER — 챕터
 
 사실: 챕터는 parser가 만들고 document revision에 속한다. 발행 revision은 `revision_content_guard`로 동결되어 있다. 사용자 편집은 제목 블록 교정뿐이다. 문제 FK에 ON DELETE가 없으므로 삭제 전 문제 이동이 필수다.
@@ -275,7 +282,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -380,4 +387,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-7 | 10 | 진행 | |
 | CHAPTER-7 | 10 | 진행 | |
 | CHAPTER-8 | 10 | 진행 | |
+| DOCS-3 | 10 | 진행 | |
+| DOCS-4 | 10 | 진행 | |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
