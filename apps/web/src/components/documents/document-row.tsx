@@ -24,6 +24,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import type { DocumentKind } from '@/lib/documents/client-api';
 import type { DocumentRow } from '@/lib/documents/upload-machine';
 import { formatBytes } from '@/lib/documents/validation';
+import { PendingLink } from '@/components/workspaces/pending-link';
 import { DocumentKindMenu } from './document-kind-menu';
 import { TextExportMenu } from './text-export-menu';
 import styles from './documents.module.css';
@@ -129,9 +130,9 @@ export function DocumentRowItem({
       {row.title}
     </Link>
   ) : href ? (
-    <Link href={href} className={styles.title}>
+    <PendingLink href={href} className={styles.title}>
       {row.title}
-    </Link>
+    </PendingLink>
   ) : (
     <span className={styles.title}>{row.title}</span>
   );

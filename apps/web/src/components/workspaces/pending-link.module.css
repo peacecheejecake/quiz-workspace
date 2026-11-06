@@ -1,0 +1,31 @@
+/* UX12-NAV-AC01. Out of flow, so neither the crumbs after the link nor the page shift. Semantic
+   tokens only. */
+
+.link {
+  position: relative;
+}
+
+/* The delay keeps a fast navigation from flashing the bar. */
+.mark {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  animation: pulse 0.6s var(--easing-standard) 0.1s infinite alternate backwards;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A still bar. */
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
+}
