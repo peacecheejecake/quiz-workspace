@@ -304,7 +304,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | SHELL-3 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | SHELL-4 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | SHELL-5 | 6 | 대기 | |
-| SHELL-6 | 6 | 진행 | |
+| SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | CHAPTER-1 | 7 | 진행 | |
 | CHAPTER-3 | 7 | 대기 | |
 | CHAPTER-4 | 7 | 대기 | |
