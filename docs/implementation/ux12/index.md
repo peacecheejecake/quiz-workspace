@@ -102,7 +102,7 @@
 | SHELL-1 신원 재확인 | 재진입 문구, 복귀 버튼 깜빡임 | 원인 확인: `verifyIdentity`가 창 `focus`·`pageshow`·복귀 클릭마다 `identityPending`을 켜고, `globals.css`가 앱 전체를 `visibility: hidden`으로 만든다. **문구만 지우면 빈 화면 깜빡임이 남는다.** `silent` 모드를 추가해 계정 불일치가 확정될 때만 가린다. 활동 buffer는 유지한다 | ux11-return AC04 개정. `practice-return-provider.test.tsx` RED "same user focus → pending 없음". D-4 | M·없음 |
 | SHELL-2 복귀 bar 모양 | padding, 둥근 모서리, glass, X 테두리 | `practice-return.module.css`. 버튼 padding 축소, 외곽 padding 확대, `--radius-xl`, `glass-surface`. 높이 유지, 320px 대응. X 테두리는 DESIGN-1로 해결 | AC05 44px 유지 | S·DESIGN-1,4 |
 | SHELL-3 테마 | light/dark 버튼 | `ThemeProvider`가 kit에만 있고 앱에 안 쓰인다. `quiz-theme` cookie를 RootLayout이 읽어 `data-theme` 지정(깜빡임 없음, CSP 영향 없음). 사용자 메뉴에 시스템/라이트/다크 | design-system §3.2. 저장 유지 E2E. D-5 | M·DESIGN-1 |
-| SHELL-4 설정 | 드래그 자동 복사 | `/settings` 추가, Switch 기본 꺼짐. `useAutoCopyOnSelect`: pointer 선택만, 입력란 제외. `HighlightableText`의 선택 메뉴와 공존, 복사 내용은 `rangeText` 재사용. iOS는 clipboard 제약으로 데스크톱 우선 | 새 화면 명세. D-5 | M·SHELL-3 |
+| SHELL-4 설정 | 드래그 자동 복사 | `/settings/preferences` 추가, Switch 기본 꺼짐. `useAutoCopyOnSelect`: pointer 선택만, 입력란 제외. `HighlightableText`의 선택 메뉴와 공존, 복사 내용은 `rangeText` 재사용. iOS는 clipboard 제약으로 데스크톱 우선 | 새 화면 명세. D-5 | M·SHELL-3 |
 | SHELL-5 가상키보드 | 키보드 때 헤더·본문 고정 | `interactiveWidget: 'resizes-content'` + `useKeyboardInset`(`visualViewport`). sticky header, panel, 복귀 bar 보정 | overlay-scroll.md. Playwright로 실제 키보드를 못 띄우므로 **실기기 확인이 DoD**. iOS는 최선 노력 | M·SHELL-3 |
 | SHELL-6 도움말 | Release note / help center | 사용자 메뉴에서 여는 `도움말` 정적 페이지, 릴리스 노트는 그 한 절 | D-6 | S·SHELL-3 |
 
@@ -303,7 +303,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | DOCS-2 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 22·lint·typecheck·unit GREEN |
 | SHELL-3 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | SHELL-4 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
-| SHELL-5 | 6 | 대기 | |
+| SHELL-5 | 6 | 진행 | |
 | SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | CHAPTER-1 | 7 | 진행 | |
 | CHAPTER-3 | 7 | 대기 | |
