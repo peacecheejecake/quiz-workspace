@@ -560,7 +560,7 @@ test(
     await expect(homeUi.questionSearchButton(page)).toBeVisible();
     await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
-    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
+    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*2$/); // the book and the paper
     await homeUi.openMenu(page);
     await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
     await page.keyboard.press('Escape');
