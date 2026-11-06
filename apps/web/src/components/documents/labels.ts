@@ -49,20 +49,19 @@ const STAGE_LABELS: Readonly<Record<string, string>> = {
   loading: '파일 읽는 중',
   downloading: '파일 읽는 중',
   parsing: '파싱 중',
-  structuring: '분석 중',
-  chunking: '분석 중',
+  structuring: '구조 분석 중',
+  chunking: '색인 준비 중',
   indexing: '색인 중',
   publishing: '게시 중',
 };
 
-/** "처리 대기 중" / "처리 준비 중" / "처리 중 · 색인 중" for a processing row. */
+/** "처리 대기 중" / "처리 준비 중" / "색인 중" for a processing row: the stage alone. */
 export function processingLabel(row: DocumentRow): string {
   const job = row.job;
   if (!job || job.status === 'queued') return '처리 대기 중';
   // A cold worker loads the parser's models first (UX3-JOB, DOC-01-AC05).
   if (job.stage === 'preparing') return '처리 준비 중';
-  const stage = job.stage ? (STAGE_LABELS[job.stage] ?? '처리 중') : null;
-  return stage && stage !== '처리 중' ? `처리 중 · ${stage}` : '처리 중';
+  return (job.stage && STAGE_LABELS[job.stage]) || '처리 중';
 }
 
 /** The DOC-01 step list (UX6-PROGRESS): 업로드 → 분석 → 색인. */

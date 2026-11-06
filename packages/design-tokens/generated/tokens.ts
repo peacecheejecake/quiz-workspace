@@ -91,6 +91,7 @@ export const themedTokens = {
 } as const;
 export const staticTokens = {
   'font-sans': '"Pretendard", "Inter", system-ui, -apple-system, sans-serif',
+  'font-size-label-xs': '11px',
   'font-size-label-sm': '12px',
   'font-size-label': '13px',
   'font-size-body': '14px',
