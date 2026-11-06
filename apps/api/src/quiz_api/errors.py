@@ -115,6 +115,12 @@ class ProblemType(StrEnum):
     # 422: a chapter redistribution target is not a chapter of the current revision of a live
     # book of the workspace (a question paper's chapter, an old revision's, a deleted book's).
     CHAPTER_INVALID = "urn:quiz-workspace:problem:chapter-invalid"
+    # 409: the chapter tree is not the version the client read (CHMAN-01-C05).
+    CHAPTER_TREE_CHANGED = "urn:quiz-workspace:problem:chapter-tree-changed"
+    # 422: a chapter move would make a cycle or a tree deeper than 20 levels.
+    CHAPTER_TREE_INVALID = "urn:quiz-workspace:problem:chapter-tree-invalid"
+    # 422: deleting a chapter with questions needs `move_questions_to` (CHMAN-01-C06).
+    CHAPTER_TARGET_REQUIRED = "urn:quiz-workspace:problem:chapter-target-required"
     # 409: a merge named questions whose content is not the same question (UX7-DEDUP).
     NOT_DUPLICATES = "urn:quiz-workspace:problem:not-duplicates"
     # 422: a range names a question that is not a live CONFIRMED question of the workspace (a

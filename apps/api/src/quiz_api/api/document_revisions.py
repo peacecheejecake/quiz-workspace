@@ -652,7 +652,9 @@ def restore_revision(
         if repo.active_parse_job(document.workspace_id, draft.id) is not None:
             raise _publish_in_progress()
         repo.replace_draft_content(draft, source)
-        _refresh_hash(repo, document, draft)
+    # CHMAN-01: chapter edits live on the active revision; the restored draft carries them.
+    repo.carry_chapter_tree(document, draft)
+    _refresh_hash(repo, document, draft)
     repo.record_activity(
         document,
         user_id,

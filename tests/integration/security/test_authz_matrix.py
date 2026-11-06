@@ -136,6 +136,12 @@ RULES: dict[str, Rule | str] = {
     "listChapterRedistributionQuestions": EDIT,
     "previewChapterRedistribution": EDIT,
     "assignQuestionChapters": EDIT,
+    # chapter management (CHMAN-01)
+    "getChapterTree": EDIT,
+    "createChapter": EDIT,
+    "updateChapter": EDIT,
+    "moveChapters": EDIT,
+    "deleteChapter": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
     "createQuestionImport": EDIT,
@@ -302,6 +308,12 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
                     "expected_chapter_id": None,
                 }
             ],
+        },
+        "createChapter": {"document_id": ids["document_id"], "parent_id": None, "title": "S4"},
+        "updateChapter": {"title": "S4"},
+        "moveChapters": {
+            "expected_version": 0,
+            "moves": [{"chapter_id": ids["chapter_id"], "parent_id": None, "position": 0}],
         },
         "startWorkspaceFork": {"name": "S4 fork"},
         "searchSharedWorkspace": {"query": "S4"},

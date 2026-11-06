@@ -54,7 +54,7 @@ linked_tests: [CHMAN-01-AC01 … CHMAN-01-AC08]
 
 ### CHMAN-01-C01 권한
 
-모든 route는 편집 권한·활성 Workspace를 요구한다: 보기 권한 403 `insufficient-role`, 보관 403 `workspace-archived`, 다른 Workspace·삭제·없는 id는 같은 본문의 404. Share session에는 route가 없다. 쓰기는 `Idempotency-Key`를 받는다(같은 키·같은 본문 → 저장한 응답, 다른 본문 → 422 `idempotency-key-reused`).
+모든 route는 편집 권한·활성 Workspace를 요구한다: 보기 권한 403 `insufficient-role`, 보관 403 `workspace-archived`, 다른 Workspace·삭제·없는 id는 같은 본문의 404. Share session에는 route가 없다. 쓰기는 `Idempotency-Key`를 받는다(같은 키·같은 본문 → 저장한 응답, 다른 본문 → 409 `idempotency-key-reused`).
 
 ### CHMAN-01-C02 잠금 순서
 

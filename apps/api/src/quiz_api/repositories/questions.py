@@ -50,7 +50,7 @@ UNNUMBERED = 2147483647
 # UX9 (docs/questions.md §14.1): how a question's chapter was decided.
 ChapterSource = Literal["manual", "auto"]
 # Why a chapter changed (`question_chapter_changes.source`).
-ChapterChangeSource = Literal["manual", "recommendation", "edit", "import"]
+ChapterChangeSource = Literal["manual", "recommendation", "edit", "import", "chapter_edit"]
 
 ActivityEventType = Literal[
     "question.created",
