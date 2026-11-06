@@ -1591,6 +1591,8 @@ export type paths = {
      *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
      *     user and question, so no separate key lock is taken. A key seen again replays its session
      *     while it is open: once submitted, the latest result answers instead, or 409 without one.
+     *     A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
+     *     its latest submission still waits for grading: nothing else can finish that one.
      */
     post: operations['openQuestionPractice'];
     delete?: never;
@@ -6162,7 +6164,7 @@ export type components = {
       previous_revision: boolean;
       /** Reset Epoch */
       reset_epoch: number;
-      /** @description The latest submitted session of the active revision, with its outcome. */
+      /** @description The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading. */
       result: components['schemas']['PracticeSessionDetail'] | null;
       /**
        * Reused

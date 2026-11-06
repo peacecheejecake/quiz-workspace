@@ -231,6 +231,42 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     expect(openSession).toHaveBeenCalledTimes(1);
   });
 
+  it('UX12-RETRYOPEN-AC01 practice: a clean opening of a marked question keeps the toggle and an inert 다시 풀기', async () => {
+    render(
+      <QuestionViewer
+        mode="practice"
+        workspaceId={WS}
+        question={{
+          id: QID,
+          title: '3장 12번 문제',
+          chapterTitle: '3장 물의 순환',
+          questionType: 'MCQ',
+          preview: STEM,
+          isFavorite: false,
+          needsRetry: true,
+          lastGradedResult: 'correct',
+          isPendingGrading: false,
+        }}
+        readOnly={false}
+        onClose={noop}
+        onFlagsChange={noop}
+        onViewed={noop}
+      />,
+    );
+    const panel = screen.getByRole('dialog', { name: '3장 12번 문제' });
+    await within(panel).findByRole('radiogroup');
+    expect(within(panel).getByRole('button', { name: '다시 풀기 해제' })).toHaveAttribute(
+      'data-state',
+      'on',
+    );
+    expect(within(panel).getByRole('button', { name: /^다시 풀기$/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(within(panel).getByRole('button', { name: '초기화' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('region', { name: '해설' })).toBeNull();
+  });
+
   it('RETRY-01-C04 practice: 다시 풀기 is not rendered unless the last graded result is correct, even when the flag is on', () => {
     const question = {
       id: QID,

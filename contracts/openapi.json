@@ -7798,7 +7798,7 @@
                 "type": "null"
               }
             ],
-            "description": "The latest submitted session of the active revision, with its outcome."
+            "description": "The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading."
           },
           "reused": {
             "description": "`session` is the cached one; nothing was written.",
@@ -23904,7 +23904,7 @@
     },
     "/api/v1/questions/{question_id}/practice-open": {
       "post": {
-        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.",
+        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.\nA question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless\nits latest submission still waits for grading: nothing else can finish that one.",
         "operationId": "openQuestionPractice",
         "parameters": [
           {

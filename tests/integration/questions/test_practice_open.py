@@ -411,3 +411,113 @@ def test_ux12_open_ac06_an_open_queued_behind_a_reset_cannot_undo_it(seed: Any) 
     assert responses["open"].status_code == 409
     assert responses["open"].json()["type"] == RESET_PROBLEM
     assert _status(owner, ws["id"], q["id"]) == "unseen"
+
+
+def _solved_and_marked(seed: Any, label: str) -> tuple[Any, dict[str, Any], dict[str, Any], str]:
+    owner, ws, q = _mcq(seed, label)
+    first = open_practice(owner, q["id"])["session"]
+    assert choose(owner, first["id"], "opt-1") == "correct"
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": True})
+    return owner, ws, q, str(first["id"])
+
+
+def _attempt_rows(client: Any, question_id: str) -> list[Any]:
+    return list(client.ok("GET", f"/questions/{question_id}/attempts")["items"])
+
+
+def test_ux12_retryopen_ac09_a_marked_question_opens_without_its_result(seed: Any) -> None:
+    owner, _, q, first = _solved_and_marked(seed, "ux12-retryopen-marked")
+    before = _attempt_rows(owner, q["id"])
+    opened = open_practice(owner, q["id"], key=uuid.uuid4().hex)
+    assert opened["result"] is None
+    assert opened["submitted_answer"] is None
+    assert opened["session"]["id"] != first
+    assert opened["session"]["state"] == "open"
+    assert opened["latest_attempt_id"] == before[0]["id"]
+    assert answer_keys(opened) == []
+    assert _attempt_rows(owner, q["id"]) == before
+
+
+def test_ux12_retryopen_ac09_the_cached_session_is_reused(seed: Any) -> None:
+    owner, _, q, _ = _solved_and_marked(seed, "ux12-retryopen-cached")
+    opened = open_practice(owner, q["id"])
+    again = open_practice(
+        owner,
+        q["id"],
+        {
+            "cached_session_id": opened["session"]["id"],
+            "baseline_attempt_id": opened["latest_attempt_id"],
+        },
+    )
+    assert again["reused"] is True
+    assert again["session"]["id"] == opened["session"]["id"]
+    assert answer_keys(again) == []
+
+
+def test_ux12_retryopen_ac09_clearing_the_mark_brings_the_result_back(seed: Any) -> None:
+    owner, _, q, first = _solved_and_marked(seed, "ux12-retryopen-clear")
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": False})
+    opened = open_practice(owner, q["id"])
+    assert opened["session"] is None
+    assert opened["result"]["id"] == first
+    assert opened["result"]["outcome"]["result"] == "correct"
+
+
+def test_ux12_retryopen_ac09_the_mark_is_each_users_own(seed: Any) -> None:
+    owner, ws, q, _ = _solved_and_marked(seed, "ux12-retryopen-owner")
+    member = seed.client("ux12-retryopen-member")
+    seed.membership(ws["id"], member.user, "viewer")
+    mine = open_practice(member, q["id"])["session"]
+    assert choose(member, mine["id"], "opt-1") == "correct"
+    assert open_practice(member, q["id"])["result"]["id"] == mine["id"]
+    assert open_practice(owner, q["id"])["result"] is None
+
+
+def test_ux12_retryopen_ac09_a_mark_on_a_merged_duplicate_counts(seed: Any) -> None:
+    owner = seed.client("ux12-retryopen-merged")
+    ws = owner.create_workspace()
+    body = seed.mcq(_stem("중복"), ["a", "b", "c"], 0)
+    keep = owner.create_question(ws["id"], body)
+    duplicate = owner.create_question(ws["id"], body)
+    for question in (keep, duplicate):
+        session = open_practice(owner, question["id"])["session"]
+        assert choose(owner, session["id"], "opt-1") == "correct"
+    owner.ok("PATCH", f"/questions/{duplicate['id']}/my-state", {"needs_retry": True})
+    owner.ok(
+        "POST",
+        f"/workspaces/{ws['id']}/question-duplicates/merge",
+        {"groups": [{"keep_question_id": keep["id"], "duplicate_question_ids": [duplicate["id"]]}]},
+    )
+    opened = open_practice(owner, keep["id"])
+    assert opened["result"] is None
+    assert answer_keys(opened) == []
+
+
+def test_ux12_retryopen_ac09_a_key_seen_again_returns_its_own_submission(seed: Any) -> None:
+    owner, _, q, _ = _solved_and_marked(seed, "ux12-retryopen-key")
+    key = uuid.uuid4().hex
+    opened = open_practice(owner, q["id"], key=key)
+    assert open_practice(owner, q["id"], key=key)["session"]["id"] == opened["session"]["id"]
+    assert choose(owner, opened["session"]["id"], "opt-1") == "correct"
+    replayed = open_practice(owner, q["id"], key=key)
+    assert replayed["result"]["id"] == opened["session"]["id"]
+
+
+def test_ux12_retryopen_ac09_a_pending_submission_keeps_its_result(seed: Any) -> None:
+    owner = seed.client("ux12-retryopen-pending")
+    ws = owner.create_workspace()
+    q = owner.create_question(ws["id"], {"question_type": "ESSAY", "stem": _stem("서술")})
+    first = open_practice(owner, q["id"])["session"]
+    answer = {"answer_text": "답"}
+    owner.ok("POST", f"/practice-sessions/{first['id']}/submit", answer)
+    owner.ok("POST", f"/practice-sessions/{first['id']}/self-grade", {"result": "correct"})
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": True})
+    second = open_practice(owner, q["id"])["session"]
+    assert second is not None
+    owner.ok("POST", f"/practice-sessions/{second['id']}/submit", answer)
+
+    opened = open_practice(owner, q["id"])
+    assert opened["result"]["id"] == second["id"]
+    assert opened["result"]["outcome"]["result"] == "pending"
+    owner.ok("POST", f"/practice-sessions/{second['id']}/self-grade", {"result": "correct"})
+    assert open_practice(owner, q["id"])["result"] is None

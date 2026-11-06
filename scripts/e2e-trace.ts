@@ -148,6 +148,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-VIEW.0': ['UX12-VIEW'],
   // UX12 MOCKUX-3: the run's footer matches the Heatmap path; `건너뛰기` is gone.
   'UX12-RUNBAR.0': ['UX12-RUNBAR'],
+  // UX12 MOCKUX-5: a question marked 다시 풀기 opens to be answered, without its last result.
+  'UX12-RETRYOPEN.0': ['UX12-RETRYOPEN'],
   // UX12 VIEW-3: drag handle for the editor's options, multi-line option input.
   'UX12-QEDIT.0': ['UX12-QEDIT'],
   // UX12 VIEW-6: pending mark on page links; DOC-02 keeps its 404 (no loading boundary).

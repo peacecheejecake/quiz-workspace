@@ -181,13 +181,17 @@ def test_ux12_open_ac07_opening_stays_within_its_budget_and_reports_timing(
     )
     result, shown = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
     assert shown["result"]["id"] == session["id"]
+    meter.trips("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": True})
+    marked, clean = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
+    assert clean["result"] is None  # UX12-RETRYOPEN: the mark is read with the latest result
 
     # Before UX12-OPEN one opening took a practice-recent (9) and a practice-sessions (10).
-    used = {"fresh": fresh, "cached": cached, "result": result}
+    used = {"fresh": fresh, "cached": cached, "result": result, "marked": marked}
     assert used == {
         "fresh": min(fresh, 10),
         "cached": min(cached, 8),
         "result": min(result, 7),
+        "marked": min(marked, 10),
     }, used
 
     timing = http.post(

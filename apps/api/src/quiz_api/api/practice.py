@@ -775,7 +775,10 @@ class PracticeOpened(BaseModel):
     session: PracticeSession | None = Field(description="The open session to answer.")
     reused: bool = Field(description="`session` is the cached one; nothing was written.")
     result: PracticeSessionDetail | None = Field(
-        description="The latest submitted session of the active revision, with its outcome."
+        description=(
+            "The latest submitted session of the active revision, with its outcome. Left out for "
+            "a question marked for retry, unless that submission still waits for grading."
+        )
     )
     submitted_answer: dict[str, Any] | None = None
 
@@ -817,7 +820,9 @@ def open_question_practice(
     latest result, then reuse the cached session, show that result or open a session. Only a new
     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
     user and question, so no separate key lock is taken. A key seen again replays its session
-    while it is open: once submitted, the latest result answers instead, or 409 without one."""
+    while it is open: once submitted, the latest result answers instead, or 409 without one.
+    A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
+    its latest submission still waits for grading: nothing else can finish that one."""
     body = body or PracticeOpenBody()
     epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
     if reset_since_start:
@@ -870,7 +875,8 @@ def open_question_practice(
             cached, question.id, active, epoch, body.baseline_attempt_id, latest_id
         ):
             return response(_session_out(cached), reused=True)
-    if not body.force_new and (result := latest_result()) is not None:
+    marked_for_retry = found is not None and found.needs_retry and found.latest_result != "pending"
+    if not body.force_new and not marked_for_retry and (result := latest_result()) is not None:
         return result
 
     # The hash leaves the cached ids out: a re-run of one opening may no longer have them.
