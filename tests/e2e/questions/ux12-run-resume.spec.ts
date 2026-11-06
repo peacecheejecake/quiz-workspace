@@ -15,6 +15,7 @@ import {
   runUi,
   seedRangeWorkspace,
   type PracticeRun,
+  closeUnfinishedRun,
 } from '../fixtures/practice-runs.ts';
 import { rangePickerUi } from '../fixtures/range-picker.ts';
 import {
@@ -90,6 +91,7 @@ async function answer(panel: Locator, question: Question): Promise<void> {
   await expect(runUi.result(panel)).toBeVisible();
 }
 
+/** The results step closes without asking (UX12-RUNCLOSE). */
 async function closeRun(panel: Locator): Promise<void> {
   await runUi.close(panel).click();
   await expect(panel).toHaveCount(0);
@@ -111,7 +113,7 @@ test(
     const panel = runUi.panel(page);
     await expect(runUi.progress(panel)).toBeVisible();
     await answer(panel, nth(questions, 0));
-    await closeRun(panel);
+    await closeUnfinishedRun(panel);
 
     await openListButton(page).click();
     const dialog = mockUi.dialog(page);
@@ -149,7 +151,7 @@ test(
     await page.goBack();
     await expect(runUi.title(panel, 2)).toBeVisible();
 
-    await closeRun(panel);
+    await closeUnfinishedRun(panel);
     await expect.poll(() => practiceParam(page)).toBeNull();
     await expect(resumeRows(mockUi.dialog(page))).toHaveCount(1);
   },
@@ -169,7 +171,7 @@ test(
 
     await resume(resumeRows(dialog)).click();
     await answer(panel, nth(questions, 1));
-    await closeRun(panel);
+    await closeUnfinishedRun(panel);
     await expect(resumeRows(dialog)).toContainText('2/3');
 
     await resume(resumeRows(dialog)).click();
@@ -196,7 +198,7 @@ test(
     await page.goto(practiceRunPath(s.workspaceId, run.id, 1));
     const panel = runUi.panel(page);
     await answer(panel, nth(s.confirmed, 0));
-    await closeRun(panel);
+    await closeUnfinishedRun(panel);
 
     await openListButton(page).click();
     const dialog = mockUi.dialog(page);

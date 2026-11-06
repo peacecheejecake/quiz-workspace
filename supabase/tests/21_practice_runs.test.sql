@@ -17,10 +17,10 @@ select columns_are('public', 'practice_runs',
 select has_column('public', 'practice_sessions', 'practice_run_id', 'sessions carry the run');
 select has_column('public', 'practice_sessions', 'run_position', 'sessions carry the position');
 select col_is_null('public', 'practice_sessions', 'practice_run_id', 'the run link is optional');
-select index_is_unique('public', 'practice_sessions', 'practice_sessions_run_position_key');
-select ok((select pg_get_indexdef(indexrelid) like '%WHERE (practice_run_id IS NOT NULL)%'
-             from pg_index where indexrelid = 'public.practice_sessions_run_position_key'::regclass),
-  'one session per run position is a partial unique index');
+select index_is_unique('public', 'practice_sessions', 'practice_sessions_run_position_live_key');
+select ok((select pg_get_indexdef(indexrelid) like '%WHERE ((practice_run_id IS NOT NULL) AND (superseded_at IS NULL))%'
+             from pg_index where indexrelid = 'public.practice_sessions_run_position_live_key'::regclass),
+  'one live session per run position is a partial unique index');
 select ok((select relrowsecurity from pg_class where oid = 'public.practice_runs'::regclass),
   'RLS is enabled on practice_runs');
 select table_privs_are('public', 'practice_runs', 'quiz_api', array['SELECT', 'INSERT'],

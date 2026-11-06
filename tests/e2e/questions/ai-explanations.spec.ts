@@ -60,6 +60,7 @@ import {
   openRangePicker,
   questionAttemptCount,
   runUi,
+  confirmRunClose,
 } from '../fixtures/practice-runs.ts';
 import {
   createShareLink,
@@ -859,6 +860,7 @@ test(
 
     await expectDone(area);
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(run).toBeHidden();
     // The same cache from the Heatmap's practice panel.
     const panel = await openPanel(page, 1);
@@ -950,7 +952,6 @@ test(
 
       await expectDone(explUi.area(r));
       expect(explainCalls(mq.id)).toBe(1);
-      await p.keyboard.press('Escape');
       await s.owner.api.ok(
         'PATCH',
         `/mock-exam-questions/${mq.id}`,

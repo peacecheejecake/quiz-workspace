@@ -407,6 +407,27 @@ describe('nested spans and every parse loop', () => {
     expect(() => parseAnswerMarkdown(`${'~~a '.repeat(20000)}`, { streaming: true })).not.toThrow();
   });
 
+  // Quadratic scans took seconds at this size, past the test timeout.
+  it.each(['*a ', '**a ', '***a ', '_a ', '~~a ', '[a ', '![a ', '[a](b '])(
+    'parses 20,000 unclosed %s in linear time',
+    { timeout: 2000 },
+    (marker) => {
+      const input = marker.repeat(20000);
+      expect(() => parseAnswerMarkdown(input)).not.toThrow();
+      expect(() => parseAnswerMarkdown(input, { streaming: true })).not.toThrow();
+    },
+  );
+
+  it('pairs brackets from the inside, as nested labels and escapes need', () => {
+    expect(parseAnswerInline('[a [b] c](https://x.test)')).toMatchObject([
+      { kind: 'link', href: 'https://x.test/' },
+    ]);
+    expect(parseAnswerInline('[a \\] b](https://x.test)')).toMatchObject([
+      { kind: 'link', href: 'https://x.test/' },
+    ]);
+    expect(parseAnswerInline('[[a](https://x.test)')[0]).toEqual({ kind: 'text', text: '[' });
+  });
+
   it('keeps inline text in order and never repeats it, for random markers', () => {
     const next = random(1);
     for (let i = 0; i < 4000; i += 1) {

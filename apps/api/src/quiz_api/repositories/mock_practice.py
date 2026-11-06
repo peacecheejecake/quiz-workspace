@@ -382,11 +382,33 @@ class MockPracticeRepository:
         row = self._session.execute(
             text(
                 _SESSION + " where s.practice_run_id = :r and s.run_position = :p "
-                "and s.user_id = :u"
+                "and s.user_id = :u and s.superseded_at is null"
             ),
             {"r": run_id, "p": position, "u": user_id},
         ).one_or_none()
         return _session(row) if row is not None else None
+
+    def supersede_run_session(self, session_id: uuid.UUID) -> None:
+        """`다시 풀기`: the position has no live session any more (UX12-RETRYINPLACE)."""
+        self._session.execute(
+            text(
+                "update public.mock_exam_practice_sessions set superseded_at = now() where id = :s"
+            ),
+            {"s": session_id},
+        )
+
+    def run_position_reopened(self, run_id: uuid.UUID, position: int) -> bool:
+        """Whether the position was reopened: its next session draws a new option order."""
+        return bool(
+            self._session.execute(
+                text(
+                    "select exists (select 1 from public.mock_exam_practice_sessions "
+                    "where practice_run_id = :r and run_position = :p "
+                    "and superseded_at is not null)"
+                ),
+                {"r": run_id, "p": position},
+            ).scalar_one()
+        )
 
     def open_session(
         self,
@@ -604,7 +626,7 @@ class MockPracticeRepository:
                     left join public.mock_exam_questions q
                       on q.id = s.mock_exam_question_id and q.workspace_id = :w
                      and q.removed_at is null
-                   where s.practice_run_id = :r
+                   where s.practice_run_id = :r and s.superseded_at is null
                 ), m as (select coalesce(max(position), 0) as reached from s)
                 select m.reached,
                        count(s.*) filter (where s.state <> 'open' and s.eligible) as submitted,
@@ -662,6 +684,7 @@ class MockPracticeRepository:
                     select s.state, {_LATEST_RESULT} as result
                       from public.mock_exam_practice_sessions s
                      where s.practice_run_id = :r and s.run_position = page.position
+                       and s.superseded_at is null
                   ) res on q.id is not null
                  order by page.position
                 """  # noqa: S608 - constant SQL fragments only

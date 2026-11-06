@@ -7,6 +7,7 @@ docs/questions.md §12, architecture.md §6).
     GET  /practice-runs/{id}                        the run's creator; counts, progress, summary
     GET  /practice-runs/{id}/items/{position}       the run's creator; one position (1-based)
     GET  /practice-runs/{id}/results?offset&limit   the run's creator; one page (limit <= 200)
+    POST /practice-runs/{id}/items/{position}/reopen  the run's creator; `다시 풀기`
     POST /practice-runs/{id}/finish                 the run's creator; fix the summary
     GET  /workspaces/{id}/practice-runs/unfinished  member; the caller's own unfinished bank runs
                                                     (UX12-RESUME); no content, at most 20
@@ -916,6 +917,76 @@ def list_practice_run_results(
             for r in rows
         ],
     )
+
+
+@router.post(
+    "/practice-runs/{run_id}/items/{position}/reopen",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="reopenRunItem",
+    responses=problem_responses(409),
+)
+def reopen_run_item(
+    run: WriteRun,
+    position: Annotated[int, Path(ge=1)],
+    runs: RunRepo,
+    practice: PracticeRepo,
+    mocks: MockRepo,
+    access_repo: AccessRepo,
+    user: CurrentUser,
+) -> None:
+    """`다시 풀기` in an unfinished run (UX12-RETRYINPLACE): the position goes back to unanswered
+    and its next opening is a new session. The graded session stays linked and its attempts stay;
+    the position's result is the live session's. A position with no graded session is left as it
+    is, so a repeated call changes nothing; one waiting for self-grading is 409."""
+    if position > run.total:
+        raise _not_found()
+    question_id = runs.question_at(run.id, position)
+    if question_id is None:
+        raise _not_found()
+    authorize_workspace(
+        access_repo,
+        user.id,
+        run.workspace_id,
+        Action.PRACTICE,
+        LockMode.SHARE,
+        not_found_detail=NOT_FOUND,
+    )
+    # Serialises with opening a position and with finishing the run.
+    locked = runs.get_in_workspace(run.id, user.id, run.workspace_id)
+    if locked is None:
+        raise _not_found()
+    if locked.finished_at is not None:
+        raise run_finished()
+    state: str | None = None
+    session_id: uuid.UUID | None = None
+    if run.source == "bank":
+        if runs.live_question(run.workspace_id, question_id) is None:
+            raise _not_found()
+        epoch = practice.lock_epoch(user.id, question_id)
+        session = practice.run_session(run.id, position, user.id)
+        if session is not None:
+            if session.reset_epoch != epoch:
+                raise ProblemException(
+                    409,
+                    ProblemType.PRACTICE_SESSION_RESET,
+                    detail="This practice session was reset. Start a new run.",
+                )
+            state, session_id = session.state, session.id
+    else:
+        target = mocks.target(question_id)
+        if target is None or target.removed or target.workspace_id != run.workspace_id:
+            raise _not_found()
+        mock_session = mocks.run_session(run.id, position, user.id)
+        if mock_session is not None:
+            state, session_id = mock_session.state, mock_session.id
+    if state == "pending_grade":
+        raise already_submitted()
+    if state == "graded" and session_id is not None:
+        if run.source == "bank":
+            practice.supersede_run_session(session_id)
+        else:
+            mocks.supersede_run_session(session_id)
+    practice.commit()
 
 
 @router.post("/practice-runs/{run_id}/finish", operation_id="finishPracticeRun")

@@ -42,6 +42,7 @@ import {
   CH1,
   CH2,
   type RangeWorkspace,
+  confirmRunClose,
 } from '../fixtures/practice-runs.ts';
 import {
   createShareLink,
@@ -414,6 +415,7 @@ test(
 
     // Close, then start again through the actual unified play entry.
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     await expect.poll(() => practiceParam(page)).toBeNull();
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
@@ -526,6 +528,7 @@ test(
     await expect(runUi.submit(panel)).toHaveCount(0);
 
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     const dot = overviewUi.dot(page, 1);
     await expect(dot).toHaveAccessibleName(/오답|incorrect/i);

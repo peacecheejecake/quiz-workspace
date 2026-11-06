@@ -2031,3 +2031,134 @@ def test_ux12_mockresume_fully_answered_runs_never_hide_an_older_one(seed: Any) 
         (done["id"], done["id"]),
     )
     assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == waiting["id"]
+
+
+# --- UX12-RETRYINPLACE ---------------------------------------------------------------------------
+
+
+def reopen(client: Any, run_id: str, position: int) -> Any:
+    return client.call("POST", f"/practice-runs/{run_id}/items/{position}/reopen", {})
+
+
+def test_ux12_retryinplace_c01_reopen_clears_the_position_and_keeps_the_attempt(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-c01")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    first = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{first['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["answered"] == 1
+
+    assert reopen(owner, run["id"], 1).status_code == 204
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["answered"] == 0
+    item = owner.ok("GET", f"/practice-runs/{run['id']}/items/1")
+    assert item["attempt"] is None
+    assert not (_keys(item) & ANSWER_KEYS)
+    # Called again nothing changes: no graded session is left.
+    assert reopen(owner, run["id"], 1).status_code == 204
+
+    second = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    assert second["id"] != first["id"]
+    assert not (_keys(second) & ANSWER_KEYS)
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{second['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+    results = owner.ok("GET", f"/practice-runs/{run['id']}/results?offset=0&limit=200")
+    assert [row["result"] for row in results["items"]] == ["correct"]
+    done = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert done["summary"]["correct"] == 1
+    assert done["summary"]["incorrect"] == 0
+    assert (
+        count(
+            "select count(*) from public.question_attempts where question_id = %s",
+            (question["id"],),
+        )
+        == 2
+    )
+
+
+def test_ux12_retryinplace_c02_a_finished_run_is_not_reopened(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-c02")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    finished = owner.ok("POST", f"/practice-runs/{run['id']}/finish", {})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    assert owner.ok("GET", f"/practice-runs/{run['id']}") == finished
+    assert (
+        count(
+            "select count(*) from public.practice_sessions where id = %s and superseded_at is null",
+            (session["id"],),
+        )
+        == 1
+    )
+
+
+def test_ux12_retryinplace_refuses_a_pending_position_a_reset_and_another_user(seed: Any) -> None:
+    owner = seed.client("ux12-inplace-refuse")
+    stranger = seed.client("ux12-inplace-stranger")
+    workspace = str(owner.create_workspace()["id"])
+    essay = owner.create_question(
+        workspace,
+        {
+            "question_type": "ESSAY",
+            "stem": "Explain the cycle.",
+            "rubric": "Evaporation",
+            "explanation": "Synthetic explanation",
+        },
+    )
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, essay["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    owner.ok("POST", f"/practice-sessions/{session['id']}/submit", {"answer_text": "Evaporation"})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    assert reopen(stranger, run["id"], 1).status_code == 404
+    assert reopen(owner, run["id"], 2).status_code == 404
+
+    owner.ok("POST", f"/practice-sessions/{session['id']}/self-grade", {"result": "correct"})
+    owner.ok("POST", f"/questions/{essay['id']}/practice-reset", {})
+    assert reopen(owner, run["id"], 1).status_code == 409
+    owner.ok("POST", f"/workspaces/{workspace}/archive")
+    assert reopen(owner, run["id"], 1).status_code == 403
+
+
+def test_ux12_retryinplace_c04_superseded_at_is_set_once_on_a_graded_run_session(
+    seed: Any,
+) -> None:
+    owner = seed.client("ux12-inplace-c04")
+    workspace = str(owner.create_workspace()["id"])
+    question = owner.create_question(workspace, mcq("inplace", 1, 1, None))
+    run = created(owner, workspace, bank({"all": True}))
+    session = owner.ok_response(
+        run_session(owner, question["id"], run["id"], 1), "POST", "run session", (201,)
+    )
+    supersede = "update public.practice_sessions set superseded_at = now() where id = %s"
+    with pytest.raises(psycopg.errors.CheckViolation):
+        admin(supersede, (session["id"],))
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": [wrong_option(question)]},
+    )
+    assert reopen(owner, run["id"], 1).status_code == 204
+    with pytest.raises(psycopg.errors.CheckViolation):
+        admin(supersede, (session["id"],))

@@ -399,3 +399,10 @@ def test_ux12_mockresume_the_run_on_a_mock_exam_has_no_content() -> None:
     exam = spec["components"]["schemas"]["MockExam"]
     assert "unfinished_run" in exam["properties"]
     assert "unfinished_run" not in exam["required"]
+
+
+def test_ux12_retryinplace_reopen_answers_nothing() -> None:
+    spec = json.loads(render_openapi())
+    operation = spec["paths"]["/api/v1/practice-runs/{run_id}/items/{position}/reopen"]["post"]
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation

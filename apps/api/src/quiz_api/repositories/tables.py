@@ -265,6 +265,8 @@ practice_sessions = Table(
     # QVIEW-B: the run position this session practises (both null outside a run).
     Column("practice_run_id", Uuid),
     Column("run_position", Integer),
+    # UX12-RETRYINPLACE: replaced at its run position by `다시 풀기`; the attempts stay.
+    _ts("superseded_at"),
 )
 
 # QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at and

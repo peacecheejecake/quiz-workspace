@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, insert, literal, select, true, tuple_, union_all, update
+from sqlalchemy import and_, exists, func, insert, literal, select, true, tuple_, union_all, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -397,9 +397,32 @@ class PracticeRepository:
                 practice_sessions.c.practice_run_id == run_id,
                 practice_sessions.c.run_position == position,
                 practice_sessions.c.user_id == user_id,
+                practice_sessions.c.superseded_at.is_(None),
             )
         ).one_or_none()
         return _session(row) if row is not None else None
+
+    def supersede_run_session(self, session_id: uuid.UUID) -> None:
+        """`다시 풀기`: the position has no live session any more (UX12-RETRYINPLACE)."""
+        self._session.execute(
+            update(practice_sessions)
+            .where(practice_sessions.c.id == session_id)
+            .values(superseded_at=func.now())
+        )
+
+    def run_position_reopened(self, run_id: uuid.UUID, position: int) -> bool:
+        """Whether the position was reopened: its next session draws a new option order."""
+        return bool(
+            self._session.execute(
+                select(
+                    exists().where(
+                        practice_sessions.c.practice_run_id == run_id,
+                        practice_sessions.c.run_position == position,
+                        practice_sessions.c.superseded_at.is_not(None),
+                    )
+                )
+            ).scalar_one()
+        )
 
     def initial_attempt(self, session_id: uuid.UUID, user_id: uuid.UUID) -> AttemptRecord | None:
         row = self._session.execute(
