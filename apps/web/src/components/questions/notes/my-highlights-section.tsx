@@ -302,6 +302,7 @@ export function MyHighlightsSection({
                       <Button
                         size="sm"
                         variant="ghost"
+                        borderless
                         className={styles.more}
                         aria-expanded={open}
                         onClick={() =>

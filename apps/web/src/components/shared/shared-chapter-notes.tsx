@@ -108,6 +108,7 @@ export function SharedChapterNotes({
               <Button
                 size="sm"
                 variant="ghost"
+                borderless
                 aria-haspopup="dialog"
                 aria-current={item.chapter_id === chapterId || undefined}
                 onClick={() => navigate(item.chapter_id, true)}

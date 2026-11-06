@@ -124,6 +124,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   // UX12 EXTRACT-2 (2026-11-06): a draft question's source blocks are highlighted whole.
   'UX12-EXTRACT.0': ['UX12-EXTRACT'],
   'UX12-NUMBER.0': ['UX12-NUMBER'],
+  // UX12 DESIGN-1: which buttons may drop the boundary, hover backgrounds, compact button rows.
+  'UX12-CONTROLS.0': ['UX12-CONTROLS'],
 };
 
 const LEADING_ID = new RegExp(

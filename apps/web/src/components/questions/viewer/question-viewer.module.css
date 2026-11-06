@@ -197,7 +197,7 @@
 .footer {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
   align-items: center;
   inline-size: 100%;
 }
@@ -411,7 +411,7 @@
 .stepActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 /* QuestionRangePicker */

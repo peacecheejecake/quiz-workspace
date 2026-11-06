@@ -917,6 +917,10 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 
 불필요한 epoch row 생성·중복 reset 시각 조회를 제거하고, 소유자/멤버십·문항·epoch 조회를 안전하게 묶은 뒤의 측정 상한은 세션 열기 10, 제출 6, session GET 6, my-state PATCH 9다. Main은 이 네 경로의 실제 트랜잭션/잠금 비용을 새 기준으로 승인했다. 다른 Workspace·overview·documents 상한은 바꾸지 않는다. 테스트는 새 수치에 고정해 이후 추가 왕복을 계속 차단하며, 권한 matrix·리셋/alias/동시성 계약을 함께 통과해야 한다. 수치 변경만으로 기존 실패를 숨기지 않으며 독립 리뷰에서 잠금·snapshot 보존을 확인한다.
 
+### UX12 DESIGN-1: UX10-UI의 버튼 경계 규칙 변경 (2026-11-06)
+
+사용자 결정 D-1에 따라 UX10-UI-AC01의 "모든 버튼은 경계를 보인다"를 바꾼다. 아이콘 ghost와 `borderless` ghost 버튼만 경계 없이 둘 수 있고, 나머지 컨트롤은 경계를 유지한다. 기준은 `docs/screens/ux12-controls.md`(phase `UX12-CONTROLS.0`)와 `docs/design-system.md` §4.1이다.
+
 ## 8. 진행 현황
 
 | Task | 상태 | 커밋 | 리뷰 |

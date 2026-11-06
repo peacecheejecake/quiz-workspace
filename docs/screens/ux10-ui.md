@@ -15,7 +15,7 @@ linked_tests: [UX10-UI-AC01, UX10-UI-AC02, UX10-UI-AC03, UX10-UI-AC04]
 
 ### UX10-UI-AC01
 
-light/dark의 Button과 IconButton은 기본 경계 또는 배경을 표시하고 크기와 focus를 유지한다.
+light/dark의 Button과 IconButton은 기본 경계 또는 배경을 표시하고 크기와 focus를 유지한다. **개정(UX12 DESIGN-1, 2026-11-06):** 아이콘 ghost와 `borderless` ghost 버튼만 경계 없이 둘 수 있다([UX12-CONTROLS](ux12-controls.md)). 그 밖의 컨트롤은 그대로 경계를 유지한다.
 ### UX10-UI-AC02
 
 AI 질문의 기존 말풍선 안 표시 중심은 SVG 중심과 일치하며 label을 유지한다.

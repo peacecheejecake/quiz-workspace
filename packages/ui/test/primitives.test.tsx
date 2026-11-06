@@ -196,3 +196,29 @@ describe('Popover', () => {
     expect(trigger).toHaveFocus();
   });
 });
+
+describe('Button borderless (UX12-CONTROLS)', () => {
+  it('marks only buttons that ask for it and never leaks the prop to the DOM', () => {
+    render(
+      <>
+        <Button variant="ghost" borderless>
+          접기
+        </Button>
+        <Button variant="ghost">새 대화</Button>
+      </>,
+    );
+    const borderless = screen.getByRole('button', { name: '접기' });
+    expect(borderless).toHaveAttribute('data-borderless');
+    expect(borderless).not.toHaveAttribute('borderless');
+    expect(screen.getByRole('button', { name: '새 대화' })).not.toHaveAttribute('data-borderless');
+  });
+
+  it('forwards the marker through asChild', () => {
+    render(
+      <Button variant="ghost" borderless asChild>
+        <a href="#x">링크</a>
+      </Button>,
+    );
+    expect(screen.getByRole('link', { name: '링크' })).toHaveAttribute('data-borderless');
+  });
+});

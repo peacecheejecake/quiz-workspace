@@ -184,7 +184,7 @@ html body[data-scroll-locked] {
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--space-2);
+    gap: var(--control-gap);
     padding: var(--space-2) var(--space-5) var(--space-3);
     border-top: 1px solid var(--color-border);
   }

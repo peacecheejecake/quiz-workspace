@@ -19,7 +19,9 @@ describe('UX10 overlay swipe', () => {
   });
 });
 
-it('UX10-UI-AC01 keeps an explicit boundary on transparent button variants', async () => {
+// UX12-CONTROLS revised UX10-UI-AC01: borderless is allowed only for icon ghost and `borderless`
+// buttons (the guard is test/control-boundary.test.ts); every other control keeps a boundary.
+it('UX10-UI-AC01 keeps an explicit boundary on the base button rule', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('src/styles/controls.css', 'utf8');
   expect(css).toMatch(/border:\s*1px solid var\(--color-border\)/);
@@ -47,8 +49,9 @@ it('UX10-UI-AC03 fixes the closest edge and honors every directional threshold',
   expect(qualifiesSwipe('left', -24, 0, 49)).toBe(false);
 });
 
-it('UX10-UI-AC01 BackLink buttons have a boundary while links retain link styling', async () => {
+it('UX12-CONTROLS BackLink has no boundary, as a button or as a link', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync('src/styles/layout.css', 'utf8');
-  expect(css).toMatch(/button\.qz-back-link\s*\{\s*border:\s*1px solid var\(--color-border\)/);
+  expect(css).not.toMatch(/button\.qz-back-link\s*\{/);
+  expect(css.split('.qz-back-link {')[1]?.split('}')[0]).toMatch(/border:\s*0/);
 });

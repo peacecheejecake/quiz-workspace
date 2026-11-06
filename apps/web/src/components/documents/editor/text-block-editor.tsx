@@ -315,6 +315,7 @@ function QuestionCard({
         <Button
           size="sm"
           variant="ghost"
+          borderless
           aria-expanded={answerOpen}
           aria-controls={`${id}-answer`}
           onClick={() => setAnswerOpen((open) => !open)}
@@ -324,6 +325,7 @@ function QuestionCard({
         <Button
           size="sm"
           variant="ghost"
+          borderless
           aria-expanded={showSource}
           aria-controls={`${id}-source`}
           onClick={() => setSourceOpen((open) => !open)}
