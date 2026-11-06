@@ -214,7 +214,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | EXTRACT-6 재추출 | 기존 문제 반영 | 수정은 새 run에만 적용된다. `다시 추출`: 같은 revision에 새 run과 초안, 등록된 문제는 그대로. 교체 경로 필요(변경된 지문은 중복 탐지에 안 걸린다) | D-11 | M·EXTRACT-2 |
 | EXTRACT-7 그림 | 이미지 표시 | `source-region`에 `figures[]`, PDF 영역을 보기 위에 lazy 표시. 정답 뒤 이미지 제외 | QSRC-01. D-11 | M·EXTRACT-2 |
 | EXTRACT-8 span | 테이블 렌더링 | `TableContent.spans`, API·contract, `colSpan`/`rowSpan`, chunker 중복 제거. 기존 revision은 재파싱 전까지 그대로 | `make contracts` | M·없음 |
-| EXTRACT-9 구조화 셀(A안) | 문제 표 병합 셀 | `stem`의 GFM은 유지하고 `stem_tables` JSON을 추가한다. `question_revisions`, `mock_exam_question_revisions`, 초안 payload에 저장하고 등록, 수정, 모의고사, Fork 복사 경로로 전달한다. 화면만 구조화 데이터를 우선 사용하며 AI, 검색, 중복 판정은 `stem`을 그대로 읽는다. 문제 편집에서 표 글자를 고치면 구조화 데이터를 지우고 GFM으로 돌아간다 | 사용자 결정(2026-11-06). 기존 문제는 `다시 추출`로만 반영 | L·EXTRACT-4, 8 |
+| EXTRACT-9 구조화 셀(A안) | 문제 표 병합 셀 | `stem`의 GFM은 유지하고 `stem_tables` JSON을 추가한다. `question_revisions`, `mock_exam_question_revisions`, 초안 payload에 저장하고 등록, 수정, 모의고사, Fork 복사 경로로 전달한다. 화면만 구조화 데이터를 우선 사용하며 AI, 검색, 중복 판정은 `stem`을 그대로 읽는다. 문제 편집기에서 표를 셀 단위로 편집한다(사용자 결정 2026-11-06). 행·열 추가와 삭제를 지원하고, 저장할 때 `stem`의 GFM을 구조화 데이터로 다시 만든다 | 사용자 결정(2026-11-06). 기존 문제는 `다시 추출`로만 반영 | L·EXTRACT-4, 8 |
 | EXTRACT-10 발문 전체 구조화(B안, 추후) | 발문 블록화 | `stem`을 블록 구조로 교체한다. `stem`을 쓰는 약 120개 파일, 프롬프트, 중복 판정, 지문 해시를 함께 바꾼다 | 이번 범위 밖. 사용자 결정(2026-11-06)으로 기록만 남긴다 | XL·EXTRACT-9 |
 
 ## 5. 실행 순서
