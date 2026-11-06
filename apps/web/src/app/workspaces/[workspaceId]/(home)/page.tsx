@@ -75,6 +75,7 @@ export default async function Page({
           summary: 'DOCSUM-01',
           mockExams: 'MOCK-01',
           redistribution: 'CHREDIST-01',
+          chapterManagement: 'CHMAN-01',
         }}
       />
     </div>

@@ -31,7 +31,15 @@ _spec.loader.exec_module(notes)
 CH1 = notes.CH1
 OK = notes.OK
 RANDOM_ID = notes.RANDOM_ID
-DTO_KEYS = {"question_id", "number_label", "chapter_title", "question_type", "stem", "options"}
+DTO_KEYS = {
+    "question_id",
+    "number_label",
+    "chapter_title",
+    "question_type",
+    "stem",
+    "stem_tables",
+    "options",
+}
 FORBIDDEN = {
     "correct_option_ids",
     "correct",

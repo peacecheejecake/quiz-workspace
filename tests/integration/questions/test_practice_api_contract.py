@@ -27,6 +27,7 @@ SESSION_KEYS = {
     "question_revision_id",
     "question_type",
     "stem",
+    "stem_tables",
     "options",
     "is_multi_answer",
     "state",

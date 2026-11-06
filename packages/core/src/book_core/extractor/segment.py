@@ -34,7 +34,14 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
-from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
+from book_core.contracts import (
+    BBox,
+    Block,
+    BlockType,
+    QuestionType,
+    SourceLocation,
+    TableContent,
+)
 from book_core.export import md_table
 from book_core.question.labels import (
     CIRCLED_DIGITS,
@@ -127,6 +134,8 @@ class RawQuestion:
     number: int
     stem_lines: list[SourceLine]
     stem_parts: list[str]
+    stem_tables: list[TableContent] = field(default_factory=list)
+    """The cells of the tables in ``stem_parts``, in order (UX12-STEMTABLE)."""
     options: list[RawOption] = field(default_factory=list)
     figures: list[RawFigure] = field(default_factory=list)
     trailing: list[SourceLine] = field(default_factory=list)
@@ -649,6 +658,7 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 elif block.table is not None:
                     table = md_table(block)
                     current.stem_parts.append(table)
+                    current.stem_tables.append(block.table)
                     current.stem_lines.append(
                         SourceLine(text=table, block=block, block_index=index)
                     )

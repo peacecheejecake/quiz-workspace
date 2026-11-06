@@ -25,6 +25,8 @@
 //                     active workspace): a stacked floating dialog that moves confirmed questions
 //                     between chapters (직접 옮기기, 자동 추천 미리보기); a move re-reads the heatmap
 //                     and an open 정리 노트. Others' deep links to it are dropped from the URL.
+//   챕터 관리          `?panel=chapter-management` (문서 N › 챕터 관리, CHMAN-01, editors of an active
+//                     workspace): the modal chapter tree editor; edits apply at once (D-9).
 //   중복 문제 정리     `?panel=question-duplicates` (문제 › 중복 문제 정리, UX7-DEDUP, editors of an active
 //                     workspace): a stacked floating dialog that scans for identical confirmed
 //                     questions and merges each group into the question kept (QOV-01-AC16).
@@ -73,6 +75,7 @@ import { QuestionDuplicates } from '@/components/questions/duplicates/question-d
 import { InactiveQuestions } from '@/components/questions/inactive/inactive-questions';
 import { MockExamsPanel } from '@/components/questions/mock-exams/mock-exams-panel';
 import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-panel';
+import { ChapterManagementPanel } from '@/components/chapters/chapter-management-panel';
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
 import { QuestionSearch } from '@/components/search/question-search';
@@ -99,6 +102,7 @@ import {
   seedOverviewCache,
   type OverviewCache,
 } from '@/lib/questions/overview-cache';
+import { outlineChoiceNodes } from '@/lib/questions/chapter-picker';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
@@ -126,6 +130,7 @@ import {
   DUPLICATES_PANEL,
   INACTIVE_QUESTIONS_PANEL,
   MOCK_EXAMS_PANEL,
+  CHAPTER_MANAGEMENT_PANEL,
   REDISTRIBUTION_PANEL,
   mockParamOf,
   mockViewOf,
@@ -204,6 +209,7 @@ export interface WorkspaceHomeProps {
     readonly summary: string;
     readonly mockExams: string;
     readonly redistribution?: string;
+    readonly chapterManagement?: string;
     readonly ask?: string;
   };
 }
@@ -279,7 +285,8 @@ function WorkspaceHomeContent({
     (panel !== 'share' || isOwner) &&
     ((panel !== QUESTION_CREATE_PANEL &&
       panel !== DUPLICATES_PANEL &&
-      panel !== REDISTRIBUTION_PANEL) ||
+      panel !== REDISTRIBUTION_PANEL &&
+      panel !== CHAPTER_MANAGEMENT_PANEL) ||
       canEdit);
   const panels = parsePanels(searchParams).filter(allowed);
   const isOpen = (panel: HomePanel) => panels.includes(panel);
@@ -327,6 +334,14 @@ function WorkspaceHomeContent({
       `${pathname}${withPanel(window.location.search, REDISTRIBUTION_PANEL, false)}`,
     );
   }, [deniedRedistribution, panelHistory, pathname]);
+  // CHMAN-01: likewise for the 챕터 관리 panel.
+  const deniedChapters = !canEdit && parsePanels(searchParams).includes(CHAPTER_MANAGEMENT_PANEL);
+  useEffect(() => {
+    if (!deniedChapters) return;
+    panelHistory.replace(
+      `${pathname}${withPanel(window.location.search, CHAPTER_MANAGEMENT_PANEL, false)}`,
+    );
+  }, [deniedChapters, panelHistory, pathname]);
 
   // --- 정리 노트 (CHNOTE-01) ---------------------------------------------------------------------
   // `chapter` names the note's chapter while its panel is open (home.ts noteChapterOf).
@@ -762,7 +777,7 @@ function WorkspaceHomeContent({
     setNoteListRead((n) => n + 1);
     startNavigation(() => router.refresh());
   };
-  const redistributionOpen = isOpen(REDISTRIBUTION_PANEL);
+  const redistributionOpen = isOpen(REDISTRIBUTION_PANEL) || isOpen(CHAPTER_MANAGEMENT_PANEL);
   useEffect(() => {
     if (redistributionOpen || !chaptersStale.current) return;
     chaptersStale.current = false;
@@ -850,7 +865,7 @@ function WorkspaceHomeContent({
   }
 
   // Flat for now: `OverviewChapter` has no level yet (CHAPTER-6).
-  const chapterNodes = chapterChoices.map((c) => ({ value: c.value, label: c.title, level: 1 }));
+  const chapterNodes = outlineChoiceNodes(chapterChoices);
 
   const page = (
     <div className={styles.home}>
@@ -867,6 +882,7 @@ function WorkspaceHomeContent({
             onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
             onDuplicates={() => setPanel(DUPLICATES_PANEL, true)}
             onRedistribute={() => setPanel(REDISTRIBUTION_PANEL, true)}
+            onManageChapters={() => setPanel(CHAPTER_MANAGEMENT_PANEL, true)}
             onInactive={() => setPanel(INACTIVE_QUESTIONS_PANEL, true)}
           />
           <Button
@@ -1063,6 +1079,16 @@ function WorkspaceHomeContent({
               workspaceId={workspace.id}
               onChanged={onChaptersChanged}
               screenId={screenIds.redistribution}
+            />
+          ) : null}
+          {canEdit ? (
+            <ChapterManagementPanel
+              open={shows(CHAPTER_MANAGEMENT_PANEL)}
+              onOpenChange={(open) => setPanel(CHAPTER_MANAGEMENT_PANEL, open)}
+              container={host}
+              workspaceId={workspace.id}
+              onChanged={onChaptersChanged}
+              screenId={screenIds.chapterManagement}
             />
           ) : null}
           <FloatingSidePanel

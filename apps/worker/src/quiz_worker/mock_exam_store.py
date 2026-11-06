@@ -25,6 +25,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from book_core.contracts import TableContent
 from sqlalchemy import Connection, Engine, text
 
 from quiz_worker.document_store import WorkspaceUnavailableError
@@ -85,6 +86,7 @@ class MadeQuestion:
     rubric: str | None
     evidence: list[dict[str, Any]]
     validation_issues: list[dict[str, Any]]
+    stem_tables: list[Any] | None = None
 
 
 @dataclass
@@ -117,7 +119,7 @@ _GENERATION = text(
 _REVISIONS = text(
     """
     select q.id, q.question_type, r.id as revision_id, r.stem, r.options, r.correct_option_ids,
-           r.accepted_answers, r.is_multi_answer, r.explanation, r.rubric
+           r.accepted_answers, r.is_multi_answer, r.explanation, r.rubric, r.stem_tables
       from public.question_revisions r
       join public.questions q on q.id = r.question_id and q.workspace_id = r.workspace_id
      where r.workspace_id = :w and r.id = any(:ids)
@@ -139,6 +141,7 @@ _SOURCES = text(
 class PinnedSource:
     row: SourceQuestionRow
     rubric: str | None
+    stem_tables: tuple[TableContent | None, ...] | None = None
 
 
 class PostgresMockExamStore:
@@ -285,6 +288,7 @@ class PostgresMockExamStore:
                     sources=tuple(sources.get(r["id"], [])),
                 ),
                 rubric=r["rubric"],
+                stem_tables=parse_tables(r["stem_tables"]),
             )
         return out
 
@@ -431,9 +435,10 @@ class PostgresMockExamStore:
                 "insert into public.mock_exam_question_revisions (id, workspace_id, "
                 "mock_exam_question_id, version, stem, options, correct_option_ids, "
                 "accepted_answers, is_multi_answer, explanation, rubric, evidence, "
-                "validation_issues, origin) values (:id, :w, :q, 1, :stem, "
+                "validation_issues, origin, stem_tables) values (:id, :w, :q, 1, :stem, "
                 "cast(:options as jsonb), :correct, :accepted, :multi, :explanation, :rubric, "
-                "cast(:evidence as jsonb), cast(:issues as jsonb), 'generated')"
+                "cast(:evidence as jsonb), cast(:issues as jsonb), 'generated', "
+                "cast(:stem_tables as jsonb))"
             ),
             {
                 "id": revision_id,
@@ -448,6 +453,7 @@ class PostgresMockExamStore:
                 "rubric": made.rubric,
                 "evidence": _json(made.evidence),
                 "issues": _json(made.validation_issues),
+                "stem_tables": _json(made.stem_tables) if made.stem_tables is not None else None,
             },
         )
         conn.execute(
@@ -587,6 +593,12 @@ class PostgresMockExamStore:
                 text("select payload from public.async_jobs where id = :j"), {"j": job_id}
             ).scalar_one_or_none()
         return dict(payload) if isinstance(payload, dict) else None
+
+
+def parse_tables(stored: list[Any] | None) -> tuple[TableContent | None, ...] | None:
+    if stored is None:
+        return None
+    return tuple(TableContent.model_validate(t) if t is not None else None for t in stored)
 
 
 def _content(r: Any) -> QuestionContentRow:

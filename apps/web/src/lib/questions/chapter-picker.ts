@@ -37,3 +37,34 @@ export function chapterPickerNodes(chapters: readonly PickableChapter[]): Chapte
     })),
   ]);
 }
+
+export interface OutlineChoice {
+  readonly value: string;
+  readonly title: string;
+  /** Top level first, without the chapter itself. */
+  readonly ancestors: readonly { readonly id: string; readonly title: string }[];
+}
+
+/**
+ * The home filter's tree (CHMAN-01-AC07): the Heatmap's chapter groups at their outline depth. An
+ * ancestor without a group of its own has no questions to filter by, so it is a heading row.
+ */
+export function outlineChoiceNodes(choices: readonly OutlineChoice[]): ChapterPickerNode[] {
+  const chapters = new Set(choices.map((c) => c.value));
+  const headings = new Set<string>();
+  return choices.flatMap((choice) => [
+    ...choice.ancestors.flatMap((ancestor, index) => {
+      if (chapters.has(ancestor.id) || headings.has(ancestor.id)) return [];
+      headings.add(ancestor.id);
+      return [
+        {
+          value: `ancestor:${ancestor.id}`,
+          label: ancestor.title,
+          level: index + 1,
+          group: true,
+        },
+      ];
+    }),
+    { value: choice.value, label: choice.title, level: choice.ancestors.length + 1 },
+  ]);
+}

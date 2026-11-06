@@ -5,7 +5,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(25);
+select plan(27);
 
 insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-0000000b1001', 'qjob-owner@example.test');
@@ -78,6 +78,11 @@ select ('60000000-0000-4000-8000-0000000b100' || n)::uuid,
                                                              'block_id', 'cb-' || n)))),
          'validations', '[]'::jsonb, 'review_status', 'pending')
   from generate_series(1, 4) n;
+
+-- UX12 EXTRACT-9: q2 has cells; q1 is a payload from before the field.
+update public.question_drafts
+   set payload = payload || '{"stem_tables": [{"rows": [["a"]], "header_rows": 0}]}'::jsonb
+ where id = '60000000-0000-4000-8000-0000000b1002';
 
 -- Version token as the API computes it.
 create temporary table v on commit drop as
@@ -166,6 +171,17 @@ select results_eq(
   $$ values ('ok'::text, 0, 0, 0, 0) $$,
   'a re-delivered job finds nothing left to do');
 reset role;
+
+select is(
+  (select r.stem_tables from public.question_revisions r
+     join public.question_drafts d on d.published_question_id = r.question_id
+    where d.id = '60000000-0000-4000-8000-0000000b1002'),
+  '[{"rows": [["a"]], "header_rows": 0}]'::jsonb, 'the revision takes the draft''s cells');
+select is(
+  (select r.stem_tables from public.question_revisions r
+     join public.question_drafts d on d.published_question_id = r.question_id
+    where d.id = '60000000-0000-4000-8000-0000000b1001'),
+  null::jsonb, 'a payload without the field registers as null');
 
 select results_eq(
   $$ select draft_id, state, reason from public.question_import_registration_items

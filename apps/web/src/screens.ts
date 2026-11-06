@@ -97,6 +97,12 @@ export const SCREENS = [
     path: '/workspaces/[workspaceId]',
     query: { param: 'panel', value: 'chapter-redistribution' },
   },
+  {
+    id: 'CHMAN-01',
+    name: '챕터 관리 Floating Panel',
+    path: '/workspaces/[workspaceId]',
+    query: { param: 'panel', value: 'chapter-management' },
+  },
   { id: 'SEARCH-02', name: '본문 검색 페이지', path: '/workspaces/[workspaceId]/search' },
 ] as const satisfies readonly ScreenSpec[];
 

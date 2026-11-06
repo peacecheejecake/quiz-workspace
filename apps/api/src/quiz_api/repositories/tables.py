@@ -170,6 +170,7 @@ question_revisions = Table(
     Column("rubric", Text),
     Column("created_by", Uuid),
     _ts("created_at", nullable=False),
+    Column("stem_tables", JSONB(none_as_null=True)),
 )
 
 question_sources = Table(
@@ -432,6 +433,8 @@ documents = Table(
     Column("status", Text, nullable=False),
     Column("active_revision_id", Uuid),
     Column("last_error", Text),
+    # CHMAN-01 (20261106150000_chapter_edit.sql).
+    Column("chapter_tree_version", BigInteger, nullable=False, server_default=FetchedValue()),
     Column("created_by", Uuid),
     _ts("created_at", nullable=False),
     _ts("updated_at", nullable=False),

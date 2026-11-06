@@ -8,10 +8,12 @@
 // was approved, so content that changed after the review is refused (409 stale-draft).
 // Answers come only from the source: a missing answer stays null until the reviewer enters one.
 import type { Schemas } from '@quiz/api-client';
+import type { StemTables } from './stem-table-edit';
 import {
   acceptedAnswerList,
   LIMITS,
   MESSAGES,
+  stemTablesBody,
   validateQuestionForm,
   type FieldErrors,
   type QuestionFormValues,
@@ -87,6 +89,7 @@ export interface ReviewDraft {
   readonly questionNumber: number | null;
   readonly type: QuestionType;
   readonly stem: string;
+  readonly stemTables?: StemTables;
   readonly options: readonly DraftOption[];
   readonly isMultiAnswer: boolean;
   /** null = the source has no answer key for this question. */
@@ -174,6 +177,7 @@ export function reviewDraftFromImport(draft: ImportDraft): ReviewDraft {
     questionNumber: draft.question_number,
     type: draft.question_type,
     stem: p.stem,
+    stemTables: p.stem_tables,
     options: p.options.map((o) => ({ id: o.id, text: o.text, correct: correctSet.has(o.id) })),
     isMultiAnswer: draft.is_multi_answer,
     correctOptionIds: correct,
@@ -340,6 +344,7 @@ export function formFromDraft(draft: ReviewDraft): QuestionFormValues {
   return {
     type: draft.type,
     stem: draft.stem,
+    stemTables: draft.stemTables,
     options: draft.options.map((o) => ({ id: o.id, text: o.text, correct: o.correct })),
     multiAnswer: draft.isMultiAnswer,
     acceptedAnswers: (draft.acceptedAnswers ?? []).join('\n'),
@@ -373,10 +378,13 @@ export function draftUpdateBody(values: QuestionFormValues, baseVersion: string)
   const correct = values.options.filter((o) => o.correct).map((o) => o.id);
   const answers = acceptedAnswerList(values.acceptedAnswers);
   const number = values.questionNumber.trim();
+  const tables = stemTablesBody(values);
   return {
     base_version: baseVersion,
     question_type: values.type,
     stem: values.stem,
+    // Omitted, the API keeps the stored cells while they fit the stem.
+    ...(tables ? { stem_tables: tables } : {}),
     options: isMcq ? values.options.map((o) => ({ id: o.id, text: o.text })) : [],
     correct_option_ids: isMcq && correct.length > 0 ? correct : null,
     is_multi_answer: isMcq && values.multiAnswer,

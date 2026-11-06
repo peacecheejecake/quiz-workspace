@@ -10,7 +10,7 @@
 | 완료(제외) | 21 |
 | 남은 작업(부분 완료 포함) | 75 |
 | 큰 Task(Epic) | 12 |
-| 구현 Task | 47 |
+| 구현 Task | 48 |
 
 ## 1. 실행 규칙
 
@@ -176,7 +176,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
 |---|---|---|---|---|
 | CHAPTER-1 Picker | dropdown → popover 트리 | 새 `ChapterPicker`(Popover, 접기/펼치기, 입력 필터, 키보드 tree). 호출처 6곳: 홈 필터, 문제 편집, 초안, 재분배, Ask 범위, 검색. **열린 동안에만 렌더**(초안 752 × 챕터 300 탭 크래시 재발 방지). Ask·검색은 하위 챕터까지 선택 가능해진다 | design-system §7, CHREDIST-01 외. 규모 test | L·없음 |
-| CHAPTER-2 | 1 | 완료 | 507d6e50 · Codex P2(CI phase)는 merge에서 반영, 번호 라벨 전 화면 통일, E2E 66·Vitest GREEN |
+| CHAPTER-2 | 1 | 완료 | Codex 반영, 번호 라벨 전 화면 통일, PR #80 병합 |
 | CHAPTER-3 명세·RED | 챕터 관리 | `chapter-management.md`(CHMAN-01), DOC-02-AC02 개정, questions §14, architecture §5, workspace-sharing §11 | D-9 | M·D-9 |
 | CHAPTER-4 API | 추가·수정·삭제·이동 | migration: guard에 `chapter_edit` 경로, `documents.chapter_tree_version`, 변경 이력 source 추가. API: tree 조회, 생성, 수정, 일괄 이동(`expected_version`), 삭제(`move_questions_to`). 잠금 순서 Workspace → 문서 → 문제. 사용자 챕터 key는 `user-<uuid>`, 이전 revision 복원 시 이어받기 | pgTAP, 계약, 권한 매트릭스, fork 경합 | L·CHAPTER-3 |
 | CHAPTER-5 관리 화면 | dnd 계층 관리, drop | `문제` 메뉴 `챕터 관리`, modal panel, `@dnd-kit` + 키보드 동등 메뉴. 문제를 챕터로 끌어 놓기는 기존 `chapter-assignments` 재사용 | Chromium·WebKit touch | L·CHAPTER-1, 4 |
@@ -214,7 +214,8 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | EXTRACT-6 재추출 | 기존 문제 반영 | 수정은 새 run에만 적용된다. `다시 추출`: 같은 revision에 새 run과 초안, 등록된 문제는 그대로. 교체 경로 필요(변경된 지문은 중복 탐지에 안 걸린다) | D-11 | M·EXTRACT-2 |
 | EXTRACT-7 그림 | 이미지 표시 | `source-region`에 `figures[]`, PDF 영역을 보기 위에 lazy 표시. 정답 뒤 이미지 제외 | QSRC-01. D-11 | M·EXTRACT-2 |
 | EXTRACT-8 span | 테이블 렌더링 | `TableContent.spans`, API·contract, `colSpan`/`rowSpan`, chunker 중복 제거. 기존 revision은 재파싱 전까지 그대로 | `make contracts` | M·없음 |
-| EXTRACT-9 구조화 셀(후속) | 문제 표 개선 | **UX12 범위 밖 후속 과제.** `stem`의 GFM 표를 구조화 셀 새 컬럼으로 옮긴다. 병합 셀을 정확히 표현한다. 초안, revision, 모의고사, fork, 프롬프트를 함께 고쳐야 한다 | 사용자 결정(2026-11-06)으로 기록만 남긴다. 착수 시 별도 계획 | L·EXTRACT-4 |
+| EXTRACT-9 구조화 셀(A안) | 문제 표 병합 셀·표 편집 | `stem`의 GFM은 유지하고 `stem_tables` JSON을 추가한다. `question_revisions`, `mock_exam_question_revisions`, 초안 payload에 저장하고 등록, 수정, 모의고사, Fork 복사 경로로 전달한다. 화면은 맞물리는 구조화 데이터를 우선 사용하고 AI, 검색, 중복 판정은 `stem`을 그대로 읽는다. 문제 편집에서는 표를 표로 편집한다(칸 글자, 행·열 추가와 삭제, 병합 유지와 줄임). 저장 시 구조화 데이터에서 GFM 묶음을 다시 쓴다. pipe 묶음을 직접 고쳐 어긋나면 GFM으로 돌아간다. 칸 병합·해제는 범위 밖 | 사용자 결정(2026-11-06). 기존 문제는 `다시 추출`로만 반영 | L·EXTRACT-4, 8 |
+| EXTRACT-10 발문 전체 구조화(B안, 추후) | 발문 블록화 | `stem`을 블록 구조로 교체한다. `stem`을 쓰는 약 120개 파일, 프롬프트, 중복 판정, 지문 해시를 함께 바꾼다 | 이번 범위 밖. 사용자 결정(2026-11-06)으로 기록만 남긴다 | XL·EXTRACT-9 |
 
 ## 5. 실행 순서
 
@@ -253,7 +254,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | D-8 | 다시 풀기 "항상 보이게": footer 버튼 항상 표시(첫 제출 전 비활성) / 토글 항상 표시. 결과 문구 삭제 시 색만 남는 문제: 행에 ✓/✗ 아이콘, 단답은 문구 유지. radio 색: 평소 `viewed`, hover `border-strong` | 각 왼쪽 |
 | D-9 | **결정됨(2026-11-06):** 챕터 편집은 활성 revision에 즉시 적용한다. 공유는 제외 선택과 Owner 기록 읽기 전용 옵션을 만들고, Fork에는 복사하지 않는다. **미정:** 삭제 시 문제 이동 대상 필수 여부, Heatmap 계층화 여부 | 대상 필수 |
 | D-10 | AI 질문: 대화 화면의 `새 대화` 제거, `다시 시도`는 유지, AI 안내 문구 유지 | 왼쪽 그대로 |
-| D-11 | **결정됨(2026-11-06):** 표는 `stem` 안 GFM으로 저장하고, 구조화 셀 전환은 EXTRACT-9로 기록한다. **미정:** 그림(PDF 영역 인라인 / 저장 crop + signed URL / 버튼만), 기존 문제(`다시 추출` / 재업로드), 교재 번호(접두어만 제거 / 평면 정렬 추가) | 인라인, `다시 추출`, 접두어 제거 |
+| D-11 | **결정됨(2026-11-06):** 표는 `stem` 안 GFM으로 저장하고, 구조화 셀은 별도 컬럼으로 추가한다(EXTRACT-9). 발문 전체 구조화는 추후 과제다(EXTRACT-10). **미정:** 그림(PDF 영역 인라인 / 저장 crop + signed URL / 버튼만), 기존 문제(`다시 추출` / 재업로드), 교재 번호(접두어만 제거 / 평면 정렬 추가) | 인라인, `다시 추출`, 접두어 제거 |
 | D-12 | hover 배율 1.18 유지 / 약 1.3으로 상향 | 약 1.3 |
 | D-13 | 원본 패널 범위: 가져오기만 / + 상세·관련 본문·발췌·요약 / + 공유 화면. 체크된 `pdf에서 보기`가 본문 발췌의 버튼까지 뜻하는지. 느린 breadcrumb 화면 | 두 번째 범위, 발췌 포함, 화면은 사용자 지정 필요 |
 | D-14 | LLM off 때 저장된 요약 없는 `요약` 버튼 숨김. 기존 AI 해설: 버전 올려 사라짐(건당 약 $0.02–0.03로 재생성) / 계속 표시 | 숨김, 버전 올림 |
@@ -280,7 +281,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HILITE-1 | 1 | 완료 | 652666a9 · Codex 지적 없음, E2E 34·Vitest web 1367·ui 452 GREEN |
 | DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
-| CHAPTER-2 | 1 | 대기 | HOME-1 뒤(`packages/ui/src/questions` 공유) |
 | DESIGN-1 | 2 | 완료 | ee5864fa · Codex P2(CI phase)는 merge에서 반영, 경계 규칙·hover·--control-gap, E2E 22·Vitest GREEN |
 | VIEW-1 | 2 | 완료 | c1f6235f · Codex P2(CI phase)는 merge에서 반영, 탭 시 비활성 이유 토스트, E2E 14·Vitest 138 GREEN |
 | VIEW-2 | 2 | 완료 | 645934b7 · Codex P2(CI phase)는 merge에서 반영, 제출 후 focus 표시 추가, E2E 78·Vitest GREEN |
@@ -312,10 +312,11 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | SHELL-5 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 실기기 확인 필요 |
 | SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | CHAPTER-1 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과, lint·typecheck·unit GREEN, 일부 E2E는 PR CI |
-| CHAPTER-3 | 7 | 진행 | |
-| CHAPTER-4 | 7 | 진행 | |
-| CHAPTER-5 | 7 | 진행 | |
-| CHAPTER-6 | 7 | 진행 | |
+| CHAPTER-3 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
+| CHAPTER-4 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
+| CHAPTER-5 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
+| CHAPTER-6 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
 | SHARE-1 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | SHARE-2 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | VIEW-7 | 5 | 완료 | Codex P2 3건 수정 후 재리뷰 통과, 첫 구현 E2E·화면 확인, 수정분 E2E는 PR CI |
+| EXTRACT-9 | 8 | 완료 | a540c198 · Codex P1(span 메모리)·P2(CI phase) 수정 후 재리뷰 통과, 표 편집 포함, 칸 병합·해제 제외, 발문 표 28개 중 병합 18개. migration·pgTAP·E2E는 PR CI에서 확인 |

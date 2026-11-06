@@ -110,6 +110,7 @@ from quiz_api.repositories.practice_runs import (
 )
 from quiz_api.repositories.question_overview import QuestionOverviewRepository
 from quiz_api.settings import Environment, Settings
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
 
@@ -161,6 +162,9 @@ class RetrySession(BaseModel):
     chapter_id: uuid.UUID | None
     question_number: int | None
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool
     options: list[RunOption]
     displayed_option_ids: list[str]
@@ -236,6 +240,9 @@ class RunItem(BaseModel):
     chapter_title: str | None
     question_number: int | None
     stem: str | None
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool | None
     options: list[RunOption] = Field(
         description="MCQ options; in the session's displayed order once a session is open."
@@ -493,9 +500,11 @@ def _mock_item(
         texts = {o["id"]: o["text"] for o in session.revision.options}
         options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
         stem, multi = session.revision.stem, session.revision.is_multi_answer
+        stem_tables = session.revision.stem_tables
     else:
         options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
         stem, multi = live.stem, live.is_multi_answer
+        stem_tables = live.stem_tables
     return RunItem(
         position=position,
         total=run.total,
@@ -507,6 +516,7 @@ def _mock_item(
         chapter_title=None,
         question_number=None,
         stem=stem,
+        stem_tables=stem_tables_out(stem_tables),
         is_multi_answer=multi,
         options=options,
         practice_session_id=session.id if session else None,
@@ -720,6 +730,7 @@ def start_run_item_retry_session(
         chapter_id=None,
         question_number=None,
         stem=mock.stem,
+        stem_tables=mock.stem_tables,
         is_multi_answer=mock.is_multi_answer,
         options=[RunOption(id=o.id, text=o.text) for o in mock.options],
         displayed_option_ids=mock.displayed_option_ids,
@@ -770,9 +781,11 @@ def get_practice_run_item(
         texts = {o["id"]: o["text"] for o in session.revision.options}
         options = [RunOption(id=i, text=texts[i]) for i in session.displayed_option_ids]
         stem, multi = session.revision.stem, session.revision.is_multi_answer
+        stem_tables = session.revision.stem_tables
     else:
         options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
         stem, multi = live.stem, live.is_multi_answer
+        stem_tables = live.stem_tables
     numbers = _chapter_numbers(overview, [live.chapter_id])
     return RunItem(
         position=position,
@@ -785,6 +798,7 @@ def get_practice_run_item(
         chapter_title=live.chapter_title,
         question_number=live.question_number,
         stem=stem,
+        stem_tables=stem_tables_out(stem_tables),
         is_multi_answer=multi,
         options=options,
         practice_session_id=session.id if session else None,

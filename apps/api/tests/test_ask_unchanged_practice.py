@@ -14,12 +14,12 @@ EXPECTED = {
     "PracticeSession": {
         "chapter_id", "displayed_option_ids", "id", "is_multi_answer", "opened_at", "options",
         "practice_run_id", "question_id", "question_number", "question_revision_id",
-        "question_type", "run_position", "state", "stem", "workspace_id",
+        "question_type", "run_position", "state", "stem", "stem_tables", "workspace_id",
     },
     "PracticeSessionDetail": {
         "chapter_id", "displayed_option_ids", "graded_at", "id", "is_multi_answer", "opened_at",
         "options", "outcome", "practice_run_id", "question_id", "question_number",
-        "question_revision_id", "question_type", "run_position", "state", "stem",
+        "question_revision_id", "question_type", "run_position", "state", "stem", "stem_tables",
         "submitted_at", "workspace_id",
     },
     "SubmitResult": {
@@ -29,7 +29,7 @@ EXPECTED = {
     "MockPracticeSession": {
         "displayed_option_ids", "id", "is_multi_answer", "mock_exam_id", "mock_exam_question_id",
         "opened_at", "options", "practice_run_id", "question_type", "revision_id",
-        "run_position", "state", "stem", "workspace_id",
+        "run_position", "state", "stem", "stem_tables", "workspace_id",
     },
     "MockSubmitResult": {
         "accepted_answers", "attempt_id", "correct_option_ids", "explanation",

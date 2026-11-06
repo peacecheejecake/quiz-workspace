@@ -22,6 +22,7 @@ function menu(readOnly: QuestionMenuReadOnly) {
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
     onRedistribute: vi.fn(),
+    onManageChapters: vi.fn(),
     onInactive: vi.fn(),
   };
   render(
@@ -50,6 +51,7 @@ describe('home `문제` menu', () => {
       '직접 추가',
       '중복 문제 정리',
       '챕터 재분배',
+      '챕터 관리',
       '보관·초안 문제',
     ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
@@ -111,6 +113,7 @@ describe('home `문제` menu', () => {
         '직접 추가',
         '중복 문제 정리',
         '챕터 재분배',
+        '챕터 관리',
         '보관·초안 문제',
       ]);
       const items = all.slice(2, 5);

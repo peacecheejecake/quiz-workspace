@@ -66,6 +66,7 @@ from quiz_api.question_rules import QuestionType
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.mock_practice import MockPracticeRepository, MockSessionRecord
 from quiz_api.repositories.practice_runs import PracticeRunRepository
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["mock-exams"], responses=problem_responses(503))
 
@@ -88,6 +89,9 @@ class MockPracticeSession(BaseModel):
     revision_id: uuid.UUID = Field(description="The mock exam question revision graded on.")
     question_type: QuestionType
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool
     options: list[PracticeOption] = Field(description="MCQ options in displayed order.")
     displayed_option_ids: list[str] = Field(description="The displayed order (MCQ), as ids.")
@@ -186,6 +190,7 @@ def session_out(s: MockSessionRecord) -> MockPracticeSession:
         revision_id=s.revision.id,
         question_type=s.question_type,
         stem=s.revision.stem,
+        stem_tables=stem_tables_out(s.revision.stem_tables),
         is_multi_answer=s.revision.is_multi_answer,
         options=[PracticeOption(id=oid, text=texts[oid]) for oid in s.displayed_option_ids],
         displayed_option_ids=s.displayed_option_ids,

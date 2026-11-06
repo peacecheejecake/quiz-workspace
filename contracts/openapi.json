@@ -854,6 +854,102 @@
         "title": "ChapterAssignmentResult",
         "type": "object"
       },
+      "ChapterCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null = a top-level chapter.",
+            "title": "Parent Id"
+          },
+          "title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "title"
+        ],
+        "title": "ChapterCreateRequest",
+        "type": "object"
+      },
+      "ChapterDeleteResult": {
+        "properties": {
+          "moved_questions": {
+            "title": "Moved Questions",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "description": "Where the chapter was: a retry is authorized here, the chapter being gone.",
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "moved_questions",
+          "version"
+        ],
+        "title": "ChapterDeleteResult",
+        "type": "object"
+      },
+      "ChapterMove": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_id": {
+            "format": "uuid",
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "position": {
+            "description": "0-based among the new siblings.",
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chapter_id",
+          "parent_id",
+          "position"
+        ],
+        "title": "ChapterMove",
+        "type": "object"
+      },
       "ChapterNote": {
         "properties": {
           "created_at": {
@@ -1135,6 +1231,102 @@
           "page_to"
         ],
         "title": "ChapterSummary",
+        "type": "object"
+      },
+      "ChapterTree": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/TreeDocument"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "documents"
+        ],
+        "title": "ChapterTree",
+        "type": "object"
+      },
+      "ChapterTreeResult": {
+        "properties": {
+          "chapters": {
+            "description": "Outline order.",
+            "items": {
+              "$ref": "#/components/schemas/TreeChapter"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "chapters"
+        ],
+        "title": "ChapterTreeResult",
+        "type": "object"
+      },
+      "ChapterTreeUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/ChapterMove"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Moves",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_version",
+          "moves"
+        ],
+        "title": "ChapterTreeUpdate",
+        "type": "object"
+      },
+      "ChapterUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ChapterUpdateRequest",
+        "type": "object"
+      },
+      "ChapterWrite": {
+        "properties": {
+          "chapter": {
+            "$ref": "#/components/schemas/TreeChapter"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chapter",
+          "version"
+        ],
+        "title": "ChapterWrite",
         "type": "object"
       },
       "CheckStatus": {
@@ -2323,6 +2515,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "validations": {
             "items": {
               "$ref": "#/components/schemas/DraftValidation"
@@ -2373,6 +2587,7 @@
               "enum": [
                 "type",
                 "stem",
+                "table",
                 "options",
                 "answer"
               ],
@@ -5722,6 +5937,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "validation_issues": {
             "anyOf": [
               {
@@ -5861,6 +6098,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -6337,6 +6597,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "workspace_id": {
             "format": "uuid",
@@ -7182,6 +7464,14 @@
       },
       "OverviewChapter": {
         "properties": {
+          "ancestors": {
+            "description": "From the top-level chapter down to the parent. Most have no group here.",
+            "items": {
+              "$ref": "#/components/schemas/OverviewChapterAncestor"
+            },
+            "title": "Ancestors",
+            "type": "array"
+          },
           "document_id": {
             "anyOf": [
               {
@@ -7206,6 +7496,12 @@
             ],
             "description": "null = the questions without a chapter.",
             "title": "Id"
+          },
+          "level": {
+            "default": 1,
+            "description": "Depth in the outline; 1 = top level (CHMAN-01).",
+            "title": "Level",
+            "type": "integer"
           },
           "number": {
             "anyOf": [
@@ -7237,6 +7533,25 @@
           "question_count"
         ],
         "title": "OverviewChapter",
+        "type": "object"
+      },
+      "OverviewChapterAncestor": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "OverviewChapterAncestor",
         "type": "object"
       },
       "OverviewCounts": {
@@ -7840,6 +8155,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -8049,6 +8386,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "submitted_at": {
             "anyOf": [
@@ -8524,6 +8883,29 @@
             "maxLength": 20000,
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -8833,6 +9215,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -9008,6 +9413,28 @@
             "description": "The active revision's stem, unaltered.",
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -9152,6 +9579,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "version": {
             "title": "Version",
@@ -9494,6 +9943,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -10341,6 +10813,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -10852,6 +11346,28 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "total": {
             "title": "Total",
@@ -12736,6 +13252,120 @@
         "title": "SourceRegionItem",
         "type": "object"
       },
+      "StemTable": {
+        "description": "The cells of one pipe block of the stem, in the shape of a document table.",
+        "properties": {
+          "header_rows": {
+            "title": "Header Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rectangular grid: merged cells repeat their text.",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StemTableSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Merged cells; null when there are none.",
+            "title": "Spans"
+          }
+        },
+        "required": [
+          "rows",
+          "header_rows"
+        ],
+        "title": "StemTable",
+        "type": "object"
+      },
+      "StemTableInput": {
+        "additionalProperties": false,
+        "properties": {
+          "header_rows": {
+            "title": "Header Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rectangular grid: merged cells repeat their text.",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StemTableSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Merged cells; null when there are none.",
+            "title": "Spans"
+          }
+        },
+        "required": [
+          "rows",
+          "header_rows"
+        ],
+        "title": "StemTableInput",
+        "type": "object"
+      },
+      "StemTableSpan": {
+        "properties": {
+          "col": {
+            "minimum": 0.0,
+            "title": "Col",
+            "type": "integer"
+          },
+          "col_span": {
+            "minimum": 1.0,
+            "title": "Col Span",
+            "type": "integer"
+          },
+          "row": {
+            "minimum": 0.0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "row_span": {
+            "minimum": 1.0,
+            "title": "Row Span",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "col",
+          "row_span",
+          "col_span"
+        ],
+        "title": "StemTableSpan",
+        "type": "object"
+      },
       "SubmitBody": {
         "additionalProperties": false,
         "description": "`selected_option_ids` for an MCQ (one id unless multi-answer), `answer_text` otherwise.",
@@ -13367,6 +13997,131 @@
           "end"
         ],
         "title": "TextSpan",
+        "type": "object"
+      },
+      "TreeChapter": {
+        "properties": {
+          "attached_question_count": {
+            "description": "Every question on the chapter, also drafts, archived and deleted ones: more than zero means a delete needs `move_questions_to`.",
+            "title": "Attached Question Count",
+            "type": "integer"
+          },
+          "has_note": {
+            "description": "A chapter note exists (deleting hides it).",
+            "title": "Has Note",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "level": {
+            "description": "1 = top level; parent + 1.",
+            "title": "Level",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "question_count": {
+            "description": "Live CONFIRMED questions, sub-chapters excluded.",
+            "title": "Question Count",
+            "type": "integer"
+          },
+          "section_key": {
+            "description": "Stable across revisions; `user-<uuid>` when added here.",
+            "title": "Section Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "description": "Pre-order position in the revision.",
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "user_created": {
+            "title": "User Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "parent_id",
+          "section_key",
+          "title",
+          "level",
+          "sort_order",
+          "page",
+          "question_count",
+          "attached_question_count",
+          "has_note",
+          "user_created"
+        ],
+        "title": "TreeChapter",
+        "type": "object"
+      },
+      "TreeDocument": {
+        "properties": {
+          "chapters": {
+            "description": "Outline order.",
+            "items": {
+              "$ref": "#/components/schemas/TreeChapter"
+            },
+            "title": "Chapters",
+            "type": "array"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "description": "`expected_version` of the next batch move.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "revision_id",
+          "version",
+          "chapters"
+        ],
+        "title": "TreeDocument",
         "type": "object"
       },
       "UploadCompleted": {
@@ -15195,6 +15950,273 @@
         ]
       }
     },
+    "/api/v1/chapters/{chapter_id}": {
+      "delete": {
+        "description": "Delete a chapter. Its questions go where the person chose (no new question revision;\nattempts and runs stay), its blocks and sub-chapters go to its parent.\n\nA retry finds the chapter gone, so the saved response comes first: the key is the caller's\nown, and the workspace the saved response names is authorized like the delete was (a member\nremoved since gets the same 404, a viewer or an archived workspace the same 403). The advisory\nlock comes first too, so a retry racing the first request waits and finds the response.",
+        "operationId": "deleteChapter",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Chapter id or `none` (\"챕터 없음\"); required when questions are here.",
+            "in": "query",
+            "name": "move_questions_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "const": "none",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Chapter id or `none` (\"챕터 없음\"); required when questions are here.",
+              "title": "Move Questions To"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterDeleteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Delete Chapter",
+        "tags": [
+          "chapters"
+        ]
+      },
+      "patch": {
+        "description": "Rename a chapter. Its key stays, so notes, summaries and publishes keep following it.",
+        "operationId": "updateChapter",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chapter_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chapter Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterWrite"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Update Chapter",
+        "tags": [
+          "chapters"
+        ]
+      }
+    },
     "/api/v1/chapters/{chapter_id}/my-highlights": {
       "get": {
         "description": "The caller's highlights of the chapter: those of every note version of the chapter (version\nnumber included) and the explanation highlights of the questions now in it (live CONFIRMED;\narchived, deleted, draft and moved-away questions are left out).",
@@ -16255,6 +17277,134 @@
         "summary": "Correct Block",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/chapters/tree": {
+      "post": {
+        "description": "Apply moves in order and recompute `level` and `sort_order` for the whole revision. Only\nfrom the version the client read: all moves or none.",
+        "operationId": "moveChapters",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterTreeUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterTreeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Move Chapters",
+        "tags": [
+          "chapters"
         ]
       }
     },
@@ -26705,6 +27855,223 @@
         "summary": "List Redistribution Questions",
         "tags": [
           "questions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chapter-tree": {
+      "get": {
+        "description": "The chapter tree of every live book, with question counts and whether a note exists. No\nbook text, answers or explanations.",
+        "operationId": "getChapterTree",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterTree"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Get Chapter Tree",
+        "tags": [
+          "chapters"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chapters": {
+      "post": {
+        "description": "Add a chapter as the last child of `parent_id`, in the active revision. The book's text\ndoes not change: the chapter starts empty.",
+        "operationId": "createChapter",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[!-~]{1,200}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409.",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChapterCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChapterWrite"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Create Chapter",
+        "tags": [
+          "chapters"
         ]
       }
     },

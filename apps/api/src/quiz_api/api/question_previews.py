@@ -34,6 +34,7 @@ from quiz_api.chapter_notes import question_label
 from quiz_api.errors import problem_responses
 from quiz_api.question_rules import QuestionType
 from quiz_api.repositories.questions import QuestionRecord
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["questions"], responses=problem_responses(503))
 shared_router = APIRouter(
@@ -58,6 +59,9 @@ class QuestionPreview(BaseModel):
     chapter_title: str | None
     question_type: QuestionType
     stem: str = Field(description="The active revision's stem, unaltered.")
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     options: list[PreviewOption] = Field(description="Original order; empty for text answers.")
 
 
@@ -73,6 +77,7 @@ def preview_out(q: QuestionRecord, *, chapter_visible: bool) -> QuestionPreview:
         chapter_title=title,
         question_type=q.question_type,
         stem=q.revision.stem,
+        stem_tables=stem_tables_out(q.revision.stem_tables),
         options=[PreviewOption(id=o["id"], text=o["text"]) for o in q.revision.options],
     )
 

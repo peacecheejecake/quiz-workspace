@@ -245,6 +245,7 @@ export function sessionFromMock(s: MockPracticeSession): PracticeSession {
     question_type: s.question_type,
     chapter_id: null,
     stem: s.stem,
+    stem_tables: s.stem_tables,
     is_multi_answer: s.is_multi_answer,
     displayed_option_ids: s.displayed_option_ids,
     options: s.options,

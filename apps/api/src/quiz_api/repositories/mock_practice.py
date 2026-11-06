@@ -54,6 +54,7 @@ class MockRevision:
     is_multi_answer: bool
     explanation: str | None
     rubric: str | None
+    stem_tables: list[Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,7 @@ class LiveMockQuestion:
     stem: str
     options: list[dict[str, str]]
     is_multi_answer: bool
+    stem_tables: list[Any] | None = None
 
 
 def _revision(row: Any) -> MockRevision:
@@ -172,6 +174,7 @@ def _revision(row: Any) -> MockRevision:
         is_multi_answer=bool(row.rev_is_multi_answer),
         explanation=row.rev_explanation,
         rubric=row.rev_rubric,
+        stem_tables=row.rev_stem_tables,
     )
 
 
@@ -182,7 +185,8 @@ _TARGET = """
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
            r.options as rev_options, r.correct_option_ids as rev_correct_option_ids,
            r.accepted_answers as rev_accepted_answers, r.is_multi_answer as rev_is_multi_answer,
-           r.explanation as rev_explanation, r.rubric as rev_rubric
+           r.explanation as rev_explanation, r.rubric as rev_rubric,
+           r.stem_tables as rev_stem_tables
       from public.mock_exam_questions q
       join public.mock_exams e on e.id = q.mock_exam_id and e.workspace_id = q.workspace_id
       join public.mock_exam_question_revisions r
@@ -206,7 +210,8 @@ _SESSION = """
            r.id as rev_id, r.version as rev_version, r.stem as rev_stem,
            r.options as rev_options, r.correct_option_ids as rev_correct_option_ids,
            r.accepted_answers as rev_accepted_answers, r.is_multi_answer as rev_is_multi_answer,
-           r.explanation as rev_explanation, r.rubric as rev_rubric
+           r.explanation as rev_explanation, r.rubric as rev_rubric,
+           r.stem_tables as rev_stem_tables
       from public.mock_exam_practice_sessions s
       join public.mock_exam_questions q
         on q.id = s.mock_exam_question_id and q.workspace_id = s.workspace_id
@@ -559,7 +564,7 @@ class MockPracticeRepository:
     ) -> LiveMockQuestion | None:
         row = self._session.execute(
             text(
-                "select q.id, q.question_type, r.stem, r.options, r.is_multi_answer "
+                "select q.id, q.question_type, r.stem, r.options, r.is_multi_answer, r.stem_tables "
                 "from public.mock_exam_questions q "
                 "join public.mock_exam_question_revisions r "
                 "on r.id = q.active_revision_id and r.mock_exam_question_id = q.id "
@@ -575,6 +580,7 @@ class MockPracticeRepository:
             stem=row.stem,
             options=list(row.options or []),
             is_multi_answer=bool(row.is_multi_answer),
+            stem_tables=row.stem_tables,
         )
 
     def progress(self, run: RunRecord) -> RunProgress:

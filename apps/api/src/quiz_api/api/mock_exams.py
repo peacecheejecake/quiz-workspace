@@ -46,6 +46,7 @@ from book_core.mock_exam import (
     make_plan,
     uses_llm,
 )
+from book_core.question import stem_tables_json
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -93,6 +94,15 @@ from quiz_api.repositories.mock_exams import (
 from quiz_api.repositories.question_imports import QuestionImportRepository
 from quiz_api.repositories.question_overview import QuestionOverviewRepository
 from quiz_api.settings import Settings
+from quiz_api.stem_tables import (
+    STEM_TABLES_DESCRIPTION,
+    STEM_TABLES_EDIT_DESCRIPTION,
+    StemTable,
+    StemTablesInput,
+    edited_stem_tables,
+    parse_stem_tables,
+    stem_tables_out,
+)
 
 router = APIRouter(tags=["mock-exams"], responses=problem_responses(503))
 
@@ -245,6 +255,9 @@ class MockExamQuestion(BaseModel):
     question_type: Literal["MCQ", "SHORT_ANSWER", "ESSAY"]
     variation_type: VariationName
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     options: list[MockExamOption]
     is_multi_answer: bool
     revision: MockExamRevisionRef
@@ -267,6 +280,10 @@ class MockExamQuestionUpdate(BaseModel):
 
     base_revision_id: uuid.UUID
     stem: str | None = Field(default=None, max_length=MAX_STEM)
+    stem_tables: StemTablesInput | None = Field(
+        default=None,
+        description=STEM_TABLES_EDIT_DESCRIPTION,
+    )
     options: list[MockExamOption] | None = Field(default=None, max_length=MAX_OPTIONS)
     correct_option_ids: list[str] | None = Field(default=None, max_length=MAX_OPTIONS)
     is_multi_answer: bool | None = None
@@ -485,6 +502,7 @@ def question_out(
         question_type=q.question_type,  # type: ignore[arg-type]
         variation_type=q.variation_type,  # type: ignore[arg-type]
         stem=q.stem,
+        stem_tables=stem_tables_out(q.stem_tables),
         options=[MockExamOption(id=o["id"], text=o["text"]) for o in q.options],
         is_multi_answer=q.is_multi_answer,
         revision=MockExamRevisionRef(id=q.revision_id, version=q.revision_version),
@@ -894,9 +912,16 @@ def update_mock_exam_question(
         if "options" in sent and body.options is not None
         else [(o["id"], o["text"]) for o in current.options]
     )
+    stem = body.stem if "stem" in sent and body.stem is not None else current.stem
     content = QuestionContent(
         question_type=current.question_type,  # type: ignore[arg-type]
-        stem=body.stem if "stem" in sent and body.stem is not None else current.stem,
+        stem=stem,
+        stem_tables=edited_stem_tables(
+            stem,
+            sent="stem_tables" in sent,
+            tables=body.stem_tables,
+            stored=parse_stem_tables(current.stem_tables),
+        ),
         options=tuple(options),
         correct_option_ids=tuple(c)
         if (c := pick("correct_option_ids", current.correct_option_ids)) is not None
@@ -919,6 +944,7 @@ def update_mock_exam_question(
         access.workspace.user_id,
         {
             "stem": content.stem,
+            "stem_tables": stem_tables_json(content.stem_tables),
             "options": content.options_json(),
             "correct_option_ids": list(content.correct_option_ids)
             if content.correct_option_ids is not None
