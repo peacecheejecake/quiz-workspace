@@ -10,7 +10,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   HighlightableText,
   HighlightMenu,
-  ModalDialog,
   colorAction,
   type HighlightAction,
   type HighlightSelection,
@@ -91,6 +90,7 @@ interface HarnessProps {
   readOnly?: boolean;
   onAction?: (action: HighlightAction) => void;
   onCopy?: (text: string) => Promise<boolean>;
+  onCopied?: () => void;
   onSelection?: (selection: HighlightSelection | null) => void;
 }
 
@@ -100,6 +100,7 @@ function Harness({
   readOnly,
   onAction,
   onCopy,
+  onCopied,
   onSelection,
 }: HarnessProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -140,6 +141,7 @@ function Harness({
         readOnly={readOnly}
         onAction={onAction}
         onCopy={onCopy}
+        onCopied={onCopied}
         onClose={() => setSelection(null)}
         returnFocusTo={ref}
       />
@@ -149,34 +151,11 @@ function Harness({
 
 const menu = () => screen.findByRole('menu', { name: '하이라이트' }, { timeout: 4000 });
 
-/** Whether `el` or an ancestor is hidden from assistive technology. */
-function ariaHidden(el: Element): boolean {
-  return el.closest('[aria-hidden="true"]') !== null;
+/** Closes the menu: unmounting an open one clears the selection a moment into the next test. */
+async function closeMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
 }
-
-describe('HILITE-01-C09 HighlightMenu inside a modal', () => {
-  it('HILITE-01-C09e keeps the copy status announced while the menu lives in a modal (정리 노트)', async () => {
-    const user = userEvent.setup();
-    const onCopy = vi.fn(async () => true);
-    render(
-      <ModalDialog defaultOpen title="정리 노트">
-        <Harness onCopy={onCopy} />
-      </ModalDialog>,
-    );
-    await screen.findByRole('dialog', { name: '정리 노트' });
-    const status = document.querySelector('body > [role="status"][aria-live="polite"]');
-    if (!status) throw new Error('the copy status is not portalled to <body>');
-    // The modal hid the rest of the page on open, but not the status.
-    await waitFor(() => expect(document.querySelector('[data-aria-hidden]')).not.toBeNull());
-    expect(ariaHidden(status)).toBe(false);
-
-    mouseSelect('장의 ', '핵심');
-    const open = await menu();
-    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
-    await waitFor(() => expect(status).toHaveTextContent('복사했습니다'));
-    expect(ariaHidden(status)).toBe(false);
-  });
-});
 
 describe('HILITE-01-C09 HighlightableText', () => {
   it('HILITE-01-C09a draws non-overlapping highlights and search results over the same text', async () => {
@@ -267,15 +246,6 @@ describe('HILITE-01-C09 HighlightableText', () => {
         .getAllByRole('menuitemradio')
         .map((i) => i.textContent),
     ).toEqual(['노랑', '파랑', '분홍']);
-    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
-    expect(onCopy).toHaveBeenCalledWith('장의 핵심');
-    expect(await within(open).findByText('복사했습니다')).toBeVisible();
-    // Announced by a status outside the menu (a `menu` owns only items, groups, separators).
-    expect(screen.getAllByRole('status').some((el) => el.textContent === '복사했습니다')).toBe(
-      true,
-    );
-    expect(within(open).queryByRole('status')).toBeNull();
-
     await user.click(within(open).getByRole('menuitemradio', { name: '파랑' }));
     expect(onAction).toHaveBeenCalledWith({
       type: 'create',
@@ -304,6 +274,76 @@ describe('HILITE-01-C09 HighlightableText', () => {
     );
     await user.click(within(open).getByRole('menuitemradio', { name: '분홍' }));
     expect(onAction).toHaveBeenLastCalledWith({ type: 'recolor', id: 'h1', color: 'pink' });
+  });
+
+  it('HILITE-01-C09b a successful copy closes the menu, clears the selection and reports it', async () => {
+    const user = userEvent.setup();
+    const onCopy = vi.fn(async () => true);
+    const onCopied = vi.fn();
+    render(<Harness highlights={[YELLOW]} onCopy={onCopy} onCopied={onCopied} />);
+
+    mouseSelect('장의 ', '핵심');
+    const open = await menu();
+    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
+    expect(onCopy).toHaveBeenCalledWith('장의 핵심');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(onCopied).toHaveBeenCalledTimes(1);
+    expect(region()).toHaveFocus();
+    expect(window.getSelection()?.toString()).toBe('');
+    // The toast says it; the menu has no status of its own.
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it.each([
+    ['refused', async () => false],
+    [
+      'failed',
+      async () => {
+        throw new Error('denied');
+      },
+    ],
+  ])('HILITE-01-C09b a %s copy keeps the menu open', async (_name, onCopy) => {
+    const user = userEvent.setup();
+    const onCopied = vi.fn();
+    render(<Harness onCopy={onCopy} onCopied={onCopied} />);
+
+    mouseSelect('장의 ', '핵심');
+    const open = await menu();
+    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
+    await act(async () => new Promise((r) => setTimeout(r, 10)));
+    expect(screen.getByRole('menu', { name: '하이라이트' })).toBeVisible();
+    expect(onCopied).not.toHaveBeenCalled();
+    await closeMenu(user);
+  });
+
+  it('HILITE-01-C09b a copy that ends after the menu closed still reports it', async () => {
+    const user = userEvent.setup();
+    let finish: (ok: boolean) => void = () => undefined;
+    const onCopied = vi.fn();
+    render(
+      <Harness
+        onCopied={onCopied}
+        onCopy={() =>
+          new Promise<boolean>((resolve) => {
+            finish = resolve;
+          })
+        }
+      />,
+    );
+
+    mouseSelect('장의 ', '핵심');
+    const open = await menu();
+    await user.click(within(open).getByRole('menuitem', { name: '복사' }));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+
+    // A new pick opened meanwhile stays open.
+    mouseSelect('의 순서');
+    await menu();
+    await act(async () => finish(true));
+    expect(onCopied).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('menu', { name: '하이라이트' })).toBeVisible();
+    await closeMenu(user);
   });
 
   it('HILITE-01-C09c refuses a selection across blocks: colors disabled with the reason as text', async () => {

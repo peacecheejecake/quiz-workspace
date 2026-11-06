@@ -13,7 +13,6 @@ import {
 import { createPortal } from 'react-dom';
 import { useLayerStyle } from '../internal/layer';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
-import { COPY_FEEDBACK_MS } from '../primitives/CopyButton';
 import { CheckIcon } from '../primitives/icons';
 import {
   HIGHLIGHT_COLORS,
@@ -31,7 +30,6 @@ export const HIGHLIGHT_MENU_TEXT = {
   label: '하이라이트',
   remove: '하이라이트 지우기',
   copy: '복사',
-  copied: '복사했습니다',
   oneBlock: '한 문단 안에서 고르세요',
 } as const;
 
@@ -50,6 +48,8 @@ export interface HighlightMenuProps {
   returnFocusTo?: RefObject<HTMLElement | null>;
   /** Writes the text to the clipboard; default `navigator.clipboard.writeText`. */
   onCopy?: (text: string) => Promise<boolean>;
+  /** The text was copied and the menu closed; a failed copy keeps the menu open. */
+  onCopied?: () => void;
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -79,16 +79,15 @@ export function HighlightMenu({
   readOnly = false,
   returnFocusTo,
   onCopy = copyToClipboard,
+  onCopied,
 }: HighlightMenuProps) {
   const reasonId = useId();
   const layerStyle = useLayerStyle();
   const guardOverscroll = useOverscrollGuard<HTMLDivElement>();
   const [scrolled, setScrolled] = useState(0);
-  const [copiedFor, setCopiedFor] = useState<HighlightSelection | null>(null);
-  const copied = copiedFor !== null && copiedFor === selection;
-  const copiedTimer = useRef<number | undefined>(undefined);
   const closing = useRef<'escape' | 'outside' | 'action' | null>(null);
   const last = useRef<HighlightSelection | null>(null);
+  const current = useRef(selection);
   const open = selection !== null;
   // Measured while rendering so the anchor is in place when the menu mounts; re-measured after a
   // scroll (the popper re-reads the anchor every frame while open).
@@ -115,7 +114,9 @@ export function HighlightMenu({
     };
   }, [selection]);
 
-  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
+  useEffect(() => {
+    current.current = selection;
+  });
 
   const range =
     selection && selection.block !== null
@@ -134,15 +135,14 @@ export function HighlightMenu({
 
   async function copy() {
     if (!selection) return;
-    window.clearTimeout(copiedTimer.current);
-    setCopiedFor(null);
     const text = selection.text;
     const ok = await Promise.resolve()
       .then(() => onCopy(text))
       .catch(() => false);
     if (!ok) return;
-    setCopiedFor(selection);
-    copiedTimer.current = window.setTimeout(() => setCopiedFor(null), COPY_FEEDBACK_MS);
+    // The reader may have moved on while the clipboard answered: leave a newer menu alone.
+    if (current.current === selection) act(null);
+    onCopied?.();
   }
 
   const anchorStyle: CSSProperties = {
@@ -166,23 +166,14 @@ export function HighlightMenu({
       {typeof document === 'undefined'
         ? null
         : createPortal(
-            <>
-              <RadixDropdownMenu.Trigger asChild>
-                <span
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  style={anchorStyle}
-                  data-highlight-anchor=""
-                />
-              </RadixDropdownMenu.Trigger>
-              {/* The copy announcement lives outside the menu: a `menu` may own only items,
-                  groups and separators (axe aria-required-children, A11Y-19). An explicit
-                  aria-live keeps it out of a modal's hideOthers (the 정리 노트 modal), which
-                  exempts [aria-live] but not an implicit role=status. */}
-              <span role="status" aria-live="polite" className="qz-visually-hidden">
-                {copied ? HIGHLIGHT_MENU_TEXT.copied : ''}
-              </span>
-            </>,
+            <RadixDropdownMenu.Trigger asChild>
+              <span
+                aria-hidden="true"
+                tabIndex={-1}
+                style={anchorStyle}
+                data-highlight-anchor=""
+              />
+            </RadixDropdownMenu.Trigger>,
             document.body,
           )}
       <RadixDropdownMenu.Portal>
@@ -268,17 +259,13 @@ export function HighlightMenu({
           <RadixDropdownMenu.Item
             className="item"
             onSelect={(event) => {
-              // The menu stays open to show the status below the item.
+              // The menu closes once the copy succeeded; a failed one leaves it open.
               event.preventDefault();
               void copy();
             }}
           >
             {HIGHLIGHT_MENU_TEXT.copy}
           </RadixDropdownMenu.Item>
-          {/* Shown under the item; announced by the status outside the menu (above). */}
-          <p aria-hidden="true" className="status">
-            {copied ? HIGHLIGHT_MENU_TEXT.copied : ''}
-          </p>
         </RadixDropdownMenu.Content>
       </RadixDropdownMenu.Portal>
     </RadixDropdownMenu.Root>

@@ -26,6 +26,7 @@ export const HIGHLIGHT_TEXT = {
   recolor: '색 바꾸기',
   delete: '삭제',
   deleted: '하이라이트를 지웠습니다',
+  copied: '복사했습니다.',
   undo: '되돌리기',
   undoHint: '되돌리려면 F8',
   more: '더 보기',
