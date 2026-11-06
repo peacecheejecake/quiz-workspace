@@ -444,7 +444,6 @@ export function PracticeViewer({
       ) : null}
       {ready && finished ? (
         <Button
-          variant="ghost"
           onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
         >
           다시 풀기
