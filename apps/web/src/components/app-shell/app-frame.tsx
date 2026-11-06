@@ -6,6 +6,7 @@ import { AppShell, type AppShellProps } from '@quiz/ui';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useAutoCopyOnSelect } from './use-auto-copy-on-select';
+import { useKeyboardInset } from './use-keyboard-inset';
 
 export interface DrawerState {
   readonly open: boolean;
@@ -19,6 +20,7 @@ export function drawerFor(state: DrawerState, pathname: string): DrawerState {
 
 export function AppFrame(props: Omit<AppShellProps, 'mobileNavOpen' | 'onMobileNavOpenChange'>) {
   useAutoCopyOnSelect();
+  useKeyboardInset();
   const pathname = usePathname();
   const [drawer, setDrawer] = useState<DrawerState>({ open: false, pathname });
   const current = drawerFor(drawer, pathname);
