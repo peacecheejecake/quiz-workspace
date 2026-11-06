@@ -23,7 +23,7 @@ select has_trigger('public', 'practice_sessions', 'practice_sessions_check_super
   'bank supersession is checked');
 select has_trigger('public', 'mock_exam_practice_sessions',
   'mock_exam_practice_sessions_check_superseded', 'mock supersession is checked');
-select col_has_check('public', 'practice_sessions', 'superseded_at',
+select col_has_check('public', 'practice_sessions', array['superseded_at', 'practice_run_id'],
   'only a run session is superseded');
 select ok(not has_function_privilege('quiz_api', 'public.run_session_check_superseded()', 'execute'),
   'the trigger function is not callable by the API role');

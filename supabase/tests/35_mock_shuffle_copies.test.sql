@@ -41,6 +41,9 @@ insert into public.async_jobs (id, workspace_id, created_by, job_type, schema_ve
 values ('60000000-0000-4000-8000-000000130001', '10000000-0000-4000-8000-000000130001',
         '00000000-0000-4000-8000-000000130001', 'mock_exam.generate', 1, 'shuffle-test', '{}');
 
+grant quiz_api to postgres;
+grant usage on schema extensions to quiz_api;
+
 set local role quiz_api;
 insert into public.mock_exams (id, workspace_id, title, config, range, created_by) values
   ('40000000-0000-4000-8000-000000130001', '10000000-0000-4000-8000-000000130001', '섞기',
