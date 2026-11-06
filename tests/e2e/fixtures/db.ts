@@ -209,3 +209,24 @@ export function stampDraftValidation(
     ).trim(),
   );
 }
+
+/**
+ * Replaces one table block of a draft revision (UX12-SPANS). Only the real parser produces merged
+ * cells and the synthetic PDFs have none; published revisions are immutable, so this needs a draft.
+ */
+export function seedDraftTable(
+  documentId: string,
+  blockId: string,
+  table: { readonly rows: readonly (readonly string[])[]; readonly spans: readonly object[] },
+): void {
+  const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  const text = table.rows.map((row) => row.join(' | ')).join('\n');
+  const json = JSON.stringify({ rows: table.rows, header_rows: 1, spans: table.spans });
+  psql(
+    `update public.content_blocks b set text = ${quote(text)}, ` +
+      `attributes = b.attributes || jsonb_build_object('table', ${quote(json)}::jsonb) ` +
+      `from public.document_revisions r where r.id = b.document_revision_id ` +
+      `and r.document_id = ${uuidList([documentId])} and r.status = 'draft' ` +
+      `and b.block_id = ${quote(blockId)}`,
+  );
+}
