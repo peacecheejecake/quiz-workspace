@@ -17,11 +17,11 @@ images wholly outside the body area (margin and header decoration).
 
 Columns: ``mv_page``/``mv_up`` blocks moved to an earlier page / up within their column, ``2col``
 two-column pages, ``opts`` option-count histogram, ``gaps`` missing question numbers, ``dup``
-repeated numbers (both per chapter), ``ans`` answered ratio, ``tbl`` non-option tables dropped from the stem (and
-the questions they hit), ``rev`` regions holding a block printed before the question's first
-line, ``seq`` questions starting before the previous question, ``ovl`` pairs of questions whose
-page regions overlap, ``marg`` images in the margin attached to a question, ``hsec`` questions
-split over several outline sections by a heading inside them.
+repeated numbers (both per chapter), ``ans`` answered ratio, ``tbl`` non-option tables dropped
+from the stem (and the questions they hit), ``rev`` regions holding a block printed before the
+question's first line, ``seq`` questions starting before the previous question, ``ovl`` pairs of
+questions whose page regions overlap, ``marg`` images in the margin attached to a question,
+``hsec`` questions split over several outline sections by a heading inside them.
 """
 
 from __future__ import annotations
