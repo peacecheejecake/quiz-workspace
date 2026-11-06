@@ -115,6 +115,7 @@ import {
   searchUi,
   seedMembership,
   signInAs,
+  sourcePdfUi,
   submitPractice,
   startPractice,
   uploadReadyBook,
@@ -374,6 +375,7 @@ test(
     await expect(excerpt).toContainText(PASSAGES.book);
     await expect(excerpt).toContainText(pageLabel(2));
     await searchUi.openInPdf(excerpt).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) =>
         url.pathname.endsWith(`/documents/${s.book.documentId}`) &&
@@ -662,6 +664,7 @@ test(
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId, q.id)}`);
       const offPractice = panelUi.panel(page);
       await expect(offPractice).toBeVisible();
+      await panelUi.reveal(offPractice).click(); // a solved question opens to be answered
       await expect(
         offPractice.getByRole('status').filter({ hasText: RESULT_TEXT.incorrect }),
       ).toBeVisible();

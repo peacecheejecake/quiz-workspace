@@ -1,6 +1,5 @@
 /* DOCVIEW-01 document viewer layout: the "보기 설정" bar, the split area with its docked outline
- * panel, and the 원본 / 변환본 panes. Semantic tokens only; the reading panes are opaque surfaces
- * (no glass over the PDF or the text, design-system §1). */
+ * panel, and the 원본 / 변환본 panes. Semantic tokens only; the reading panes are opaque surfaces. */
 
 .viewer {
   display: grid;
@@ -274,12 +273,12 @@ button.segment:focus-visible {
 
 /* --- outline panel ------------------------------------------------------------------------- */
 
-/* Tablets: the panel floats over the PDF and the text, so it is opaque there (no glass over the
-   reading area, design-system §1 checklist). Desktop docks it beside the panes (inset). */
+/* Tablets: the panel stays open over the PDF and the text while reading, so its long tree is opaque
+   there. Desktop docks it beside the panes (inset). */
 .outlinePanel:global(.qz-panel)[data-dock-mode='overlay'] {
   background: var(--color-glass-solid);
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* Reduced motion: the outline panel opens and folds at once (DOCVIEW-01-AC02). The global reset
@@ -314,16 +313,32 @@ button.segment:focus-visible {
   position: absolute;
   z-index: calc(var(--z-side-panel) + 1);
   inset: 0 0 auto;
+  display: grid;
+  gap: var(--space-2);
   max-height: 70dvh;
   overflow: auto;
   padding-top: max(var(--space-2), env(safe-area-inset-top));
   padding-right: max(var(--space-3), env(safe-area-inset-right));
   padding-bottom: var(--space-2);
   padding-left: max(var(--space-3), env(safe-area-inset-left));
-  background: var(--color-surface);
   transition:
     transform var(--duration-state) var(--easing-standard),
     opacity var(--duration-state) var(--easing-standard);
+}
+
+/* A full-width bar: only its lower edge is an edge. */
+.chrome:global(.glass-surface) {
+  border-width: 0 0 1px;
+}
+
+.chrome :global(.qz-page-header) {
+  margin-bottom: 0;
+}
+
+/* The PDF tools sit on the chrome: its padding and glass, no box of their own. */
+.toolbarHost > * {
+  padding: 0;
+  border-bottom: 0;
 }
 
 .chrome[data-hidden] {

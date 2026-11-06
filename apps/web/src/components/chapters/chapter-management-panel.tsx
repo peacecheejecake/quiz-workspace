@@ -1,7 +1,8 @@
 'use client';
 
 // CHMAN-01 챕터 관리 (docs/screens/chapter-management.md): the modal panel over the home, editors of
-// an active workspace only. Each book's chapter tree with 챕터 추가, a row menu (이름 바꾸기, 하위 챕터
+// an active workspace only. Each book's chapter tree (and the Workspace chapters as one more group,
+// UX12-CHAPTERADD) with 챕터 추가, a row menu (이름 바꾸기, 하위 챕터
 // 추가, 위로, 아래로, 들여쓰기, 내어쓰기, 삭제) and pointer drags: a row onto a row makes it its last
 // child, a question onto a row moves it through `chapter-assignments`. Edits apply at once (D-9), so
 // nothing here is unsaved. The grips are pointer-only and hidden from assistive technology: the
@@ -29,7 +30,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  EmptyState,
   FloatingSidePanel,
   GripIcon,
   IconButton,
@@ -58,6 +58,7 @@ import {
   dropMove,
   NO_CHAPTER_TARGET,
   rowMove,
+  treeGroups,
   treePickerNodes,
   type ChapterApi,
   type ChapterMove,
@@ -268,7 +269,7 @@ function Content({
     const id = String(active.id);
     if (id.startsWith(CHAPTER_DRAG)) {
       const chapterId = id.slice(CHAPTER_DRAG.length);
-      const chapters = tree?.documents.flatMap((d) => d.chapters) ?? [];
+      const chapters = (tree ? treeGroups(tree) : []).flatMap((d) => d.chapters);
       setDragLabel(chapters.find((c) => c.id === chapterId)?.title ?? null);
     } else {
       const questionId = id.slice(QUESTION_DRAG.length);
@@ -322,14 +323,12 @@ function Content({
       </div>
     );
   }
-  if (tree.documents.length === 0) {
-    return <EmptyState title="챕터를 관리할 교재가 없습니다. 교재 PDF를 먼저 올려 주세요." />;
-  }
-
   const pickerNodes = treePickerNodes(tree);
   // The row as last read: its counts change, and it may be gone.
   const current = removing
-    ? tree.documents.flatMap((d) => d.chapters).find((c) => c.id === removing.id)
+    ? treeGroups(tree)
+        .flatMap((d) => d.chapters)
+        .find((c) => c.id === removing.id)
     : undefined;
   return (
     <div className={styles.body} aria-busy={busy || undefined}>
@@ -379,7 +378,7 @@ function Content({
       >
         <div className={styles.columns}>
           <div className={styles.trees}>
-            {tree.documents.map((document) => (
+            {treeGroups(tree).map((document) => (
               <section key={document.document_id} className={styles.book}>
                 <div className={styles.bookHead}>
                   <h3 className={styles.bookTitle}>{document.title}</h3>

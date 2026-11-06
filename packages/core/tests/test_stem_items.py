@@ -176,3 +176,20 @@ def test_ux11_shared_range_and_passage_boundaries() -> None:
             assert len(stem_item_starts(case["stem"])) == case["items"]
         else:
             assert result.startswith("서문입니다.\n\n옳은 것은? ( )\n\n카드사는")
+
+
+def test_ux12_passage2_source_lines_of_list_items_keep_their_breaks() -> None:
+    from book_core.extractor.segment import RawQuestion
+
+    def stem(*parts: str) -> str:
+        return RawQuestion(number=1, stem_lines=[], stem_parts=list(parts)).stem
+
+    assert stem("두 항목의", "합계는?", "- 가람 항목 : 10 , 20", "- 누리 항목 : 30 , 40") == (
+        "두 항목의 합계는?\n\n- 가람 항목 : 10 , 20\n- 누리 항목 : 30 , 40"
+    )
+    assert stem("합계는?", "- 가람 항목", "- 누리 항목은", "둘째 줄", "- 마루") == (
+        "합계는?\n\n- 가람 항목\n- 누리 항목은 둘째 줄\n- 마루"
+    )
+    assert stem("합계는?", "∙ 가람", "∙누리") == "합계는?\n∙ 가람\n∙누리"
+    # A wrapped line that opens with a hyphen glued to a word, or a number, goes on.
+    assert stem("기간은 2023", "-01 부터 12", "% 이다.") == "기간은 2023 -01 부터 12 % 이다."

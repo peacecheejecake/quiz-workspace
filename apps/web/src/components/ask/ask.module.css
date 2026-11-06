@@ -103,8 +103,10 @@
   cursor: pointer;
 }
 
-.rowOpen:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .rowOpen:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .rowTitle {
@@ -157,21 +159,128 @@
   font-size: var(--font-size-label);
 }
 
+/* UX12-ASKMD: the answer's Markdown, design-system.md §4 "답변 Markdown". Semantic tokens only. */
 .markdown {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
+  min-inline-size: 0;
   line-height: var(--line-height-relaxed);
 }
 
 .markdown p,
 .markdown ul,
-.markdown ol {
+.markdown ol,
+.markdown blockquote,
+.markdown pre {
   margin: 0;
 }
 
 .markdown ul,
 .markdown ol {
   padding-inline-start: var(--space-5);
+}
+
+/* Blocks of a list item or a quote stay as close as the answer's own. */
+.markdown li > * + *,
+.markdown blockquote > * + * {
+  margin-block-start: var(--space-2);
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin-block-start: var(--space-1);
+}
+
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-normal);
+}
+
+.markdown h3 {
+  font-size: var(--font-size-body-lg);
+}
+
+.markdown * + h3,
+.markdown * + h4,
+.markdown * + h5,
+.markdown * + h6 {
+  margin-block-start: var(--space-2);
+}
+
+.markdown hr {
+  inline-size: 100%;
+  margin: var(--space-1) 0;
+  border: 0;
+  border-block-start: 1px solid var(--color-border);
+}
+
+.markdown blockquote {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 3px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+}
+
+.markdown code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-label);
+}
+
+.markdown del {
+  text-decoration: line-through;
+}
+
+.link {
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.codeBlock {
+  min-inline-size: 0;
+  overflow-x: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.codeBlock pre {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.codeBlock code {
+  padding: 0;
+  background: none;
+}
+
+.task {
+  margin-inline-start: calc(var(--space-5) * -1);
+  list-style: none;
+}
+
+.task > input {
+  margin: 0 var(--space-1) 0 0;
+  accent-color: var(--color-accent);
+  vertical-align: middle;
+}
+
+.markdown .alignCenter {
+  text-align: center;
+}
+
+.markdown .alignRight {
+  text-align: right;
 }
 
 .cite {
@@ -184,7 +293,7 @@
   padding: 0 var(--space-1);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-label);
@@ -192,8 +301,10 @@
   cursor: pointer;
 }
 
-.cite:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .cite:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .tag {
@@ -201,8 +312,10 @@
   cursor: default;
 }
 
-.tag:hover {
-  background: var(--color-surface);
+@media (hover: hover) {
+  .tag:hover {
+    background: transparent;
+  }
 }
 
 .sources {
@@ -220,7 +333,7 @@
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-label);
@@ -228,8 +341,10 @@
   cursor: pointer;
 }
 
-.sourceButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .sourceButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .searched {
@@ -290,8 +405,6 @@
   padding: var(--space-2);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-floating);
 }
 
 .composer:has(.input:focus-visible) {

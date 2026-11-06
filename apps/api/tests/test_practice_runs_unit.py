@@ -215,7 +215,7 @@ def test_order_is_heatmap_or_the_seeded_shuffle() -> None:
     assert sorted(run_order(IDS, True, 7)) == sorted(IDS)
 
 
-def test_ux12_chapterrun_shuffle_is_a_bank_only_setting_kept_in_the_range() -> None:
+def test_qview_01_c11_shuffle_is_a_bank_only_setting_kept_in_the_range() -> None:
     plain = PracticeRunCreate.model_validate({"source": "bank", "range": {"all": True}})
     assert plain.shuffle_options is False
     assert "shuffle_options" not in run_range(plain)  # older runs and new ones without it match
@@ -235,7 +235,7 @@ def test_ux12_chapterrun_shuffle_is_a_bank_only_setting_kept_in_the_range() -> N
         )
 
 
-def test_ux12_chapterrun_a_position_keeps_one_order_for_its_run() -> None:
+def test_qview_01_c11_a_position_keeps_one_order_for_its_run() -> None:
     options = [{"id": f"o{i}", "text": f"보기 {i}"} for i in range(4)]
     plain = run(4, False)
     on = replace(plain, seed=PRACTICE_RUN_TEST_SEED, shuffle_options=True)
@@ -250,18 +250,7 @@ def test_ux12_chapterrun_a_position_keeps_one_order_for_its_run() -> None:
     assert 0 <= run_option_seed(MAX_SEED, 5000) < 2**63  # practice_sessions.shuffle_seed: bigint
 
 
-def test_ux12_chapterrun_fixture_positions_move_under_the_test_seed() -> None:
-    """tests/e2e/questions/ux12-chapter-run.spec.ts relies on these with four options."""
-    ids = ["0", "1", "2", "3"]
-    seeded = [
-        shuffled_option_ids(ids, run_option_seed(PRACTICE_RUN_TEST_SEED, position))
-        for position in (1, 2)
-    ]
-    assert seeded == [["2", "0", "1", "3"], ["3", "0", "2", "1"]]
-    assert run_order([1, 2, 3], True, PRACTICE_RUN_TEST_SEED) == [2, 1, 3]  # type: ignore[list-item]
-
-
-def test_ux12_chapterrun_the_run_columns_read_the_flag_from_the_range() -> None:
+def test_qview_01_c11_the_run_columns_read_the_flag_from_the_range() -> None:
     dialect = postgresql.dialect()  # type: ignore[no-untyped-call]
     sql = str(select(*_RUN_COLUMNS).compile(dialect=dialect))
     assert "coalesce" in sql
@@ -390,3 +379,30 @@ def test_ux11_retry_open_schema_never_exposes_answers_or_origin() -> None:
     props = _props(spec, schema, set(), set())
     assert {"id", "question_id", "stem", "options"} <= props
     assert not props & (ANSWER_KEYS | {"retry_origin_run_id", "retry_origin_position"})
+
+
+def test_ux12_resume_list_has_no_content_and_is_an_allowlist() -> None:
+    spec = json.loads(render_openapi())
+    schema = _response(spec, "/workspaces/{workspace_id}/practice-runs/unfinished", "get", "200")
+    props = _props(spec, schema, set(), set())
+    assert props == {
+        "items", "id", "total", "answered", "next_position", "chapter_title", "created_at",
+        "last_touched_at",
+    }  # fmt: skip
+    assert "/api/v1/practice-runs/{run_id}/dismiss" in spec["paths"]
+
+
+def test_ux12_mockresume_the_run_on_a_mock_exam_has_no_content() -> None:
+    spec = json.loads(render_openapi())
+    node = spec["components"]["schemas"]["MockExamUnfinishedRun"]
+    assert set(node["properties"]) == {"id", "total", "answered", "next_position"}
+    exam = spec["components"]["schemas"]["MockExam"]
+    assert "unfinished_run" in exam["properties"]
+    assert "unfinished_run" not in exam["required"]
+
+
+def test_ux12_retryinplace_reopen_answers_nothing() -> None:
+    spec = json.loads(render_openapi())
+    operation = spec["paths"]["/api/v1/practice-runs/{run_id}/items/{position}/reopen"]["post"]
+    assert "content" not in operation["responses"]["204"]
+    assert "requestBody" not in operation

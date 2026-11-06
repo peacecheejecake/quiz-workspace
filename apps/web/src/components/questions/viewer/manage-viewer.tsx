@@ -10,6 +10,7 @@
 // `full` — the dialog shows its answers already; only where the home's AI 질문 is available). The
 // opener reads the question (QuestionDetailDialog): its answers are never cached here.
 import { Badge, Button, ModalDialog } from '@quiz/ui';
+import { QuestionSkeleton } from '@/components/questions/question-skeleton';
 import { useRef, useState, type ReactNode } from 'react';
 import { AskQuestionButton, useAskLauncher } from '@/components/ask/ask-launcher';
 import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
@@ -127,7 +128,7 @@ export function ManageViewer({
               <span>버전 {question.revision.version}</span>
             </div>
             <QuestionSourceButton source={source} />
-            <QuestionSourceDialog source={source} aboveModals />
+            <QuestionSourceDialog source={source} aboveModals wholeDocument />
             <QuestionBody
               kind="revision"
               revision={question.revision}
@@ -169,9 +170,7 @@ export function ManageViewer({
             ) : null}
           </>
         ) : (
-          <p className={styles.text} role="status">
-            문제를 불러오는 중입니다.
-          </p>
+          <QuestionSkeleton />
         )}
 
         <section className={styles.section} aria-labelledby="question-detail-sources">
@@ -226,6 +225,8 @@ function Sources({
           const title = documentTitle(documents, source.document_id);
           const text = `${title} ${pageText(source) ?? ''}`.trim();
           const documentId = source.document_id;
+          const blockId = source.block_ids?.[0];
+          const revisionId = source.document_revision_id;
           return (
             <li key={`${documentId ?? 'none'}-${i}`}>
               {href && documentId ? (
@@ -239,6 +240,7 @@ function Sources({
                       page: source.page_start ?? 1,
                       documentHref: href,
                       documentTitle: title,
+                      ...(blockId && revisionId ? { block: { id: blockId, revisionId } } : {}),
                     })
                   }
                 >

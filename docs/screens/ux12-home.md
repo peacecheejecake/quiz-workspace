@@ -15,4 +15,4 @@ panel을 닫은 뒤에도 그 dot의 미리보기 동작은 그대로다. 포인
 
 ### UX12-HOME-AC03
 
-데스크톱 Heatmap 셀은 28×28px이고 marker는 21×21px, 이웃 marker 사이 간격은 7px(marker 폭의 1/3)이다. mobile·coarse pointer 셀은 24×24px을 유지한다.
+Heatmap 셀과 marker는 모든 화면에서 28×28px이고, 이웃 marker 사이 간격은 7px(marker 폭의 1/3 이하)이다(UX12 DESIGN-6이 21px marker와 touch 24px를 바꿨다).

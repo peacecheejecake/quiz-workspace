@@ -5,11 +5,10 @@
 //
 //   Workspace header  a line that sticks under the app header (UX12-HEADER, D-7): the `문서 N` menu
 //                     (문서 관리 · 본문 검색 | 직접 추가 · 중복 문제 정리 · 챕터 재분배 | 보관·초안 문제),
-//                     the primary `모의고사` and, aligned right, `AI 질문` (icon + text, every member) ·
-//                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 검색
-//                     and 필터 buttons (UX12-FILTER): the first opens the 문제 search (SEARCH-01-AC12:
-//                     filters the heatmap as you type), the second a popover with the chapter/type
-//                     filters.
+//                     the primary `모의고사`, 검색 · 필터 and, aligned right, `AI 질문` (icon + text, every member) ·
+//                     `이력` · `공유하기` (icon buttons; share for the owner only). 검색 opens the 문제
+//                     search (UX12-FILTER, SEARCH-01-AC12: filters the heatmap as you type), 필터 a
+//                     popover with the chapter, type and status filters (UX12-HOMEFILTER).
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -35,8 +34,6 @@
 //   원본 범위 풀이      `?practice=new&source=bank` → `?practice=<run>&i=<n>` (a 모의고사 만들기 without
 //                     variations, QVIEW-01): the modal range run (QuestionViewer sequence, rendered
 //                     by QuestionsOverview). Its steps replace the entry; positions push one.
-//   챕터 풀기          A Heatmap chapter's `풀기` (UX12-CHAPTERRUN, every member): a small dialog of two
-//                     options, kept out of the URL; `시작` pushes `?practice=<run>&i=1`.
 //   모의고사           `?panel=mock-exams[&mock=new|<id>]` (the primary `모의고사`, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
@@ -61,7 +58,6 @@ import {
   questionTypeLabels,
   Select,
   ShareIcon,
-  type HeatmapChapter,
   type QuestionType,
 } from '@quiz/ui';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -71,7 +67,6 @@ import { DocumentLibraryFeedback } from '@/components/documents/document-library
 import { DocumentsLibrary } from '@/components/documents/documents-library';
 import { DocumentSummaryPanel } from '@/components/documents/summary/document-summary-panel';
 import { useSummaryActivity } from '@/components/documents/summary/use-summary-activity';
-import { bodyDocumentCount } from '@/components/documents/labels';
 import { useDocumentLibrary } from '@/components/documents/use-document-library';
 import { HistoryPanel } from '@/components/history/history-panel';
 import { QuestionDuplicates } from '@/components/questions/duplicates/question-duplicates';
@@ -81,10 +76,7 @@ import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-pane
 import { ChapterManagementPanel } from '@/components/chapters/chapter-management-panel';
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
-import {
-  ChapterRunDialog,
-  type ChapterRunTarget,
-} from '@/components/questions/viewer/chapter-run-dialog';
+import { StatusFilter } from '@/components/questions/overview/status-filter';
 import { QuestionSearch } from '@/components/search/question-search';
 import searchStyles from '@/components/search/search-forms.module.css';
 import { useLiveQuery } from '@/components/search/use-live-query';
@@ -92,6 +84,7 @@ import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { AskIcon } from '@/components/ask/ask-icons';
+import { MockExamIcon } from './home-icons';
 import {
   AskLauncherProvider,
   useGuardedAskLaunch,
@@ -113,6 +106,7 @@ import { outlineChoiceNodes } from '@/lib/questions/chapter-picker';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
+  isOverviewFiltered,
   mergeOverviewFilters,
   parseOverviewFilters,
   OVERVIEW_SEARCH_MAX,
@@ -165,7 +159,7 @@ import {
   withAskConversation,
   withoutAsk,
 } from '@/lib/workspaces/home';
-import { withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
+import { parseRunState, withRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { useManualScrollWhile, usePanelHistory } from './use-panel-history';
 import { useStagedDialogs } from './use-staged-dialogs';
 import styles from './workspace-home.module.css';
@@ -382,31 +376,6 @@ function WorkspaceHomeContent({
   function closeRun() {
     closeTo(`${pathname}${keepMockView(withRunState(window.location.search, null))}`);
   }
-  // A chapter's 풀기 (UX12-CHAPTERRUN): a small options dialog, then the same run panel.
-  const [chapterRun, setChapterRun] = useState<ChapterRunTarget | null>(null);
-  const chapterRunOpener = useRef<HTMLElement | null>(null);
-  function startChapterRun(runId: string) {
-    practiceReturnFocusRef.current = chapterRunOpener.current;
-    setChapterRun(null);
-    const state: RunUrlState = { step: 'solve', runId, position: 1 };
-    openPanelAt(`${pathname}${keepMockView(withRunState(window.location.search, state))}`);
-  }
-  function chapterRunButton(chapter: HeatmapChapter) {
-    if (chapter.questions.length === 0) return null;
-    return (
-      <Button
-        size="sm"
-        aria-label={`${chapter.title} 풀기`}
-        aria-haspopup="dialog"
-        onClick={(event) => {
-          chapterRunOpener.current = event.currentTarget;
-          setChapterRun({ id: chapter.id, title: chapter.title });
-        }}
-      >
-        풀기
-      </Button>
-    );
-  }
 
   // --- 모의고사 (MOCK-01) ---------------------------------------------------------------------------
   // The dialog's view is `mock`, which a mock exam run's range step borrows for its mock exam
@@ -430,6 +399,11 @@ function WorkspaceHomeContent({
   /** A mock exam's 풀기: the run panel's range step on it (QVIEW-01 `sequence(mock)`). */
   function openMockRun(mockExamId: string) {
     openPanelAt(`${pathname}${withMockRun(window.location.search, mockExamId)}`);
+  }
+  /** `이어 풀기` (UX12-RESUME): the run over the dialog, so closing it returns to the list. */
+  function resumeRun(runId: string, position: number) {
+    const state: RunUrlState = { step: 'solve', runId, position };
+    openPanelAt(`${pathname}${keepMockView(withRunState(window.location.search, state))}`);
   }
   // The practice panel's open, previous/next (new entries) and close (QPLAY-01-AC05, UX7-BACK).
   function changeQuestion(questionId: string | null) {
@@ -540,7 +514,6 @@ function WorkspaceHomeContent({
     summaryAvailable,
   });
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
-  const bookCount = bodyDocumentCount(library.documents);
   const summaryActivity = useSummaryActivity(workspace.id, isOpen('documents'));
   // Only this workspace's documents: another workspace's id (even one the user can read) is
   // "문서를 찾을 수 없습니다." and is never loaded here (DOCSUM-01-AC07).
@@ -908,7 +881,7 @@ function WorkspaceHomeContent({
         <div className={styles.actionGroup}>
           <QuestionMenu
             readOnly={readOnly}
-            documentCount={bookCount}
+            documentCount={library.rows.length}
             searchHref={searchPagePath(workspace.id)}
             onDocuments={() => setPanel('documents', true)}
             onCreate={() => setPanel(QUESTION_CREATE_PANEL, true)}
@@ -919,6 +892,7 @@ function WorkspaceHomeContent({
           />
           <Button
             variant="primary"
+            className={styles.compactButton}
             onClick={() => {
               if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
                 panelHistory.push(
@@ -927,44 +901,20 @@ function WorkspaceHomeContent({
               }
             }}
           >
-            모의고사
+            <MockExamIcon width={16} height={16} className={styles.compactIcon} />
+            <span className={styles.compactLabel}>모의고사</span>
           </Button>
         </div>
-        <div className={styles.actionGroup} data-align="end">
-          {askAvailable ? (
-            <Button className={styles.askButton} onClick={openAsk}>
-              <AskIcon width={16} height={16} />
-              <span className={styles.askLabel}>AI 질문</span>
-            </Button>
-          ) : null}
-          <IconButton
-            label="이력"
-            icon={<HistoryIcon />}
-            variant="secondary"
-            onClick={() => setPanel('history', true)}
-          />
-          {isOwner ? (
-            <IconButton
-              label="공유하기"
-              icon={<ShareIcon />}
-              variant="secondary"
-              onClick={() => setPanel('share', true)}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className={styles.header}>
-        <div className={searchStyles.column}>
-          <QuestionSearch
-            screenId={screenIds.search}
-            query={questionSearch}
-            max={OVERVIEW_SEARCH_MAX}
-            searchable={hasSearchableQuestions(
-              hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
-            )}
-            filterActive={view.chapter !== null || view.type !== null}
-            filters={
+        <QuestionSearch
+          screenId={screenIds.search}
+          query={questionSearch}
+          max={OVERVIEW_SEARCH_MAX}
+          searchable={hasSearchableQuestions(
+            hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
+          )}
+          filterActive={isOverviewFiltered({ ...view, q: '' })}
+          filters={
+            <div className={searchStyles.filterStack}>
               <div className={searchStyles.optionRow}>
                 <ChapterPicker
                   label="챕터"
@@ -989,8 +939,35 @@ function WorkspaceHomeContent({
                   }
                 />
               </div>
-            }
+              <StatusFilter
+                status={view.status}
+                favorite={view.favorite}
+                onFiltersChange={changeFilters}
+              />
+            </div>
+          }
+        />
+        <div className={styles.actionGroup} data-align="end">
+          {askAvailable ? (
+            <Button className={styles.askButton} onClick={openAsk}>
+              <AskIcon width={16} height={16} />
+              <span className={styles.askLabel}>AI 질문</span>
+            </Button>
+          ) : null}
+          <IconButton
+            label="이력"
+            icon={<HistoryIcon />}
+            variant="secondary"
+            onClick={() => setPanel('history', true)}
           />
+          {isOwner ? (
+            <IconButton
+              label="공유하기"
+              icon={<ShareIcon />}
+              variant="secondary"
+              onClick={() => setPanel('share', true)}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -1001,9 +978,7 @@ function WorkspaceHomeContent({
           workspaceId={workspace.id}
           readOnly={readOnly}
           filters={shown.filters}
-          view={view}
           navigating={navigating || fetchingKey !== null}
-          onFiltersChange={changeFilters}
           onResetFilters={resetAll}
           overview={shown.overview}
           failure={shown.failure}
@@ -1024,33 +999,31 @@ function WorkspaceHomeContent({
             setQuestionsVersion((n) => n + 1);
           }}
           onStudyStateChanged={invalidateOverviewCache}
-          chapterActions={(chapter) =>
+          chapterActions={(chapter, { hasNote }) =>
             chapter.id === NO_CHAPTER_KEY ? (
               // HILITE-01: the "챕터 없음" group's explanation highlights (no AI note there).
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-haspopup="dialog"
-                  onClick={() => openNote(NO_CHAPTER_NOTE)}
-                >
-                  내 하이라이트
-                </Button>
-                {chapterRunButton(chapter)}
-              </>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-haspopup="dialog"
+                onClick={() => openNote(NO_CHAPTER_NOTE)}
+              >
+                내 하이라이트
+              </Button>
             ) : (
               <>
                 {generating.has(chapter.id) ? <span>만드는 중</span> : null}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`${chapter.title} 정리 노트`}
-                  aria-haspopup="dialog"
-                  onClick={() => openNote(chapter.id)}
-                >
-                  정리 노트
-                </Button>
-                {chapterRunButton(chapter)}
+                {hasNote ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${chapter.title} 정리 노트`}
+                    aria-haspopup="dialog"
+                    onClick={() => openNote(chapter.id)}
+                  >
+                    정리 노트
+                  </Button>
+                ) : null}
               </>
             )
           }
@@ -1059,13 +1032,6 @@ function WorkspaceHomeContent({
 
       {/* Dialogs are portalled here so they stay inside the main landmark. */}
       <div ref={setHost} />
-      <ChapterRunDialog
-        workspaceId={workspace.id}
-        target={chapterRun}
-        container={host}
-        onClose={() => setChapterRun(null)}
-        onStarted={startChapterRun}
-      />
       {host ? (
         <>
           <FloatingSidePanel
@@ -1163,6 +1129,8 @@ function WorkspaceHomeContent({
                 `${pathname}${withRunState(withoutMockExams(window.location.search), { step: 'solve', runId, position: 1 })}`,
               )
             }
+            onResume={resumeRun}
+            runOpen={parseRunState(new URLSearchParams(searchParams.toString())) !== null}
             screenId={screenIds.mockExams}
           />
           <FloatingSidePanel

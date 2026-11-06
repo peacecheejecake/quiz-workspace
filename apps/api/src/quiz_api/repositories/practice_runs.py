@@ -8,6 +8,9 @@ aggregate over the run's sessions (the partial unique `(practice_run_id, run_pos
 
 Every read is keyed by the run id AND the caller's user id: a run belongs to its creator only.
 
+The `이어 풀기` list (UX12-RESUME) is the one read over several runs: it scans at most
+`UNFINISHED_SCAN` runs, most recently touched first, and aggregates their positions in SQL.
+
 Eligibility (QVIEW-01-C07, the question-viewer state table): a position is available only while
 its question is a live CONFIRMED question of the run's workspace (`eligible_question`). The item
 read, the summary and the results all use that one condition: a position whose question was
@@ -25,15 +28,21 @@ from typing import Any, cast
 from sqlalchemy import (
     ColumnElement,
     Integer,
+    Text,
+    Uuid,
     and_,
     case,
     false,
     func,
     insert,
     literal,
+    or_,
     select,
     true,
     update,
+)
+from sqlalchemy import (
+    cast as sql_cast,
 )
 from sqlalchemy.orm import Session
 
@@ -55,6 +64,9 @@ from quiz_api.repositories.tables import (
 STEM_HEAD = 1000
 
 RunResult = str  # correct | incorrect | pending
+
+# The runs the `이어 풀기` list looks at: bounds its cost when many runs were left open.
+UNFINISHED_SCAN = 100
 
 
 @dataclass(frozen=True)
@@ -112,6 +124,19 @@ class ResultRow:
     stem_head: str | None
     state: str | None
     result: RunResult | None
+
+
+@dataclass(frozen=True)
+class UnfinishedRun:
+    """A row of the `이어 풀기` list. `next_position` is the first position still answerable."""
+
+    id: uuid.UUID
+    total: int
+    answered: int
+    next_position: int
+    chapter_title: str | None
+    created_at: datetime
+    last_touched_at: datetime
 
 
 _RUN_COLUMNS = (
@@ -257,6 +282,149 @@ class PracticeRunRepository:
             .values(finished_at=func.now())
         )
 
+    def dismiss(self, run_id: uuid.UUID) -> None:
+        """Take the run out of the `이어 풀기` list, once; nothing else about it changes."""
+        self._session.execute(
+            update(practice_runs)
+            .where(practice_runs.c.id == run_id, practice_runs.c.resume_dismissed_at.is_(None))
+            .values(resume_dismissed_at=func.now())
+        )
+
+    def unfinished(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID, limit: int
+    ) -> list[UnfinishedRun]:
+        """The caller's bank runs of this workspace with a position left to answer, most
+        recently touched first (UX12-RESUME)."""
+        touched = (
+            select(
+                func.max(
+                    func.greatest(
+                        practice_sessions.c.opened_at,
+                        practice_sessions.c.submitted_at,
+                        practice_sessions.c.graded_at,
+                    )
+                )
+            )
+            .where(practice_sessions.c.practice_run_id == practice_runs.c.id)
+            .correlate(practice_runs)
+            .scalar_subquery()
+        )
+        last_touched = func.coalesce(touched, practice_runs.c.created_at).label("last_touched_at")
+        candidates = self._session.execute(
+            select(
+                practice_runs.c.id,
+                func.cardinality(practice_runs.c.item_ids).label("total"),
+                practice_runs.c.created_at,
+                last_touched,
+            )
+            .where(
+                practice_runs.c.workspace_id == workspace_id,
+                practice_runs.c.user_id == user_id,
+                practice_runs.c.source == "bank",
+                practice_runs.c.finished_at.is_(None),
+                practice_runs.c.resume_dismissed_at.is_(None),
+            )
+            .order_by(last_touched.desc(), practice_runs.c.id.desc())
+            .limit(UNFINISHED_SCAN)
+        ).all()
+        if not candidates:
+            return []
+        positions = self._unfinished_positions(workspace_id, [c.id for c in candidates])
+        out: list[UnfinishedRun] = []
+        for candidate in candidates:
+            row = positions.get(candidate.id)
+            if row is None or row.next_position is None:
+                continue
+            out.append(
+                UnfinishedRun(
+                    id=candidate.id,
+                    total=int(candidate.total),
+                    answered=int(row.answered),
+                    next_position=int(row.next_position),
+                    chapter_title=row.chapter_title,
+                    created_at=candidate.created_at,
+                    last_touched_at=candidate.last_touched_at,
+                )
+            )
+            if len(out) == limit:
+                break
+        return out
+
+    def _unfinished_positions(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Any]:
+        """For each run: positions answered, the first one still answerable and the chapter
+        title if its live questions share one. A position is answerable while its question is
+        live and it has no session, or an open session of the current epoch: a session reset
+        since it was opened cannot be read in the run any more (409), and a submitted one is
+        done. `answered` is `PracticeRun.answered`."""
+        item = (
+            func.unnest(practice_runs.c.item_ids)
+            .table_valued("question_id", with_ordinality="ordinality")
+            .render_derived(name="run_item")
+        )
+        rows = (
+            select(
+                practice_runs.c.id.label("run_id"),
+                item.c.ordinality.label("position"),
+                questions.c.id.label("live_id"),
+                questions.c.chapter_id,
+                practice_sessions.c.id.label("session_id"),
+                practice_sessions.c.state,
+                current_session().label("current"),
+            )
+            .select_from(
+                practice_runs.join(item, true())
+                .outerjoin(questions, eligible_question(item.c.question_id, workspace_id))
+                .outerjoin(
+                    practice_sessions,
+                    and_(
+                        practice_sessions.c.practice_run_id == practice_runs.c.id,
+                        practice_sessions.c.run_position == item.c.ordinality,
+                        practice_sessions.c.superseded_at.is_(None),
+                    ),
+                )
+            )
+            .where(practice_runs.c.id.in_(run_ids))
+            .cte("run_items")
+        )
+        live = rows.c.live_id.is_not(None)
+        submitted = and_(live, rows.c.state != "open", rows.c.current)
+        answerable = and_(
+            live,
+            or_(rows.c.session_id.is_(None), and_(rows.c.state == "open", rows.c.current)),
+        )
+        totals = (
+            select(
+                rows.c.run_id,
+                func.count().filter(submitted).label("answered"),
+                func.min(rows.c.position).filter(answerable).label("next_position"),
+                func.count(rows.c.chapter_id.distinct()).label("chapters"),
+                func.count().filter(live, rows.c.chapter_id.is_(None)).label("no_chapter"),
+                func.min(sql_cast(rows.c.chapter_id, Text)).label("chapter_id"),
+            )
+            .group_by(rows.c.run_id)
+            .subquery("totals")
+        )
+        stmt = select(
+            totals.c.run_id,
+            totals.c.answered,
+            totals.c.next_position,
+            case(
+                (and_(totals.c.chapters == 1, totals.c.no_chapter == 0), chapters.c.title),
+                else_=None,
+            ).label("chapter_title"),
+        ).select_from(
+            totals.outerjoin(
+                chapters,
+                and_(
+                    chapters.c.id == sql_cast(totals.c.chapter_id, Uuid),
+                    chapters.c.workspace_id == workspace_id,
+                ),
+            )
+        )
+        return {row.run_id: row for row in self._session.execute(stmt)}
+
     def progress(self, run: RunRecord) -> RunProgress:
         """`reached` counts every opened position; the submissions count only at positions that
         are still eligible (an unavailable position is skipped)."""
@@ -273,7 +441,10 @@ class PracticeRunRepository:
                     questions, eligible_question(practice_sessions.c.question_id, run.workspace_id)
                 )
             )
-            .where(practice_sessions.c.practice_run_id == run.id)
+            .where(
+                practice_sessions.c.practice_run_id == run.id,
+                practice_sessions.c.superseded_at.is_(None),
+            )
             .cte("run_sessions")
         )
         reached = select(func.coalesce(func.max(sessions.c.position), 0)).scalar_subquery()
@@ -371,7 +542,10 @@ class PracticeRunRepository:
                 case((current_session(), latest.c.result), else_=None).label("result"),
             )
             .select_from(practice_sessions.outerjoin(latest, true()))
-            .where(practice_sessions.c.practice_run_id == run.id)
+            .where(
+                practice_sessions.c.practice_run_id == run.id,
+                practice_sessions.c.superseded_at.is_(None),
+            )
             .subquery("run_sessions")
         )
         live = eligible_question(page.c.question_id, run.workspace_id)

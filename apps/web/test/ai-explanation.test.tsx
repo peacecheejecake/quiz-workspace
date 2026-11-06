@@ -261,6 +261,29 @@ describe('AIEXPL-01 area states', () => {
     expect(api.create).not.toHaveBeenCalled();
   });
 
+  it('UX12-ASKMD shares the answer Markdown: tables, footnotes in cells, headings below its h4', async () => {
+    const base = explanation();
+    const api = fakeClient(
+      stateOf({
+        can_create: false,
+        explanation: {
+          ...base,
+          body: {
+            ...(base.body as NonNullable<Explanation['body']>),
+            summary_md: '# 요점\n\n| 구분 | 설명 |\n| --- | --- |\n| 증발 | 기체가 됨 [1] |',
+          },
+        },
+      }),
+    );
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+    const table = await within(area()).findByRole('table');
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(2);
+    expect(within(table).getByRole('button', { name: /출처 1|^\[1\]$|1/ })).toBeInTheDocument();
+    expect(within(area()).getByRole('heading', { name: '요점', level: 5 })).toBeInTheDocument();
+  });
+
   it('editors get 다시 만들기 (version meta), and its refusal reads as text', async () => {
     const user = userEvent.setup();
     const api = fakeClient(

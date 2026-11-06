@@ -9,7 +9,7 @@
 // network. The current page is the page under the upper quarter line of the viewport; the toolbar
 // keeps "현재 페이지", previous/next and zoom (fit width by default), and the selected block's
 // source is highlighted from its bbox (PDF points, origin top-left). The reading area is an opaque
-// surface — no glass/blur over it (design-system §1, checklist). DOCVIEW-01: the viewer may be
+// surface; floating layers may blur over it (design-system §10). DOCVIEW-01: the viewer may be
 // hidden (원본 hidden by a view mode, or the other pane on a narrow screen) and resized by the
 // splitter; a hidden viewer keeps its document and drawings, takes jumps made meanwhile when it is
 // shown again, and a splitter drag redraws only once, after the release.

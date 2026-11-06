@@ -23,7 +23,7 @@ describe('UX10 overlay swipe', () => {
   });
 });
 
-// UX12-CONTROLS revised UX10-UI-AC01: borderless is allowed only for icon ghost and `borderless`
+// UX12-CONTROLS, UX12-GLASSBTN revised UX10-UI-AC01: borderless is allowed only for icon-only and `borderless`
 // buttons (the guard is test/control-boundary.test.ts); every other control keeps a boundary.
 it('UX10-UI-AC01 keeps an explicit boundary on the base button rule', async () => {
   const { readFileSync } = await import('node:fs');

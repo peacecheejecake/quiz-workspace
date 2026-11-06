@@ -124,10 +124,10 @@ test(
               element.hasAttribute('aria-pressed') ||
               ['on', 'off'].includes(element.getAttribute('data-state') ?? '');
             const allowed =
-              element.getAttribute('data-variant') === 'ghost' &&
               !toggle &&
               (element.classList.contains('qz-icon-button') ||
-                element.hasAttribute('data-borderless'));
+                (element.getAttribute('data-variant') === 'ghost' &&
+                  element.hasAttribute('data-borderless')));
             return (
               !allowed &&
               css.backgroundColor === 'rgba(0, 0, 0, 0)' &&
@@ -137,9 +137,11 @@ test(
           .map((element) => element.outerHTML.slice(0, 120)),
       );
       expect(offenders).toEqual([]);
+      // UX12-GLASSBTN: this primary icon button keeps its 1px border, transparent, and its fill.
       const border = await boundary(newConversation);
-      expect(border.color).not.toBe(TRANSPARENT);
       expect(border.style).toBe('solid');
+      expect(border.width).toBe('1px');
+      await expect(newConversation).not.toHaveCSS('background-color', TRANSPARENT);
     }
 
     await page.goto('/workspaces');

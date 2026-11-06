@@ -770,7 +770,7 @@ name = "WORKER_QUEUE"
 services = ["worker"]
 kind = "config"
 provider = "operator"
-note = "default | interactive; a second worker process with WORKER_QUEUE=interactive runs ask.answer (ASK_WORKER_CONCURRENCY processes, no beat) so document jobs never delay answers"
+note = "default | interactive; a second worker process with WORKER_QUEUE=interactive runs ask.answer and AI explanations (ASK_WORKER_CONCURRENCY processes, no beat) so document jobs never delay answers; both processes also read quiz.ondemand (mock exams)"
 
 [[var]]
 name = "ASK_WORKER_CONCURRENCY"

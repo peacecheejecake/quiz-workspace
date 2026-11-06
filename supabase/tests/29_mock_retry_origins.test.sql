@@ -2,7 +2,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select plan(12);
-select columns_are('public', 'mock_exam_practice_sessions', array['id', 'workspace_id', 'mock_exam_question_id', 'mock_exam_question_revision_id', 'user_id', 'practice_run_id', 'run_position', 'displayed_option_ids', 'shuffle_seed', 'state', 'opened_at', 'submitted_at', 'graded_at', 'created_at', 'updated_at', 'retry_origin_run_id', 'retry_origin_position'], 'mock practice session schema includes durable detached origin');
+select columns_are('public', 'mock_exam_practice_sessions', array['id', 'workspace_id', 'mock_exam_question_id', 'mock_exam_question_revision_id', 'user_id', 'practice_run_id', 'run_position', 'displayed_option_ids', 'shuffle_seed', 'state', 'opened_at', 'submitted_at', 'graded_at', 'created_at', 'updated_at', 'retry_origin_run_id', 'retry_origin_position', 'superseded_at'], 'mock practice session schema includes durable detached origin');
 select fk_ok('public', 'mock_exam_practice_sessions', array['retry_origin_run_id', 'user_id', 'workspace_id'], 'public', 'practice_runs', array['id', 'user_id', 'workspace_id'], 'origin belongs to user and workspace');
 select has_trigger('public', 'mock_exam_practice_sessions', 'mock_retry_origin_check', 'origin is checked');
 grant quiz_api to postgres;

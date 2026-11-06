@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
-// UX6-UPLOAD (DOC-01-AC06–AC08): the kind badge text, what `문서 n` counts, the `종류 변경` client call and its refusals, and the row's kind menu (Radix menu
+// UX6-UPLOAD (DOC-01-AC06–AC08): the kind badge text, the `종류 변경` client call and its refusals, and the row's kind menu (Radix menu
 // with radio items, the current kind checked, a refusal as an alert in the row).
 import './dom-setup';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { bodyDocumentCount, kindBadgeLabel } from '../src/components/documents/labels';
+import { kindBadgeLabel } from '../src/components/documents/labels';
 import { createDocumentsClient, type DocumentSummary } from '../src/lib/documents/client-api';
 import { DocumentApiError } from '../src/lib/documents/errors';
-import { buildRows } from '../src/lib/documents/upload-machine';
+import { buildRows, newUploadItem } from '../src/lib/documents/upload-machine';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 const { DocumentRowItem } = await import('../src/components/documents/document-row');
@@ -45,18 +45,18 @@ describe('kind labels and counts', () => {
     expect(kindBadgeLabel({ kind: null, status: 'failed' })).toBeNull();
   });
 
-  it('counts the PDFs with body text: 교재 and 교재+문제, not 문제지 or unclassified ones', () => {
-    expect(
-      bodyDocumentCount([
+  it('gives every PDF a row: `문서 N` counts them whatever their kind or state', () => {
+    const rows = buildRows(
+      [
         doc('b'),
         doc('m', { kind: 'mixed' }),
         doc('q', { kind: 'question_paper', document_type: 'question_paper' }),
         doc('n', { kind: null, status: 'processing' }),
-        // From before UX6-UPLOAD-B: no kind in the list, its type decides.
-        doc('old', { kind: undefined }),
-        doc('oldq', { kind: undefined, document_type: 'question_paper' }),
-      ]),
-    ).toBe(3);
+        doc('f', { kind: null, status: 'failed' }),
+      ],
+      [newUploadItem('local', { name: 'new.pdf', size: 100 }, 'new')],
+    );
+    expect(rows).toHaveLength(6);
   });
 });
 

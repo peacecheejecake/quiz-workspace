@@ -25,14 +25,12 @@ import {
   ConfirmDialog,
   EmptyState,
   QuestionHeatmap,
-  QUESTION_DOT_STATUSES,
-  questionStatusLabels,
   questionTypeLabels,
   focusQuestionDotQuietly,
   useToast,
   type HeatmapChapter,
-  type QuestionDotStatus,
 } from '@quiz/ui';
+import { QuestionLineSkeleton } from '@/components/questions/question-skeleton';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
@@ -101,11 +99,8 @@ export interface QuestionsOverviewProps {
   readonly readOnly: OverviewReadOnly;
   /** The filters the server rendered `overview` with. */
   readonly filters: OverviewFilters;
-  /** The filters as last chosen (ahead of the URL while a navigation is pending). */
-  readonly view: OverviewFilters;
   /** A filter navigation is in flight. */
   readonly navigating: boolean;
-  readonly onFiltersChange: (patch: Partial<OverviewFilters>) => void;
   /** Clears every filter, the search text included. */
   readonly onResetFilters: () => void;
   readonly overview: QuestionOverview;
@@ -115,11 +110,14 @@ export interface QuestionsOverviewProps {
   /** `?question=` resolved outside the current filters by the server render (deep link). */
   readonly requested?: PlacedQuestion | null;
   /** Controls at the end of each chapter group header (CHNOTE-01 정리 노트). */
-  readonly chapterActions?: (chapter: HeatmapChapter) => ReactNode;
+  /** `hasNote`: the chapter can have a 정리 노트, so it has a document (UX12-CHAPTERADD). */
+  readonly chapterActions?: (
+    chapter: HeatmapChapter,
+    context: { readonly hasNote: boolean },
+  ) => ReactNode;
   /**
-   * Where focus goes when the practice or run panel closes, when set by whoever opened it (a 정리
-   * 노트 footnote: the note's disclosure; a chapter's 풀기). Cleared on close; otherwise focus
-   * returns to the dot.
+   * Where focus goes when the practice panel closes, when set by whoever opened it (a 정리 노트
+   * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
   /**
@@ -218,9 +216,7 @@ export function QuestionsOverview({
   workspaceId,
   readOnly,
   filters,
-  view,
   navigating,
-  onFiltersChange,
   onResetFilters,
   overview,
   failure,
@@ -246,8 +242,7 @@ export function QuestionsOverview({
   const { toast } = useToast();
   const [reloading, startReload] = useTransition();
   const canAuthor = readOnly === null;
-  // QOV-01-AC08: the status filter is collapsed until asked for.
-  const statusRegionId = useId();
+  const titleId = useId();
 
   // Optimistic study-state changes until the revalidated overview arrives.
   const [overrides, setOverrides] = useState<ReadonlyMap<string, StudyOverride>>(new Map());
@@ -288,6 +283,10 @@ export function QuestionsOverview({
   const placed = useMemo(
     () => placeQuestions(overview.chapters, items),
     [overview.chapters, items],
+  );
+  const workspaceChapters = useMemo(
+    () => new Set(overview.chapters.filter((c) => c.id && !c.document_id).map((c) => c.id)),
+    [overview.chapters],
   );
   const chapters = useMemo(() => heatmapChapters(placed), [placed]);
   const itemsRef = useRef(items);
@@ -413,13 +412,6 @@ export function QuestionsOverview({
     // A history entry per open/close/previous/next: back/forward reopen or close the panel.
     // Next.js syncs `useSearchParams` with pushState.
     window.history.pushState(null, '', `${pathname}${query ? `?${query}` : ''}`);
-  }
-
-  function toggleStatus(status: QuestionDotStatus) {
-    const wanted = new Set(view.status);
-    if (wanted.has(status)) wanted.delete(status);
-    else wanted.add(status);
-    onFiltersChange({ status: QUESTION_DOT_STATUSES.filter((s) => wanted.has(s)) });
   }
 
   const putOverride = useCallback(
@@ -782,35 +774,13 @@ export function QuestionsOverview({
   const busy = navigating || reloading;
 
   return (
-    <section ref={screenRef} className={styles.screen} aria-labelledby={`${statusRegionId}-title`}>
-      <h2 id={`${statusRegionId}-title`} className="qz-visually-hidden">
+    <section ref={screenRef} className={styles.screen} aria-labelledby={titleId}>
+      <h2 id={titleId} className="qz-visually-hidden">
         문제
       </h2>
       <p className={styles.inFilter} role="status">
-        {busy ? '문제를 불러오는 중입니다.' : ''}
+        {busy ? <QuestionLineSkeleton /> : ''}
       </p>
-
-      <div id={statusRegionId} className={styles.stateFilters} role="group" aria-label="상태 필터">
-        {QUESTION_DOT_STATUSES.map((status) => (
-          <Button
-            key={status}
-            size="sm"
-            aria-pressed={view.status.includes(status)}
-            data-status={status}
-            onClick={() => toggleStatus(status)}
-          >
-            <span className={styles.swatch} data-status={status} aria-hidden="true" />
-            {questionStatusLabels[status]}
-          </Button>
-        ))}
-        <Button
-          size="sm"
-          aria-pressed={view.favorite === true}
-          onClick={() => onFiltersChange({ favorite: view.favorite === true ? null : true })}
-        >
-          즐겨찾기만
-        </Button>
-      </div>
 
       {failure ? (
         <div role="alert" className={styles.loadError}>
@@ -853,7 +823,11 @@ export function QuestionsOverview({
             chapters={chapters}
             selectedQuestionId={openPlaced?.item.question_id ?? null}
             headingLevel={3}
-            renderChapterActions={chapterActions}
+            renderChapterActions={
+              chapterActions &&
+              ((chapter) =>
+                chapterActions(chapter, { hasNote: !workspaceChapters.has(chapter.id) }))
+            }
             onOpen={(questionId) => {
               if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
               setQuestionParam(questionId);
@@ -889,7 +863,6 @@ export function QuestionsOverview({
           });
         }}
         onFlagsChange={changeFlags}
-        flagsSettled={(questionId) => flagSync.settled(questionId)}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={({ onShowSource }) =>
@@ -927,8 +900,8 @@ export function QuestionsOverview({
           }
           const root = screenRef.current;
           if (!root) return;
-          // An empty heatmap falls back to the first status chip.
-          const toggle = root.querySelector<HTMLElement>('button[data-status]');
+          // An empty heatmap falls back to the home's 필터 button, on the sticky line.
+          const toggle = document.querySelector<HTMLElement>('[data-home-filter]');
           if (focusAfterPanel(root, lastOpened.current, openOrder.current, toggle)) {
             event.preventDefault();
           }
@@ -961,15 +934,6 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
-          onCloseAutoFocus={(event) => {
-            // A chapter's 풀기 asks focus back on its button (UX12-CHAPTERRUN-AC04).
-            const requestedFocus = practiceReturnFocusRef?.current ?? null;
-            if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
-            if (requestedFocus?.isConnected) {
-              requestedFocus.focus();
-              event.preventDefault();
-            }
-          }}
           headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}

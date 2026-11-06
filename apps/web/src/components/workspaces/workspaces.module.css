@@ -45,8 +45,10 @@
   white-space: nowrap;
 }
 
-.itemLink:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .itemLink:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (hover: hover) {

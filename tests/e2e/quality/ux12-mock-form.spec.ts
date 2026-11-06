@@ -12,6 +12,7 @@ import {
   overviewPath,
   signInAs,
   test,
+  openStatusFilters,
 } from '../fixtures/test.ts';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -98,19 +99,23 @@ for (const viewport of VIEWPORTS) {
     await expectNoSidewaysScroll(dialog);
     await expectAtPanelBottom(dialog, next);
 
-    await next.click();
     await picker.selectAll(dialog).check();
     await picker.expand(dialog, '챕터 없음').click();
     await expect(picker.questions(dialog)).toHaveCount(40);
 
-    const start = dialog.getByRole('button', { name: /^(시작|start)$/i });
     const steps = mockUi.steps(dialog);
     const stepsBefore = await steps.boundingBox();
     await scrollToEnd(dialog);
     await expect(picker.questions(dialog).last()).toBeInViewport();
-    await expectAtPanelBottom(dialog, start);
+    await expectAtPanelBottom(dialog, next);
     await expect(steps).toBeInViewport({ ratio: 1 });
     expect(await steps.boundingBox()).toEqual(stepsBefore);
+    await expectNoSidewaysScroll(dialog);
+
+    await next.click();
+    const start = dialog.getByRole('button', { name: /^(시작|start)$/i });
+    await expect(start).toBeVisible();
+    await expectAtPanelBottom(dialog, start);
     await expectNoSidewaysScroll(dialog);
   });
 }
@@ -135,12 +140,11 @@ test('UX12-MOCKFORM-AC03 filters are always shown with the home swatches and tex
       );
 
   await page.goto(overviewPath(workspace.id));
-  const home = await swatches(page.getByRole('group', { name: /^(상태 필터|status filter)$/i }));
+  const home = await swatches(await openStatusFilters(page));
   expect(home).toHaveLength(5);
 
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
   const dialog = createDialog(page);
-  await mockUi.next(dialog).click();
   await expect(picker.selectAll(dialog)).toBeVisible();
 
   const group = picker.filters(dialog);
@@ -175,7 +179,6 @@ test('UX12-MOCKFORM-AC04 유형 is a multi-select checkbox group and none means 
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
 
   const dialog = createDialog(page);
-  await mockUi.next(dialog).click();
   await expect(picker.selectAll(dialog)).toBeVisible();
   await expect(dialog.getByRole('combobox', { name: /^(유형|type)$/i })).toHaveCount(0);
   await picker.selectAll(dialog).check();
@@ -208,37 +211,37 @@ test('UX12-MOCKFORM-AC05 the done step goes back with its values kept, by mouse 
   await page.goto(homePath(workspace.id, 'panel=mock-exams&mock=new'));
 
   const dialog = createDialog(page);
-  await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
-  await mockUi.title(dialog).fill('돌아가기 점검');
-  await mockUi.questionCount(dialog).fill('2');
-  await expect(mockUi.backToOptions(dialog)).toHaveCount(0);
-  await mockUi.next(dialog).click();
-
   await expect(picker.selectAll(dialog)).toBeVisible();
-  await expect(dialog.getByRole('button', { name: /^(이전|back|previous)$/i })).toHaveCount(0);
+  await expect(mockUi.backToRange(dialog)).toHaveCount(0);
   await picker.selectAll(dialog).check();
   const mcq = picker
     .typeFilters(dialog)
     .getByRole('checkbox', { name: /^(객관식|multiple choice)$/i });
   await mcq.check();
   await expect(picker.selected(dialog, 3)).toBeVisible();
+  await mockUi.next(dialog).click();
 
-  const back = mockUi.backToOptions(dialog);
+  await expect(dialog.getByRole('button', { name: /^(이전|back|previous)$/i })).toHaveCount(0);
+  await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
+  await mockUi.title(dialog).fill('돌아가기 점검');
+  await mockUi.questionCount(dialog).fill('2');
+
+  const back = mockUi.backToRange(dialog);
   const box = await back.boundingBox();
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(24);
   expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
   await back.click();
+  await expect(picker.selected(dialog, 3)).toBeVisible();
+  await expect(mcq).toBeChecked();
+
+  await mockUi.next(dialog).click();
   await expect(mockUi.title(dialog)).toHaveValue('돌아가기 점검');
   await expect(mockUi.questionCount(dialog)).toHaveValue('2');
   await expect(mockUi.variation(dialog, 'OPTION_SHUFFLE')).toBeChecked();
 
-  await mockUi.next(dialog).click();
-  await expect(picker.selected(dialog, 3)).toBeVisible();
-  await expect(mcq).toBeChecked();
-
   await back.focus();
   await page.keyboard.press('Enter');
-  await expect(mockUi.title(dialog)).toHaveValue('돌아가기 점검');
+  await expect(picker.selected(dialog, 3)).toBeVisible();
 });
 
 test('UX12-MOCKFORM-AC06 설정 바꾸기 shares the screen and restores the saved types', async ({
@@ -262,12 +265,11 @@ test('UX12-MOCKFORM-AC06 설정 바꾸기 shares the screen and restores the sav
   const dialog = createDialog(page);
   await mockUi.chooseDetailAction(dialog, 'settings');
   await expect(mockUi.steps(dialog)).toBeVisible();
-  await mockUi.next(dialog).click();
   await expect(picker.selectAll(dialog)).toBeVisible();
   await expect(
     picker.typeFilters(dialog).getByRole('checkbox', { name: /^(객관식|multiple choice)$/i }),
   ).toBeChecked();
+  await mockUi.next(dialog).click();
   await expect(mockUi.remake(dialog)).toBeInViewport({ ratio: 1 });
-  await mockUi.backToOptions(dialog).click();
   await expect(mockUi.variation(dialog, 'OPTION_SHUFFLE')).toBeChecked();
 });

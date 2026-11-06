@@ -334,8 +334,9 @@ _PASSAGE_BULLETS = "∙•·ㆍ"
 _SENTENCE_END = re.compile(r"[.!?。\uff01\uff1f][)\uff09\"'\u2019”」』]*\s*$")
 _AT_LINE_START = re.compile(r"\n[^\S\r\n]*$")
 _ENDS_QUESTION = re.compile(r"[?\uff1f](?:\s*[(\uff08]\s*[)\uff09])*\s*$")
-# ``이름 : 값`` right after a `` - ``; ``10:30`` is no name.
-_NAME_VALUE = re.compile(r"\s*[^\n∙•·ㆍ:\uff1a-]{1,30}(?<!\d)[:\uff1a]\s*\S")
+# ``이름 : 값`` right after a `` - ``; a name neither starts nor ends in a digit (``오전 10 : 30``).
+_NAME_VALUE = re.compile(r"(?!\s*\d)\s*[^\n∙•·ㆍ:\uff1a-]{1,30}(?<![\d\s])[^\S\r\n]*[:\uff1a]\s*\S")
+_ITEM_DASH = re.compile(r"(?<!\S)-\s+(?=\S)")
 _PASSAGE_MARKER = re.compile(r"[∙•·ㆍ]|(?<!\S)-(?=\s)")
 
 
@@ -463,6 +464,40 @@ def _passage_lines(body: str) -> list[str]:
     return [intro, *lines] if intro else lines
 
 
+def _dash_run(text: str) -> tuple[list[int], int] | None:
+    """``(item offsets, end)`` of ``-`` items without sentence ends (UX12-PASSAGE2), ``None``
+    without a run. It opens at a line start or after the question sentence, and each item starts
+    a line or has the ``이름 : 값`` shape, at least two. Other dashes stay text: ``A - B``,
+    ``1 - 2``, a lone dash in prose."""
+
+    def at_line(start: int) -> bool:
+        head = text[:start]
+        return not head.strip() or _AT_LINE_START.search(head) is not None
+
+    dashes = list(_ITEM_DASH.finditer(text))
+    first = next(
+        (
+            dash
+            for dash in dashes
+            if at_line(dash.start()) or _BEFORE_FIRST_ITEM.search(text[: dash.start()])
+        ),
+        None,
+    )
+    if first is None:
+        return None
+    blank = _BLANK_LINE.search(text, first.start())
+    end = blank.start() if blank else len(text)
+    items = [
+        dash.start()
+        for dash in dashes
+        if first.start() <= dash.start() < end
+        and (at_line(dash.start()) or _NAME_VALUE.match(text, dash.start() + 1, end))
+    ]
+    if len(items) < 2 or items[0] != first.start():
+        return None
+    return items, end
+
+
 def _break_items(text: str) -> str:
     starts = stem_item_starts(text)
     item_end = len(text)
@@ -496,6 +531,8 @@ def _break_items(text: str) -> str:
             and all(sentence_end.search(body) for body in bullet_bodies)
         ):
             starts = [m.start() for m in bullets]
+        elif run := _dash_run(text):
+            starts, item_end = run
         else:
             passage = re.search(r"[?\uff1f]\s*\(\s*\)\s+(?=\S)", text)
             if (

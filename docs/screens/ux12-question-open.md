@@ -20,9 +20,9 @@ linked_tests: [UX12-OPEN-AC01 … UX12-OPEN-AC08]
 
 UX10의 "서버 metadata를 먼저 확인한다"는 보장은 그대로이며, 확인과 열기가 한 호출 안으로 들어온다. 캐시된 session도 응답을 받기 전에는 답을 입력할 수 없다.
 
-- **재사용 조건(서버 판정):** `cached_session_id`가 본인의 이 문제 session이고, 범위 풀이 session이 아니며, `open` 상태이고, 현재 epoch·현재 revision이며, `baseline_attempt_id`가 최신 attempt와 같을 때만 재사용한다. 이 열기가 결과를 보일 문제이면 재사용하지 않는다. `다시 풀기`로 연 session(`cached_another_try`)만 결과보다 앞선다([UX12-RETRYOPEN](ux12-retry-open.md)). 이 조건 중 하나라도 어긋나면 UX10과 같은 순서로 판단한다. 결과가 있으면 결과를, 없으면 새 session을 준다. `다시 풀기` 상태인 문제는 결과가 있어도 새 session을 준다([UX12-RETRYOPEN](ux12-retry-open.md)).
-- **응답 분리:** 미제출 session은 `session`(`PracticeSession`, 답 필드 없음), 제출한 결과는 `result`(`PracticeSessionDetail`)에 담는다. 정답·해설은 `result.outcome`에만 있다.
-- **멱등성:** `Idempotency-Key`는 새 session을 열 때만 저장한다. 같은 key가 다시 오면 그 session이 아직 `open`일 때 응답을 재생한다. 이미 제출됐으면 결과를 준다. 같은 사용자·문제의 reset 잠금이 요청을 직렬화하므로 별도 key 잠금은 두지 않는다.
+- **재사용 조건(서버 판정):** `cached_session_id`가 본인의 이 문제 session이고, 범위 풀이 session이 아니며, `open` 상태이고, 현재 epoch·현재 revision이며, `baseline_attempt_id`가 최신 attempt와 같을 때만 재사용한다. 이 조건 중 하나라도 어긋나면 새 session을 준다. 채점 대기인 제출이 있으면 재사용 전에 그 결과를 준다([UX12-SOLVEDOPEN](ux12-solved-open.md) 개정).
+- **응답 분리:** 미제출 session은 `session`(`PracticeSession`, 답 필드 없음), 채점 대기인 제출은 `result`(`PracticeSessionDetail`)에 담는다. 정답·해설은 `result.outcome`에만 있다.
+- **멱등성:** `Idempotency-Key`는 새 session을 열 때만 저장한다. 같은 key가 다시 오면 그 session이 아직 `open`일 때 응답을 재생한다. 이미 제출됐으면 409 `practice-session-submitted`다(열기 응답에는 결과를 싣지 않는다). 같은 사용자·문제의 reset 잠금이 요청을 직렬화하므로 별도 key 잠금은 두지 않는다.
 - **`practice-recent`·`expected_reset_epoch`:** web은 더 쓰지 않는다. epoch를 읽는 시점과 여는 시점 사이의 틈이 없어졌기 때문이다. 다른 탭의 reset이 먼저 커밋되고 그 뒤에 도착한 열기는 새 열기로 처리된다. 잠금을 기다리던 열기는 지금처럼 409 `practice-session-reset`이다. API endpoint 자체는 호환을 위해 유지한다.
 - **Server-Timing:** 이 route들의 응답에 `db`(시간, statement 수)와 `app`이 붙는다. BFF는 `bff`를 더해 그대로 전달한다. client는 `practice-open` performance measure를 남긴다. 어느 쪽에도 id나 내용은 없다.
 
@@ -34,7 +34,7 @@ UX10의 "서버 metadata를 먼저 확인한다"는 보장은 그대로이며, �
 |---|---:|---:|
 | 처음 여는 문제 | 19 (`practice-recent` 9 + `practice-sessions` 10) | 10 |
 | 안 풀고 다시 여는 문제(캐시) | 9 | 8 |
-| 풀었던 문제 | 9 | 7 |
+| 풀었던 문제 | 9 | 10 (UX12-SOLVEDOPEN: 처음 여는 문제와 같은 길) |
 | 열기당 POST | 2 | 1 |
 
 **체감 시간(client `practice-open` measure, ms):** Playwright Chromium, `next start`, 문제 8개의 median, 같은 Mac. RTT 10 ms는 TCP 지연 proxy로 넣었다.
@@ -59,15 +59,15 @@ Heatmap에서 처음 여는 문제는 `POST /api/questions/{id}/practice-open` �
 
 ### UX12-OPEN-AC02
 
-제출한 문제를 다시 열면 같은 한 번의 호출로 본인의 결과·정답·해설이 보이고 새 session이 생기지 않는다. `다시 풀기`는 호출 한 번으로 새 미제출 session을 연다.
+제출한 문제를 다시 열면 호출 한 번으로 풀이 화면이 열린다. 본인의 결과·정답·해설은 `해설 보기`의 호출 한 번으로 보인다. `다시 풀기`는 호출 한 번으로 새 미제출 session을 연다([UX12-SOLVEDOPEN](ux12-solved-open.md)).
 
 ### UX12-OPEN-AC03
 
-안 풀고 닫은 문제를 다시 열면 호출은 한 번이고 같은 session을 재사용한다. 그 사이 다른 곳에서 제출했으면 캐시를 쓰지 않고 그 결과를 보인다(UX10 "metadata first").
+안 풀고 닫은 문제를 다시 열면 호출은 한 번이고 같은 session을 재사용한다. 그 사이 다른 곳에서 제출했으면 캐시를 쓰지 않고 새 session을 열며, 그 결과는 `해설 보기`로 보인다(UX10 "metadata first", UX12-SOLVEDOPEN 개정).
 
 ### UX12-OPEN-AC04
 
-`practice-open`은 멱등이다. 같은 `Idempotency-Key`의 재전송과 동시 요청은 session 하나만 연다. key가 다시 와도 제출된 session을 미제출로 되살리지 않는다. 그 사이 문제가 수정되어 보여 줄 결과가 없으면 새 session을 열지 않고 409 `practice-session-submitted`를 돌려준다(새 key로 다시 연다). 재사용 조건이 하나라도 어긋난 `cached_session_id`(남의 session, 지난 revision, 제출됨, 범위 풀이, 새 attempt가 생김)는 재사용되지 않는다.
+`practice-open`은 멱등이다. 같은 `Idempotency-Key`의 재전송과 동시 요청은 session 하나만 연다. key가 다시 와도 제출된 session을 미제출로 되살리지 않는다. 제출된 session의 key는 새 session을 열지 않고 409 `practice-session-submitted`를 돌려준다(새 key로 다시 연다). 재사용 조건이 하나라도 어긋난 `cached_session_id`(남의 session, 지난 revision, 제출됨, 범위 풀이, 새 attempt가 생김)는 재사용되지 않는다.
 
 ### UX12-OPEN-AC05
 

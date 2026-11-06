@@ -481,7 +481,9 @@ export async function latestSessionId(userId: string, target: Target): Promise<s
   const sql =
     target.kind === 'question'
       ? `select id from public.practice_sessions where user_id = ${uuid(userId)} ` +
-        `and question_id = ${uuid(target.id)} order by created_at desc limit 1`
+        `and question_id = ${uuid(target.id)} ` +
+        // A solved question opens a new session too: the submitted one is what gates the rest.
+        `order by submitted_at is null, created_at desc limit 1`
       : `select id from public.mock_exam_practice_sessions where user_id = ${uuid(userId)} ` +
         `and mock_exam_question_id = ${uuid(target.id)} order by created_at desc limit 1`;
   let found = '';

@@ -71,8 +71,6 @@ test(
     await page.goto(overviewPath(ws.id));
     await overviewUi.dot(page, 1).click();
     const panel = panelUi.numbered(page, 1);
-    await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
-    await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
     await expect(panelUi.submit(panel)).toBeVisible();
     const correct = question.revision.options.find((option) =>
       question.revision.correct_option_ids?.includes(option.id),
@@ -102,7 +100,7 @@ test(
 );
 
 test(
-  'UX11-RETURN-AC02 returns to the same run position after separate retry without changing its result',
+  'UX11-RETURN-AC02 returns to the same run position after a retry in a finished run without changing its result',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member(`return-run-${randomUUID().slice(0, 8)}`);
@@ -130,11 +128,9 @@ test(
     const panel = runUi.panel(page);
     await expect(runUi.result(panel)).toContainText(RESULT_TEXT.incorrect);
     await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
-    const retry = page.getByRole('dialog', { name: '문제 다시 풀기' });
-    await panelUi.option(retry, correct.text).check();
-    await panelUi.submit(retry).click();
-    await expect(panelUi.result(retry)).toContainText(RESULT_TEXT.correct);
-    await panelUi.close(retry).click();
+    await runUi.option(panel, correct.text).check();
+    await runUi.submit(panel).click();
+    await expect(runUi.result(panel)).toContainText(RESULT_TEXT.correct);
     expect(await runResults(owner, run.id)).toEqual(before);
     await runUi.close(panel).click();
     await page.getByRole('button', { name: '보던 문제로 돌아가기' }).click();
@@ -144,7 +140,7 @@ test(
 );
 
 test(
-  'UX11-RETURN-AC01 a mock retry is a separate attempt and leaves the run result unchanged',
+  'UX11-RETURN-AC01 a mock retry after the run finished is a separate attempt and leaves the run result unchanged',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member(`return-mock-${randomUUID().slice(0, 8)}`);
@@ -164,13 +160,16 @@ test(
     await panel.getByRole('radio').first().check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toContainText(/정답|오답/);
+    await owner.api.ok('POST', `/practice-runs/${run.id}/finish`, {}, [200]);
     const before = await runResults(owner, run.id);
+    await page.reload();
+    await expect(runUi.result(panel)).toContainText(/정답|오답/);
     await panel.getByRole('button', { name: /^다시 풀기$/ }).click();
-    const retry = page.getByRole('dialog', { name: '문제 다시 풀기' });
-    await retry.getByRole('radio').first().check();
-    await panelUi.submit(retry).click();
-    await expect(panelUi.result(retry)).toContainText(/정답|오답/);
-    await panelUi.close(retry).click();
+    await expect(panel.getByRole('status').filter({ hasText: /정답|오답/ })).toHaveCount(0);
+    await expect(panel.getByRole('radio').first()).toBeEnabled();
+    await panel.getByRole('radio').first().check();
+    await runUi.submit(panel).click();
+    await expect(runUi.result(panel)).toContainText(/정답|오답/);
     expect(await runResults(owner, run.id)).toEqual(before);
     expect(questionAttemptCount(ws.id)).toBe(0);
     expect(mockAttemptCount(exam.id)).toBe(2);

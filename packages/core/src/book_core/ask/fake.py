@@ -12,6 +12,8 @@ line ``이전 턴 <n>개`` in at least three deltas ~150 ms apart. Markers in th
 - ``E2E-ASK-BADCITE``: a valid ``[S1]`` and an unknown ``[S9]``;
 - ``E2E-ASK-NOANSWER``: the answer starts with ``[NO_ANSWER]``;
 - ``E2E-ASK-UNCITED``: an answer without any footnote;
+- ``E2E-ASK-MARKDOWN``: ``MARKDOWN_ANSWER``, every Markdown syntax of UX12-ASKMD with ``[S1]``
+  (with ``E2E-ASK-SLOW``: in 40 deltas);
 - ``E2E-ASK-LEAK-PROBE``: echoes the attached question's DTO, one ``<field>: <value>`` line per
   field (``attachment: none`` without one), then the turn count;
 - ``E2E-ASK-HOLD-<token>``: before the first delta, creates ``<hold dir>/<token>.held`` and waits
@@ -52,6 +54,7 @@ MARKER_BADCITE = "E2E-ASK-BADCITE"
 MARKER_NOANSWER = "E2E-ASK-NOANSWER"
 MARKER_LEAK_PROBE = "E2E-ASK-LEAK-PROBE"
 MARKER_UNCITED = "E2E-ASK-UNCITED"
+MARKER_MARKDOWN = "E2E-ASK-MARKDOWN"
 MARKER_HOLD = "E2E-ASK-HOLD"
 _SIMPLE_MARKERS = (
     MARKER_FAIL,
@@ -60,6 +63,7 @@ _SIMPLE_MARKERS = (
     MARKER_NOANSWER,
     MARKER_LEAK_PROBE,
     MARKER_UNCITED,
+    MARKER_MARKDOWN,
 )
 _HOLD = re.compile(re.escape(MARKER_HOLD) + r"-([A-Za-z0-9_-]{1,64})")
 _SENTENCE_END = re.compile(r"(?<=[.!?。])\s+|\n+")
@@ -67,6 +71,40 @@ FAKE_MODEL = "fake-ask"
 HOLD_TIMEOUT_SECONDS = 120.0
 DEFAULT_LOG_DIR = Path(tempfile.gettempdir()) / "quiz-e2e-ask-fake-log"
 DEFAULT_HOLD_DIR = Path(tempfile.gettempdir()) / "quiz-e2e-ask-hold"
+MARKDOWN_ANSWER = """## 핵심 정리
+
+**굵게**, *기울임*, ~~취소선~~, `인라인 코드`를 씁니다 [S1]
+
+| 왼쪽 구분 | 가운데 설명 | 오른쪽 수치 |
+| :--- | :---: | ---: |
+| 물의순환을설명하는아주긴칸 | 증발과응결을설명하는아주긴칸 [S1] | 1234567890123456789 |
+| 정수처리를설명하는아주긴칸 | 침전과여과를설명하는아주긴칸 | 42 |
+
+### 세부 단계
+
+- 첫 항목 [S1]
+  - 중첩 항목
+- [x] 끝낸 일
+- [ ] 남은 일
+
+1. 순서 하나
+2. 순서 둘
+
+> 인용 문장 [S1]
+
+```python
+print("코드 블록은 그대로입니다")
+```
+
+---
+
+[참고 링크](https://example.com/guide)
+
+<script>alert(1)</script>
+
+![그림](https://example.com/a.png)
+
+[위험한 링크](javascript:alert(1))"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +205,8 @@ class FakeAskAnswerer:
             return f"{NO_ANSWER_MARK} 근거 구절로는 이 질문에 답할 수 없습니다."
         if MARKER_LEAK_PROBE in markers:
             return "\n".join([*_probe(request), turns])
+        if MARKER_MARKDOWN in markers:
+            return MARKDOWN_ANSWER
         if MARKER_BADCITE in markers:
             lead = f"{sentences[0]} [S1]" if sentences else "근거 없는 설명"
             return f"{lead}\n\n근거에 없는 내용입니다 [S9]\n\n{turns}"

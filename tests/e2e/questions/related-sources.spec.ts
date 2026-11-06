@@ -182,7 +182,7 @@ async function expectClosedToHome(page: Page, panel: Locator): Promise<void> {
   await expect(page).toHaveURL((url) => url.search === '');
 }
 
-/** Reopens the submitted result with `?question=` and checks its restored grading. */
+/** Reopens the question, asks for its result with 해설 보기 (UX12-SOLVEDOPEN) and checks the grading. */
 async function reopenSubmitted(
   page: Page,
   workspaceId: string,
@@ -191,6 +191,7 @@ async function reopenSubmitted(
   await page.goto(overviewPath(workspaceId, question.id));
   const panel = panelUi.panel(page);
   await expect(panel).toBeVisible();
+  await panelUi.reveal(panel).click();
   await expect(panel.getByRole('status').filter({ hasText: RESULT_TEXT.correct })).toBeVisible();
   return panel;
 }

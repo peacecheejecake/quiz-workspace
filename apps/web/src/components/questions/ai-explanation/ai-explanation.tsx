@@ -20,7 +20,7 @@
 // heading; finishing never moves it. The shared, guest version is SharedAiExplanation.
 import { Badge, Button } from '@quiz/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AnswerMarkdown } from '@/components/ask/ask-answer';
+import { AnswerMarkdown } from '@/components/ask/answer-markdown';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import askStyles from '@/components/ask/ask.module.css';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
@@ -434,7 +434,12 @@ function AiExplanationArea({
           ) : null}
         </div>
         {text ? (
-          <AnswerMarkdown text={text} sourceNumbers={null} renderCite={(n) => `[${n}]`} />
+          <AnswerMarkdown
+            text={text}
+            sourceNumbers={null}
+            renderCite={(n) => `[${n}]`}
+            headingLevel={4}
+          />
         ) : null}
       </div>
     );
@@ -597,7 +602,7 @@ export function ExplanationView({
     );
   };
   const markdown = (value: string) => (
-    <AnswerMarkdown text={value} sourceNumbers={numbers} renderCite={renderCite} />
+    <AnswerMarkdown text={value} sourceNumbers={numbers} renderCite={renderCite} headingLevel={5} />
   );
   return (
     <div className={styles.done}>

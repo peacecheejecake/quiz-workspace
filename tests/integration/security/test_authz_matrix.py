@@ -67,6 +67,9 @@ OWN_ARCHIVED_WRITE = Rule(ALL, writes=True, archived_ok=True, personal=True)
 # PRACTICE: the feature is off on this stack, so an executed call would be 409).
 EDIT_READ = Rule(EDITORS, writes=False)
 EXPLAIN_CREATE = Rule(ALL, writes=True)
+# UX12-SOLVEDOPEN `해설 보기`: any member's write, not executed here: without a submission of the
+# caller's it answers 404, and the contract tests cover the rest. Separate object from PRACTICE.
+PRACTICE_REVEAL = Rule(ALL, writes=True)
 
 # Not workspace-scoped: the caller's own account data, the guest share API, health probes.
 ME = "me"  # any signed-in user, own data only
@@ -110,6 +113,7 @@ RULES: dict[str, Rule | str] = {
     "updateMyQuestionState": PRACTICE,
     "startPracticeSession": PRACTICE,
     "openQuestionPractice": PRACTICE,  # UX12-OPEN
+    "revealQuestionPractice": PRACTICE_REVEAL,  # UX12-SOLVEDOPEN
     "listMyWorkspaceAttempts": READ,
     # QVIEW-B range practice runs (QVIEW-01-C05): the creator's only
     "createPracticeRun": RUN_CREATE,
@@ -118,6 +122,10 @@ RULES: dict[str, Rule | str] = {
     "startRunItemRetrySession": OWN_WRITE,
     "listPracticeRunResults": OWN_READ,
     "finishPracticeRun": OWN_RUN_WRITE,
+    # UX12-RESUME: the list answers each member's own runs; dismissing is the creator's.
+    "listUnfinishedPracticeRuns": READ,
+    "dismissPracticeRun": OWN_RUN_WRITE,
+    "reopenRunItem": OWN_RUN_WRITE,  # UX12-RETRYINPLACE
     # questions, drafts, import (the QGEN generation routes were retired by QGEN-RM)
     "updateQuestionDraft": EDIT,
     "getQuestionImport": READ,
@@ -143,6 +151,7 @@ RULES: dict[str, Rule | str] = {
     "createChapter": EDIT,
     "updateChapter": EDIT,
     "moveChapters": EDIT,
+    "moveWorkspaceChapters": EDIT,
     "deleteChapter": EDIT,
     "getQuestionRevision": READ,
     "listQuestionImports": READ,
@@ -295,6 +304,7 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "updateMyQuestionState": {"is_favorite": True},
         "createPracticeRun": {"source": "bank", "range": {"all": True}},
         "finishPracticeRun": {},
+        "dismissPracticeRun": {},
         "mergeQuestionDuplicates": {
             "groups": [
                 {
@@ -317,6 +327,10 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "createChapter": {"document_id": ids["document_id"], "parent_id": None, "title": "S4"},
         "updateChapter": {"title": "S4"},
         "moveChapters": {
+            "expected_version": 0,
+            "moves": [{"chapter_id": ids["chapter_id"], "parent_id": None, "position": 0}],
+        },
+        "moveWorkspaceChapters": {
             "expected_version": 0,
             "moves": [{"chapter_id": ids["chapter_id"], "parent_id": None, "position": 0}],
         },

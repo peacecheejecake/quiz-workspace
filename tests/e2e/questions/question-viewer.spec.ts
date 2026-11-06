@@ -42,6 +42,7 @@ import {
   CH1,
   CH2,
   type RangeWorkspace,
+  confirmRunClose,
 } from '../fixtures/practice-runs.ts';
 import {
   createShareLink,
@@ -414,6 +415,7 @@ test(
 
     // Close, then start again through the actual unified play entry.
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     await expect.poll(() => practiceParam(page)).toBeNull();
     // Closing a changed run refreshes the server-rendered overview; let that navigation settle.
@@ -421,12 +423,12 @@ test(
     await page.getByRole('button', { name: /^모의고사$/ }).click();
     const play = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await play.getByRole('button', { name: /^(추가|add)$/i }).click();
+    await runUi.selectAll(play).check();
+    await play.getByRole('button', { name: /다음|next/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
     await expect(random).not.toBeChecked();
     await random.check();
     await play.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-    await play.getByRole('button', { name: /다음|next/i }).click();
-    await runUi.selectAll(play).check();
     await play.getByRole('button', { name: /시작|start/i }).click();
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
     await expect(page).toHaveURL(/[?&]i=1(&|$)/);
@@ -526,6 +528,7 @@ test(
     await expect(runUi.submit(panel)).toHaveCount(0);
 
     await page.keyboard.press('Escape');
+    await confirmRunClose(page);
     await expect(panel).toBeHidden();
     const dot = overviewUi.dot(page, 1);
     await expect(dot).toHaveAccessibleName(/오답|incorrect/i);
@@ -672,11 +675,12 @@ test(
     ).toBeVisible();
     const rows = runUi.resultRows(panel);
     await expect(rows).toHaveCount(5);
-    await expect(nth(await rows.all(), 0).getByLabel(/정답|correct/i)).toHaveText('O');
-    await expect(nth(await rows.all(), 1).getByLabel(/오답|incorrect/i)).toHaveText('X');
-    await expect(nth(await rows.all(), 2)).toContainText(/건너뜀|skipped/i);
-    await expect(nth(await rows.all(), 3)).toContainText(RESULT_TEXT.pending);
-    await expect(nth(await rows.all(), 4)).toContainText(RESULT_TEXT.pending);
+    const mark = (i: number, name: RegExp) => rows.nth(i).getByRole('cell', { name });
+    await expect(mark(0, /맞음|correct/i)).toHaveText('O');
+    await expect(mark(1, /틀림|incorrect/i)).toHaveText('X');
+    await expect(mark(2, /건너뜀|skipped/i)).toHaveText('–');
+    await expect(mark(3, RESULT_TEXT.pending)).toHaveText('대기');
+    await expect(mark(4, RESULT_TEXT.pending)).toHaveText('대기');
 
     // A result row reopens that position read-only.
     await rows.nth(1).getByRole('button').first().click();

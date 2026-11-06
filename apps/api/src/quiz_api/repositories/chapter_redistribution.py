@@ -119,6 +119,9 @@ class ChapterRedistributionRepository:
         the current revision of every live question paper, in outline order."""
         return DraftChapterRepository(self._session).paper_chapters(workspace_id)
 
+    def workspace_chapters(self, workspace_id: uuid.UUID) -> list[BookChapter]:
+        return DraftChapterRepository(self._session).workspace_chapters(workspace_id)
+
     def start_blocks(
         self, workspace_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
     ) -> dict[uuid.UUID, StartBlock]:
@@ -229,15 +232,18 @@ class ChapterRedistributionRepository:
         rows = self._session.execute(
             select(
                 chapters.c.id,
-                and_(
-                    documents.c.deleted_at.is_(None),
-                    documents.c.active_revision_id == chapters.c.document_revision_id,
-                    # CHAP-MATCH: a book's chapter, or a top-level chapter of a question paper.
-                    or_(documents.c.document_type == BOOK, chapters.c.level == 1),
+                or_(
+                    chapters.c.document_revision_id.is_(None),  # a Workspace chapter
+                    and_(
+                        documents.c.deleted_at.is_(None),
+                        documents.c.active_revision_id == chapters.c.document_revision_id,
+                        # CHAP-MATCH: a book's chapter, or a top-level chapter of a question paper.
+                        or_(documents.c.document_type == BOOK, chapters.c.level == 1),
+                    ),
                 ).label("valid"),
             )
             .select_from(
-                chapters.join(
+                chapters.outerjoin(
                     documents,
                     and_(
                         documents.c.workspace_id == chapters.c.workspace_id,

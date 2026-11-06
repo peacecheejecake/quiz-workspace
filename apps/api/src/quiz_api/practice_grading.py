@@ -39,7 +39,7 @@ def new_shuffle_seed() -> int:
 
 def run_option_seed(run_seed: int, position: int) -> int:
     """The option shuffle seed of a run position: fixed by the run, so a position shows one order
-    before and after its session opens (UX12-CHAPTERRUN-C03). Fits `shuffle_seed`."""
+    before and after its session opens (QVIEW-01-C11). Fits `shuffle_seed`."""
     digest = hashlib.sha256(f"{run_seed}:{position}".encode()).digest()
     return int.from_bytes(digest[:8], "big") >> (64 - _SEED_BITS)
 

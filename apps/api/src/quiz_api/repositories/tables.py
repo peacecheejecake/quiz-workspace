@@ -265,9 +265,12 @@ practice_sessions = Table(
     # QVIEW-B: the run position this session practises (both null outside a run).
     Column("practice_run_id", Uuid),
     Column("run_position", Integer),
+    # UX12-RETRYINPLACE: replaced at its run position by `다시 풀기`; the attempts stay.
+    _ts("superseded_at"),
 )
 
-# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at changes).
+# QVIEW-B range practice runs (one user's fixed, ordered questions; only finished_at and
+# resume_dismissed_at change).
 practice_runs = Table(
     "practice_runs",
     metadata,
@@ -283,6 +286,7 @@ practice_runs = Table(
     Column("item_ids", ARRAY(Uuid), nullable=False),
     _ts("created_at", nullable=False),
     _ts("finished_at"),
+    _ts("resume_dismissed_at"),
 )
 
 question_attempts = Table(
@@ -469,8 +473,10 @@ chapters = Table(
     metadata,
     Column("id", Uuid, primary_key=True),
     Column("workspace_id", Uuid, nullable=False),
-    Column("document_id", Uuid, nullable=False),
-    Column("document_revision_id", Uuid, nullable=False),
+    # Both null on a Workspace chapter (UX12-CHAPTERADD, 20261106210000_workspace_chapters.sql).
+    Column("document_id", Uuid),
+    Column("document_revision_id", Uuid),
+    Column("workspace_level_of", Uuid),
     Column("parent_id", Uuid),
     Column("section_key", Text, nullable=False),
     Column("level", SmallInteger, nullable=False),
@@ -479,6 +485,13 @@ chapters = Table(
     Column("page", Integer),
     Column("heading_block_id", Text),
     _ts("created_at", nullable=False),
+)
+
+workspace_chapter_trees = Table(
+    "workspace_chapter_trees",
+    metadata,
+    Column("workspace_id", Uuid, primary_key=True),
+    Column("version", BigInteger, nullable=False),
 )
 
 content_blocks = Table(

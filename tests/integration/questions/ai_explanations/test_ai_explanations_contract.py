@@ -322,7 +322,7 @@ def shuffle_exam(owner: Any, ws: str, question_ids: list[str]) -> list[dict[str,
         },
         (202,),
     )
-    owner.wait_for_job(str(made["latest_generation"]["job_id"]))
+    assert made["status"] == "ready"
     items: list[dict[str, Any]] = owner.ok(
         "GET", f"/mock-exams/{made['id']}/questions?include=answers"
     )["items"]
@@ -651,6 +651,44 @@ def test_c03_an_older_prompt_version_stays_stored_and_the_question_can_be_made_a
         (fresh["id"], PROMPT_VERSION, "succeeded", False),
     ]
     assert state(guest.read(link["id"], cookie, url), (200,))["body"] == fresh["body"]
+
+
+def test_ux12_askmd_a_v2_explanation_stays_until_it_is_regenerated(seed: Any, db: Any) -> None:
+    """question.ai_explain/v3 changed only the Markdown allowed: v2 rows are not hidden."""
+    owner = seed.client("expl-v2-owner")
+    book = Book(owner)
+    q = book.mcq()
+    old = make(owner, q["id"], view="detail")
+    previous = "question.ai_explain/v2"
+    db(
+        "update public.question_ai_explanations set prompt_version = %s where id = %s",
+        (previous, old["id"]),
+    )
+    link = owner.create_link(book.ws)
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+    url = f"/questions/{q['id']}/ai-explanation"
+
+    now = state(get(owner, q["id"], view="detail"), (200,))
+    assert now["explanation"]["id"] == old["id"]
+    assert now["can_create"] is False
+    assert now["can_regenerate"] is True
+    assert state(guest.read(link["id"], cookie, url), (200,))["body"] == old["body"]
+    assert owner.call("GET", f"/ai-explanations/{old['id']}/stream?view=detail").status_code == 200
+    # A cache hit: no new row, no LLM call, nothing counted.
+    assert state(post(owner, q["id"], view="detail"), (200,))["explanation"]["id"] == old["id"]
+
+    regenerated = state(regenerate(owner, q["id"], view="detail"), (202,))["explanation"]
+    assert regenerated["version"] == 2
+    drain(owner, regenerated)
+    after = state(get(owner, q["id"], view="detail"), (200,))
+    assert after["explanation"]["id"] == regenerated["id"]
+    stored = db(
+        "select prompt_version, status from public.question_ai_explanations "
+        "where question_id = %s order by created_at",
+        (q["id"],),
+    )
+    assert stored == [(previous, "succeeded"), (PROMPT_VERSION, "succeeded")]
 
 
 def test_c03_an_older_prompt_version_of_a_mock_question_is_gone_from_its_stream(

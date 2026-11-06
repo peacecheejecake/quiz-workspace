@@ -802,7 +802,7 @@ export type paths = {
     put?: never;
     /**
      * Start Mock Practice Session
-     * @description Open a mock exam question: pins its active revision and optionally shuffles MCQ options.
+     * @description Open a mock exam question: pins its active revision and its MCQ option order.
      *     No answers in the response, nothing recorded outside the mock exam tables. With a run
      *     position the caller's mock run must hold this question; an open session is resumed, and a
      *     submitted one is 409 `already-submitted`.
@@ -1056,6 +1056,27 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/practice-runs/{run_id}/dismiss': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Dismiss Practice Run
+     * @description Stop offering the run for `이어 풀기` (the mock exam list's group or a mock exam's row).
+     *     The run, its sessions and attempts stay as they are, and it still opens by its URL.
+     */
+    post: operations['dismissPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/practice-runs/{run_id}/finish': {
     parameters: {
       query?: never;
@@ -1092,6 +1113,29 @@ export type paths = {
     get: operations['getPracticeRunItem'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/practice-runs/{run_id}/items/{position}/reopen': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reopen Run Item
+     * @description `다시 풀기` in an unfinished run (UX12-RETRYINPLACE): the position goes back to unanswered
+     *     and its next opening is a new session. The graded session stays linked and its attempts stay;
+     *     the position's result is the live session's. A position with no graded session is left as it
+     *     is, so a repeated call changes nothing; one waiting for self-grading is 409.
+     */
+    post: operations['reopenRunItem'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1587,12 +1631,11 @@ export type paths = {
     /**
      * Open Question Practice
      * @description Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the
-     *     latest result, then reuse the cached session, show that result or open a session. Only a new
-     *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
-     *     user and question, so no separate key lock is taken. A key seen again replays its session
-     *     while it is open: once submitted, the latest result answers instead, or 409 without one.
-     *     A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
-     *     its latest submission still waits for grading: nothing else can finish that one.
+     *     latest submission, then reuse the cached session or open one. A solved question opens to be
+     *     answered, without its result (UX12-SOLVEDOPEN); only a submission waiting for self-grading is
+     *     returned, since nothing else can finish it. Only a new session is stored under
+     *     `Idempotency-Key`; the reset lock already serialises retries of this user and question, so no
+     *     separate key lock is taken. A key seen again replays its session while it is open.
      */
     post: operations['openQuestionPractice'];
     delete?: never;
@@ -1632,6 +1675,29 @@ export type paths = {
      * @description Reset personal study state; immutable attempts remain for audit.
      */
     post: operations['resetQuestionPractice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/practice-reveal': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reveal Question Practice
+     * @description `해설 보기` (UX12-SOLVEDOPEN): the caller's latest submission of the active revision with its
+     *     answers. This is a write, not a read: the caller's open sessions of the question are retired
+     *     in the same transaction, so an answer seen here cannot be graded in them. Repeating it
+     *     changes nothing more. 404 for a question the caller has not submitted on this revision.
+     */
+    post: operations['revealQuestionPractice'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2338,10 +2404,30 @@ export type paths = {
     put?: never;
     /**
      * Create Chapter
-     * @description Add a chapter as the last child of `parent_id`, in the active revision. The book's text
-     *     does not change: the chapter starts empty.
+     * @description Add a chapter as the last child of `parent_id`, in the active revision or among the
+     *     Workspace chapters. The book's text does not change: the chapter starts empty.
      */
     post: operations['createChapter'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/chapters/tree': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Move Workspace Chapters
+     * @description `moveChapters` for the Workspace chapters: a chapter of a document here is unknown.
+     */
+    post: operations['moveWorkspaceChapters'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2429,7 +2515,8 @@ export type paths = {
     /**
      * Create Mock Exam
      * @description Save a mock exam and start its first generation. With an AI variation type the range's
-     *     questions, answers, explanations and related book text are sent to the LLM provider.
+     *     questions, answers, explanations and related book text are sent to the LLM provider;
+     *     with 보기 섞기 only the response is already `ready` (`job_id` null).
      */
     post: operations['createMockExam'];
     delete?: never;
@@ -2473,6 +2560,27 @@ export type paths = {
      *     The response carries counts only (read positions through /items/{position}).
      */
     post: operations['createPracticeRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspace_id}/practice-runs/unfinished': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Unfinished Practice Runs
+     * @description The caller's own unfinished bank runs in this workspace, most recently touched first:
+     *     runs not finished, not dismissed and with a position left to answer (UX12-RESUME).
+     */
+    get: operations['listUnfinishedPracticeRuns'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3096,9 +3204,9 @@ export type components = {
     BookChapterOption: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
       /**
@@ -3168,9 +3276,14 @@ export type components = {
     ChapterCreateRequest: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null = a Workspace chapter.
        */
-      document_id: string;
+      document_id?: string | null;
+      /**
+       * Near Chapter Id
+       * @description The chapter chosen when a dropdown creates one: the new chapter goes to that live book, otherwise it is a Workspace chapter. Not with `document_id` or `parent_id`.
+       */
+      near_chapter_id?: string | null;
       /**
        * Parent Id
        * @description null = a top-level chapter.
@@ -3292,9 +3405,9 @@ export type components = {
     ChapterRef: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /**
        * Id
        * Format: uuid
@@ -3325,6 +3438,8 @@ export type components = {
     ChapterTree: {
       /** Documents */
       documents: components['schemas']['TreeDocument'][];
+      /** @description The chapters without a document. */
+      workspace: components['schemas']['WorkspaceChapters'];
     };
     /** ChapterTreeResult */
     ChapterTreeResult: {
@@ -3351,6 +3466,13 @@ export type components = {
     /** ChapterWrite */
     ChapterWrite: {
       chapter: components['schemas']['TreeChapter'];
+      /**
+       * Document Id
+       * @description null = a Workspace chapter.
+       */
+      document_id: string | null;
+      /** Document Title */
+      document_title: string;
       /** Version */
       version: number;
     };
@@ -3741,9 +3863,9 @@ export type components = {
     DraftChapterRef: {
       /**
        * Document Id
-       * Format: uuid
+       * @description null: a Workspace chapter.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
       /**
@@ -5220,6 +5342,8 @@ export type components = {
       status: 'generating' | 'ready' | 'partial' | 'failed';
       /** Title */
       title: string;
+      /** @description The caller's run of the shown generation to resume. */
+      unfinished_run?: components['schemas']['MockExamUnfinishedRun'] | null;
       /**
        * Updated At
        * Format: date-time
@@ -5455,6 +5579,32 @@ export type components = {
        * @description null: the source was deleted.
        */
       question_id: string | null;
+    };
+    /**
+     * MockExamUnfinishedRun
+     * @description The caller's run to resume: counts and a position, never question content.
+     */
+    MockExamUnfinishedRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Next Position
+       * @description The first position still answerable.
+       */
+      next_position: number;
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
     };
     /** MockExamUpdate */
     MockExamUpdate: {
@@ -6131,30 +6281,19 @@ export type components = {
     /**
      * PracticeOpenBody
      * @description What the panel knows of this question: an open session it keeps in memory and the latest
-     *     attempt when that session was opened, or `force_new` for another try after a result.
-     *     `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
-     *     result the question would otherwise open with.
+     *     attempt when that session was opened.
      */
     PracticeOpenBody: {
       /** Baseline Attempt Id */
       baseline_attempt_id?: string | null;
-      /**
-       * Cached Another Try
-       * @default false
-       */
-      cached_another_try?: boolean;
       /** Cached Session Id */
       cached_session_id?: string | null;
-      /**
-       * Force New
-       * @default false
-       */
-      force_new?: boolean;
     };
     /**
      * PracticeOpened
-     * @description One opening of the panel. Answers exist only under `result`: `session` is the answer-free
-     *     open shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).
+     * @description One opening of the panel. Answers exist only under `result`, and only for a submission
+     *     still waiting for self-grading: `session` is the answer-free open shape, so an unsubmitted
+     *     payload cannot carry one (a new field here is a reviewed change).
      */
     PracticeOpened: {
       /**
@@ -6171,7 +6310,7 @@ export type components = {
       previous_revision: boolean;
       /** Reset Epoch */
       reset_epoch: number;
-      /** @description The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading. */
+      /** @description The latest submission of the active revision while it waits for self-grading. */
       result: components['schemas']['PracticeSessionDetail'] | null;
       /**
        * Reused
@@ -6203,6 +6342,19 @@ export type components = {
       };
       /** Reset */
       reset: boolean;
+    };
+    /**
+     * PracticeRevealed
+     * @description `해설 보기`: the latest submission of the active revision, with its outcome.
+     */
+    PracticeRevealed: {
+      /** Reset Epoch */
+      reset_epoch: number;
+      result: components['schemas']['PracticeSessionDetail'];
+      /** Submitted Answer */
+      submitted_answer?: {
+        [key: string]: unknown;
+      } | null;
     };
     /**
      * PracticeRun
@@ -7261,9 +7413,9 @@ export type components = {
       chapters: components['schemas']['RedistributionTargetChapter'][];
       /**
        * Document Id
-       * Format: uuid
+       * @description null: the Workspace chapters.
        */
-      document_id: string;
+      document_id: string | null;
       /** Document Title */
       document_title: string;
     };
@@ -8849,6 +9001,52 @@ export type components = {
        */
       version: number;
     };
+    /**
+     * UnfinishedRun
+     * @description A row of the `이어 풀기` list: progress and where to resume, never question content.
+     */
+    UnfinishedRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Chapter Title
+       * @description Set when the live questions share a chapter.
+       */
+      chapter_title: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Last Touched At
+       * Format: date-time
+       */
+      last_touched_at: string;
+      /**
+       * Next Position
+       * @description The first position still answerable.
+       */
+      next_position: number;
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
+    };
+    /** UnfinishedRunList */
+    UnfinishedRunList: {
+      /** Items */
+      items: components['schemas']['UnfinishedRun'][];
+    };
     /** UploadCompleted */
     UploadCompleted: {
       /**
@@ -9051,6 +9249,21 @@ export type components = {
        * @description Pass as `cursor` for older attempts.
        */
       next_cursor: string | null;
+    };
+    /** WorkspaceChapters */
+    WorkspaceChapters: {
+      /**
+       * Chapters
+       * @description Outline order.
+       */
+      chapters: components['schemas']['TreeChapter'][];
+      /** Title */
+      title: string;
+      /**
+       * Version
+       * @description `expected_version` of the next batch move.
+       */
+      version: number;
     };
     /** WorkspaceCreate */
     WorkspaceCreate: {
@@ -13495,6 +13708,71 @@ export interface operations {
       };
     };
   };
+  dismissPracticeRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   finishPracticeRun: {
     parameters: {
       query?: never;
@@ -13604,6 +13882,81 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  reopenRunItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        position: number;
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -15620,6 +15973,82 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  revealQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeRevealed'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };
@@ -18265,6 +18694,89 @@ export interface operations {
       };
     };
   };
+  moveWorkspaceChapters: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChapterTreeUpdate'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChapterTreeResult'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   listDocuments: {
     parameters: {
       query?: {
@@ -18761,6 +19273,73 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  listUnfinishedPracticeRuns: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnfinishedRunList'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

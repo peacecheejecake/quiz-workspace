@@ -446,12 +446,12 @@ test(
     }
     // 보기 섞기 only (no LLM) with fixed seeds; every question of the range is taken, in Heatmap
     // order, so the rows are the same on every run.
-    const exams: { id: string; job: string }[] = [];
+    const exams: { id: string }[] = [];
     for (const [title, range, count] of [
       ['1장 복습', { all: false, chapter_ids: [chapters[1]] }, 3],
       ['중간 점검', { all: true }, 5],
     ] as const) {
-      const exam = await owner.api.ok<{ id: string; latest_generation: { job_id: string } }>(
+      const exam = await owner.api.ok<{ id: string }>(
         'POST',
         `/workspaces/${ws.id}/mock-exams`,
         {
@@ -462,9 +462,8 @@ test(
         },
         [202],
       );
-      exams.push({ id: exam.id, job: exam.latest_generation.job_id });
+      exams.push({ id: exam.id });
     }
-    for (const exam of exams) await waitForJob(owner, exam.job);
     const [, midterm] = exams;
     if (!midterm) throw new Error('no mock exam');
 
@@ -476,8 +475,14 @@ test(
     await expect(mockUi.row(dialog, '1장 복습')).toContainText(STATUS_TEXT.ready);
     await snapEvery(page, 'mock-exams-list');
 
-    // 만들기: options (default name, 문구 변형 checked) and the range (1장 open, 1장 1번 off).
+    // 만들기: the range (1장 open, 1장 1번 off), then the options (문구 변형 checked).
     await mockUi.add(dialog).click();
+    await rangePickerUi.selectAll(dialog).check();
+    await rangePickerUi.expand(dialog, '1장 물의 순환').click();
+    await rangePickerUi.question(dialog, 1, 1).uncheck();
+    await expect(rangePickerUi.selected(dialog, 4)).toBeVisible();
+    await snapEvery(page, 'mock-exams-create-range');
+    await mockUi.next(dialog).click();
     await expect(mockUi.variations(dialog)).toHaveCount(4);
     for (const type of ['OPTION_SHUFFLE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
       const box = mockUi.variation(dialog, type);
@@ -486,14 +491,8 @@ test(
     await mockUi.variation(dialog, 'PARAPHRASE').check();
     await mockUi.title(dialog).fill('기말 대비');
     await mockUi.questionCount(dialog).fill('4');
-    await snapEvery(page, 'mock-exams-create-options');
-    await mockUi.next(dialog).click();
-    await rangePickerUi.selectAll(dialog).check();
-    await rangePickerUi.expand(dialog, '1장 물의 순환').click();
-    await rangePickerUi.question(dialog, 1, 1).uncheck();
-    await expect(rangePickerUi.selected(dialog, 4)).toBeVisible();
     await expect(dialog.getByText(MOCK_TEXT.aiNotice)).toBeVisible();
-    await snapEvery(page, 'mock-exams-create-range');
+    await snapEvery(page, 'mock-exams-create-options');
 
     // The detail (round 1, five 보기 섞기 copies; no answer shown in the rows).
     await page.goto(mockExamsPath(ws.id, midterm.id));

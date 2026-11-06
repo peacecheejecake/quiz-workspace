@@ -42,7 +42,27 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.groupTitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runName {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
 }
 
 .itemMain {
@@ -73,8 +93,10 @@
   cursor: pointer;
 }
 
-.titleButton:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .titleButton:hover {
+    text-decoration: underline;
+  }
 }
 
 @media (hover: hover) {
@@ -181,7 +203,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface-muted);
+  background: transparent;
   color: var(--color-text-primary);
   font: inherit;
   text-align: start;
@@ -189,8 +211,10 @@
   cursor: pointer;
 }
 
-.questionButton:hover {
-  background: var(--color-state-hover);
+@media (hover: hover) {
+  .questionButton:hover {
+    background: var(--color-state-hover);
+  }
 }
 
 .questionTitle {
@@ -231,10 +255,26 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.variation {
+.legendRow {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-1);
+}
+
+.variationHelp {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-label);
+}
+
+.variationHelp dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.variationHelp dd {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
 .formRow {

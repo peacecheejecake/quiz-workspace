@@ -283,7 +283,7 @@ class DraftPublishError(BaseModel):
 class DraftChapterRef(BaseModel):
     id: uuid.UUID
     title: str
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = Field(description="null: a Workspace chapter.")
     document_title: str
 
 
@@ -969,6 +969,7 @@ def _summary_out(
 
 
 def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[BookChapterOption]:
+    chapters = DraftChapterRepository(repo.session)
     return [
         BookChapterOption(
             id=c.id,
@@ -977,7 +978,10 @@ def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[Boo
             document_title=c.document_title,
             level=c.level,
         )
-        for c in DraftChapterRepository(repo.session).book_chapters(run.workspace_id)
+        for c in [
+            *chapters.book_chapters(run.workspace_id),
+            *chapters.workspace_chapters(run.workspace_id),
+        ]
     ]
 
 
@@ -1367,6 +1371,11 @@ def update_question_draft(
 
     Import drafts only: a generation draft of the retired 변형 출제 (QGEN-RM) answers 404."""
     _reject_unstorable(body)
+    # The chapter's owner before the draft (docs/questions.md §14.6): a chapter delete holds it
+    # while it moves drafts. So the draft is read, and its version compared, after any such move.
+    chapters_repo = DraftChapterRepository(repo.session)
+    if body.chapter_id is not None:
+        chapters_repo.lock_documents_of(access.workspace.workspace_id, [body.chapter_id])
     record = repo.get_draft(access.resource_id, lock=True)
     if record is None or record.source_type != "import":  # the binding hides other drafts too
         raise HTTPException(status_code=404, detail=NOT_FOUND)
@@ -1459,8 +1468,6 @@ def update_question_draft(
         values["question_number"] = body.question_number
     if "chapter_id" in sent:
         if body.chapter_id is not None:
-            chapters_repo = DraftChapterRepository(repo.session)
-            chapters_repo.lock_documents_of(record.workspace_id, [body.chapter_id])
             current = chapters_repo.current_book_chapters(record.workspace_id, [body.chapter_id])
             found = current.get(body.chapter_id)
             if found is None or found.id != body.chapter_id:
@@ -1468,7 +1475,7 @@ def update_question_draft(
                     [
                         {
                             "loc": ("body", "chapter_id"),
-                            "msg": "Unknown chapter: use a chapter of a book's current revision.",
+                            "msg": "Unknown chapter: use a Workspace or current book chapter.",
                             "type": "value_error",
                         }
                     ]
@@ -1534,6 +1541,11 @@ def publish_question_import_drafts(
     for item in body.drafts:
         versions.setdefault(item.draft_id, item.version)
     requested = list(versions)
+    # CHAPTER-MAP: the chapters on screen are known only under the drafts' locks and the chapters'
+    # owners come first (docs/questions.md §14.6), so all of them: what is read below stays the
+    # current chapter until this transaction ends.
+    chapter_repo = DraftChapterRepository(repo.session)
+    chapter_repo.lock_every_chapter_owner(run.workspace_id)
     drafts = {d.id: d for d in repo.lock_drafts(run.id, requested)}
     if len(drafts) != len(requested):
         raise HTTPException(status_code=404, detail="Draft not found.")
@@ -1575,14 +1587,8 @@ def publish_question_import_drafts(
         issues.raise_if_any()
 
     mapping = {d.id: d.published_question_id for d in drafts.values()}
-    # CHAPTER-MAP: the chapter on screen. The books are locked FOR SHARE first (question lock
-    # order), so the chapter read here is the current one until this transaction ends.
-    chapter_repo = DraftChapterRepository(repo.session)
     shown = _chapters_of(repo.session, run, [r for r, _, _ in plans])
     _refuse_changed_chapters(_displayed_chapters(body.drafts), shown)
-    chapter_repo.lock_documents_of(
-        run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
-    )
     current = chapter_repo.current_book_chapters(
         run.workspace_id, [c.chapter.id for c in shown.values() if c.chapter is not None]
     )

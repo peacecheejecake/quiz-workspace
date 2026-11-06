@@ -95,6 +95,13 @@
 | DESIGN-3 제스처 | modal 스와이프 + 관성, 복귀 bar 스와이프 | `swipe-dismiss.ts`를 `useDragDismiss`로 재작성. CSS `translate` 추적, release 속도로 WAAPI 퇴장, 거부되면 복귀, `data-swiped`로 Radix 퇴장 애니메이션 끔. 방향: 768px 미만은 아래, 넓으면 side 방향, 중앙 dialog는 아래. drawer 추가, header 전체에서 시작 | 현재 close-on-release만 있다. 중앙 dialog가 폰에서 left로 판정되는 버그와 제목 글자에서 시작 안 되는 버그를 함께 고친다. UX10-UI AC03·04, UX11 AC03 개정. D-2 | L·SHELL-1 |
 | DESIGN-4 Glass | gradation 색상 | `.glass-surface`에 테마별 gradient 층 추가. 모바일 sheet의 `background` shorthand가 gradient를 지우므로 수정. PDF 위 표면은 제외 | design-system §3. 양 테마 대비 test. D-3 | M·DESIGN-1 |
 
+### 4.1a DESIGN 추가 — 유리 레이어와 버튼(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| DESIGN-5 유리·버튼 | 투명도, 유리 위 버튼, 아이콘 버튼 테두리, hover, Heatmap 확대, header gradation | 유리 floating layer를 더 투명하게 한다. 유리 위 버튼은 `보던 문제로 돌아가기`와 목록 항목의 배경을 지우고, 해설처럼 영역이 구분돼야 하는 곳은 회색에서 흰색으로 바꾼다. 아이콘만 있는 버튼의 테두리를 지운다. 모든 버튼에 hover 색을 넣는다. Heatmap cell hover 확대를 키운다. global header의 gradation을 뺀다. 유리 레이어 하단 고정 영역에 흰색 배경을 두지 않는다. 홈 상단 고정 header 영역에 glassmorphism을 적용한다. confirm dialog 하단 선을 지운다 | M·DESIGN-1, 3 |
+| DESIGN-7 흰 버튼·회색 영역 | 사용자 정정 | 흰색 버튼은 배경을 유지한다. 배경 삭제는 `보던 문제로 돌아가기`와 목록 항목에만 적용한다. 해설 같은 영역은 회색을 유지한다 | S·DESIGN-5 |
+
 ### 4.2 SHELL — 앱 셸·세션·설정
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -116,6 +123,20 @@
 | HOME-4 Header | 문서 검색·문서 관리 dropdown 이동, `문서 N` 버튼화, sticky | `question-menu.tsx` trigger를 `문서 N ▾`로, 풀기 왼쪽 배치. 메뉴: 문서 관리·본문 검색 / 직접 추가·중복 정리·재분배 / 보관·초안. sticky는 `.home`을 grid에서 flex로 바꿔야 동작한다. dot에 `scroll-margin-top` | UX10-HOME-AC01, SEARCH-02 AC01, QOV-01 AC11. `fixtures/workspace-ui.ts` 공통화(스펙 약 20개 영향). D-7 | L·없음 |
 | HOME-5 검색·필터 줄 | 검색 아이콘 펼침, 필터 popover, 레이블 삭제, 칩 삭제 | `question-search.tsx` 재작성. `grid-template-columns 0fr→1fr` + opacity, 닫힌 input `inert`, `ChevronLeftIcon`·`FilterIcon` 추가. 필터 활성 표시 필수. `다시 풀기만`은 `다시 풀기` 상태 칩과 같은 값이라 삭제해도 기능 손실이 없다. `?retry=true`는 `status=retry`로 변환. **빈 결과의 필터 초기화는 유지**(없으면 탈출 경로가 없다) | UX10-HOME-AC02 폐기, SEARCH-01 AC09·12. D-7 | L·HOME-4 |
 
+### 4.3a HOME 추가 — 상태 필터(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| HOME-6 상태 필터 | 로딩 문구 위치, 필터 동작, 툴바 배치 | `문제를 불러오는 중입니다.`를 상태 필터 아래로 옮긴다. `즐겨찾기만`을 켜면 미열람을 비활성으로 한다. `즐겨찾기만`은 켜져도 배경 없이 글자와 테두리만 primary다. 상태 필터를 필터 툴팁 안으로 옮기고, 검색·필터 버튼을 `모의고사` 버튼 오른쪽에 간격을 두고 둔다 | M·MOCKUX-4 |
+
+### 4.3b HOME·CHAPTER 추가(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| HOME-7 문서 수 | `문서 N` | 문제 PDF와 본문 PDF를 구분 없이 센 PDF 수를 보인다 | S·없음 |
+| CHAPTER-7 dropdown 스크롤 | iPadOS Safari | 챕터 dropdown 안에서 터치 스크롤이 되게 한다 | S·없음 |
+| CHAPTER-8 챕터 추가 | dropdown, 교재 없는 Workspace | 문제의 챕터 dropdown에서 새 챕터를 만들고 바로 고른다. 교재가 없는 Workspace에서도 챕터를 만들 수 있다 | L·CHAPTER-4 |
+
 ### 4.4 VIEW — 문제 보기·편집
 
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
@@ -132,6 +153,12 @@
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
 |---|---|---|---|---|
 | VIEW-7 제시문 | 제시문 내 줄바꿈, 제시문 사이 구분, 제시문마다 영역 구분 | `<제목>` 형태의 제시문과 `(가)` 항목을 나누어 각각 박스로 표시한다. `∙`, `-` 항목은 줄을 나눈다. 표시 단계에서 처리해 이미 등록된 문제에도 적용하고, 추출기에도 같은 규칙을 넣는다 | QPLAY-01, questions.md §4. TS/Python parity | M·없음 |
+
+### 4.4b VIEW 추가 — 항목형 제시문(사용자 보고 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| VIEW-8 항목 줄바꿈 | 제시문 줄바꿈, 영역 구분 | 한 줄로 붙은 `- 항목` 나열을 항목마다 줄바꿈하고 제시문 영역으로 구분한다. 저장된 문제는 표시에서, 새 추출은 줄을 보존해서 처리한다 | M·VIEW-7 |
 
 ### 4.5 EXPL — AI 해설
 
@@ -156,6 +183,12 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | ASK-1 명세·RED | 7개 전체 | `docs/screens/ux12-ask.md`, ASK-01 개정. **AI 생성 표시·다시 생성은 2026-11-01 사용자 결정을 뒤집으므로** §7에 기록 | D-10 | S·D-10 |
 | ASK-2 구현 | 목록 테두리, 입력창 삭제, FAB, 대화창 재구성, 뒤로가기, 범위 popover, 레이블 삭제 | 목록에서 footer 제거. 단 `role=status`는 content로 옮기고, 삭제 실패·보관 상태 안내는 목록에도 표시, 작성 중 draft 유지. FAB 56px 원형 sticky(새 `PlusIcon`), 마지막 행 메뉴가 가리지 않게 여백. **대화창(사용자 설계 수정 2026-11-06):** 입력창은 대화 화면 하단 floating UI다. 입력창 안 오른쪽에 왼쪽부터 제출, 질문 범위 순으로 둔다. 질문 범위는 필터 아이콘(`FilterIcon`, 이름 `질문 범위`) 버튼이며 범위가 좁혀지면 활성 표시를 한다. popover는 `side="top"`. 답을 기다리는 동안 제출 버튼이 중단 버튼으로 바뀐다. 마지막 메시지가 floating 입력창에 가리지 않게 여백을 둔다. `FloatingSidePanel`에 `headerStart` 추가. RadioGroup 삭제, 768px 미만 전체 폭 | `fixtures/ask.ts`의 `ask()`가 composer를 먼저 열도록. `ask-panel.test.tsx` 18곳, `a11y-ask.spec.ts`. HOME-5와 `FilterIcon` 공유 | L·ASK-1, DESIGN-1 |
 
+### 4.7a ASK 추가 — 답변 마크다운(사용자 요청 2026-11-06)
+
+| Task | 항목 | 내용 | 크기·의존 |
+|---|---|---|---|
+| ASK-3 답변 렌더링 | 표, 마크다운 문법 | AI 질문 답변 본문의 표를 렌더링한다. 나머지 마크다운 문법의 지원 여부를 점검하고 미지원 항목을 디자인 시스템 스타일과 함께 구현한다 | M·없음 |
+
 ### 4.8 PLAY — 모의고사
 
 | Task | 항목 | 구현 | 크기·의존 |
@@ -174,6 +207,15 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-4 챕터별 풀기 | 홈 챕터의 `풀기` | 홈 Heatmap의 챕터마다 `풀기` 버튼을 둔다. 누르면 저장 없는 풀이로 바로 들어간다. `보기 섞기`와 `문제 순서 무작위`만 고르고 확인한 뒤 시작한다. 범위 고르기 단계와 `모의고사 목록` 버튼은 없다 | 사용자 요청(2026-11-06). 범위는 그 챕터의 확정 문제 전체. 모든 멤버 사용 가능 | M·MOCKUX-1, 2, 3 |
 | MOCKUX-5 다시 풀기 열기 | 해설 먼저 보임 | `다시 풀기` 상태의 문제는 이미 풀었더라도 열 때 이전 결과와 해설 없이 풀이 화면부터 보인다 | 사용자 요청(2026-11-06). MOCKUX-2의 "홈 버튼 이름 `풀기` 유지"는 같은 날 요청으로 `모의고사`로 바뀌어 MOCKUX-4에서 처리한다 | M·MOCKUX-3 |
 | MOCKUX-6 제출 전 질문 | `질문하기` 버튼 | 문제를 풀기 전에는 모의고사 풀이(`sequence(mock)`) header의 `질문하기`를 숨기고, 제출 뒤에만 보인다 | 사용자 요청(2026-11-06). 등록 문제 풀이에는 이미 없다. 서버의 `hint` 모드는 그대로 둔다 | S·MOCKUX-5 |
+| MOCKUX-7 이어 풀기 | 닫은 원본 풀이가 목록에 없음 | 모의고사 목록에 내 끝나지 않은 원본 풀이(챕터별 풀기 포함)를 `이어 풀기` 행으로 보인다. 누르면 그 묶음의 다음 미제출 문제로 연다. 끝낸 풀이는 사라진다 | 사용자 결정(2026-11-06). QVIEW-01 "끝나지 않은 묶음 목록은 v1에 없다"를 바꾼다. 다른 사람의 풀이는 보이지 않는다 | M·MOCKUX-2, 4 |
+| MOCKUX-8 단계 순서·문구 | 범위 먼저, 이름 기본값, 설명 묶기 | 1단계를 범위, 2단계를 옵션으로 바꾼다. 이름 기본값은 고른 챕터 이름이다. 안내 문구 3개를 지운다. `변형 유형` 옆 물음표 버튼 하나의 툴팁에 유형 설명을 모은다 | 사용자 요청(2026-11-06). MOCKUX-1의 step UI를 이어받는다 | M·MOCKUX-1 |
+| MOCKUX-9 보기 섞기 실행 시점 | 실행마다 새로 섞기 | `보기 섞기`는 모의고사를 실행할 때마다 문제를 보는 시점에 새로 섞고, 한 번의 실행 안에서는 유지한다. `보기 섞기`만 고르면 문제를 미리 만들지 않는다 | 사용자 요청(2026-11-06) | M·MOCKUX-4 |
+| MOCKUX-10 동시 생성 실패 | 문제 추출 중 모의고사 생성 안 됨 | 문제 추출과 모의고사 생성을 함께 돌릴 때 생성이 안 되는 원인을 찾아 고친다(추출 대기 때문인지, 생성 자체 문제인지) | 사용자 보고(2026-11-06) | M·없음 |
+| MOCKUX-11 풀이 화면 먼저, 챕터 풀기 삭제 | 푼 문제 열기, `해설 보기`, 챕터별 버튼 | Heatmap cell로 열면 이전에 푼 문제도 문제부터 보이고, 하단 `해설 보기`로 이전 결과와 해설을 연다. 같은 dialog에서 푼 문제로 이전/다음으로 돌아오면 해설을 먼저 보이고, 이미 본 문제로 돌아올 때 로딩 문구를 보이지 않는다. MOCKUX-4의 챕터별 `풀기` 버튼을 지운다 | 사용자 요청(2026-11-06). MOCKUX-5의 범위를 모든 푼 문제로 넓힌다 | M·MOCKUX-4, 5 |
+| MOCKUX-12 모의고사 이어 풀기 | 저장된 모의고사의 끝나지 않은 풀이 | 저장된 모의고사를 풀다가 닫으면 그 행과 상세에서 `이어 풀기`로 다음 미제출 문제부터 계속한다 | 사용자 요청(2026-11-06). MOCKUX-7은 원본 풀이만 다룬다 | M·MOCKUX-7 |
+| MOCKUX-13 닫기 확인 | 풀이 닫기 confirm | 풀이 panel을 닫을 때 확인 dialog를 보인다 | 사용자 요청(2026-11-06). QVIEW-01 "확인 없이 닫는다"를 바꾼다 | S·MOCKUX-12 |
+| MOCKUX-14 풀이 결과 표 | 결과 화면 | 문제별 발제를 지우고, 문제 번호를 가로로 펼친 표에 O/X를 표기한다. hover 때 번호와 결과 칸의 배경이 바뀌고, 누르면 그 문제로 이동한다 | 사용자 요청(2026-11-06) | M·MOCKUX-3 |
+| MOCKUX-15 제자리 다시 풀기 | 풀이의 `다시 풀기` | 새 창을 열지 않고 현재 문제를 풀기 상태로 바꾼다 | 사용자 요청(2026-11-06). QVIEW-01 "묶음 안 재풀이"를 바꾼다 | M·MOCKUX-13 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -181,6 +223,13 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 |---|---|---|---|---|
 | DOCS-1 업로드 | step 폭 고정, 숫자 정렬, 문구, 취소 버튼 | `.steps` 고정 basis, `%`는 `5ch` tabular. `.marker` `line-height: 1`, 한 단계 작게. `processingLabel`이 단계명만 반환. `structuring`→`구조 분석 중`, `chunking`→`색인 준비 중`으로 바꿔 `분석 중` 중복을 막는다. 취소는 `IconButton` + `TrashIcon` | DOC-01-AC05, `workspace-ui.ts` locator | S·없음 |
 | DOCS-2 원본 패널 | 원본 링크 → floating dialog | 현재 같은 탭 이동 지점: 가져오기 초안, 문제 상세 출처, 관련 본문 PDF, 검색 발췌, 요약 쪽 링크, 공유 화면 4곳. `SourceComparePanel`에 `initialPage`, 공용 `PdfPageDialog`. 풀이 화면은 전체 PDF 금지(QSRC-01) | QIMPORT-01·02, RELSRC-01, QVIEW-01. D-13 | M·CHAPTER-1과 순서 조정 |
+
+### 4.9a DOCS 추가 — PDF 미리보기와 헤더(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 크기·의존 |
+|---|---|---|---|
+| DOCS-3 출처 미리보기 | 문제·해설 패널의 PDF 출처 | 출처를 누르면 floating dialog에 해당 부분과 주변 페이지의 PDF 미리보기를 보인다 | M·DOCS-2 |
+| DOCS-4 PDF 헤더 | 간격, 배경, 유리, 다시 보기 | PDF 헤더의 간격과 배경색을 정리하고 glassmorphism을 적용한다. 숨겨진 헤더를 탭과 hover로 다시 볼 수 있게 한다 | M·DESIGN-5 |
 
 ### 4.10 CHAPTER — 챕터
 
@@ -245,6 +294,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 ∥ MOCKUX-12 ∥ MOCKUX-13 ∥ MOCKUX-14 ∥ MOCKUX-15 ∥ DESIGN-7 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -340,3 +390,23 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-4 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 홈 버튼 모의고사 포함, shuffle_options는 range jsonb, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-5 | 9 | 완료 | Codex P2(재열기 캐시) 수정 후 재리뷰 통과, 경로별 표는 보고서, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| MOCKUX-7 | 10 | 완료 | Codex 지적 없음, 지우기는 resume_dismissed_at 컬럼(migration 20261106180000), lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
+| MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| DESIGN-5 | 10 | 완료 | Codex P2 수정, 블러 원인(Lightning CSS의 -webkit 순서) 수정, PDF 위 블러 허용, Heatmap 1.3은 기존값이라 변화 없음(DESIGN-6에서 처리), lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| MOCKUX-9 | 10 | 완료 | 실행마다 섞기, 보기 섞기만이면 작업 없이 준비됨(문제 행은 저장), migration 20261106190000, Codex P2(CI phase)는 merge에서 반영, 통합·E2E는 PR CI에서 확인 |
+| MOCKUX-10 | 10 | 완료 | 원인은 추출과 같은 큐(코드·재현으로 입증, production 수치는 미확인), quiz.ondemand 큐와 대기 중 표시, Codex 지적 없음, lint·typecheck·unit GREEN |
+| HOME-7 | 10 | 완료 | 문서 관리 행 수로 변경, UX6-UPLOAD 결정 대체, Codex P2(CI phase)는 merge에서 반영 |
+| CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
+| CHAPTER-8 | 10 | 완료 | Workspace 챕터(migration 20261106210000), dropdown 새 챕터, 잠금 순서 통일, Codex 재리뷰 통과, 통합·E2E는 PR CI에서 확인 |
+| MOCKUX-11 | 10 | 완료 | 푼 문제도 문제부터, 해설 보기, 같은 dialog 복귀는 해설 먼저, 스켈레톤, 챕터 풀기 삭제. Codex P2 2건 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
+| VIEW-8 | 10 | 완료 | 줄 중간 항목 분리와 추출 줄 보존, 실제 PDF 표시 변경 6건·오분리 0, 기존 8건은 다시 추출 필요, Codex P2 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
+| MOCKUX-12 | 10 | 완료 | 이어 풀기 n/m을 주 버튼으로, 이어 풀기 지우기, Codex P2 수정 후 재리뷰 통과, 첫 머지는 리뷰를 읽기 전에 함, 통합·E2E는 PR CI에서 확인 |
+| MOCKUX-13 | 10 | 완료 | 닫기·Escape·바깥·스와이프 확인, Codex P3 수정 후 재리뷰 통과, E2E는 PR CI에서 확인 |
+| MOCKUX-14 | 10 | 완료 | 번호·O/X 표, 열 전체가 버튼, Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| MOCKUX-15 | 10 | 완료 | 제자리 다시 풀기, 미제출로 되돌림(사용자 결정), migration 20261106230000, Codex P2 수정 후 재리뷰 통과, 통합·E2E는 PR CI에서 확인 |
+| DESIGN-7 | 10 | 완료 | 흰 버튼 유지(raised), 해설 회색 유지, 돌아가기 ghost, Codex 지적 없음, 토큰 대비 AA, E2E는 PR CI에서 확인 |
+| DESIGN-6 | 10 | 완료 | 마커 실제 21px·18px였던 것을 28px로, hover 1.5배, 간격 0→7px, Codex P2(기존 테스트 값) 수정, Chromium Storybook 측정, E2E는 PR CI에서 확인 |
+| DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
+| DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
+| ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |

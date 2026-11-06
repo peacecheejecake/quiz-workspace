@@ -238,6 +238,12 @@ export function homeRunClient(
       sessionSources.get(sessionId) === 'mock'
         ? mock.selfGrade(sessionId, grade)
         : bank.selfGrade(sessionId, grade),
+    reopenPosition: (runId, position) => bank.reopenPosition(runId, position),
+    async openRetrySession(runId, position, key, epoch) {
+      const result = await bank.openRetrySession(runId, position, key, epoch);
+      if (result.ok) sessionSources.set(result.data.id, await sourceOf(runId));
+      return result;
+    },
   };
 }
 

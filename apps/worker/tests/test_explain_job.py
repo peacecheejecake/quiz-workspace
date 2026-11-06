@@ -86,7 +86,7 @@ class FakeStore:
             version=1,
             job_id=JOB,
             created_by=USER,
-            prompt_version="question.ai_explain/v2",
+            prompt_version="question.ai_explain/v3",
             model="fake-ai-explanation",
             sources=[PinnedPassage(1, DOC, REV, None, self.blocks, 2, 2, {"tag": 1})],
         )

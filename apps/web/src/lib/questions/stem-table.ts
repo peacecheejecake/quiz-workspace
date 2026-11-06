@@ -15,7 +15,7 @@ export type StemSegment =
   | { readonly kind: 'table'; readonly text: string; readonly table: PipeTable };
 
 /** Raw cells of a `| a | b |` row (`\|` stays inside its cell), null for any other line. */
-function pipeCells(line: string): string[] | null {
+export function pipeCells(line: string): string[] | null {
   const row = line.trim();
   if (row.length < 2 || !row.startsWith('|')) return null;
   const cells: string[] = [];

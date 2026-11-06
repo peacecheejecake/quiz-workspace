@@ -1,6 +1,7 @@
 // A stand-in for `openQuestionPractice` in viewer tests, deciding like `POST .../practice-open`
 // (tests/integration/questions/test_practice_open.py pins the real decision): `latest` is what the
-// server would find, `open` a new session, whose calls the tests count.
+// server would find, `open` a new session, whose calls the tests count. An opening carries a
+// result only while it waits for self-grading; `해설 보기` goes through `fakePracticeReveal`.
 import type { PracticeSession } from '../src/lib/questions/practice-actions';
 import type { PracticeOpenRequest } from '../src/lib/questions/practice-open-client';
 
@@ -11,8 +12,6 @@ interface Latest {
   readonly latest_attempt_id?: string | null;
   readonly submitted_answer?: unknown;
   readonly session?: { readonly outcome?: { readonly result?: string } } | null;
-  /** UX12-RETRYOPEN: marked 다시 풀기, so a graded result stays out of the opening. */
-  readonly needs_retry?: boolean;
 }
 
 type Outcome<T> = { readonly ok: true; readonly data: T } | { readonly ok: false };
@@ -39,9 +38,7 @@ export function fakePracticeOpen(deps: {
       result: null,
       reused: false,
     };
-    const outcome = found.data.session?.outcome;
-    const showsResult =
-      !!outcome && !(found.data.needs_retry === true && outcome.result !== 'pending');
+    const pending = found.data.session?.outcome?.result === 'pending';
     const cached = request.cached ? known.get(request.cached.sessionId) : undefined;
     if (
       cached &&
@@ -49,11 +46,11 @@ export function fakePracticeOpen(deps: {
       request.cached?.baselineAttemptId === attempt &&
       (found.data.active_revision_id ?? cached.session.question_revision_id) ===
         cached.session.question_revision_id &&
-      (!showsResult || request.cached?.anotherTry)
+      !pending
     ) {
       return { ok: true, data: { ...metadata, session: cached.session, reused: true } };
     }
-    if (!request.forceNew && showsResult) {
+    if (pending) {
       return {
         ok: true,
         data: {
@@ -68,5 +65,23 @@ export function fakePracticeOpen(deps: {
     if (!opened.ok) return opened;
     known.set(opened.data.id, { session: opened.data, epoch });
     return { ok: true, data: { ...metadata, session: opened.data } };
+  };
+}
+
+/** `revealQuestionPractice` over the same `latest`: the submission, or the 404 of none. */
+export function fakePracticeReveal(deps: { readonly latest?: () => Promise<unknown> }) {
+  return async (): Promise<unknown> => {
+    const found = ((await deps.latest?.()) ?? { ok: true, data: {} }) as Outcome<Latest>;
+    if (!found.ok) return found;
+    const result = found.data.session;
+    if (!result?.outcome) return { ok: false, kind: 'notFound', message: '없음' };
+    return {
+      ok: true,
+      data: {
+        reset_epoch: found.data.reset_epoch ?? 0,
+        result,
+        submitted_answer: found.data.submitted_answer,
+      },
+    };
   };
 }

@@ -28,6 +28,7 @@ _TAG = re.compile(r"S\d{1,3}")
 _NO_ANSWER = re.compile(re.escape(NO_ANSWER_MARK))
 _SPACE_BEFORE_PUNCT = re.compile(r"[ \t]+([.,;:!?。])")
 _DOUBLE_SPACE = re.compile(r"[ \t]{2,}")
+_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,15 +61,38 @@ def validate_citations(raw: str, known_tags: Collection[str]) -> CitationResult:
         return "".join(dict.fromkeys(out))
 
     text = _GROUP.sub(replace, text)
-    text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
-    text = "\n".join(_DOUBLE_SPACE.sub(" ", line).rstrip() for line in text.splitlines()).strip()
     return CitationResult(
-        text=text,
+        text=_tidy_spaces(text),
         cited_tags=tuple(order),
         dropped=dropped,
         no_answer=no_answer,
         uncited=bool(known) and not order and not no_answer,
     )
+
+
+def _tidy_line(line: str) -> str:
+    """Spaces a dropped tag left behind; a Markdown indent and hard break stay (UX12-ASKMD)."""
+    body = line.lstrip(" \t")
+    indent = line[: len(line) - len(body)]
+    tidy = _DOUBLE_SPACE.sub(" ", _SPACE_BEFORE_PUNCT.sub(r"\1", body)).rstrip()
+    return f"{indent}{tidy}{'  ' if tidy and line.endswith('  ') else ''}"
+
+
+def _tidy_spaces(text: str) -> str:
+    lines: list[str] = []
+    fence: str | None = None
+    for line in text.splitlines():
+        marker = _FENCE.match(line)
+        if fence is not None:
+            lines.append(line)
+            if marker and marker.group(1).startswith(fence) and not line[marker.end() :].strip():
+                fence = None
+        elif marker:
+            fence = marker.group(1)
+            lines.append(line)
+        else:
+            lines.append(_tidy_line(line))
+    return "\n".join(lines).strip()
 
 
 def display_tags(text: str) -> str:

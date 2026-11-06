@@ -22,7 +22,13 @@ from quiz_worker.ask_store import (
     PinnedSource,
     Usage,
 )
-from quiz_worker.celery_app import INTERACTIVE_QUEUE, build_celery_config, queue_for, task_name
+from quiz_worker.celery_app import (
+    INTERACTIVE_QUEUE,
+    ONDEMAND_QUEUE,
+    build_celery_config,
+    queue_for,
+    task_name,
+)
 from quiz_worker.runner import JobContext
 from quiz_worker.settings import WorkerSettings
 from quiz_worker.store import InMemoryJobStore
@@ -287,10 +293,12 @@ def test_interactive_queue_routing_and_process() -> None:
         task_name("ask.answer"): {"queue": INTERACTIVE_QUEUE},
         # EXPL-B: AI explanations share the interactive queue.
         task_name("question.ai_explain"): {"queue": INTERACTIVE_QUEUE},
+        # MOCK-01-C11: mock exams run wherever a slot is free.
+        task_name("mock_exam.generate"): {"queue": ONDEMAND_QUEUE},
     }
     assert "ask-purge" in config["beat_schedule"]
-    argv = serve.build_worker_argv(2, "info", beat=False, queue=INTERACTIVE_QUEUE)
-    assert "--queues=interactive" in argv
+    argv = serve.build_worker_argv(2, "info", beat=False, interactive=True)
+    assert "--queues=interactive,quiz.ondemand" in argv
     assert "--beat" not in argv
 
 

@@ -350,10 +350,10 @@ class ExplanationRepository:
         return _row(kind, row) if row is not None else None
 
     def _key_filter(self, model: str | None) -> str:
-        return "prompt_version = :pv" + (" and model = :m" if model is not None else "")
+        return "prompt_version = any(:pv)" + (" and model = :m" if model is not None else "")
 
     def newest(
-        self, kind: str, revision_id: uuid.UUID, prompt_version: str, model: str | None
+        self, kind: str, revision_id: uuid.UUID, prompt_versions: Sequence[str], model: str | None
     ) -> ExplanationRow | None:
         """The newest row of the key that is not superseded (any status)."""
         table = TABLES[kind]
@@ -364,31 +364,36 @@ class ExplanationRepository:
                 f"{self._key_filter(model)} and superseded_at is null "
                 "order by created_at desc, id desc limit 1"
             ),
-            {"r": revision_id, "pv": prompt_version, "m": model},
+            {"r": revision_id, "pv": list(prompt_versions), "m": model},
         ).one_or_none()
         return _row(kind, row) if row is not None else None
 
     def live(
-        self, kind: str, revision_id: uuid.UUID, prompt_version: str, model: str | None
+        self, kind: str, revision_id: uuid.UUID, prompt_versions: Sequence[str], model: str | None
     ) -> ExplanationRow | None:
         return self._one(
-            kind, revision_id, prompt_version, model, "status in ('queued', 'running')"
+            kind, revision_id, prompt_versions, model, "status in ('queued', 'running')"
         )
 
     def current(
-        self, kind: str, revision_id: uuid.UUID, prompt_version: str, model: str | None
+        self, kind: str, revision_id: uuid.UUID, prompt_versions: Sequence[str], model: str | None
     ) -> ExplanationRow | None:
         """The key's current success (not superseded)."""
         return self._one(
             kind,
             revision_id,
-            prompt_version,
+            prompt_versions,
             model,
             "status = 'succeeded' and superseded_at is null",
         )
 
     def _one(
-        self, kind: str, revision_id: uuid.UUID, prompt_version: str, model: str | None, where: str
+        self,
+        kind: str,
+        revision_id: uuid.UUID,
+        prompt_versions: Sequence[str],
+        model: str | None,
+        where: str,
     ) -> ExplanationRow | None:
         table = TABLES[kind]
         row = self._session.execute(
@@ -398,7 +403,7 @@ class ExplanationRepository:
                 f"{self._key_filter(model)} and {where} "
                 "order by created_at desc, id desc limit 1"
             ),
-            {"r": revision_id, "pv": prompt_version, "m": model},
+            {"r": revision_id, "pv": list(prompt_versions), "m": model},
         ).one_or_none()
         return _row(kind, row) if row is not None else None
 

@@ -2,8 +2,9 @@
 
 The API creates mock exams, their revision history, queued generations with their pinned plan
 and `mock_exam.generate` job, question edits (new revisions) and removals; the worker fills
-generations. Routes commit once. Job idempotency: `mock_exam_generation:<generation id>:1`.
-Activities `mock_exam.*` carry ids and counts only.
+generations. A generation of 보기 섞기 only has no job: `store_shuffle_copies` finishes it in the
+request (UX12-MOCKSHUFFLE-C01). Routes commit once. Job idempotency:
+`mock_exam_generation:<generation id>:1`. Activities `mock_exam.*` carry ids and counts only.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from book_core.generation import stored_source_evidence
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -119,6 +121,60 @@ _QUESTIONS = """
         on r.id = q.active_revision_id and r.mock_exam_question_id = q.id
       left join public.questions s
         on s.id = q.source_question_id and s.workspace_id = q.workspace_id
+"""
+
+
+@dataclass(frozen=True)
+class UnfinishedMockRun:
+    """The run a mock exam's `이어 풀기` opens (UX12-MOCKRESUME)."""
+
+    id: uuid.UUID
+    total: int
+    answered: int
+    next_position: int
+
+
+# One statement however many mock exams are listed, one row per mock exam: its runs walked newest
+# first until one has a position left, so runs of one mock exam never crowd out another's. A
+# position is answerable while its question is still in the mock exam and it has no submission;
+# mock exam practice has no reset epochs. The sorted subquery lets the LIMIT stop at that run.
+_UNFINISHED_RUNS = """
+    select e.id as mock_exam_id, r.id, r.total, r.answered, r.next_position
+      from public.mock_exams e
+     cross join lateral (
+       select c.id, cardinality(c.item_ids) as total, p.answered, p.next_position
+         from (
+           select pr.id, pr.item_ids,
+                  coalesce(
+                    (select max(greatest(s.opened_at, s.submitted_at, s.graded_at))
+                       from public.mock_exam_practice_sessions s
+                      where s.practice_run_id = pr.id),
+                    pr.created_at
+                  ) as last_touched_at
+             from public.practice_runs pr
+            where pr.user_id = :u and pr.workspace_id = e.workspace_id and pr.source = 'mock'
+              and pr.mock_exam_id = e.id
+              and pr.mock_exam_generation_id = e.current_generation_id
+              and pr.finished_at is null and pr.resume_dismissed_at is null
+            order by last_touched_at desc, pr.id desc
+         ) c
+        cross join lateral (
+          select count(*) filter (where q.id is not null and s.state <> 'open') as answered,
+                 min(i.position) filter (where q.id is not null
+                                           and (s.id is null or s.state = 'open')) as next_position
+            from unnest(c.item_ids) with ordinality as i(question_id, position)
+            left join public.mock_exam_questions q
+              on q.id = i.question_id and q.workspace_id = e.workspace_id
+             and q.removed_at is null
+            left join public.mock_exam_practice_sessions s
+              on s.practice_run_id = c.id and s.run_position = i.position
+             and s.superseded_at is null
+        ) p
+        where p.next_position is not null
+        order by c.last_touched_at desc, c.id desc
+        limit 1
+     ) r
+     where e.id = any(:ids) and e.workspace_id = :w and e.deleted_at is null
 """
 
 
@@ -263,6 +319,24 @@ class MockExamRepository:
             {"e": exam_id},
         ).one_or_none()
         return _generation(row) if row is not None else None
+
+    def unfinished_runs(
+        self, user_id: uuid.UUID, workspace_id: uuid.UUID, exam_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, UnfinishedMockRun]:
+        """mock exam id -> the caller's most recently touched run of its current generation
+        that still has a position to answer."""
+        if not exam_ids:
+            return {}
+        rows = self._session.execute(
+            text(_UNFINISHED_RUNS),
+            {"u": user_id, "w": workspace_id, "ids": list(exam_ids)},
+        )
+        return {
+            r.mock_exam_id: UnfinishedMockRun(
+                r.id, int(r.total), int(r.answered), int(r.next_position)
+            )
+            for r in rows
+        }
 
     def question_counts(self, generation_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, int]:
         ids = list(set(generation_ids))
@@ -453,8 +527,9 @@ class MockExamRepository:
         range_: dict[str, Any],
         plan: list[dict[str, Any]],
         seed: int,
+        with_job: bool = True,
     ) -> uuid.UUID:
-        """The queued generation (pinned plan) + its job + activity."""
+        """The queued generation (pinned plan) + its job (`with_job`) + activity."""
         version = (
             int(
                 self._session.execute(
@@ -468,21 +543,23 @@ class MockExamRepository:
             + 1
         )
         generation_id = uuid.uuid4()
-        job_id: uuid.UUID = self._session.execute(
-            text(
-                "insert into public.async_jobs (workspace_id, created_by, job_type, "
-                "schema_version, idempotency_key, payload) values (:w, :a, :t, :v, :k, "
-                "cast(:p as jsonb)) returning id"
-            ),
-            {
-                "w": exam.workspace_id,
-                "a": actor_id,
-                "t": JOB_TYPE,
-                "v": JOB_SCHEMA_VERSION,
-                "k": job_key(generation_id),
-                "p": _json({"generation_id": str(generation_id)}),
-            },
-        ).scalar_one()
+        job_id: uuid.UUID | None = None
+        if with_job:
+            job_id = self._session.execute(
+                text(
+                    "insert into public.async_jobs (workspace_id, created_by, job_type, "
+                    "schema_version, idempotency_key, payload) values (:w, :a, :t, :v, :k, "
+                    "cast(:p as jsonb)) returning id"
+                ),
+                {
+                    "w": exam.workspace_id,
+                    "a": actor_id,
+                    "t": JOB_TYPE,
+                    "v": JOB_SCHEMA_VERSION,
+                    "k": job_key(generation_id),
+                    "p": _json({"generation_id": str(generation_id)}),
+                },
+            ).scalar_one()
         self._session.execute(
             text(
                 "insert into public.mock_exam_generations (id, workspace_id, mock_exam_id, "
@@ -512,6 +589,43 @@ class MockExamRepository:
             {"generation_id": str(generation_id), "version": version, "question_count": len(plan)},
         )
         return generation_id
+
+    def source_evidence(
+        self, workspace_id: uuid.UUID, question_ids: Sequence[uuid.UUID]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """question id -> its stored sources as a copy's evidence (the worker's value)."""
+        rows = self._session.execute(
+            text(
+                "select question_id, document_id, document_revision_id, page_start, page_end, "
+                "block_ids, locations from public.question_sources "
+                "where workspace_id = :w and question_id = any(:ids) and document_id is not null "
+                "order by created_at, id"
+            ),
+            {"w": workspace_id, "ids": list(question_ids)},
+        )
+        out: dict[str, list[dict[str, Any]]] = {}
+        for r in rows:
+            evidence = stored_source_evidence(
+                document_id=str(r.document_id),
+                revision_id=str(r.document_revision_id) if r.document_revision_id else None,
+                page_start=r.page_start,
+                page_end=r.page_end,
+                block_ids=tuple(r.block_ids or ()),
+                locations=list(r.locations or []),
+            )
+            if evidence is not None:
+                out.setdefault(str(r.question_id), []).append(evidence.model_dump(mode="json"))
+        return out
+
+    def store_shuffle_copies(
+        self, generation_id: uuid.UUID, evidence: dict[str, list[dict[str, Any]]]
+    ) -> None:
+        """Copies a job-less generation's pinned revisions and shows it (one definer function:
+        this role cannot write those rows itself)."""
+        self._session.execute(
+            text("select public.mock_exam_store_shuffle_copies(:g, cast(:e as jsonb))"),
+            {"g": generation_id, "e": _json(evidence)},
+        )
 
     def delete_exam(self, exam: ExamRecord, actor_id: uuid.UUID) -> None:
         """Soft delete; a queued/running generation is cancelled (its job too)."""

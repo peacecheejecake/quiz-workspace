@@ -16,6 +16,8 @@ select tables_are(
         'idempotency_keys',
         -- M3.2a document domain
         'documents', 'document_revisions', 'chapters', 'content_blocks', 'document_uploads',
+        -- UX12 workspace chapters
+        'workspace_chapter_trees',
         -- S1a share links
         'workspace_share_links',
         -- S3a forks

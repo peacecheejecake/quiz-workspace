@@ -7,6 +7,7 @@
 // There is no answer input, favourite, retry or edit control, and opening a question records
 // nothing (the shared API has no write route at all).
 import { Button, NO_QUESTION_NUMBER, type FloatingSidePanelProps, type PanelSteps } from '@quiz/ui';
+import { QuestionListSkeleton } from '@/components/questions/question-skeleton';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SharedAiExplanation } from '@/components/questions/ai-explanation/shared-ai-explanation';
@@ -100,11 +101,7 @@ export function SharedQuestions({
       <h2 id="shared-questions-title" className={styles.cardTitle}>
         문제
       </h2>
-      {list.status === 'loading' ? (
-        <p className={styles.note} role="status">
-          문제를 불러오는 중입니다…
-        </p>
-      ) : null}
+      {list.status === 'loading' ? <QuestionListSkeleton /> : null}
       {list.status === 'error' ? (
         <div className={styles.alert} role="alert">
           <p>{list.message}</p>

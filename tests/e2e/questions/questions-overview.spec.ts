@@ -40,6 +40,7 @@ import {
   overviewItem,
   outlineNodeId,
   overviewPath,
+  openStatusFilters,
   overviewUi,
   panelUi,
   PROBLEM_TYPES,
@@ -71,7 +72,7 @@ import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const HOVER_SCALE = 1.3;
+const HOVER_SCALE = 1.5;
 const BOOK = book('book-ko');
 const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
@@ -559,7 +560,7 @@ test(
     await expect(homeUi.questionSearchButton(page)).toBeVisible();
     await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
-    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*1$/); // the book; not the paper
+    await expect(homeUi.documentsButton(page)).toHaveText(/문서\s*2$/); // the book and the paper
     await homeUi.openMenu(page);
     await expect(homeUi.contentSearchLink(page)).toHaveAttribute('href', `${home}/search`);
     await page.keyboard.press('Escape');
@@ -655,8 +656,7 @@ test(
     ).toHaveCount(0);
     await expect(main(page).getByRole('list', { name: /상태 범례|legend/i })).toHaveCount(0);
 
-    const filters = homeUi.statusFilters(page);
-    await expect(filters).toBeVisible();
+    const filters = await openStatusFilters(page);
     for (const label of ['미열람', '열람', '오답', '정답', '다시 풀기']) {
       await expect(filters.getByRole('button', { name: label, exact: true })).toHaveAttribute(
         'aria-pressed',
@@ -1174,26 +1174,32 @@ test(
 
     // A filter chosen while a dialog is open survives its close, by Back (UX7 확인 7) or by its
     // close button; neither Back nor Forward reopens the dialog.
-    const unseen = (url: URL) => noPanel(url) && url.searchParams.get('status') === 'unseen';
+    const SEARCHED = 'qov01-ac14';
+    const searched = (url: URL) => noPanel(url) && url.searchParams.get('q') === SEARCHED;
     /**
-     * Opens 문서 관리 and picks the 미열람 filter while it is open. UX9 (HOMEDLG-01): the dialog is
-     * modal, so the user cannot reach the filter behind it; the filter's own buttons are driven
-     * through the DOM to keep the rule covered for any address change made while a dialog is open.
+     * Opens 문서 관리 and searches while it is open. UX9 (HOMEDLG-01): the dialog is modal, so the
+     * user cannot reach the search behind it, and the chips are only in the 필터 popover it would
+     * close (UX12-HOMEFILTER); the search box is driven through the DOM to keep the rule covered
+     * for any address change made while a dialog is open.
      */
     async function openDocumentsAndFilter(): Promise<void> {
       await arrive();
       await homeUi.openDocuments(page);
       await expect(documents).toBeVisible();
-      const filters = main(page).getByRole('group', {
-        name: /^(상태 필터|status filter)$/i,
-        includeHidden: true,
-      });
-      for (const label of ['열람', '오답', '정답', '다시 풀기']) {
-        await filters
-          .getByRole('button', { name: label, exact: true, includeHidden: true })
-          .dispatchEvent('click');
-      }
-      await expect(page).toHaveURL(/[?&]status=unseen(&|$)/);
+      await main(page)
+        .getByRole('search', { name: /^(문제 검색|question search)$/i, includeHidden: true })
+        .evaluate((form, value) => {
+          const input = form.querySelector('input[type="search"]');
+          if (!(input instanceof HTMLInputElement)) throw new Error('no search box');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+            input,
+            value,
+          );
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }, SEARCHED);
+      await expect(page).toHaveURL(
+        (url) => panels(url) === 'documents' && url.searchParams.get('q') === SEARCHED,
+      );
       await expect(documents).toBeVisible();
     }
     // The close shows the filtered home over the entry before the open: Next reads it, and
@@ -1203,16 +1209,16 @@ test(
         (r) =>
           r.url().includes('_rsc=') &&
           noPanel(new URL(r.url())) &&
-          new URL(r.url()).searchParams.get('status') === 'unseen',
+          new URL(r.url()).searchParams.get('q') === SEARCHED,
       );
     await openDocumentsAndFilter();
     let read = closedRead();
     await back();
-    await expect(page).toHaveURL(unseen);
+    await expect(page).toHaveURL(searched);
     await expect(documents).toBeHidden();
     await read;
     await forward();
-    await expect(page).toHaveURL(unseen);
+    await expect(page).toHaveURL(searched);
     await expect(documents).toBeHidden();
     await backLeavesHome();
     await forwardStaysClosed(documents);
@@ -1220,7 +1226,7 @@ test(
     read = closedRead();
     await documents.getByRole('button', { name: closeDocuments }).click();
     await expect(documents).toBeHidden();
-    await expect(page).toHaveURL(unseen);
+    await expect(page).toHaveURL(searched);
     await read;
     await expect(overviewUi.dots(page)).toHaveCount(2);
     await backLeavesHome();

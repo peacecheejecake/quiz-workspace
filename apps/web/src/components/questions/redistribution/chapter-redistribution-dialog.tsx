@@ -24,6 +24,7 @@ import {
   Skeleton,
   useUnsavedChanges,
 } from '@quiz/ui';
+import { QuestionListSkeleton } from '@/components/questions/question-skeleton';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 import {
@@ -379,11 +380,7 @@ function RedistributionContent({
 
       {step === 'list' ? (
         list.status === 'loading' ? (
-          <div className={styles.loading}>
-            <p className={styles.muted}>문제를 불러오는 중입니다.</p>
-            <Skeleton height={40} />
-            <Skeleton height={40} />
-          </div>
+          <QuestionListSkeleton />
         ) : list.status === 'error' ? (
           <div role="alert" className={styles.failure}>
             <p>{REDIST_FAILURE_MESSAGES[list.kind]}</p>

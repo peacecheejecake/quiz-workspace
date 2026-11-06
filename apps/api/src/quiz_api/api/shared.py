@@ -346,7 +346,12 @@ def _shared_document(
 
 
 def _question_out(q: QuestionRecord, published: set[uuid.UUID]) -> SharedQuestion:
-    chapter = q.chapter if q.chapter and q.chapter.document_id in published else None
+    # A Workspace chapter has no document to be unpublished: it is only the question's label.
+    chapter = (
+        q.chapter
+        if q.chapter and (q.chapter.document_id is None or q.chapter.document_id in published)
+        else None
+    )
     return SharedQuestion(
         id=q.id,
         question_type=q.question_type,

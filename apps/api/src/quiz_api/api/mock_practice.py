@@ -7,7 +7,7 @@ docs/screens/question-viewer.md QVIEW-01-C03/C04, docs/questions.md §11).
     POST /mock-practice-sessions/{id}/self-grade       the session's owner; pending only
 
 The same flow as bank practice (quiz_api.api.practice) on a mock exam question: opening pins the
-question's active revision and a CSPRNG-seeded displayed option order; the open shape has no
+question's active revision and its displayed option order; the open shape has no
 answer, explanation, rubric or accepted-answer field at all (MockPracticeSession, an allowlist);
 submit grades on the server by stable option ids (`grade_submission`, `practice_grading`) and is
 the only response that reveals the answers; a session is submitted once; an ungradable answer is
@@ -31,6 +31,11 @@ Authorization: practising is the caller's own write (`Action.PRACTICE`, every ro
 workspace answers 403 `workspace-archived`). Unknown, taken-out and foreign questions, questions
 the mock exam no longer lists, and sessions that are unknown or another user's all answer the
 same 404. Share-session guests have no user JWT (401).
+
+Option order (UX12-MOCKSHUFFLE-C03, C04): a 보기 섞기 question always shuffles: under the run's
+seed at a run position (`run_option_seed`, the order `GET /practice-runs/{id}/items` showed),
+under a new CSPRNG seed outside a run. Other questions keep their stored order unless the request
+sets `shuffle_options`.
 """
 
 from __future__ import annotations
@@ -61,7 +66,12 @@ from quiz_api.authz.permissions import policy_for
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
-from quiz_api.practice_grading import AttemptResult, new_shuffle_seed, shuffled_option_ids
+from quiz_api.practice_grading import (
+    AttemptResult,
+    new_shuffle_seed,
+    run_option_seed,
+    shuffled_option_ids,
+)
 from quiz_api.question_rules import QuestionType
 from quiz_api.repositories.idempotency import IdempotencyStore
 from quiz_api.repositories.mock_practice import MockPracticeRepository, MockSessionRecord
@@ -239,7 +249,7 @@ def start_mock_practice_session(
     body: PracticeSessionCreate | None = None,
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
-    """Open a mock exam question: pins its active revision and optionally shuffles MCQ options.
+    """Open a mock exam question: pins its active revision and its MCQ option order.
     No answers in the response, nothing recorded outside the mock exam tables. With a run
     position the caller's mock run must hold this question; an open session is resumed, and a
     submitted one is 409 `already-submitted`."""
@@ -256,6 +266,7 @@ def start_mock_practice_session(
     if target is None or target.removed or target.workspace_id != access.workspace_id:
         raise _not_found()
     run_id, position = body.practice_run_id, body.run_position
+    run_seed: int | None = None
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace_id)
         if run is None:
@@ -284,6 +295,9 @@ def start_mock_practice_session(
                 )
             repo.commit()
             return resumed
+        # A reopened position draws a new order below (UX12-RETRYINPLACE).
+        if target.shuffles_options and not repo.run_position_reopened(run.id, position):
+            run_seed = run_option_seed(run.seed, position)
     elif not target.shown:
         # Outside a run only what the mock exam lists now can be practised.
         raise _not_found()
@@ -292,8 +306,11 @@ def start_mock_practice_session(
     displayed: list[str] = []
     if target.question_type == "MCQ":
         displayed = [o["id"] for o in target.revision.options]
-        if body.shuffle_options:
+        if run_seed is not None:
+            seed = run_seed
+        elif body.shuffle_options or target.shuffles_options:
             seed = new_shuffle_seed()
+        if seed is not None:
             displayed = shuffled_option_ids(displayed, seed)
     opened = repo.open_session(
         target,

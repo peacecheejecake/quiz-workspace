@@ -18,13 +18,20 @@ A generation pins its plan at request time: the range resolved to the workspace'
 CONFIRMED questions (`quiz_api.mock_exam_ranges`, the QVIEW-B resolver), `min(문항 수, range)`
 sources picked by the seed and their variation types (`book_core.mock_exam.make_plan`).
 
+보기 섞기 only (UX12-MOCKSHUFFLE-C01): no job and no LLM. The request copies the pinned revisions
+in their source option order and answers `ready`; options are ordered per run
+(`quiz_api.api.practice_runs`). AI generations copy their 보기 섞기 items the same way in the job.
+
 Limits (MOCK-01-C06): 문항 수 1..100 with an AI variation type, 1..min(range, 5,000) (or null =
 the whole range) with 보기 섞기 only (422); AI types need WORKER_MOCK_EXAMS and an LLM (409
 `mock-llm-disabled`); one queued/running generation per mock exam (409
-`mock-generation-running`); at most MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE in the workspace (409
-`generation-busy`); MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE starts per user (429 +
+`mock-generation-running`); at most MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE with a job in the
+workspace (409 `generation-busy`); MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE starts per user (429 +
 Retry-After). A retry with the same `Idempotency-Key` returns the first response before any
 limit is checked.
+
+`unfinished_run` is the caller's own (UX12-MOCKRESUME): the one run of the current generation
+that `이어 풀기` opens, as counts only, read in one statement for a whole list.
 
 Viewers never get answers or explanations (MOCK-01-C05); responses carry no prompt or LLM output,
 activities ids and counts only (MOCK-01-C07).
@@ -90,6 +97,7 @@ from quiz_api.repositories.mock_exams import (
     GenerationRecord,
     MockExamRepository,
     QuestionRecord,
+    UnfinishedMockRun,
 )
 from quiz_api.repositories.question_imports import QuestionImportRepository
 from quiz_api.repositories.question_overview import QuestionOverviewRepository
@@ -187,6 +195,15 @@ class MockExamGeneration(BaseModel):
     finished_at: datetime | None
 
 
+class MockExamUnfinishedRun(BaseModel):
+    """The caller's run to resume: counts and a position, never question content."""
+
+    id: uuid.UUID
+    total: int = Field(description="Positions 1..total.")
+    answered: int = Field(description="Positions submitted.")
+    next_position: int = Field(description="The first position still answerable.")
+
+
 class MockExam(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -202,6 +219,9 @@ class MockExam(BaseModel):
     latest_generation: MockExamGeneration | None
     created_at: datetime
     updated_at: datetime
+    unfinished_run: MockExamUnfinishedRun | None = Field(
+        default=None, description="The caller's run of the shown generation to resume."
+    )
 
 
 class MockExamList(BaseModel):
@@ -425,8 +445,19 @@ def _exam_status(latest: MockExamGeneration | None) -> ExamStatus:
     return "failed"
 
 
-def exams_out(repo: MockExamRepository, exams: list[ExamRecord]) -> list[MockExam]:
+def _unfinished_out(run: UnfinishedMockRun | None) -> MockExamUnfinishedRun | None:
+    if run is None:
+        return None
+    return MockExamUnfinishedRun(
+        id=run.id, total=run.total, answered=run.answered, next_position=run.next_position
+    )
+
+
+def exams_out(
+    repo: MockExamRepository, exams: list[ExamRecord], viewer: WorkspaceAccess
+) -> list[MockExam]:
     generations = repo.generations([e.id for e in exams])
+    unfinished = repo.unfinished_runs(viewer.user_id, viewer.workspace_id, [e.id for e in exams])
     latest: dict[uuid.UUID, GenerationRecord] = {}
     for g in generations.values():
         if g.mock_exam_id not in latest or g.version > latest[g.mock_exam_id].version:
@@ -453,13 +484,14 @@ def exams_out(repo: MockExamRepository, exams: list[ExamRecord]) -> list[MockExa
                 latest_generation=newest_out,
                 created_at=exam.created_at,
                 updated_at=exam.updated_at,
+                unfinished_run=_unfinished_out(unfinished.get(exam.id)),
             )
         )
     return out
 
 
-def exam_out(repo: MockExamRepository, exam: ExamRecord) -> MockExam:
-    return exams_out(repo, [exam])[0]
+def exam_out(repo: MockExamRepository, exam: ExamRecord, viewer: WorkspaceAccess) -> MockExam:
+    return exams_out(repo, [exam], viewer)[0]
 
 
 def source_labels(
@@ -579,11 +611,12 @@ def _start(
     new_config: bool,
     saved_range: bool = False,
 ) -> uuid.UUID:
-    """Resolve, plan, enforce the start limits and queue the generation (no commit). A count
-    over the range is refused when the settings are new (create / 설정 바꾸기); a plain remake
-    of a range that shrank since makes `min(count, range)` like the AI types. A `saved_range`
-    (다시 만들기 of the stored range) drops questions gone since instead of 422 (C08). A whole
-    range (`question_count` null) over 5,000 questions is 422 however it starts (C06)."""
+    """Resolve, plan, enforce the start limits and queue the generation, or with 보기 섞기
+    only finish it here (no commit). A count over the range is refused when the settings are new
+    (create / 설정 바꾸기); a plain remake of a range that shrank since makes `min(count, range)`
+    like the AI types. A `saved_range` (다시 만들기 of the stored range) drops questions gone
+    since instead of 422 (C08). A whole range (`question_count` null) over 5,000 questions is 422
+    however it starts (C06)."""
     repo.lock_workspace_generations(exam.workspace_id)
     candidates = resolve_candidates(
         repo.session, exam.workspace_id, actor_id, range_, saved=saved_range
@@ -612,7 +645,11 @@ def _start(
             f"A mock exam holds at most {MAX_RANGE_QUESTIONS:,} questions: the range has "
             f"{len(candidates):,}. Choose a question count or a smaller range.",
         )
-    if repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace:
+    with_job = uses_llm(types)
+    if (
+        with_job
+        and repo.running_count(exam.workspace_id) >= settings.mock_exam_max_running_per_workspace
+    ):
         raise ProblemException(
             409,
             ProblemType.GENERATION_BUSY,
@@ -628,14 +665,19 @@ def _start(
         )
     chosen = seed if seed is not None else secrets.randbelow(MAX_SEED + 1)
     plan = make_plan(candidates, config.question_count, types, chosen)
-    return repo.create_generation(
+    generation_id = repo.create_generation(
         exam,
         actor_id,
         config=config.model_dump(mode="json"),
         range_=range_.model_dump(mode="json"),
         plan=[p.as_json() for p in plan],
         seed=chosen,
+        with_job=with_job,
     )
+    if not with_job:
+        sources = [uuid.UUID(p.question_id) for p in plan]
+        repo.store_shuffle_copies(generation_id, repo.source_evidence(exam.workspace_id, sources))
+    return generation_id
 
 
 def _replayed(
@@ -669,17 +711,17 @@ def _accepted(
     jobs: QuestionImportRepository,
     publisher: JobPublisher | None,
     exam_id: uuid.UUID,
-    user_id: uuid.UUID,
+    viewer: WorkspaceAccess,
     scope: str,
     key: str | None,
     body_hash: str,
 ) -> JSONResponse:
     exam = repo.exam(exam_id)
     assert exam is not None  # noqa: S101 - created/locked in this transaction
-    result = exam_out(repo, exam)
+    result = exam_out(repo, exam, viewer)
     payload = result.model_dump(mode="json")
     if key is not None:
-        idempotency.save(user_id, scope, key, body_hash, status.HTTP_202_ACCEPTED, payload)
+        idempotency.save(viewer.user_id, scope, key, body_hash, status.HTTP_202_ACCEPTED, payload)
     repo.commit()
     job_id = result.latest_generation.job_id if result.latest_generation else None
     _publish_job(jobs, publisher, job_id)
@@ -694,7 +736,7 @@ def list_mock_exams(access: ReadWorkspace, repo: Repo, settings: SettingsDep) ->
     """The workspace's mock exams, newest first, with their generation state."""
     return MockExamList(
         llm_available=settings.mock_exam_llm_available,
-        items=exams_out(repo, repo.exams(access.workspace_id)),
+        items=exams_out(repo, repo.exams(access.workspace_id), access),
     )
 
 
@@ -717,7 +759,8 @@ def create_mock_exam(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Save a mock exam and start its first generation. With an AI variation type the range's
-    questions, answers, explanations and related book text are sent to the LLM provider."""
+    questions, answers, explanations and related book text are sent to the LLM provider;
+    with 보기 섞기 only the response is already `ready` (`job_id` null)."""
     user_id, workspace_id = access.user_id, access.workspace_id
     scope = f"POST /workspaces/{workspace_id}/mock-exams"
     body_hash = request_hash(body.model_dump(mode="json"))
@@ -742,7 +785,7 @@ def create_mock_exam(
         repo, settings, limiter, exam, user_id, body.config, body.range, body.seed, new_config=True
     )
     return _accepted(
-        repo, idempotency, jobs, publisher, exam_id, user_id, scope, idempotency_key, body_hash
+        repo, idempotency, jobs, publisher, exam_id, access, scope, idempotency_key, body_hash
     )
 
 
@@ -756,7 +799,7 @@ def _load(repo: MockExamRepository, access: ResourceAccess, *, lock: bool = Fals
 @router.get("/mock-exams/{mock_exam_id}", operation_id="getMockExam")
 def get_mock_exam(access: ReadExam, repo: Repo) -> MockExam:
     """Settings, current and newest generation (status, progress, counts)."""
-    return exam_out(repo, _load(repo, access))
+    return exam_out(repo, _load(repo, access), access.workspace)
 
 
 @router.patch("/mock-exams/{mock_exam_id}", operation_id="renameMockExam")
@@ -767,7 +810,7 @@ def rename_mock_exam(access: EditExam, body: MockExamUpdate, repo: Repo) -> Mock
     exam = _load(repo, access, lock=True)
     if body.title.strip() != exam.title:
         repo.update_exam(exam, access.workspace.user_id, title=body.title.strip())
-    result = exam_out(repo, _load(repo, access))
+    result = exam_out(repo, _load(repo, access), access.workspace)
     repo.commit()
     return result
 
@@ -854,7 +897,15 @@ def create_mock_exam_generation(
         saved_range=body.range is None,
     )
     return _accepted(
-        repo, idempotency, jobs, publisher, exam.id, user_id, scope, idempotency_key, body_hash
+        repo,
+        idempotency,
+        jobs,
+        publisher,
+        exam.id,
+        access.workspace,
+        scope,
+        idempotency_key,
+        body_hash,
     )
 
 

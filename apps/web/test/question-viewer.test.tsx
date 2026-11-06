@@ -28,32 +28,14 @@ vi.mock('../src/lib/questions/practice-actions', () => ({
   lookupOverviewQuestionAction: vi.fn(),
 }));
 vi.mock('../src/lib/questions/practice-open-client', async () => {
-  const { fakePracticeOpen } = await import('./practice-open-fake');
+  const { fakePracticeOpen, fakePracticeReveal } = await import('./practice-open-fake');
   return {
     openQuestionPractice: fakePracticeOpen({
       open: (ws: string, q: string, key: string) => openSession(ws, q, key),
     }),
+    revealQuestionPractice: fakePracticeReveal({}),
   };
 });
-vi.mock('../src/components/questions/viewer/separate-retry', () => ({
-  SeparateRetry: ({
-    onGraded,
-    onClose,
-  }: {
-    onGraded: (id: string, result: 'correct' | 'incorrect') => void;
-    onClose: () => void;
-  }) => (
-    <div>
-      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'incorrect')}>
-        retry incorrect
-      </button>
-      <button onClick={() => onGraded('22222222-2222-4222-8222-000000000001', 'correct')}>
-        retry correct
-      </button>
-      <button onClick={onClose}>close retry</button>
-    </div>
-  ),
-}));
 vi.mock('../src/lib/questions/actions', () => ({
   getQuestionAction: vi.fn(),
   getQuestionRevisionAction: vi.fn(),
@@ -230,37 +212,6 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       within(panel).getByRole('button', { name: /다시 풀기 (표시|해제)/ }),
     ).toBeInTheDocument();
     expect(openSession).toHaveBeenCalledTimes(1);
-  });
-
-  it('UX12-RETRYOPEN-AC04 practice: the opening waits for the toggle saved just before it', async () => {
-    let saved!: () => void;
-    const flagsSettled = vi.fn(() => new Promise<void>((resolve) => (saved = resolve)));
-    render(
-      <QuestionViewer
-        mode="practice"
-        workspaceId={WS}
-        question={{
-          id: QID,
-          title: '3장 12번 문제',
-          chapterTitle: '3장 물의 순환',
-          questionType: 'MCQ',
-          preview: STEM,
-          isFavorite: false,
-          needsRetry: false,
-          lastGradedResult: 'correct',
-          isPendingGrading: false,
-        }}
-        readOnly={false}
-        flagsSettled={flagsSettled}
-        onClose={noop}
-        onFlagsChange={noop}
-        onViewed={noop}
-      />,
-    );
-    await waitFor(() => expect(flagsSettled).toHaveBeenCalledWith(QID));
-    expect(openSession).not.toHaveBeenCalled();
-    await act(async () => saved());
-    await waitFor(() => expect(openSession).toHaveBeenCalledTimes(1));
   });
 
   it('UX12-RETRYOPEN-AC01 practice: a clean opening of a marked question keeps the toggle and an inert 다시 풀기', async () => {
@@ -815,51 +766,6 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
     ).not.toHaveAttribute('aria-disabled');
   });
 
-  it('UX11-RETURN-AC01 updates bank retry-flag eligibility after a separate grade without changing run result', async () => {
-    const user = userEvent.setup();
-    const client = fakeClient({
-      getItem: vi.fn(async () => ({
-        ok: true as const,
-        data: item({
-          attempt: {
-            attempt_id: graded.attempt_id,
-            result: 'correct',
-            submitted_answer: { selected_option_ids: ['o1'], answer_text: null },
-            correct_option_ids: ['o1'],
-            accepted_answers: null,
-            explanation: REVISION.explanation,
-            rubric: null,
-          },
-          session_state: 'graded',
-        }),
-      })),
-    });
-    render(
-      <QuestionViewer
-        mode="sequence"
-        workspaceId={WS}
-        state={{ step: 'solve', runId: RUN, position: 1 }}
-        archived={false}
-        onNavigate={noop}
-        onClose={noop}
-        client={client}
-      />,
-    );
-    const panel = screen.getByRole('dialog');
-    expect(
-      await within(panel).findByRole('button', { name: '다시 풀기 표시' }),
-    ).toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
-    await user.click(screen.getByText('retry incorrect'));
-    await user.click(screen.getByText('close retry'));
-    expect(within(panel).queryByRole('button', { name: '다시 풀기 표시' })).toBeNull();
-    await user.click(within(panel).getByRole('button', { name: /^다시 풀기$/ }));
-    await user.click(screen.getByText('retry correct'));
-    await user.click(screen.getByText('close retry'));
-    expect(within(panel).getByRole('button', { name: '다시 풀기 표시' })).toBeInTheDocument();
-    expect(client.submit).not.toHaveBeenCalled();
-  });
-
   it('sequence(bank): UX9-RETRY-OPT toggles flip before the response, never busy, failures roll back', async () => {
     const user = userEvent.setup();
     const held: { patch: object; resolve: (value: unknown) => void }[] = [];
@@ -960,7 +866,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
       />,
     );
     const panel = screen.getByRole('dialog');
-    expect(await within(panel).findByRole('status')).toHaveTextContent('오답');
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('오답'));
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeChecked();
     expect(within(panel).getByRole('radio', { name: '응결' })).toBeDisabled();
     expect(within(panel).queryByRole('button', { name: SUBMIT_UI })).toBeNull();

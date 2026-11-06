@@ -634,3 +634,9 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-label);
 }
+
+@media (hover: hover) {
+  .sourceLink:hover {
+    color: var(--color-accent-hover);
+  }
+}

@@ -57,16 +57,19 @@
 | `--color-canvas` | `#F7F8FA` | 페이지 배경 |
 | `--color-surface` | `#FFFFFF` | 카드·읽기 화면 |
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
+| `--color-surface-raised` | `#FFFFFF` | 유리 위 secondary 버튼의 채움(dark에서 `--color-surface`는 glass보다 어둡다) |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
 | `--color-text-secondary` | `#5F697E` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
 | `--color-accent` | `#5268D8` | primary action, navigation |
 | `--color-accent-hover` | `#4A5EC1` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
 | `--color-accent-pressed` | `#4355AD` | primary 버튼 누르는 동안(`:active`) |
+| `--color-accent-on-glass` | `#4A5EC1` | `.glass-surface` 안의 `--color-accent`. 투명한 표면에서 accent 글자가 AA를 지키는 값 |
 | `--color-focus` | `#356CFF` | focus outline |
-| `--color-glass` | `rgba(246,248,252,.97)` | floating glass surface(아주 옅은 tint, 거의 불투명) |
+| `--color-glass` | `rgba(246,248,252,.7)` | floating glass surface(옅은 tint, 뒤가 비친다. UX12 DESIGN-5) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
-| `--glass-gradient` | `linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35))` | glass 표면의 파랑→라벤더 tint 층(UX12 DESIGN-4). `--color-glass`·모바일 sheet의 `--color-glass-solid` 위에 얹는다 |
+| `--glass-gradient` | `linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2))` | glass 표면의 파랑→라벤더 tint 층(UX12 DESIGN-4). `--color-glass`·모바일 sheet의 `--color-glass-solid` 위에 얹는다 |
+| `--glass-brightness` | `1.3` | blur한 배경의 밝기 배율. 색 값이 아니지만 테마별이다(UX12 DESIGN-5) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#E7ECF0` | 보지 않은 문제 |
 | `--question-status-viewed` | `#ACB6C2` | 보기만 한 문제 |
@@ -122,6 +125,12 @@
 
 light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라에 alpha `.35`다. light accent 글자가 glass 위에서 4.56:1뿐이라 accent 색을 낮은 alpha로 얹으면 alpha `.06`에서도 4.22~4.28:1로 AA 아래가 되고, hover 대비도 1.05~1.07로 떨어지기 때문이다. 그래서 light tint는 아주 옅다. 더 진한 tint가 필요하면 `--color-accent`를 먼저 어둡게 해야 한다. dark는 여유가 있어 `--color-accent` 계열을 alpha `.05`로 쓴다. 대비: 두 stop 모두 글자 토큰 4.5:1 이상(light accent 최저 4.52:1), text-primary·text-secondary는 순흑·순백 배경 합성에서도 4.5:1 이상, 비텍스트 3:1 이상, hover 배경과 1.1 이상(`contrast.test.ts`).
 
+**v1.3.3 (UX12 DESIGN-5, 2026-11-06 사용자 피드백 "투명도가 너무 낮음"):** Chromium에서 blur가 한 번도 적용된 적이 없었다. Lightning CSS가 값에 `var()`가 있는 `backdrop-filter`와 `-webkit-backdrop-filter`를 한 속성으로 보고 마지막만 남겨서, 표준 선언이 배포 CSS에서 사라졌다. 이제 `-webkit-`을 먼저 쓴다(`base-css.test.ts`가 검사). blur가 실제로 적용되므로 `--color-glass`를 light `.97`→`.7`, dark `.97`→`.65`로, `--glass-gradient` light alpha를 `.35`→`.2`로 낮추고 `--glass-blur`를 16→24px로, 새 `--glass-brightness`(light 1.3, dark .7)를 더했다. 해설처럼 구분돼야 하는 영역은 `--color-surface-muted` 회색 그대로다(사용자 결정 2026-11-06). `.glass-surface` 안에서 `--color-accent`는 `--color-accent-on-glass`, `--color-accent-hover`는 `--color-accent-pressed`가 된다. 대비는 Chromium에서 빽빽한 배경 위 가장 나쁜 픽셀로 쟀다. 표와 한계는 [UX12-GLASSBTN](screens/ux12-glass-buttons.md)에 있다. `contrast.test.ts`는 그 측정값을 `BUSY_BACKDROP_INK`로 고정한다. 순흑·순백 위 AA는 이제 text-primary만 보장한다.
+
+**v1.3.4 (UX12 DOCS-4, 2026-11-06 사용자 피드백):** 문서 화면의 PDF 헤더가 `.glass-surface`다. PDF가 그 뒤에 비친다. 새 토큰은 없다. 기준은 [UX12-PDFPREVIEW](screens/ux12-pdf-preview.md).
+
+**v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
+
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(PALETTE-UNIFY 이후 light/dark 최저는 `contrast.test.ts` 참고; success 4.81+, danger 5.16+, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 체크/X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 의미를 전달한다(UX12 VIEW-2).
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
@@ -135,16 +144,19 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-canvas: #11151D;
   --color-surface: #1B222D;
   --color-surface-muted: #27313E;
+  --color-surface-raised: #27313E;
   --color-text-primary: #F2F5F9;
   --color-text-secondary: #ACB7C5;
   --color-border: #2D3745;
   --color-accent: #8CA0FF;
   --color-accent-hover: #9AACFE;
   --color-accent-pressed: #A7B6FD;
+  --color-accent-on-glass: #8CA0FF;
   --color-focus: #A2B3FF;
-  --color-glass: rgba(30, 38, 51, 0.97);
+  --color-glass: rgba(30, 38, 51, 0.65);
   --color-glass-solid: #1E2633;
   --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
+  --glass-brightness: 0.7;
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #3A4554;
   --question-status-viewed: #8591A1;
@@ -190,16 +202,19 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-canvas: #F7F8FA;
   --color-surface: #FFFFFF;
   --color-surface-muted: #F0F3F7;
+  --color-surface-raised: #FFFFFF;
   --color-text-primary: #172033;
   --color-text-secondary: #5F697E;
   --color-border: #E6E9EF;
   --color-accent: #5268D8;
   --color-accent-hover: #4A5EC1;
   --color-accent-pressed: #4355AD;
+  --color-accent-on-glass: #4A5EC1;
   --color-focus: #356CFF;
-  --color-glass: rgba(246,248,252,.97);
+  --color-glass: rgba(246,248,252,.7);
   --color-glass-solid: #F6F8FC;
-  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.35), rgba(252, 242, 255, 0.35));
+  --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2));
+  --glass-brightness: 1.3;
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #E7ECF0;
   --question-status-viewed: #ACB6C2;
@@ -254,7 +269,7 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --radius-lg: 16px;
   --radius-xl: 20px;
   --radius-pill: 999px;
-  --glass-blur: 16px;
+  --glass-blur: 24px;
   --shadow-floating: 0 18px 56px rgba(30, 39, 59, .15);
 
   --control-height-sm: 28px;
@@ -267,10 +282,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --floating-panel-width: 500px;
   --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
   --heatmap-cell: 28px;        /* UX12-HOME-1 (2026-11-06, 사용자 요청): 24px → 28px, UX5-UI의 28px → 24px를 되돌림 */
-  --heatmap-cell-touch: 24px;  /* UX9-STROKE (2026-11-02, 사용자 요청): 32px → 24px */
-  --heatmap-gap: 0px;          /* v1.2.3 (UX5-UI): 4px → 0 */
+  --heatmap-cell-touch: 28px;  /* UX12 DESIGN-6 (2026-11-06, 사용자 요청): 24px → 28px, UX9-STROKE의 24px를 되돌림 */
+  --heatmap-gap: 7px;          /* UX12 DESIGN-6: 0 → 7px, marker가 셀을 채우므로 간격을 grid가 맡는다 */
   --heatmap-dot: 16px;         /* 장식용 marker(legend·요약·preview). heatmap 점은 셀 크기로 그린다 */
-  --heatmap-marker-hover-scale: 1.3;  /* UX12 D-12: 1.18 → 1.3. 확대한 사각형도 셀 안에 들어간다 */
+  --heatmap-marker-hover-scale: 1.5;  /* UX12 DESIGN-6: 1.3 → 1.5(42px). 확대한 사각형은 셀 밖으로 7px 나가고 이웃 위로 올라온다 */
 }
 
 .glass-surface {
@@ -279,8 +294,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   background-origin: border-box;
   border: 1px solid var(--color-glass-stroke);
   box-shadow: var(--shadow-floating);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
+  --color-accent: var(--color-accent-on-glass);
+  --color-accent-hover: var(--color-accent-pressed);
 }
 
 /* 적은 투명도를 선호하거나 blur 지원이 없는 환경의 fallback */
@@ -288,7 +305,7 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   .glass-surface { background: var(--color-glass-solid); }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .glass-surface { background: var(--color-glass-solid); backdrop-filter: none; }
+  .glass-surface { background: var(--color-glass-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 /* 짧은 duration이 아니라 끈다(UX7-CSS 2026-11-02): transition-property 기본값이 all이라 0.01ms는 모든 스타일 변경을 1 frame transition으로 만들어 computed style이 한 frame 동안 시작 값을 보였다. */
 @media (prefers-reduced-motion: reduce) {
@@ -306,8 +323,9 @@ reduced motion에서는 transition·animation이 전혀 실행되지 않으므�
 | Label | 12–13px, secondary text |
 | Page title | 24–28px/1.2, 굵기 600 |
 | Section title | 16–18px, 굵기 600 |
-| Typography token | label `--font-size-label-xs`(11, `StepProgress` 번호 전용 — 본문·label 글자에는 쓰지 않는다)/`--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600) |
+| Typography token | label `--font-size-label-xs`(11, `StepProgress` 번호 전용 — 본문·label 글자에는 쓰지 않는다)/`--font-size-label-sm`(12)/`--font-size-label`(13), body `--font-size-body`(14)/`--font-size-body-lg`(16, 긴 본문은 `--line-height-relaxed` 1.6), section `--font-size-section-title`(18), page title `--font-size-page-title`(26)/`--line-height-tight`, 굵기 `--font-weight-semibold`(600), 코드 글꼴 `--font-mono` |
 | Breakpoint | mobile `< 768px`(`--breakpoint-md`), tablet 768–1023px, desktop `≥ 1024px`(`--breakpoint-lg`, sidebar 표시). CSS 변수는 media query 안에서 쓸 수 없으므로 media query는 같은 px 값을 range 문법(`(width >= 768px)`)으로 쓰고, `packages/ui` 테스트가 토큰 값과 일치하는지 검사한다. TS는 `@quiz/design-tokens`의 `breakpoints`/`mediaQueries`를 사용한다. 짝 dialog(QSRC-UI, §5.6): `--breakpoint-paired-panel: 868px`(= `--floating-panel-width` + 3×16px + `--paired-dialog-min-width`; 미만이면 전체 화면 sheet)와 `--paired-dialog-min-width: 320px` — §3.3 `:root` 예시에는 없고 `tokens.json`/생성 CSS에만 있다 |
+| 답변 Markdown (UX12-ASK-3, [UX12-ASKMD](screens/ux12-ask-markdown.md)) | AI 질문·AI 해설 본문의 `.markdown`. 본문은 body에 `--line-height-relaxed`, 블록 간격 `--space-2`, 목록 들여쓰기 `--space-5`. 제목은 굵기 600에 첫 단계 `--font-size-body-lg`, 나머지는 body(화면의 제목 순서를 잇는 `h3`~`h6`). 코드는 `--font-mono`와 `--font-size-label`, 배경 `--color-surface-muted`(인라인 `--radius-sm`, 블록 `--radius-md`와 경계). 인용은 왼쪽 3px `--color-border-strong`과 secondary 글자, 가로줄은 1px `--color-border`. 링크는 `--color-accent`에 밑줄(색만으로 구분하지 않는다). 표는 문서·발문과 같은 `printed-table.module.css`이고, 표와 코드 블록은 자기 영역에서 가로 스크롤하며 focus를 받는다 |
 | Global header | 56px 높이(`--app-header-height`, v1.2.2에서 64→56) |
 | 가상키보드 보정 | `--qz-keyboard-inset`(layout viewport 아래쪽에서 키보드가 가리는 높이), `--qz-keyboard-offset-top`(visual viewport가 위에서 밀려난 거리). 기본 0px이고 `useKeyboardInset`이 키보드가 있는 동안만 값을 넣는다. layout viewport가 줄지 않는 iOS Safari용이며 `resizes-content`가 적용되는 브라우저에서는 0px이다([UX12-KEYBOARD](screens/ux12-keyboard.md)) |
 | Control height (v1.2.2) | md `--control-height-md` 36px(Button·IconButton·입력·Select trigger·tab·메뉴/Select 항목), sm `--control-height-sm` 28px(작은 버튼·IconButton, BackLink). 모두 WCAG 2.2 target size 24px 이상. heatmap 셀(24/32px)은 §6 규격 그대로 |
@@ -316,7 +334,7 @@ reduced motion에서는 transition·animation이 전혀 실행되지 않으므�
 | Left navigation | 232px 고정(데스크톱), 모바일 drawer |
 | Content area | max-width 1440px, padding 20px(태블릿 이상, v1.2.2에서 24→20) / 16px(모바일) |
 | Border radius | 기본 10px, 떠 있는 패널 16–20px |
-| Glass gradient (UX12 DESIGN-4) | `--glass-gradient`는 색 값이 아닌 `background-image` 값이지만 테마별이라 §3.1·§3.2 표에 둔다. `.glass-surface`만 쓰고, 기능 코드는 직접 쓰지 않는다 |
+| Glass gradient (UX12 DESIGN-4) | `--glass-gradient`는 색 값이 아닌 `background-image` 값이지만 테마별이라 §3.1·§3.2 표에 둔다. `.glass-surface`만 쓰고, 기능 코드는 직접 쓰지 않는다. global header는 이 층을 빼고 `glass-surface`만 쓴다(UX12 DESIGN-5) |
 | Layering | 기본 카드 0–1, popover 20, side panel 40, modal 60, toast 70 |
 | Animation | panel enter/exit 약 180–240ms, transform+opacity, reduced-motion 대응. 컴포넌트 상태 전환(hover·active·selected·focus 배경/색)은 `--duration-state`(120ms) `--easing-standard`로 전환하고, reduced-motion에서는 즉시 변경 |
 
@@ -343,11 +361,12 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | 종류 | 기본 | hover | pressed(`:active`) | 켜짐/선택 |
   |---|---|---|---|---|
   | primary(`Button`·`IconButton`) | `--color-accent` 채움 | `--color-accent-hover` | `--color-accent-pressed` | — |
-  | secondary | `--color-surface` + 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
+  | secondary | `--color-surface` + 1px `--color-border`(`.glass-surface` 안에서는 `--color-surface-raised`, hover는 `--color-state-pressed`, UX12-GLASSBTN) | `--color-state-hover` | `--color-state-pressed` | — |
   | ghost(`IconButton` 기본 포함) | 투명, 아이콘 ghost·`borderless`는 경계 없음, 그 밖의 ghost 텍스트는 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |
   | 즐겨찾기·다시 풀기 toggle 켜짐(`.qz-study-toggle[data-state="on"]`, UX12 VIEW-2) | 투명 + 아이콘 fill·stroke 반전 | `--color-state-hover` | `--color-state-pressed` | 아이콘과 이름이 상태를 전달 |
+  | 홈 `즐겨찾기만` 칩 켜짐(`aria-pressed="true"`, UX12 HOME-6) | 투명 + `--color-accent` 글자·테두리 + 체크 아이콘 | `--color-state-hover` | `--color-state-pressed` | 체크 아이콘·`aria-pressed`·semibold가 상태를 전달 |
   | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | `--color-state-selected` 배경 + text-primary + `aria-selected` (하단 bar 없음, UX4) |
   | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
   | 객관식 보기 행(`QuestionBody`, UX12 VIEW-2) | 꺼짐: 경계 `--color-option-control` | 행 hover: 경계 `--color-option-control-hover` + 글자 semibold(비활성 제외) | — | accent 채움 |
@@ -403,7 +422,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 **규칙: overlay 안에서 시작한 scroll은 절대 아래 페이지로 이어지지 않는다.** 모든 floating 표면 — `FloatingSidePanel`(docked 제외, modal·non-modal 모두), `ModalDialog`, `ConfirmDialog`, 모바일 drawer(bottom sheet·full-screen), `Popover`, `DropdownMenu`(그리고 그 위에 만든 `Select` 목록·pointer 기준 floating) — 는 공통 overscroll guard로 자기 scroll을 가둔다. kit primitive가 보장하므로 기능 코드는 따로 처리하지 않는다. pinch-zoom과 ctrl+wheel 확대는 건드리지 않는다. **docked panel(DOCVIEW-01 목차, `placement="docked"`)은 페이지 배치의 일부라 guard하지 않는다.**
 
 - overlay의 scroll 컨테이너(panel body, dialog 내용, 목록)는 `overscroll-behavior: contain`(가로·세로). 끝에 닿아도 페이지로 넘기지 않는다.
-- iOS Safari는 scroll할 내용이 없는 요소(짧은 dialog, header, footer, backdrop)에서의 끌기와 끝에 닿은 컨테이너의 끌기를 `overscroll-behavior`와 상관없이 문서로 넘긴다. 그래서 kit의 `useOverlayScrollGuard`가 overlay 루트에 `touchmove` listener(`passive: false`)를 두고, 한 손가락 끌기가 overlay 안에서 시작했고 그 방향으로 scroll할 수 있는 조상 컨테이너가 overlay 안에 없으면 `preventDefault`한다(두 손가락 pinch-zoom·글자 선택 handle 끌기·`input`/`textarea` 안 caret 이동은 막지 않음). 같은 판정을 `wheel`에도 쓴다(trackpad; `ctrlKey`가 있는 wheel = 확대는 통과). 실제 구현 이름·세부는 Task UX9-SCROLL(ec5b97f · 06271da · a1215c4)이 기준이다.
+- iOS Safari는 scroll할 내용이 없는 요소(짧은 dialog, header, footer, backdrop)에서의 끌기와 끝에 닿은 컨테이너의 끌기를 `overscroll-behavior`와 상관없이 문서로 넘긴다. 그래서 kit의 `useOverlayScrollGuard`가 overlay 루트에 `touchmove` listener(`passive: false`)를 두고, 한 손가락 끌기가 overlay 안에서 시작했고 그 방향으로 scroll할 수 있는 조상 컨테이너가 overlay 안에 없으면 `preventDefault`한다(두 손가락 pinch-zoom·글자 선택 handle 끌기·`input`/`textarea` 안 caret 이동은 막지 않음). 같은 판정을 `wheel`에도 쓴다(trackpad; `ctrlKey`가 있는 wheel = 확대는 통과). 실제 구현 이름·세부는 Task UX9-SCROLL(ec5b97f · 06271da · a1215c4)이 기준이다. overlay가 브라우저에 맡긴 움직임은 표면에서 전파를 멈춰 modal 스크롤 잠금이 다시 판단하지 않는다. 손가락의 첫 흔들림(4px 미만)은 아무것도 정하지 않는다([UX12-CHAPTERSCROLL](screens/ux12-doc-count-chapter-scroll.md)).
 - **modal:** 열린 동안 페이지 scroll을 잠근다(Radix `RemoveScroll` 기본; iOS에서 `body` 고정 방식으로 잠그고 닫으면 원래 scroll 위치로 되돌림). backdrop에서의 끌기도 페이지를 움직이지 않는다.
 - **non-modal:** 페이지는 잠그지 않는다 — overlay **밖**에서 시작한 scroll은 지금처럼 페이지를 움직인다(옆 내용과 함께 쓰는 panel이므로). overlay **안**에서 시작한 scroll만 위 규칙으로 막는다.
 - 겹친 overlay(panel 위 dialog, panel 안 Select 목록)는 가장 안쪽 overlay가 판정한다.
@@ -455,14 +474,14 @@ type QuestionDotProps = {
 ```
 
 - 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, rounded SVG path); 두 모양 모두 semantic status color를 채운다. **marker에는 테두리가 없다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; UX9-STROKE의 `0.5px` 윤곽과 `--heatmap-marker-stroke-mix` 토큰을 없앴다). 사각형은 stroke가 없고, 별만 채움과 같은 색(`currentColor`)의 `--heatmap-marker-stroke-width` = `0.5px` non-scaling stroke를 꼭짓점을 둥글리는 기하로 쓴다 — 눈에 보이는 윤곽이 아니다. 이 규칙은 heatmap 점과 장식용 marker(상태 필터 색 견본·preview) 모두에 같다. 상태 색이 표면 대비 3:1 미만일 수 있으므로(light unseen·viewed·retry) 의미는 늘 텍스트(label·필터·tooltip)로도 준다. forced-colors에서는 채움(`currentColor`)이 시스템 색이 되고 CanvasText 윤곽은 더 두지 않으므로 상태는 텍스트로 구분한다.
-- heatmap 셀 `28×28px`(UX12-HOME-1 2026-11-06 사용자 요청으로 `24px`→`28px`), mobile·coarse pointer와 heatmap 밖의 단독 `QuestionDot`은 `24×24px`(`--heatmap-cell-touch`; UX9-STROKE 2026-11-02 사용자 요청으로 `32px`→`24px`, WCAG 2.2 target size 최소 24×24 CSS px 충족), 셀 간 grid gap `0`. heatmap 점의 marker SVG box는 셀과 같은 크기라 그려진 사각형은 viewBox 18/24 = `21px`(모서리 반경 `5.25px`, 셀 안쪽 `3.5px`; touch `18px`·`4.5px`·`3px`)이고, 이웃 marker 사이 보이는 간격은 `7px`(touch `6px`) = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로"). 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`; transition은 transform 150ms, reduced-motion시 즉시 변경한다.
+- heatmap 셀과 그려진 사각형은 모든 화면에서 `28×28px`이다(UX12 DESIGN-6 2026-11-06 사용자 요청 "기본 크기를 28px로", UX9-STROKE의 touch `24px`와 viewBox 18/24의 `21px` 사각형을 되돌림). heatmap 밖의 단독 `QuestionDot`도 같다. 모서리 반경은 `7px`이고 WCAG 2.2 target size 최소 24×24 CSS px를 넘는다. marker SVG box는 셀의 24/18로 셀 밖으로 고르게 넘치며 pointer를 받지 않는다. 셀 간 grid gap은 `7px` = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로")이고, 각 셀의 투명한 `::after`가 gap의 절반씩을 맡아 pointer는 격자 위에서 늘 어느 한 셀에 있다. 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`(1.5, `42px`)로 셀 밖 7px까지 커지고 dot이 이웃 위로 올라온다. focus ring은 확대한 marker에서 1px 밖이다. transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
 - 현재 문제 dot(풀이 panel에 열린 문제, `aria-current="true"`)는 상태 색을 그대로 두고 2px `--color-text-primary` ring(light 거의 검정 `#172033`, dark 거의 흰색 `#F2F5F9`)을 사각형에 **틈 없이** 붙여 그린다(`outline-offset` = −셀/8을 정수 px로 올림 = `−4px`, Chromium이 소수 offset을 버려 `−3.5px`로는 `0.5px` 틈이 남기 때문이다. ring은 사각형 가장자리를 `0.5px` 덮는다. 셀 `border-radius` = 셀×7.5/24 = `8.75px`. touch 셀은 `−3px`·`7.5px`로 ring 안쪽 반경이 사각형의 `4.5px`와 같다; UX9-STROKE 2026-11-02, 사용자 요청 "cell 내부 공간 제거, current일 때 outline을 black에 가까운 색으로"; 이전: accent ring을 셀 가장자리에 그려 사각형과 `3px` 띄움). `:focus-visible`은 셀 가장자리의 2px `--color-focus` ring + marker 확대로, 현재 표시와 색뿐 아니라 위치·크기로도 구분된다. focus된 현재 dot는 focus ring 하나만 보인다. forced-colors에서는 둘 다 `Highlight`이고 위치로 구분한다.
 - 점은 `<button>`으로 구현하고 label에 챕터·번호·유형·상태·favorite·retry를 포함.
 - roving tabindex 또는 명확한 Tab/Arrow navigation을 제공하여 수백 개의 버튼이 키보드 사용자에게 부담이 되지 않게 한다.
 - hover/focus에는 Tooltip/Popover로 preview, click/Enter/Space에는 Floating Question Panel. 풀이 panel을 닫아 focus가 dot으로 돌아올 때는 preview를 열지 않는다(UX12-HOME-AC01, `focusQuestionDotQuietly`). 사용자가 Tab·Arrow로 옮긴 focus와 hover는 그대로 preview를 연다.
-- 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상태 필터를 펼치면(기본 접힘, chevron 버튼 `aria-expanded`) 색 견본과 텍스트가 함께 보인다.
-- 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX9-STROKE(2026-11-02, 사용자 요청)부터 모바일에서 24px이고(이전: 32px), 데스크톱은 UX12-HOME-1부터 28px이다.
+- 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상단 줄의 `필터` popover를 열면(UX12 HOME-6) 색 견본과 텍스트가 함께 보인다.
+- 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX12 DESIGN-6(2026-11-06, 사용자 요청)부터 모든 화면에서 28px이다(이전: 모바일 24px, 데스크톱은 UX12-HOME-1부터 28px).
 
 ### 6.1 Marker 렌더링 구현 규칙
 
@@ -580,7 +599,7 @@ packages/
 - [ ] 모달 focus trap 및 닫힌 뒤 focus 원위치 복구
 - [ ] light/dark contrast, forced-colors, reduced-motion 확인
 - [ ] CSS blur 미지원 시 불투명한 fallback surface 유지
-- [ ] PDF 읽기 영역을 glass blur로 가리지 않음
+- [ ] PDF 읽기 영역 자체는 불투명 표면이다. floating glass는 그 위를 blur로 덮어도 된다(사용자 결정 2026-11-06)
 - [ ] Storybook 상태 예제와 스크린샷 회귀 테스트 포함
 - [ ] pointer target WCAG 2.2 최소 기준 확인
 

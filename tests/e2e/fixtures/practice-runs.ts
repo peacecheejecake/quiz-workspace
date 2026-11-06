@@ -85,7 +85,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { apiError, type ApiResponse } from './api.ts';
-import { outlineNodeId, uploadReadyBook, waitForJob } from './documents.ts';
+import { outlineNodeId, uploadReadyBook } from './documents.ts';
 import { seedMembership } from './db.ts';
 import { localDbAdminUrl } from './local-env.ts';
 import { rangePickerUi } from './range-picker.ts';
@@ -149,6 +149,7 @@ export interface RunSummary {
 }
 
 export interface PracticeRun {
+  readonly answered: number;
   readonly id: string;
   readonly workspace_id: string;
   readonly source: 'bank' | 'mock';
@@ -280,9 +281,7 @@ export async function createShuffleMockExam(
     },
     [202],
   );
-  const jobId = created.latest_generation?.job_id;
-  if (!jobId) throw new Error('mock exam: no generation job');
-  await waitForJob(owner, jobId);
+  // 보기 섞기 only: saved in the request, no job (UX12-MOCKSHUFFLE-C01).
   const exam = await owner.api.ok<MockExam>('GET', `/mock-exams/${created.id}`, undefined, [200]);
   expect(exam.status, 'mock exam status').toBe('ready');
   return exam;
@@ -566,10 +565,33 @@ export const runUi = {
     ),
   resultList: (panel: Locator) =>
     panel.getByRole('list', { name: /문제별 결과|results by question|results/i }),
-  resultRows: (panel: Locator) => runUi.resultList(panel).locator('section > ul > li'),
+  /** One position of the 결과 표: drawn as a column, exposed as a row (UX12-RESULTTABLE). */
+  resultRows: (panel: Locator) => runUi.resultList(panel).getByRole('row'),
   restart: (panel: Locator) =>
     panel.getByRole('button', { name: /^(처음부터 다시|start over|restart)$/i }),
 };
+
+/** The confirm an unfinished run asks before closing (UX12-RUNCLOSE). */
+export const runCloseUi = {
+  dialog: (page: Page) =>
+    page.getByRole('alertdialog', { name: /풀이를 닫을까요|close this run/i }),
+  keepSolving: (page: Page) =>
+    runCloseUi.dialog(page).getByRole('button', { name: /^(계속 풀기|keep solving)$/i }),
+  close: (page: Page) => runCloseUi.dialog(page).getByRole('button', { name: /^(닫기|close)$/i }),
+};
+
+/** Answers the close confirm with 닫기, after a close button, Escape, backdrop or swipe. */
+export async function confirmRunClose(page: Page): Promise<void> {
+  await runCloseUi.close(page).click();
+  await expect(runCloseUi.dialog(page)).toHaveCount(0);
+}
+
+/** Closes the run panel of an unfinished run through its confirm. */
+export async function closeUnfinishedRun(panel: Locator): Promise<void> {
+  await runUi.close(panel).click();
+  await confirmRunClose(panel.page());
+  await expect(panel).toBeHidden();
+}
 
 /**
  * Opens the range step of a bank run by its URL (the home's 모의고사 opens the 모의고사 list, and its

@@ -28,7 +28,7 @@
 //      latest_generation: Generation|null (the newest, any status), created_at, updated_at}.
 //      `status` = generating while latest_generation is queued/running, else ready / partial /
 //      failed from latest_generation (failed keeps current_generation, the earlier questions).
-//      Generation = {id, version, status, job_id, requested_count, created_count, skipped_count,
+//      Generation = {id, version, status, job_id (null: 보기 섞기 only, no job), requested_count, created_count, skipped_count,
 //      error_code: string|null, progress: {done, total}|null, seed, created_at, finished_at}.
 //      GET /workspaces/{id}/mock-exams → 200 {llm_available: bool, items: MockExam[]} newest
 //      first, any member (archived too); `llm_available` = this environment can run the AI types
@@ -335,7 +335,7 @@ export interface Generation {
   readonly id: string;
   readonly version: number;
   readonly status: GenerationStatus;
-  readonly job_id: string;
+  readonly job_id: string | null;
   readonly requested_count: number;
   readonly created_count: number;
   readonly skipped_count: number;
@@ -518,13 +518,14 @@ export const VARIATION_LABEL: Readonly<Record<VariationType, RegExp>> = {
 };
 
 export const STATUS_TEXT: Readonly<Record<MockStatus, RegExp>> = {
-  generating: /만드는 중|generating/i,
+  generating: /만드는 중|대기 중|generating|waiting/i,
   ready: /준비됨|ready/i,
   partial: /일부만 만듦|partially (made|generated)/i,
   failed: /^(실패|failed)$/i,
 };
 
 export const MOCK_TEXT = {
+  made: /모의고사 문제를 만들었습니다|questions are ready/i,
   empty: /아직 모의고사가 없습니다|no mock exams yet/i,
   emptyHint: /`?추가`?로 변형 유형과 범위를 골라|add one to choose variation types and a range/i,
   notFound: /모의고사를 찾을 수 없습니다|mock exam not found/i,
@@ -534,7 +535,7 @@ export const MOCK_TEXT = {
   aiDisabled: /이 환경에서는 AI 변형을 쓸 수 없습니다|AI variations are not available here/i,
   aiNotice: /AI 서비스로 전송됩니다|sent to an AI service/i,
   noRange: /출제 범위를 고르세요|choose a range/i,
-  working: /문제를 만드는 중입니다|making questions/i,
+  working: /문제를 만드는 중입니다|앞선 작업을 기다리고|making questions|waiting for/i,
   replaceConfirm:
     /지금 문제 (\d+)개를 새로 만든 문제로 바꿉니다\. 편집한 문제도 바뀝니다|replaces the current/i,
   edited: /^(편집됨|edited)$/i,
@@ -621,8 +622,13 @@ export const mockUi = {
       .or(dialog.getByRole('textbox', { name: /^(문항 수|number of questions)/i })),
   difficulty: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(난이도|difficulty)/i }),
   next: (dialog: Locator) => dialog.getByRole('button', { name: /^(다음|next)$/i }),
-  backToOptions: (dialog: Locator) =>
-    dialog.getByRole('button', { name: /^(옵션 단계로 돌아가기|back to options)$/i }),
+  backToRange: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(범위 단계로 돌아가기|back to range)$/i }),
+  /** The one `?` beside 변형 유형, and the Popover it opens (portalled out of the dialog). */
+  variationHelp: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(변형 유형 설명|variation types? help)$/i }),
+  variationHelpPanel: (page: Page) =>
+    page.getByRole('dialog', { name: /^(변형 유형 설명|variation types? help)$/i }),
   make: (dialog: Locator) => dialog.getByRole('button', { name: /^(만들기|create)$/i }),
   remake: (scope: Locator) => scope.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /^(다시 시도|try again)$/i }),

@@ -54,6 +54,7 @@ import {
 } from './ask-recovery-store';
 import { recoverFailedDraft } from './ask-draft-recovery';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
+import { useAnswerGuarded } from '@/lib/questions/answer-guard';
 import { loginRedirectPath } from '@/lib/auth/routes';
 import {
   AskApiError,
@@ -241,6 +242,7 @@ function useAskPanel({
 }: AskPanelProps) {
   const router = useRouter();
   const search = useMemo(() => createSearchClient(), []);
+  const answerGuarded = useAnswerGuarded();
   const reason = unavailableReason(askState, archived);
   const limits = askState?.limits ?? {
     max_question_chars: 1000,
@@ -1275,7 +1277,7 @@ function useAskPanel({
 
   function composer() {
     return (
-      <div className={styles.composer}>
+      <div className={`${styles.composer} glass-surface`}>
         {attachment ? (
           <div role="group" aria-label="첨부한 문제" className={styles.chip}>
             <span className={styles.chipText}>
@@ -1366,7 +1368,7 @@ function useAskPanel({
     <>
       <DocumentExcerptPanel
         workspaceId={workspaceId}
-        linkOnly
+        linkOnly={answerGuarded}
         client={search}
         item={excerpt?.item ?? null}
         open={excerptOpen}

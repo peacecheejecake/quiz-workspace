@@ -5,7 +5,8 @@
 // member. It opens at once with a skeleton (aria-busy) and shows one of three views in place,
 // each with a heading that takes focus:
 //   list    "모의고사 n개" + `추가` (every member; without edit rights the form starts only a
-//           variation-free run, UX12-MOCKNAV-AC05), one row per mock exam (name →
+//           variation-free run, UX12-MOCKNAV-AC05), the viewer's unfinished bank runs
+//           (`이어 풀기`, UX12-RESUME), one row per mock exam (name →
 //           detail, status badge in text, meta line, a "문제 생성 진행률" bar while it is made,
 //           `풀기`, and the editors' row menu 이름 바꾸기 / 설정 바꾸기 / 삭제), or the empty state.
 //   create  `&mock=new`: MockExamForm (옵션 → 범위) → `만들기` saves and shows the detail.
@@ -30,34 +31,52 @@ import {
   ProgressBar,
   Skeleton,
 } from '@quiz/ui';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { withoutMockExams, type MockView } from '@/lib/workspaces/home';
 import { withRunState } from '@/lib/questions/practice-runs';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
+import { rememberRun } from './mock-run';
 import type { RunRange } from '@/lib/questions/practice-runs';
 import { createMockExamApi, type MockExamApi } from './mock-exam-client';
 import { MockExamDetail } from './mock-exam-detail';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
 import {
   canPractise,
+  canResume,
   EMPTY_HINT,
   EMPTY_TEXT,
   generationProgress,
   isGenerating,
+  isWaiting,
   metaText,
   MOCK_POLL_MS,
   NOT_FOUND_TEXT,
   newOptions,
   progressPercent,
   progressValueText,
-  STATUS_LABELS,
+  resumeLabel,
   STATUS_TONES,
+  WAITING_TEXT,
+  statusLabel,
+  unfinishedRunName,
+  unfinishedRunProgress,
   type MockExam,
   type MockExamList,
+  type UnfinishedRun,
 } from './mock-exam-model';
 import { formatDateTime } from '../labels';
 import { RenameField } from './rename-field';
 import styles from './mock-exams.module.css';
+
+const UNFINISHED_ERROR = '이어 풀 문제를 불러오지 못했습니다.';
 
 type Load<T> =
   | { readonly status: 'loading' }
@@ -76,6 +95,10 @@ export interface MockExamsPanelProps {
   /** `풀기`: the run panel on this mock exam (QuestionViewer sequence, source=mock). */
   readonly onPractise: (exam: MockExam) => void;
   readonly onBankStarted?: (runId: string) => void;
+  /** `이어 풀기`: the run panel at this position, over this dialog (UX12-RESUME). */
+  readonly onResume: (runId: string, position: number) => void;
+  /** The run panel is open over this dialog: closing it reads the lists again. */
+  readonly runOpen?: boolean;
   readonly screenId?: string;
   /** Tests and stories: the API. */
   readonly api?: MockExamApi;
@@ -95,12 +118,21 @@ export function MockExamsPanel({
   onViewChange,
   onPractise,
   onBankStarted,
+  onResume,
+  runOpen = false,
   screenId,
   api: givenApi,
 }: MockExamsPanelProps) {
   const api = useMemo(() => givenApi ?? createMockExamApi(workspaceId), [givenApi, workspaceId]);
   const [list, setList] = useState<Load<MockExamList>>({ status: 'loading' });
   const [reads, setReads] = useState(0);
+  const [detailVersion, setDetailVersion] = useState(0);
+  const [dismissError, setDismissError] = useState<string | null>(null);
+  const [unfinished, setUnfinished] = useState<Load<readonly UnfinishedRun[]>>({
+    status: 'loading',
+  });
+  // Not `reads`: the generation polling below has no reason to read the runs.
+  const [runReads, setRunReads] = useState(0);
   // 만들기 is tied to the opening that started it (QVIEW-W key rule): a creation that answers after
   // the person left the form (closed the panel, went back to the list, opened another view or a
   // new 만들기) keeps the mock exam it made but never navigates or touches the newer form.
@@ -123,11 +155,25 @@ export function MockExamsPanel({
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setList({ status: 'loading' });
+    if (open) {
+      setList({ status: 'loading' });
+      setUnfinished({ status: 'loading' });
+    }
     // A new opening of the panel is a new 만들기 too (see formOpening).
     setFormOpening((n) => n + 1);
     setCreating(false);
     setCreateError(null);
+  }
+  // The run panel opens over this dialog, which stays open under it: its closing is what says
+  // the lists moved on (a run answered, finished or started).
+  const [wasRunOpen, setWasRunOpen] = useState(runOpen);
+  if (runOpen !== wasRunOpen) {
+    setWasRunOpen(runOpen);
+    if (!runOpen) {
+      setReads((n) => n + 1);
+      setRunReads((n) => n + 1);
+      setDetailVersion((n) => n + 1);
+    }
   }
   useEffect(() => {
     if (!open) return;
@@ -149,6 +195,22 @@ export function MockExamsPanel({
       live = false;
     };
   }, [api, open, reads]);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    const failed = { status: 'error', message: UNFINISHED_ERROR } as const;
+    api.unfinishedRuns().then(
+      (result) => {
+        if (live) setUnfinished(result.ok ? { status: 'ready', data: result.data } : failed);
+      },
+      () => {
+        if (live) setUnfinished(failed);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, open, runReads]);
   const anyGenerating = list.status === 'ready' && list.data.items.some(isGenerating);
   useEffect(() => {
     if (!open || !anyGenerating || view.view !== 'list') return;
@@ -169,6 +231,7 @@ export function MockExamsPanel({
   if (seenKey !== viewKey) {
     setSeenKey(viewKey);
     setFocusTick((n) => n + 1);
+    setDismissError(null);
     // Every arrival on 만들기 is a new opening: a new form, its own creation key.
     setFormOpening((n) => n + 1);
     setCreating(false);
@@ -187,7 +250,6 @@ export function MockExamsPanel({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteReturn = useRef<HTMLElement | null>(null);
-  const [detailVersion, setDetailVersion] = useState(0);
 
   async function runDelete() {
     const exam = confirmDelete;
@@ -217,6 +279,45 @@ export function MockExamsPanel({
       onViewChange({ view: 'list' }, 'replace');
     }
     reload();
+  }
+
+  async function dismiss(run: UnfinishedRun) {
+    setDismissError(null);
+    const result = await api.dismissRun(run.id);
+    if (!result.ok && result.kind !== 'notFound') {
+      setDismissError(result.message);
+      return;
+    }
+    setUnfinished((prev) =>
+      prev.status === 'ready'
+        ? { status: 'ready', data: prev.data.filter((r) => r.id !== run.id) }
+        : prev,
+    );
+    // The row and its menu are gone: the dialog's heading holds the focus.
+    titleRef.current?.focus();
+  }
+
+  /** `이어 풀기` of a saved mock exam: the run's source is known, no read to learn it. */
+  function resumeExam(exam: MockExam) {
+    const run = exam.unfinished_run;
+    if (!run) return;
+    rememberRun({ id: run.id, source: 'mock', mock_exam_id: exam.id });
+    onResume(run.id, run.next_position);
+  }
+
+  /** `이어 풀기 지우기`: an older unfinished run may take its place, so the lists read again. */
+  async function dismissExamRun(exam: MockExam) {
+    const run = exam.unfinished_run;
+    if (!run) return;
+    setDismissError(null);
+    const result = await api.dismissRun(run.id);
+    if (!result.ok && result.kind !== 'notFound') {
+      setDismissError(result.message);
+      return;
+    }
+    reload();
+    setDetailVersion((n) => n + 1);
+    (liveView.current.view.view === 'detail' ? viewHeading : titleRef).current?.focus();
   }
 
   async function rename(exam: MockExam, title: string): Promise<string | null> {
@@ -315,9 +416,19 @@ export function MockExamsPanel({
     body = (
       <ListView
         list={list}
+        unfinished={unfinished}
+        dismissError={dismissError}
         canEdit={canEdit}
         renaming={renaming}
         onRetry={reload}
+        onRetryRuns={() => {
+          setUnfinished({ status: 'loading' });
+          setRunReads((n) => n + 1);
+        }}
+        onResume={onResume}
+        onDismiss={(run) => void dismiss(run)}
+        onResumeExam={resumeExam}
+        onDismissExamRun={(exam) => void dismissExamRun(exam)}
         onAdd={() => {
           setCreateError(null);
           onViewChange({ view: 'create' }, 'push');
@@ -380,6 +491,9 @@ export function MockExamsPanel({
         openSettings={settingsFor === view.mockExamId}
         onSettingsShown={() => setSettingsFor(null)}
         onPractise={onPractise}
+        onResume={resumeExam}
+        onDismissRun={(exam) => void dismissExamRun(exam)}
+        dismissError={dismissError}
         onBankSubmit={(range, count, random) => void startBank(range, count, random)}
         bankBusy={creating}
         bankError={createError}
@@ -471,9 +585,16 @@ function Loading() {
 
 function ListView({
   list,
+  unfinished,
+  dismissError,
   canEdit,
   renaming,
   onRetry,
+  onRetryRuns,
+  onResume,
+  onDismiss,
+  onResumeExam,
+  onDismissExamRun,
   onAdd,
   onOpen,
   onPractise,
@@ -484,9 +605,16 @@ function ListView({
   onDelete,
 }: {
   readonly list: Load<MockExamList>;
+  readonly unfinished: Load<readonly UnfinishedRun[]>;
+  readonly dismissError: string | null;
   readonly canEdit: boolean;
   readonly renaming: string | null;
   readonly onRetry: () => void;
+  readonly onRetryRuns: () => void;
+  readonly onResume: (runId: string, position: number) => void;
+  readonly onDismiss: (run: UnfinishedRun) => void;
+  readonly onResumeExam: (exam: MockExam) => void;
+  readonly onDismissExamRun: (exam: MockExam) => void;
   readonly onAdd: () => void;
   readonly onOpen: (exam: MockExam) => void;
   readonly onPractise: (exam: MockExam) => void;
@@ -496,7 +624,9 @@ function ListView({
   readonly onSettings: (exam: MockExam) => void;
   readonly onDelete: (exam: MockExam, trigger: HTMLElement | null) => void;
 }) {
-  if (list.status === 'loading') return <Loading />;
+  const groupTitle = useId();
+  // Both first, so the empty text never shows ahead of a run.
+  if (list.status === 'loading' || unfinished.status === 'loading') return <Loading />;
   if (list.status === 'error') {
     return (
       <div role="alert" className={styles.alert}>
@@ -506,6 +636,7 @@ function ListView({
     );
   }
   const items = list.data.items;
+  const runs = unfinished.status === 'ready' ? unfinished.data : [];
   return (
     <>
       <div className={styles.toolbar}>
@@ -514,12 +645,42 @@ function ListView({
           추가
         </Button>
       </div>
+      {unfinished.status === 'error' ? (
+        <div role="alert" className={styles.alert}>
+          <p>{unfinished.message}</p>
+          <Button onClick={onRetryRuns}>다시 시도</Button>
+        </div>
+      ) : null}
+      {dismissError ? (
+        <p role="alert" className={styles.error}>
+          {dismissError}
+        </p>
+      ) : null}
+      {runs.length > 0 ? (
+        <section className={styles.group} aria-labelledby={groupTitle}>
+          <h3 id={groupTitle} className={styles.groupTitle}>
+            이어 풀기
+          </h3>
+          <ul className={styles.list} aria-label="이어 풀기 목록">
+            {runs.map((run) => (
+              <UnfinishedRow
+                key={run.id}
+                run={run}
+                onResume={() => onResume(run.id, run.next_position)}
+                onDismiss={() => onDismiss(run)}
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {items.length === 0 ? (
-        <EmptyState
-          headingLevel={3}
-          title={EMPTY_TEXT}
-          description={canEdit ? EMPTY_HINT.replace(/`/g, '') : undefined}
-        />
+        runs.length === 0 ? (
+          <EmptyState
+            headingLevel={3}
+            title={EMPTY_TEXT}
+            description={canEdit ? EMPTY_HINT.replace(/`/g, '') : undefined}
+          />
+        ) : null
       ) : (
         <ul className={styles.list} aria-label="모의고사 목록">
           {items.map((exam) => (
@@ -530,6 +691,8 @@ function ListView({
               renaming={renaming === exam.id}
               onOpen={() => onOpen(exam)}
               onPractise={() => onPractise(exam)}
+              onResume={() => onResumeExam(exam)}
+              onDismissRun={() => onDismissExamRun(exam)}
               onRename={() => onRename(exam)}
               onRenamed={(title) => onRenamed(exam, title)}
               onRenameCancel={onRenameCancel}
@@ -543,12 +706,59 @@ function ListView({
   );
 }
 
+function UnfinishedRow({
+  run,
+  onResume,
+  onDismiss,
+}: {
+  readonly run: UnfinishedRun;
+  readonly onResume: () => void;
+  readonly onDismiss: () => void;
+}) {
+  const name = unfinishedRunName(run);
+  const pending = useRef(false);
+  return (
+    <li className={styles.item}>
+      <div className={styles.itemMain}>
+        <p className={styles.runName}>{name}</p>
+        <p className={styles.meta}>
+          {unfinishedRunProgress(run)} ·{' '}
+          <time dateTime={run.last_touched_at}>{formatDateTime(run.last_touched_at)}</time>
+        </p>
+      </div>
+      <div className={styles.itemActions}>
+        <Button size="sm" aria-label={`${name} 이어 풀기`} onClick={onResume}>
+          이어 풀기
+        </Button>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <IconButton size="sm" variant="ghost" label={`${name} 메뉴`} icon={<MoreIcon />} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (!pending.current) return;
+              pending.current = false;
+              event.preventDefault();
+              onDismiss();
+            }}
+          >
+            <DropdownMenuItem onSelect={() => (pending.current = true)}>지우기</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </li>
+  );
+}
+
 function ListRow({
   exam,
   canEdit,
   renaming,
   onOpen,
   onPractise,
+  onResume,
+  onDismissRun,
   onRename,
   onRenamed,
   onRenameCancel,
@@ -560,12 +770,15 @@ function ListRow({
   readonly renaming: boolean;
   readonly onOpen: () => void;
   readonly onPractise: () => void;
+  readonly onResume: () => void;
+  readonly onDismissRun: () => void;
   readonly onRename: () => void;
   readonly onRenamed: (title: string) => Promise<string | null>;
   readonly onRenameCancel: () => void;
   readonly onSettings: () => void;
   readonly onDelete: (trigger: HTMLElement | null) => void;
 }) {
+  const resumable = canResume(exam) ? exam.unfinished_run : null;
   const trigger = useRef<HTMLButtonElement>(null);
   const pending = useRef<(() => void) | null>(null);
   const generating = isGenerating(exam);
@@ -592,7 +805,7 @@ function ListRow({
               {exam.title}
             </button>
           )}
-          <Badge tone={STATUS_TONES[exam.status]}>{STATUS_LABELS[exam.status]}</Badge>
+          <Badge tone={STATUS_TONES[exam.status]}>{statusLabel(exam)}</Badge>
         </div>
         <p className={styles.meta}>
           {metaText(exam)} ·{' '}
@@ -605,14 +818,25 @@ function ListRow({
             valueText={progressValueText(progress)}
           />
         ) : null}
+        {isWaiting(exam) ? <p className={styles.meta}>{WAITING_TEXT}</p> : null}
       </div>
       <div className={styles.itemActions}>
-        {canPractise(exam) ? (
+        {resumable ? (
+          <Button
+            size="sm"
+            variant="primary"
+            aria-label={`${exam.title} ${resumeLabel(resumable)}`}
+            onClick={onResume}
+            disabled={renaming}
+          >
+            {resumeLabel(resumable)}
+          </Button>
+        ) : canPractise(exam) ? (
           <Button size="sm" onClick={onPractise} disabled={renaming}>
             풀기
           </Button>
         ) : null}
-        {canEdit ? (
+        {canEdit || resumable ? (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <IconButton
@@ -633,17 +857,39 @@ function ListRow({
                 action();
               }}
             >
-              <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
-                이름 바꾸기
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
-                설정 바꾸기
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => (pending.current = () => onDelete(trigger.current))}
-              >
-                삭제
-              </DropdownMenuItem>
+              {resumable ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={renaming}
+                    onSelect={() =>
+                      (pending.current = () => {
+                        trigger.current?.focus();
+                        onPractise();
+                      })
+                    }
+                  >
+                    풀기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => (pending.current = onDismissRun)}>
+                    이어 풀기 지우기
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+              {canEdit ? (
+                <>
+                  <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
+                    이름 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
+                    설정 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => (pending.current = () => onDelete(trigger.current))}
+                  >
+                    삭제
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

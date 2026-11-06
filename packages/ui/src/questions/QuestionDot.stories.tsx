@@ -25,8 +25,8 @@ const meta = {
     docs: {
       description: {
         component:
-          'One CONFIRMED question: a 24×24px `<button>` (mobile/coarse pointers too) ' +
-          'drawing its QuestionMarker at the cell size (18px square). Favorite swaps the rounded square for a rounded star ' +
+          'One CONFIRMED question: a 28×28px `<button>` (mobile/coarse pointers too) ' +
+          'drawing its QuestionMarker at the cell size (28px square). Favorite swaps the rounded square for a rounded star ' +
           'of the same size and color. Only the marker scales (`--heatmap-marker-hover-scale`) on ' +
           'hover (hover-capable pointers only) and `:focus-visible`; the cell never moves. ' +
           'Current = near-black ring hugging the square, color unchanged. Keyboard: Enter/Space open (`onOpen`), focus ' +
