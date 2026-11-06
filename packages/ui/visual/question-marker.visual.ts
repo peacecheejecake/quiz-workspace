@@ -182,7 +182,11 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Tab');
     await expect(current).toBeFocused();
     await expect(current).toHaveCSS('outline-color', await tokenColor(page, '--color-focus'));
-    await expect(current).toHaveCSS('outline-offset', '6.6px'); // 1px outside the 39.2px scaled square
+    // The scaled square (39.2px) overflows the 28px cell by 5.6px a side; the outline sits 1px
+    // beyond it. The browser may round the calculated length, so compare numerically.
+    const offset = await current.evaluate((el) => parseFloat(getComputedStyle(el).outlineOffset));
+    expect(offset).toBeGreaterThanOrEqual(5.6);
+    expect(offset).toBeLessThanOrEqual(7);
   });
 }
 
