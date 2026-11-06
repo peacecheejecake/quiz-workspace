@@ -379,6 +379,17 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **교정 draft:** 편집은 같은 요청에서 교정 draft에 구조로 반영된다(key 기준으로 없는 장 추가, 상위·level·순서 맞춤, 활성에 없는 장 제거와 블록을 살아남은 상위로 이동). 그래서 발행의 `section_key` 재연결이 `user-*` 장의 문제를 null로 만들지 않는다. 이전 revision 복원(DOC-02)도 같은 동기화를 거친다.
 - **삭제:** 문제는 §14.1의 `manual` 옮기기와 같다: `chapter_id`·`chapter_source = manual`·`chapter_set_by/at`이 바뀌고 `question_chapter_changes` 행(source `chapter_edit`)이 남으며 새 revision은 없다. 자동 재매칭(§14.4)은 `manual`을 건드리지 않는다. 이력 행의 `from_chapter_id`는 장이 지워지며 FK로 null이 된다. 활동은 `document.chapter_deleted`(id·개수만) 하나다. 범위 JSON(`mock_exams.range.chapter_ids`, `ask_conversations.scope`)의 지운 장 id는 없는 것으로 읽는다.
 
+### 14.6 Workspace 챕터 (UX12 CHAPTER-8, 사용자 결정 2026-11-06)
+
+화면·계약·확인한 읽기 경로는 [UX12-CHAPTERADD](screens/ux12-chapter-add.md). 교재가 없는 Workspace에도 문제를 묶을 챕터가 필요해서, 문서에 속하지 않는 장을 둔다.
+
+- **모델:** `chapters`의 `document_id`·`document_revision_id`가 함께 null인 행이다. key는 `user-<uuid>`, 쪽·제목 블록 없음. 발행 revision의 내용이 아니므로 `revision_content_guard`와 `chapter_edit` 경로를 거치지 않고, 교정 draft·`content_hash`·`chapter_tree_version`과도 무관하다. `quiz_api`의 기존 `chapters` 권한으로 쓴다.
+- **문제와의 관계:** `questions.chapter_id`는 다른 장과 같다. Heatmap 묶음은 교재 장 뒤, `챕터 없음` 앞이다. 고른 것은 `chapter_source = manual`이고 자동 재매칭은 건드리지 않는다. 자동 추천(`ChapterMatcher`)의 후보가 아니다: 본문이 없다.
+- **본문 기능:** 정리 노트·요약·본문 검색·AI 질문 범위의 대상이 아니다. `section_key`에 묶인 노트는 문서가 있어야 하고 입력이 본문이다.
+- **잠금:** §14.3 앞에 트리 행이 온다: Workspace FOR SHARE → `workspace_chapter_trees` → 문서 → 문제. Workspace 챕터 쓰기는 FOR UPDATE, 그 장을 고르는 문제 저장·재분배·import와 Fork 커밋은 FOR SHARE다.
+- **Dropdown의 자리:** 지금 고른 장이 살아 있는 교재의 장이면 그 교재, 아니면 Workspace 챕터다.
+- **삭제:** §14.5와 같다. 하위 장은 상위로 올라가고 문제는 고른 곳으로 옮겨지며 `question_chapter_changes`(source `chapter_edit`)가 남는다.
+
 ## 15. 하이라이트와 `내 하이라이트` (UX9-SPEC 2026-11-02)
 
 화면·AC는 [HILITE-01](screens/highlights.md)·[CHNOTE-02](screens/chapter-note-tools.md). 사용자 피드백 "하이라이트 기능 추가: 텍스트 선택 시 dropdown menu 노출 … 문제 해설(AI 생성 문구 포함)을 하이라이트하면 정리 노트에 추가 · 하이라이트 목록 관리 · 정리 노트 하이라이트를 위한 툴을 공통으로 쓰면 될듯", 사용자 결정 2026-11-02 C3·C4·C5.

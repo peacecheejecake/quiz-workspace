@@ -46,6 +46,7 @@
 | UX12-SOURCE | 원본 쪽 floating dialog | 가져오기 · 문제 상세 · 관련 본문 · 본문 발췌 · 문서 요약 | [ux12-source-panel.md](ux12-source-panel.md) |
 | UX12-SHARE | 공유 범위 선택·Owner 기록 읽기 전용 | 링크 공유 dialog · 공유 화면 | [ux12-share-scope.md](ux12-share-scope.md) |
 | UX12-PICKER | 챕터 선택 트리 popover | 홈 필터 · 문제 편집기 · 초안 · 재분배 · AI 질문 · 본문 검색 | [ux12-chapter-picker.md](ux12-chapter-picker.md) |
+| UX12-CHAPTERADD | dropdown에서 챕터 추가, Workspace 챕터 | 문제 편집기 · 초안 · 챕터 관리 | [ux12-chapter-add.md](ux12-chapter-add.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |
