@@ -385,7 +385,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-9 | 10 | 진행 | |
 | MOCKUX-10 | 10 | 완료 | 원인은 추출과 같은 큐(코드·재현으로 입증, production 수치는 미확인), quiz.ondemand 큐와 대기 중 표시, Codex 지적 없음, lint·typecheck·unit GREEN |
 | HOME-7 | 10 | 완료 | 문서 관리 행 수로 변경, UX6-UPLOAD 결정 대체, Codex P2(CI phase)는 merge에서 반영 |
-| CHAPTER-7 | 10 | 진행 | |
+| CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
 | CHAPTER-8 | 10 | 진행 | |
 | DOCS-3 | 10 | 진행 | |
 | DOCS-4 | 10 | 진행 | |
