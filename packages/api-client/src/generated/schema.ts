@@ -1501,6 +1501,30 @@ export type paths = {
     patch: operations['updateMyQuestionState'];
     trace?: never;
   };
+  '/api/v1/questions/{question_id}/practice-open': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Open Question Practice
+     * @description Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the
+     *     latest result, then reuse the cached session, show that result or open a session. Only a new
+     *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
+     *     user and question, so no separate key lock is taken. A key seen again replays its session
+     *     while it is open: once submitted, the latest result answers instead, or 409 without one.
+     */
+    post: operations['openQuestionPractice'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/questions/{question_id}/practice-recent': {
     parameters: {
       query?: never;
@@ -5824,6 +5848,56 @@ export type components = {
        * @description First 40 characters of the current stem.
        */
       stem_preview: string;
+    };
+    /**
+     * PracticeOpenBody
+     * @description What the panel knows of this question: an open session it keeps in memory and the latest
+     *     attempt when that session was opened, or `force_new` for another try after a result.
+     */
+    PracticeOpenBody: {
+      /** Baseline Attempt Id */
+      baseline_attempt_id?: string | null;
+      /** Cached Session Id */
+      cached_session_id?: string | null;
+      /**
+       * Force New
+       * @default false
+       */
+      force_new?: boolean;
+    };
+    /**
+     * PracticeOpened
+     * @description One opening of the panel. Answers exist only under `result`: `session` is the answer-free
+     *     open shape, so an unsubmitted payload cannot carry one (a new field here is a reviewed change).
+     */
+    PracticeOpened: {
+      /**
+       * Active Revision Id
+       * Format: uuid
+       */
+      active_revision_id: string;
+      /** Latest Attempt Id */
+      latest_attempt_id: string | null;
+      /**
+       * Previous Revision
+       * @description The latest submission was on another revision: its result is not shown.
+       */
+      previous_revision: boolean;
+      /** Reset Epoch */
+      reset_epoch: number;
+      /** @description The latest submitted session of the active revision, with its outcome. */
+      result: components['schemas']['PracticeSessionDetail'] | null;
+      /**
+       * Reused
+       * @description `session` is the cached one; nothing was written.
+       */
+      reused: boolean;
+      /** @description The open session to answer. */
+      session: components['schemas']['PracticeSession'] | null;
+      /** Submitted Answer */
+      submitted_answer?: {
+        [key: string]: unknown;
+      } | null;
     };
     /** PracticeOption */
     PracticeOption: {
@@ -14509,6 +14583,89 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['MyState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  openQuestionPractice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Optional client-generated key (1-200 visible ASCII characters, e.g. a UUID). Retrying with the same key and body within 24 hours returns the original response (marked `Idempotent-Replayed: true`); the same key with a different body is 409. */
+        'Idempotency-Key'?: string | null;
+      };
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PracticeOpenBody'] | null;
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PracticeOpened'];
         };
       };
       /** @description Unauthorized */

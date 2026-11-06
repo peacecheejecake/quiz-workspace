@@ -39,6 +39,10 @@ const config: StorybookConfig = {
         }));
     resolve.alias = [
       { find: '@/lib/questions/practice-actions', replacement: `${WEB_STORIES}/story-server.ts` },
+      {
+        find: '@/lib/questions/practice-open-client',
+        replacement: `${WEB_STORIES}/story-server.ts`,
+      },
       { find: '@/lib/questions/actions', replacement: `${WEB_STORIES}/story-server.ts` },
       { find: /^next\/link$/, replacement: `${WEB_STORIES}/story-link.tsx` },
       { find: /^@\//, replacement: `${WEB_SRC}/` },

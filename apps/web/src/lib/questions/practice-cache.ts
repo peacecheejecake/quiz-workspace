@@ -1,5 +1,6 @@
 // UX7-CACHE (docs/screens/questions-practice.md, QPLAY-01-AC06): the practice sessions this screen
-// opened, so re-opening an unanswered question (close/reopen, previous/next) needs no request.
+// opened, so re-opening an unanswered question (close/reopen, previous/next) keeps its session; the
+// server confirms it in the opening call (UX12-OPEN).
 // In memory only, one instance per mounted panel and workspace: it is dropped with the screen
 // (sign-out, another workspace or route), never written to browser storage. It holds only the
 // answer-free `PracticeSession` fields (copied field by field, so an unexpected field never gets
