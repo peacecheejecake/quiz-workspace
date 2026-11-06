@@ -21,8 +21,8 @@
   --qz-heatmap-cell: inherit;
 }
 
-/* Mobile and coarse pointers use --heatmap-cell-touch, 28px like the desktop cell since
-   UX12 DESIGN-6 (it was 24px, the WCAG 2.2 target-size minimum, from UX9-STROKE). */
+/* Mobile and coarse pointers use --heatmap-cell-touch, 28px (the desktop cell is 26px since
+   HOME-CELL; touch was 24px, the WCAG 2.2 target-size minimum, from UX9-STROKE). */
 @media (width < 768px), (pointer: coarse) {
   .qz-heatmap,
   .qz-heatmap-legend,
@@ -74,7 +74,7 @@
 
 /*
  * Heatmap dots draw the square at the cell size (UX12 DESIGN-6): it fills 18/24 of the viewBox, so
- * the SVG box is 24/18 of the cell and overflows it evenly. --heatmap-gap (7px, 1/4 of the 28px
+ * the SVG box is 24/18 of the cell and overflows it evenly. --heatmap-gap (6px, 1/4 of the 24px
  * square) spaces the neighbours. The oversized SVG box takes no pointer: it would otherwise
  * cover the neighbours, the more so once scaled, so hit-testing stays on the cell.
  */

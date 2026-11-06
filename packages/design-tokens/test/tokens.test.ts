@@ -269,11 +269,11 @@ describe('density (design-system.md §4, v1.2.2)', () => {
   });
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
-    expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
+    expect(staticTokens['heatmap-cell']).toBe('24px'); // HOME-CELL 2026-11-07: 28px → 24px (user request); touch stays 28px
     expect(staticTokens['heatmap-cell-touch']).toBe('28px'); // UX12 DESIGN-6: reverses UX9-STROKE's 24px
     expect(staticTokens['heatmap-dot']).toBe('16px');
-    expect(staticTokens['heatmap-gap']).toBe('7px'); // UX12 DESIGN-6: the marker fills the cell
-    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.4'); // HOME-SCALE: was 1.5 (DESIGN-6: 1.3)
+    expect(staticTokens['heatmap-gap']).toBe('6px'); // HOME-CELL: 7px → 6px (DESIGN-6: the marker fills the cell)
+    expect(staticTokens['heatmap-marker-hover-scale']).toBe('1.3'); // HOME-SCALE 2026-11-07: 1.5 → 1.3
   });
 
   it('heatmap markers sit at most 1/3 of their drawn width apart (UX5-UI)', () => {

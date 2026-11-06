@@ -226,7 +226,7 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC06 a heatmap cell scales its marker by 1.4 without moving the grid',
+  'UX12-GLASSBTN-AC06 a heatmap cell scales its marker by 1.3 without moving the grid',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openOverview(page, workspaceFactory, 'ux12-gb-06');
@@ -237,7 +237,7 @@ test(
     const marker = dot.locator('.qz-question-marker');
     await expect
       .poll(() => marker.evaluate((el) => getComputedStyle(el).transform))
-      .toContain('matrix(1.4, 0, 0, 1.4');
+      .toContain('matrix(1.3, 0, 0, 1.3');
     expect(await dot.boundingBox()).toEqual(before);
     const clipped = await dot.evaluate((element) => {
       for (let node = element.parentElement; node; node = node.parentElement) {

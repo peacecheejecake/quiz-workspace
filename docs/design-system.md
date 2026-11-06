@@ -281,11 +281,11 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --breakpoint-lg: 1024px;
   --floating-panel-width: 500px;
   --outline-panel-width: 20rem; /* v1.2.7 (DOCVIEW-PORT): 탐색 panel(size="narrow")·docked 목차 panel 폭 */
-  --heatmap-cell: 28px;        /* UX12-HOME-1 (2026-11-06, 사용자 요청): 24px → 28px, UX5-UI의 28px → 24px를 되돌림 */
+  --heatmap-cell: 24px;        /* HOME-CELL (2026-11-07, 사용자 요청): 28px → 24px. UX12-HOME-1: 24px → 28px */
   --heatmap-cell-touch: 28px;  /* UX12 DESIGN-6 (2026-11-06, 사용자 요청): 24px → 28px, UX9-STROKE의 24px를 되돌림 */
-  --heatmap-gap: 7px;          /* UX12 DESIGN-6: 0 → 7px, marker가 셀을 채우므로 간격을 grid가 맡는다 */
+  --heatmap-gap: 6px;          /* UX12 DESIGN-6: 0 → 7px, HOME-CELL 2026-11-07: 6px, marker가 셀을 채우므로 간격을 grid가 맡는다 */
   --heatmap-dot: 16px;         /* 장식용 marker(legend·요약·preview). heatmap 점은 셀 크기로 그린다 */
-  --heatmap-marker-hover-scale: 1.4;  /* UX12 DESIGN-6: 1.3 → 1.5, HOME-SCALE 2026-11-07: 1.4(39.2px). 확대한 사각형은 셀 밖으로 5.6px 나가고 이웃 위로 올라온다 */
+  --heatmap-marker-hover-scale: 1.3;  /* UX12 DESIGN-6: 1.3 → 1.5, HOME-SCALE 2026-11-07: 1.3(24px 셀에서 31.2px, touch 28px 셀에서 36.4px). 확대한 사각형은 셀 밖으로 3.6px(touch 4.2px) 나가고 이웃 위로 올라온다 */
 }
 
 .glass-surface {
@@ -474,14 +474,14 @@ type QuestionDotProps = {
 ```
 
 - 기본 marker는 **rounded square**, 즐겨찾기는 **rounded five-point star SVG**(부드러운 꼭짓점: `stroke-linejoin="round"`, rounded SVG path); 두 모양 모두 semantic status color를 채운다. **marker에는 테두리가 없다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; UX9-STROKE의 `0.5px` 윤곽과 `--heatmap-marker-stroke-mix` 토큰을 없앴다). 사각형은 stroke가 없고, 별만 채움과 같은 색(`currentColor`)의 `--heatmap-marker-stroke-width` = `0.5px` non-scaling stroke를 꼭짓점을 둥글리는 기하로 쓴다 — 눈에 보이는 윤곽이 아니다. 이 규칙은 heatmap 점과 장식용 marker(상태 필터 색 견본·preview) 모두에 같다. 상태 색이 표면 대비 3:1 미만일 수 있으므로(light unseen·viewed·retry) 의미는 늘 텍스트(label·필터·tooltip)로도 준다. forced-colors에서는 채움(`currentColor`)이 시스템 색이 되고 CanvasText 윤곽은 더 두지 않으므로 상태는 텍스트로 구분한다.
-- heatmap 셀과 그려진 사각형은 모든 화면에서 `28×28px`이다(UX12 DESIGN-6 2026-11-06 사용자 요청 "기본 크기를 28px로", UX9-STROKE의 touch `24px`와 viewBox 18/24의 `21px` 사각형을 되돌림). heatmap 밖의 단독 `QuestionDot`도 같다. 모서리 반경은 `7px`이고 WCAG 2.2 target size 최소 24×24 CSS px를 넘는다. marker SVG box는 셀의 24/18로 셀 밖으로 고르게 넘치며 pointer를 받지 않는다. 셀 간 grid gap은 `7px` = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로")이고, 각 셀의 투명한 `::after`가 gap의 절반씩을 맡아 pointer는 격자 위에서 늘 어느 한 셀에 있다. 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`(1.4, `39.2px`, 사용자 피드백 2026-11-07로 1.5에서 낮춤)로 셀 밖 5.6px까지 커지고 dot이 이웃 위로 올라온다. focus ring은 확대한 marker에서 1px 밖이다. transition은 transform 150ms, reduced-motion시 즉시 변경한다.
+- heatmap 셀과 그려진 사각형은 데스크톱(fine pointer, ≥768px)에서 `24×24px`(HOME-CELL 2026-11-07 사용자 요청), 모바일·coarse pointer에서 `28×28px`이다(이전 모든 화면 28px: UX12 DESIGN-6 2026-11-06 사용자 요청 "기본 크기를 28px로", UX9-STROKE의 touch `24px`와 viewBox 18/24의 `21px` 사각형을 되돌림). heatmap 밖의 단독 `QuestionDot`(panel 머리글·목록)은 화면과 무관하게 `28×28px`(`--heatmap-cell-touch`)이다. 모서리 반경은 `7px`이고 WCAG 2.2 target size 최소 24×24 CSS px를 넘는다. marker SVG box는 셀의 24/18로 셀 밖으로 고르게 넘치며 pointer를 받지 않는다. 셀 간 grid gap은 `6px`(HOME-CELL 2026-11-07, 이전 `7px`) = **marker 폭의 1/3 이하**(v1.2.3, UX5-UI 사용자 요청 "점 사이 간격을 점 width의 1/3 이하로")이고, 각 셀의 투명한 `::after`가 gap의 절반씩을 맡아 pointer는 격자 위에서 늘 어느 한 셀에 있다. 장식용 marker(legend·상태 요약·preview)는 `--heatmap-dot` 16px box. favorite는 **크기 확대가 아니라 사각형→별 모양 전환**이다. hover 및 `:focus-visible` 시 marker만 `scale(var(--heatmap-marker-hover-scale))`(1.3, 24px 셀에서 `31.2px`, 사용자 피드백 2026-11-07로 1.5에서 낮춤)로 셀 밖 3.6px까지 커지고 dot이 이웃 위로 올라온다. focus ring은 확대한 marker에서 1px 밖이다. transition은 transform 150ms, reduced-motion시 즉시 변경한다.
 - favorite는 별 silhouette로 표시하며 상세 텍스트에서도 별 아이콘을 제공. hover/focus scale을 적용해도 고정 셀과 grid 위치는 바꾸지 않는다.
 - 현재 문제 dot(풀이 panel에 열린 문제, `aria-current="true"`)는 상태 색을 그대로 두고 2px `--color-text-primary` ring(light 거의 검정 `#172033`, dark 거의 흰색 `#F2F5F9`)을 사각형에 **틈 없이** 붙여 그린다(`outline-offset` = −셀/8을 정수 px로 올림 = `−4px`, Chromium이 소수 offset을 버려 `−3.5px`로는 `0.5px` 틈이 남기 때문이다. ring은 사각형 가장자리를 `0.5px` 덮는다. 셀 `border-radius` = 셀×7.5/24 = `8.75px`. touch 셀은 `−3px`·`7.5px`로 ring 안쪽 반경이 사각형의 `4.5px`와 같다; UX9-STROKE 2026-11-02, 사용자 요청 "cell 내부 공간 제거, current일 때 outline을 black에 가까운 색으로"; 이전: accent ring을 셀 가장자리에 그려 사각형과 `3px` 띄움). `:focus-visible`은 셀 가장자리의 2px `--color-focus` ring + marker 확대로, 현재 표시와 색뿐 아니라 위치·크기로도 구분된다. focus된 현재 dot는 focus ring 하나만 보인다. forced-colors에서는 둘 다 `Highlight`이고 위치로 구분한다.
 - 점은 `<button>`으로 구현하고 label에 챕터·번호·유형·상태·favorite·retry를 포함.
 - roving tabindex 또는 명확한 Tab/Arrow navigation을 제공하여 수백 개의 버튼이 키보드 사용자에게 부담이 되지 않게 한다.
 - hover/focus에는 Tooltip/Popover로 preview, click/Enter/Space에는 Floating Question Panel. 풀이 panel을 닫아 focus가 dot으로 돌아올 때는 preview를 열지 않는다(UX12-HOME-AC01, `focusQuestionDotQuietly`). 사용자가 Tab·Arrow로 옮긴 focus와 hover는 그대로 preview를 연다.
 - 색맹 등 색상 인지가 어려운 사용자도 구별할 수 있도록 marker label·preview popover·상태 필터에 상태 텍스트를 제공한다. 상시 legend·상태 요약은 UX3c(2026-10-20, 사용자 결정)로 없애고, 상단 줄의 `필터` popover를 열면(UX12 HOME-6) 색 견본과 텍스트가 함께 보인다.
-- 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX12 DESIGN-6(2026-11-06, 사용자 요청)부터 모든 화면에서 28px이다(이전: 모바일 24px, 데스크톱은 UX12-HOME-1부터 28px).
+- 24 CSS px 이상의 클릭 타깃을 기준으로 한다(WCAG 2.2 target size 최소). heatmap 셀은 UX12 DESIGN-6(2026-11-06, 사용자 요청)부터 28px이고 데스크톱은 HOME-CELL(2026-11-07)부터 24px이다(이전: 모바일 24px, 데스크톱은 UX12-HOME-1부터 28px).
 
 ### 6.1 Marker 렌더링 구현 규칙
 

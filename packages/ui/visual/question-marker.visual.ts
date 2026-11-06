@@ -112,10 +112,10 @@ test('UX5-UI the gap between heatmap markers is at most 1/3 of the marker width'
 });
 
 // UX12 DESIGN-6: touch cells are 28px too, above the WCAG 2.2 target-size minimum.
-test('UX12-HOME-AC03 desktop heatmap cells are 28px', async ({ page }) => {
+test('UX12-HOME-AC03 desktop heatmap cells are 24px', async ({ page }) => {
   await openStory(page, 'questions-questionheatmap--full');
   const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
-  expect(box).toMatchObject({ width: 28, height: 28 });
+  expect(box).toMatchObject({ width: 24, height: 24 });
 });
 
 test('mobile uses 28px cells', async ({ page }) => {
@@ -130,12 +130,15 @@ test('a standalone dot (no heatmap ancestor) is 28px on desktop and on mobile', 
 }) => {
   await openStory(page, 'questions-questiondot--default');
   const dot = page.locator('[data-question-id]');
-  for (const width of [1280, 390]) {
+  for (const [width, size] of [
+    [1280, 28],
+    [390, 28],
+  ] as const) {
     await page.setViewportSize({ width, height: 844 });
-    expect(await dot.boundingBox()).toMatchObject({ width: 28, height: 28 });
+    expect(await dot.boundingBox()).toMatchObject({ width: size, height: size });
     const shape = await dot.locator('.shape').boundingBox();
-    expect(shape?.width).toBeCloseTo(28, 0);
-    expect(shape?.height).toBeCloseTo(28, 0);
+    expect(shape?.width).toBeCloseTo(size, 0);
+    expect(shape?.height).toBeCloseTo(size, 0);
   }
 });
 
@@ -182,11 +185,11 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Tab');
     await expect(current).toBeFocused();
     await expect(current).toHaveCSS('outline-color', await tokenColor(page, '--color-focus'));
-    // The scaled square (39.2px) overflows the 28px cell by 5.6px a side; the outline sits 1px
+    // The 1.3x square overflows the cell by 0.15 cell a side (3.6px at 24px); the outline sits 1px
     // beyond it. The browser may round the calculated length, so compare numerically.
     const offset = await current.evaluate((el) => parseFloat(getComputedStyle(el).outlineOffset));
-    expect(offset).toBeGreaterThanOrEqual(5.6);
-    expect(offset).toBeLessThanOrEqual(7);
+    expect(offset).toBeGreaterThanOrEqual(cell.width * 0.15);
+    expect(offset).toBeLessThanOrEqual(cell.width * 0.15 + 1.5);
   });
 }
 

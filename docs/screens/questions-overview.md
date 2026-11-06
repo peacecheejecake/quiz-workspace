@@ -10,7 +10,7 @@
 ## 레이아웃 및 컴포넌트
 - 상태 토큰: unseen=lightgray, viewed=gray, incorrect=red, correct=green, retry=yellow(최상위 우선순위).
 - 일반 마커 rounded square, 즐겨찾기 rounded star(크기 동일). Hover/focus scale=1.5, 고정 Grid 셀, 키보드/스크린리더 대응.
-- 마커 사이 보이는 간격은 마커 폭의 1/3 이하(UX5-UI 2026-10-23): 셀과 마커 28px(touch도 같다, UX12 DESIGN-6 2026-11-06 사용자 요청)·grid gap 7px. 크기 규격은 [디자인 시스템](../design-system.md) §6.
+- 마커 사이 보이는 간격은 마커 폭의 1/3 이하(UX5-UI 2026-10-23): 셀과 마커 데스크톱 24px(HOME-CELL 2026-11-07), touch 28px(UX12 DESIGN-6 2026-11-06 사용자 요청)·grid gap 6px. 크기 규격은 [디자인 시스템](../design-system.md) §6.
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
 
@@ -73,7 +73,7 @@
 
 - **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
 - **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** Hover 또는 키보드 focus 시 1.4배 확대(HOME-SCALE 2026-11-07, 이전 1.5배)와 Popover를 보여주고 reduced-motion에서는 움직임을 제거한다.
+- **Then:** Hover 또는 키보드 focus 시 1.3배 확대(HOME-SCALE 2026-11-07, 이전 1.5배)와 Popover를 보여주고 reduced-motion에서는 움직임을 제거한다.
 
 ### QOV-01-AC05
 
