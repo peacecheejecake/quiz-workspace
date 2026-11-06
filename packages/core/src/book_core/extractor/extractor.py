@@ -1,9 +1,10 @@
 """``QuestionExtractor``: question PDF (``ParsedDocument``) -> ``QuestionDraft``s (Task M4.3).
 
-Pipeline (questions.md §6): rule-based pre-extraction (numbering, options, figures, answer key,
-page/bbox provenance) -> optional LLM refinement per question (``questions.extract/v3``,
-structured output, own source text only) -> structural validation -> drafts with
-``review_status=pending``, ``origin=pdf_import`` and validation issues.
+Pipeline (questions.md §6): printed reading order (``reading_order``) -> rule-based
+pre-extraction (numbering, options, figures, answer key, page/bbox provenance) -> optional LLM
+refinement per question (``questions.extract/v3``, structured output, own source text only) ->
+structural validation -> drafts with ``review_status=pending``, ``origin=pdf_import`` and
+validation issues.
 
 Answers come only from the printed answer key: a separate key section matched by question number,
 or the inline ``정답: ②`` line printed right after the question (which answers that question only,
@@ -23,12 +24,14 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
+from itertools import pairwise
 from typing import Annotated, Literal
 
 from pydantic import Field
 
 from book_core.contracts import (
     Block,
+    BlockType,
     CoreModel,
     DocumentRevision,
     DraftOrigin,
@@ -43,6 +46,7 @@ from book_core.contracts import (
 )
 from book_core.contracts.common import Identifier
 from book_core.extractor.llm_refine import LLMQuestion, build_request
+from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
     AnswerKeyEntry,
     RawFigure,
@@ -76,6 +80,11 @@ from book_core.question import (
 logger = logging.getLogger("book_core.extractor")
 
 EXTRACTOR_VERSION = "book-core-question-extractor/1"
+
+_OUTLIER_MIN_QUESTIONS = 10
+"""Multiple-choice questions before a document has a common option count."""
+_OUTLIER_MAX_SHARE = 0.1
+"""An option count held by at least this share of the questions is a format, not an outlier."""
 
 
 class ExtractedQuestion(CoreModel):
@@ -152,7 +161,7 @@ class QuestionExtractor:
         ``stop_on`` (e.g. a Celery soft time limit) arrives while refining, finished questions
         keep their refinement, the rest stay rule-based and ``refinement_incomplete`` is set.
         """
-        blocks = document.blocks
+        blocks = reading_order(document.blocks)
         seg = segment_chapters(blocks)
         warnings = _document_warnings(
             seg.questions,
@@ -179,6 +188,7 @@ class QuestionExtractor:
                     )
                 )
             candidates.append(candidate)
+        _note_layout_issues(candidates, contexts, _repaired(document.blocks, blocks, contexts))
 
         # Phase 2: LLM refinement on a bounded pool; results are stored by index so the output
         # order never depends on completion order.
@@ -293,10 +303,10 @@ def llm_requests(document: ParsedDocument | DocumentRevision) -> list[tuple[int,
     The requests are exactly those ``QuestionExtractor.extract`` sends, so tests (and cost
     estimates) can script or count them before a run.
     """
-    seg = segment_chapters(document.blocks)
+    blocks = reading_order(document.blocks)
     return [
         (ctx.raw.number, build_request(*_request_lines(ctx)))
-        for ctx in _contexts(seg, document.blocks)
+        for ctx in _contexts(segment_chapters(blocks), blocks)
         if ctx.raw.stem
     ]
 
@@ -336,6 +346,86 @@ def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
             )
         )
     return contexts
+
+
+# ------------------------------------------------------------------------------------------
+# Reading order and layout checks
+
+
+def _text_ids(blocks: Sequence[Block]) -> tuple[str, ...]:
+    return tuple(b.id for b in blocks if b.type is not BlockType.IMAGE)
+
+
+def _own_text(raw: RawQuestion, blocks: Sequence[Block]) -> tuple[str, ...]:
+    return _text_ids([blocks[i] for i in sorted(set(raw.block_indices))])
+
+
+def _repaired(
+    parsed: Sequence[Block], ordered: Sequence[Block], contexts: Sequence[_Context]
+) -> set[int]:
+    """Positions in ``contexts`` of the questions the reading order changed: they own other text
+    blocks, or the same ones in another order, than the parser's order gave them. Images do not
+    count: a dropped decoration changes no text, and a note on every page would mean nothing."""
+    if _text_ids(parsed) == _text_ids(ordered):
+        return set()
+    before: Counter[tuple[str, ...]] = Counter(
+        _own_text(q, parsed) for q in segment_chapters(parsed).questions
+    )
+    return {i for i, ctx in enumerate(contexts) if before[_own_text(ctx.raw, ordered)] == 0}
+
+
+def _option_outliers(candidates: Sequence[_Candidate]) -> set[int]:
+    """Positions of multiple-choice candidates whose option count is rare in the document, next
+    to a clear common count. A count shared by a real part of the paper (ten O/X questions before
+    fifty with four options) is a format, not an outlier."""
+    counts = Counter(len(c.options) for c in candidates if c.options)
+    total = sum(counts.values())
+    if total < _OUTLIER_MIN_QUESTIONS:
+        return set()
+    mode = counts.most_common(1)[0][0]
+    rare = {n for n, seen in counts.items() if n != mode and seen / total < _OUTLIER_MAX_SHARE}
+    return {i for i, c in enumerate(candidates) if len(c.options) in rare}
+
+
+def _lost_options(candidates: Sequence[_Candidate]) -> set[int]:
+    """Positions of a question without options followed by one with duplicate option labels: the
+    next question took its options. Reported on both."""
+    found: set[int] = set()
+    for i, (candidate, following) in enumerate(pairwise(candidates)):
+        duplicated = any(x.code == "duplicate_option_label" for x in following.issues)
+        if not candidate.options and duplicated:
+            found |= {i, i + 1}
+    return found
+
+
+def _note_layout_issues(
+    candidates: Sequence[_Candidate], contexts: Sequence[_Context], repaired: set[int]
+) -> None:
+    for i in sorted(repaired):
+        candidates[i].issues.append(
+            issue(
+                "reading_order_repaired",
+                f"Question {contexts[i].raw.number} was read in the printed order, which differs "
+                "from the parser's order.",
+            )
+        )
+    for i in sorted(_option_outliers(candidates)):
+        candidates[i].issues.append(
+            issue(
+                "option_count_outlier",
+                "This question has an unusual number of options for this document.",
+                field="options",
+            )
+        )
+    for i in sorted(_lost_options(candidates)):
+        candidates[i].issues.append(
+            issue(
+                "options_on_next_question",
+                "One question has no options and the next repeats option labels; "
+                "the options may be on the wrong question.",
+                field="options",
+            )
+        )
 
 
 # ------------------------------------------------------------------------------------------

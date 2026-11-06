@@ -6,9 +6,9 @@ questions, e.g. chapter-end exercises). It reuses the question extractor's own s
 (``segment``), so a "question" here is exactly what an import would find; there is no second
 detector to drift from it. Deterministic, no LLM, no document text in the result.
 
-The document is segmented chapter by chapter with ``segment_chapters`` and its key matched with
-``answer_entries`` - the same reading the import (``QuestionExtractor``) does, so a document
-classified as having questions yields them as drafts.
+The document is put in ``reading_order``, segmented chapter by chapter with ``segment_chapters``
+and its key matched with ``answer_entries`` - the same reading the import
+(``QuestionExtractor``) does, so a document classified as having questions yields them as drafts.
 
 Evidence:
 
@@ -52,6 +52,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from book_core.contracts import Block, BlockType, CoreModel
+from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
     AnswerKeyEntry,
     RawQuestion,
@@ -158,6 +159,7 @@ def _gaps(numbers: Sequence[int]) -> int:
 
 
 def classify_content(blocks: Sequence[Block]) -> ContentDetection:
+    blocks = reading_order(blocks)
     seg = segment_chapters(blocks)
     questions, entries = seg.questions, seg.answer_key
     keys = answer_entries(seg)
