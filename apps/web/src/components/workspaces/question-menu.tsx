@@ -80,7 +80,7 @@ export function QuestionMenu({
   const ownReasonId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pending = useRef<(() => void) | null>(null);
-  const afterClose = (action: () => void) => () => {
+  const afterClose = (action: () => void) => {
     pending.current = action;
   };
   const actions: readonly QuestionMenuAction[] = [
@@ -126,7 +126,7 @@ export function QuestionMenu({
         }}
       >
         {anyDisabled ? <DropdownMenuLabel id={reasonId}>{reason}</DropdownMenuLabel> : null}
-        <DropdownMenuItem onSelect={afterClose(onDocuments)}>문서 관리</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => afterClose(onDocuments)}>문서 관리</DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link
             href={searchHref}
@@ -146,7 +146,7 @@ export function QuestionMenu({
               <DropdownMenuItem
                 disabled={disabled}
                 aria-describedby={own !== null ? ownReasonId : disabled ? reasonId : undefined}
-                onSelect={afterClose(action.onSelect)}
+                onSelect={() => afterClose(action.onSelect)}
               >
                 {action.label}
               </DropdownMenuItem>
