@@ -92,9 +92,13 @@ def test_stored_values_round_trip_and_null_stays_null() -> None:
     stored = [TABLE.model_dump(mode="json"), None]
     assert parse_stem_tables(stored) == (TABLE, None)
     out = stem_tables_out(stored)
-    assert out is not None and out[0] is not None and out[1] is None
-    assert out[0].spans is not None and out[0].spans[0].col_span == 2
-    assert stem_tables_out(None) is None and parse_stem_tables(None) is None
+    assert out is not None
+    assert out[0] is not None
+    assert out[1] is None
+    assert out[0].spans is not None
+    assert out[0].spans[0].col_span == 2
+    assert stem_tables_out(None) is None
+    assert parse_stem_tables(None) is None
 
 
 def test_a_draft_edit_writes_the_cells_into_the_payload() -> None:
@@ -108,7 +112,8 @@ def test_a_draft_edit_writes_the_cells_into_the_payload() -> None:
     )
     content = _content(tables=(TABLE,))
     updated = with_review(draft, content, recompute_validations(content, draft), "pending")
-    assert updated.stem == GFM and updated.stem_tables == (TABLE,)
+    assert updated.stem == GFM
+    assert updated.stem_tables == (TABLE,)
     assert content_of(updated, is_multi_answer=False).stem_tables == (TABLE,)
 
 
@@ -143,7 +148,8 @@ READ_MODELS = (
 @pytest.mark.parametrize("name", READ_MODELS)
 def test_the_field_sits_beside_the_stem_in_read_models(name: str) -> None:
     properties = _openapi()["components"]["schemas"][name]["properties"]
-    assert "stem" in properties and "stem_tables" in properties
+    assert "stem" in properties
+    assert "stem_tables" in properties
 
 
 def test_the_field_is_never_where_the_stem_is_absent() -> None:

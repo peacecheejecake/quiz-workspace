@@ -26,6 +26,7 @@ export interface DocumentQuestion {
   readonly number: number | null;
   readonly type: QuestionLike['question_type'];
   readonly stem: string;
+  readonly stemTables: Revision['stem_tables'];
   readonly options: Revision['options'];
   readonly correctOptionIds: readonly string[] | null;
   readonly acceptedAnswers: readonly string[] | null;
@@ -51,6 +52,7 @@ export function documentQuestions(
       number: q.question_number,
       type: q.question_type,
       stem: q.revision.stem,
+      stemTables: q.revision.stem_tables,
       options: q.revision.options,
       correctOptionIds: q.revision.correct_option_ids,
       acceptedAnswers: q.revision.accepted_answers,

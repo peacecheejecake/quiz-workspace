@@ -37,6 +37,7 @@ export function answerFreeSession(session: PracticeSession): PracticeSession {
     question_type: session.question_type,
     chapter_id: session.chapter_id,
     stem: session.stem,
+    stem_tables: session.stem_tables,
     is_multi_answer: session.is_multi_answer,
     displayed_option_ids: [...session.displayed_option_ids],
     options: session.options.map((o) => ({ id: o.id, text: o.text })),

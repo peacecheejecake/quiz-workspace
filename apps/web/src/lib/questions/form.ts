@@ -5,6 +5,7 @@
 // option gets `opt-<random>` once and keeps it through text edits, reordering and saves, so
 // grading by option id stays valid across revisions.
 import type { Schemas } from '@quiz/api-client';
+import { alignedStemTables, type StemCells, type StemTables } from './stem-table-edit';
 
 export type Question = Schemas['Question'];
 export type QuestionDetail = Schemas['QuestionDetail'];
@@ -60,6 +61,8 @@ export interface SourceDraft {
 export interface QuestionFormValues {
   readonly type: QuestionType;
   readonly stem: string;
+  /** UX12-STEMTABLE: kept as loaded while the stem is typed in; alignment decides what counts. */
+  readonly stemTables?: StemTables;
   readonly options: readonly OptionDraft[];
   readonly multiAnswer: boolean;
   /** One accepted answer per line (SHORT_ANSWER); empty = not auto-gradable. */
@@ -125,6 +128,7 @@ export function formFromQuestion(question: Question): QuestionFormValues {
   return {
     type: question.question_type,
     stem: rev.stem,
+    stemTables: rev.stem_tables ?? null,
     options: rev.options.map((o) => ({ id: o.id, text: o.text, correct: correct.has(o.id) })),
     multiAnswer: rev.is_multi_answer,
     acceptedAnswers: (rev.accepted_answers ?? []).join('\n'),
@@ -374,6 +378,34 @@ export function validateQuestionForm(values: QuestionFormValues): FieldErrors {
   return errors;
 }
 
+function cellSpan(raw: unknown): raw is NonNullable<StemCells['spans']>[number] {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const { row, col, row_span, col_span } = raw as Record<string, unknown>;
+  return [row, col, row_span, col_span].every((n) => Number.isInteger(n));
+}
+
+function stemCells(raw: unknown): raw is StemCells {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const { rows, header_rows, spans } = raw as Record<string, unknown>;
+  return (
+    Array.isArray(rows) &&
+    rows.every(
+      (row) => Array.isArray(row) && (row as unknown[]).every((c) => typeof c === 'string'),
+    ) &&
+    Number.isInteger(header_rows) &&
+    (spans === undefined ||
+      spans === null ||
+      (Array.isArray(spans) && (spans as unknown[]).every(cellSpan)))
+  );
+}
+
+/** Stem cells received from the client, null unless the whole value has their shape. */
+function parseStemTables(raw: unknown): StemTables {
+  if (!Array.isArray(raw)) return null;
+  const list = raw as unknown[];
+  return list.every((t) => t === null || stemCells(t)) ? (list as (StemCells | null)[]) : null;
+}
+
 /**
  * Re-reads form values received from the client (server actions take untrusted input): only the
  * known fields, with the right primitive types, survive. `null` = not a form at all.
@@ -422,6 +454,7 @@ export function parseFormValues(raw: unknown): QuestionFormValues | null {
   return {
     type: type as QuestionType,
     stem: v.stem as string,
+    ...(v.stemTables ? { stemTables: parseStemTables(v.stemTables) } : {}),
     options,
     multiAnswer: v.multiAnswer,
     acceptedAnswers: v.acceptedAnswers as string,
@@ -447,11 +480,27 @@ type Content = Required<
     | 'accepted_answers'
     | 'explanation'
     | 'rubric'
+    | 'stem_tables'
   >
 >;
 
 function nullIfBlank(value: string): string | null {
   return value.trim() === '' ? null : value;
+}
+
+/** The cells to save: what lines up with the stem, as the request body takes them. */
+export function stemTablesBody(values: QuestionFormValues): Content['stem_tables'] {
+  const aligned = alignedStemTables(values.stem, values.stemTables);
+  if (!aligned) return null;
+  return aligned.map((table) =>
+    table
+      ? {
+          rows: table.rows.map((row) => [...row]),
+          header_rows: table.header_rows,
+          spans: table.spans ? table.spans.map((span) => ({ ...span })) : null,
+        }
+      : null,
+  );
 }
 
 /** The revisioned content of `values`, shaped for the question's type. */
@@ -460,6 +509,7 @@ export function contentBody(values: QuestionFormValues): Content {
   const answers = acceptedAnswerList(values.acceptedAnswers);
   return {
     stem: values.stem,
+    stem_tables: stemTablesBody(values),
     options: isMcq ? values.options.map((o) => ({ id: o.id, text: o.text })) : [],
     correct_option_ids: isMcq ? values.options.filter((o) => o.correct).map((o) => o.id) : null,
     is_multi_answer: isMcq && values.multiAnswer,
