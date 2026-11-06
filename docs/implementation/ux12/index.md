@@ -364,5 +364,5 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-7 | 10 | 완료 | Codex 지적 없음, 지우기는 resume_dismissed_at 컬럼(migration 20261106180000), lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | DESIGN-5 | 10 | 진행 | |
-| HOME-6 | 10 | 진행 | |
+| HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | ASK-3 | 10 | 완료 | Codex P1(파서 무한 반복)·프롬프트 v3 재리뷰 통과, v2 해설 유지, 칸 안 근거, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인. 자체 파서 약 600줄 |
