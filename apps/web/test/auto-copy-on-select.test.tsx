@@ -90,6 +90,33 @@ describe('useAutoCopyOnSelect', () => {
     expect(await screen.findByText('복사했습니다.')).toBeInTheDocument();
   });
 
+  it('copies a double click once, even when the first release runs late, and again next time', async () => {
+    writeAutoCopy(true);
+    mount();
+    const plain = screen.getByTestId('plain');
+    const flush = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    const doubleClick = async () => {
+      press(plain, 'pointerdown');
+      press(plain, 'pointerup');
+      // The second press selects the word before the first release's task gets to run.
+      press(plain, 'pointerdown');
+      select(plain);
+      await flush();
+      press(plain, 'pointerup');
+      await flush();
+    };
+
+    await doubleClick();
+    expect(writeText).toHaveBeenCalledTimes(1);
+
+    window.getSelection()?.removeAllRanges();
+    await doubleClick();
+    expect(writeText).toHaveBeenCalledTimes(2);
+  });
+
   it('leaves a selection the press did not change alone', async () => {
     writeAutoCopy(true);
     mount();
