@@ -776,7 +776,6 @@ export function PracticeViewer({
                   highlighting={{
                     questionId: view.id,
                     revisionId: ready.question_revision_id,
-                    chapterTitle: view.chapterTitle,
                   }}
                 />
               </form>

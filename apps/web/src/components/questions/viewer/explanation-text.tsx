@@ -7,15 +7,10 @@
 // highlights are read then and never before (AGENTS.md §5). The text shows at once; the
 // highlights are drawn when they arrive. Places without highlights (mock exam questions, share
 // guests, older revisions) get the plain text.
-import { HighlightableText, useToast } from '@quiz/ui';
+import { HighlightableText } from '@quiz/ui';
 import { useEffect, useMemo, useRef } from 'react';
 import { getQuestionHighlights } from '@/lib/highlights/client';
-import {
-  collectedNotice,
-  explanationBlocks,
-  explanationHighlightsOf,
-  HIGHLIGHT_TEXT,
-} from '@/lib/highlights/model';
+import { explanationBlocks, explanationHighlightsOf, HIGHLIGHT_TEXT } from '@/lib/highlights/model';
 import { useHighlightStore, useHighlightTool } from '../notes/highlight-tool';
 import styles from './question-viewer.module.css';
 
@@ -23,8 +18,6 @@ export interface ExplanationHighlighting {
   readonly questionId: string;
   /** The revision whose explanation is shown (the API refuses a stale one). */
   readonly revisionId?: string | null;
-  /** The question's chapter ("챕터 없음" without one), for the "모았습니다" toast. */
-  readonly chapterTitle?: string | null;
   /** Focus this highlight's mark once it is drawn (`내 하이라이트` › `위치로 이동`). */
   readonly focusId?: string | null;
 }
@@ -53,7 +46,7 @@ function HighlightedExplanation({
   readonly className: string | undefined;
   readonly highlighting: ExplanationHighlighting;
 }) {
-  const { questionId, revisionId, chapterTitle, focusId } = highlighting;
+  const { questionId, revisionId, focusId } = highlighting;
   const store = useHighlightStore(
     (signal) => getQuestionHighlights(questionId, signal),
     questionId,
@@ -63,7 +56,6 @@ function HighlightedExplanation({
     () => explanationHighlightsOf(store.items ?? [], questionId),
     [store.items, questionId],
   );
-  const { toast } = useToast();
   const areaRef = useRef<HTMLDivElement>(null);
   const { onSelectRange, activeHighlightId, menu } = useHighlightTool({
     store,
@@ -75,8 +67,6 @@ function HighlightedExplanation({
       question_id: questionId,
       ...(revisionId ? { question_revision_id: revisionId } : {}),
     },
-    onCreated: () =>
-      toast({ tone: 'success', title: collectedNotice(chapterTitle || HIGHLIGHT_TEXT.noChapter) }),
   });
 
   // 위치로 이동: the mark gets focus once the highlights are drawn.

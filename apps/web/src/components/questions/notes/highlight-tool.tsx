@@ -108,8 +108,6 @@ export interface HighlightToolOptions {
   readonly target: HighlightTargetInput;
   /** The `HighlightableText` (its `ref`); the menu returns focus there. */
   readonly areaRef: RefObject<HTMLDivElement | null>;
-  /** A new highlight was made, not a recolor (the explanation's "모았습니다" toast). */
-  readonly onCreated?: (created: MyHighlight) => void;
 }
 
 export interface HighlightTool {
@@ -126,7 +124,6 @@ export function useHighlightTool({
   toAnchor,
   target,
   areaRef,
-  onCreated,
 }: HighlightToolOptions): HighlightTool {
   const [selection, setSelection] = useState<HighlightSelection | null>(null);
   // A refused change is said next to the area.
@@ -156,7 +153,6 @@ export function useHighlightTool({
           newIdempotencyKey(),
         );
         update((list) => withCreated(list, created, action.replaceIds));
-        onCreated?.(created);
       } else if (action.type === 'recolor') {
         const current = items.find((h) => h.id === action.id);
         if (!current) return;

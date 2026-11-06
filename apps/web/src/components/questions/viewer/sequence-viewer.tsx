@@ -1337,7 +1337,6 @@ function useSolveStep({
                 ? {
                     questionId: item.question_id,
                     revisionId: session?.question_revision_id ?? null,
-                    chapterTitle: item.chapter_title ?? null,
                   }
                 : null
             }

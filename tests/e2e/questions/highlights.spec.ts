@@ -362,9 +362,8 @@ test(
     const mark = highlightUi.markWith(explanation, '첫 번째 보기가');
     await expect(mark).toHaveCount(1);
     await expectMarkColor(mark, 'pink');
-    // The toast replaced the text under the explanation; it shows over the panel.
-    await expect(highlightUi.collectedToast(page)).toContainText(CH1);
-    await expect.poll(() => isOnTop(highlightUi.collectedToast(page))).toBe(true);
+    // Making a highlight shows no toast any more (2026-11-07) and no text under the area.
+    await expect(highlightUi.collectedToast(page)).toHaveCount(0);
     await expect(
       panel.getByText(/정리 노트의 내 하이라이트에 모았습니다|added to my highlights/i),
     ).toHaveCount(0);

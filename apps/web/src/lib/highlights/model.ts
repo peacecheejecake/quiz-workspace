@@ -35,11 +35,6 @@ export const HIGHLIGHT_TEXT = {
   noChapter: '챕터 없음',
 } as const;
 
-/** "정리 노트의 내 하이라이트에 모았습니다 · <장 제목>" (toast of a new explanation highlight). */
-export function collectedNotice(chapterTitle: string): string {
-  return `정리 노트의 내 하이라이트에 모았습니다 · ${chapterTitle}`;
-}
-
 export type SourceFilter = 'all' | 'note' | 'explanation';
 export type ColorFilter = 'all' | HighlightColor;
 
