@@ -1,10 +1,10 @@
 // UX12-SPANS (docs/screens/ux12-spans.md): merged table cells in the document view.
 import type { Page } from '@playwright/test';
-import { expect, test } from '../fixtures/test';
-import { seedDraftTable } from '../fixtures/db';
-import { uploadReadyBook } from '../fixtures/documents';
-import { editorUi, signInAs } from '../fixtures/workspace-ui';
-import type { Member } from '../fixtures/workspaces';
+import { expect, test } from '../fixtures/test.ts';
+import { seedDraftTable } from '../fixtures/db.ts';
+import { uploadReadyBook } from '../fixtures/documents.ts';
+import { editorUi, signInAs } from '../fixtures/workspace-ui.ts';
+import type { Member } from '../fixtures/workspaces.ts';
 
 const MERGED_HEADER = '공정 안내';
 const MERGED_BODY = '응집과 침전';
