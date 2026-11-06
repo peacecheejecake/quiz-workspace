@@ -1,6 +1,6 @@
 // UX12-MOCKFORM2 (docs/screens/ux12-mock-form-order.md): 범위 before 옵션, the name taken from the
 // chosen chapters, the removed notes and the single help button of the variation types.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { ALL, CH1, CH2, createMockExam, mockUi, waitForMockExam } from '../fixtures/mock-exams.ts';
 import { rangePickerUi as picker } from '../fixtures/range-picker.ts';
 import {
@@ -45,6 +45,18 @@ async function openCreate(page: Page, workspaceId: string) {
   return dialog;
 }
 
+/** A semantic token as the computed colour a probe inside the dialog has (panels remap tokens). */
+function tokenColor(dialog: Locator, token: string): Promise<string> {
+  return dialog.evaluate((el, name) => {
+    const probe = document.createElement('span');
+    probe.style.color = `var(${name})`;
+    el.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
 test(
   'UX12-MOCKFORM2-AC01 범위 comes first and the last step holds the action, its count and notice',
   { tag: '@infra' },
@@ -75,6 +87,59 @@ test(
     await expect(dialog.getByText(/선택 2문제 중 2문항을 만듭니다/)).toBeVisible();
     await expect(dialog.getByText(/AI 서비스로 전송됩니다/)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^(이전|back|previous)$/i })).toHaveCount(0);
+
+    // UX12-MOCKFORM3: the current step's label is primary-coloured (and still bold, with
+    // aria-current); the done step is neutral: regular text colour, grey marker, no underline.
+    const [accent, text] = await Promise.all([
+      tokenColor(dialog, '--color-accent'),
+      tokenColor(dialog, '--color-text-primary'),
+    ]);
+    const current = mockUi.steps(dialog).getByRole('listitem').last();
+    const done = mockUi.steps(dialog).getByRole('listitem').first();
+    const style = (item: Locator, selector: string) =>
+      item.locator(selector).evaluate((el) => {
+        const css = getComputedStyle(el);
+        return {
+          color: css.color,
+          background: css.backgroundColor,
+          decoration: css.textDecorationLine,
+          weight: css.fontWeight,
+          size: parseFloat(css.fontSize),
+        };
+      });
+    const currentLabel = await style(current, '.label');
+    expect(currentLabel.color).toBe(accent);
+    expect(Number(currentLabel.weight)).toBeGreaterThanOrEqual(600);
+    expect(currentLabel.size).toBeGreaterThanOrEqual(14);
+    const doneLabel = await style(done, '.label');
+    expect(doneLabel.color).not.toBe(accent);
+    expect(doneLabel.decoration).toBe('none');
+    const doneMarker = await style(done, '.marker');
+    expect(doneMarker.background).not.toBe(accent);
+    expect(doneMarker.background).not.toBe('rgba(0, 0, 0, 0)');
+    expect(text).not.toBe(accent);
+    // Hover shows it can be pressed without the underline at rest.
+    await mockUi.backToRange(dialog).hover();
+    expect((await style(done, '.label')).decoration).toContain('underline');
+    // No divider under the step area.
+    const stepArea = mockUi
+      .steps(dialog)
+      .locator('xpath=ancestor::div[contains(@class,"pinned")][1]');
+    await expect(stepArea).toHaveCSS('border-bottom-width', '0px');
+
+    // The 변형 유형 help button is circular with a visible border.
+    const help = mockUi.variationHelp(dialog);
+    const helpCss = await help.evaluate((el) => {
+      const css = getComputedStyle(el);
+      return {
+        width: css.borderTopWidth,
+        style: css.borderTopStyle,
+        radius: css.borderTopLeftRadius,
+      };
+    });
+    expect(helpCss.style).toBe('solid');
+    expect(parseFloat(helpCss.width)).toBeGreaterThanOrEqual(1);
+    expect(parseFloat(helpCss.radius)).toBeGreaterThanOrEqual(16);
 
     await mockUi.backToRange(dialog).click();
     await expect(dialog.getByRole('heading', { name: /^(범위|range)$/i })).toBeFocused();

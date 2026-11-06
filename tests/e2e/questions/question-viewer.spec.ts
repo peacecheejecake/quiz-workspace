@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { outlineNodeId, uploadReadyBook } from '../fixtures/documents.ts';
+import { mockUi } from '../fixtures/mock-exams.ts';
 import {
   createPracticeRun,
   createShuffleMockExam,
@@ -578,7 +579,7 @@ test(
     const list = page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i });
     await expect(list).toBeVisible();
     const row = list.getByRole('listitem').filter({ hasText: name });
-    await row.getByRole('button', { name: /^(풀기|practi[sc]e|start)$/i }).click();
+    await mockUi.rowTitle(row).click();
 
     let panel = runUi.panel(page);
     await expect(panel.getByRole('heading', { name: new RegExp(`${name} 풀기`) })).toBeVisible();

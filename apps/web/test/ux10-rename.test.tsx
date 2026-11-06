@@ -131,16 +131,16 @@ it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled afte
   );
   await user.click(await screen.findByRole('button', { name: '첫 시험 메뉴' }));
   await user.click(await screen.findByRole('menuitem', { name: '이름 바꾸기' }));
-  const plays = screen.getAllByRole('button', { name: '풀기' });
-  expect(plays[0]).toBeDisabled();
-  expect(plays[1]).toBeEnabled();
+  // The renamed row's title is its field (no start button); the other row's title still starts.
+  expect(screen.queryByRole('button', { name: '첫 시험' })).toBeNull();
+  expect(screen.getByRole('button', { name: '둘째 시험' })).toBeEnabled();
   const input = screen.getByRole('textbox', { name: '모의고사 이름' });
   await user.clear(input);
   await user.type(input, '변경');
   await user.click(screen.getByRole('button', { name: '저장' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('저장 실패');
-  expect(plays[0]).toBeDisabled();
-  expect(plays[1]).toBeEnabled();
+  expect(screen.queryByRole('button', { name: '첫 시험' })).toBeNull();
+  expect(screen.getByRole('button', { name: '둘째 시험' })).toBeEnabled();
   await user.click(screen.getByRole('button', { name: '취소' }));
-  expect(plays[0]).toBeEnabled();
+  expect(screen.getByRole('button', { name: '첫 시험' })).toBeEnabled();
 });

@@ -103,24 +103,43 @@ export interface RangeFilterState {
   readonly status: readonly QuestionDotStatus[];
   readonly favorite: boolean;
   readonly retry: boolean;
-  /** Empty: every type. */
+  /**
+   * The checked question types (an explicit selection, UX12-MOCKFORM3): every type by default,
+   * none shows no question.
+   */
   readonly types: readonly QuestionType[];
 }
+
+/** Every question type, in the picker's fixed order. */
+export const ALL_QUESTION_TYPES: readonly QuestionType[] = ['MCQ', 'SHORT_ANSWER', 'ESSAY'];
 
 export const EMPTY_RANGE_FILTERS: RangeFilterState = {
   status: QUESTION_DOT_STATUSES,
   favorite: false,
   retry: false,
-  types: [],
+  types: ALL_QUESTION_TYPES,
 };
 
-export function isRangeFiltered(filters: RangeFilterState): boolean {
+/**
+ * Whether the filters hide anything. `available` are the types the questions have: a type
+ * without questions is no filter whether or not it is checked.
+ */
+export function isRangeFiltered(
+  filters: RangeFilterState,
+  available: readonly QuestionType[] = ALL_QUESTION_TYPES,
+): boolean {
   return (
     filters.status.length !== QUESTION_DOT_STATUSES.length ||
     filters.favorite ||
     filters.retry ||
-    filters.types.length > 0
+    available.some((type) => !filters.types.includes(type))
   );
+}
+
+/** The question types present in `groups`, in the picker's order. */
+export function typesIn(groups: readonly RangeGroup[]): QuestionType[] {
+  const seen = new Set(groups.flatMap((g) => g.questions.map((q) => q.type)));
+  return ALL_QUESTION_TYPES.filter((type) => seen.has(type));
 }
 
 /** The API's filters (the overview's judgement, QVIEW-01-C07); undefined when none is set. */
@@ -132,7 +151,7 @@ export function rangeApiFilters(filters: RangeFilterState): RunRangeFilters | un
       : {}),
     ...(filters.favorite ? { favorite: true } : {}),
     ...(filters.retry ? { retry: true } : {}),
-    ...(filters.types.length > 0 ? { types: [...filters.types] } : {}),
+    ...(filters.types.length < ALL_QUESTION_TYPES.length ? { types: [...filters.types] } : {}),
   };
 }
 

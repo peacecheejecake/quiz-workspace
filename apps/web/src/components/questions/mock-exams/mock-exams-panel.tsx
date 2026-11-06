@@ -4,17 +4,21 @@
 // (UX9, HOMEDLG-01; `?panel=mock-exams`, the DOC-01 list dialog pattern), opened from `문제 › 모의고사` by every
 // member. It opens at once with a skeleton (aria-busy) and shows one of three views in place,
 // each with a heading that takes focus:
-//   list    "모의고사 n개" + `추가` (every member; without edit rights the form starts only a
-//           variation-free run, UX12-MOCKNAV-AC05), the viewer's unfinished bank runs
-//           (`이어 풀기`, UX12-RESUME), one row per mock exam (name →
-//           detail, status badge in text, meta line, a "문제 생성 진행률" bar while it is made,
-//           `풀기`, and the editors' row menu 이름 바꾸기 / 설정 바꾸기 / 삭제), or the empty state.
+//   list    "모의고사 n개" + a floating `추가` (every member; without edit rights the form starts
+//           only a variation-free run, UX12-MOCKNAV-AC05) and one newest-first list of the
+//           viewer's unfinished bank runs (UX12-RESUME) and mock exams. A row has no button but
+//           its title: it resumes the run, starts a mock exam (or resumes its unfinished run), or
+//           opens a mock exam that cannot be practised; the row menu holds `상세 보기`,
+//           `처음부터 풀기`, the editors' 이름 바꾸기 / 설정 바꾸기 / 삭제 (a run row: 삭제).
+//           Status badge, `모의고사` label, `푼 문제/전체 · 날짜`, a "문제 생성 진행률" bar
+//           while it is made; or the empty state.
 //   create  `&mock=new`: MockExamForm (옵션 → 범위) → `만들기` saves and shows the detail.
 //   detail  `&mock=<id>`: MockExamDetail (progress, failure, partial, round, questions).
 // The view is the URL's: list → 만들기 / 상세 pushes a history entry, so Back returns to the list
 // with the dialog open (user decision 2026-11-02, QOV-01-AC14); the home owns the history.
 // FastAPI decides every permission; the controls only follow the role it reported to the page.
 import {
+  ArrowLeftIcon,
   Badge,
   BackLink,
   Button,
@@ -28,18 +32,11 @@ import {
   FloatingSidePanel,
   IconButton,
   MoreIcon,
+  PlusIcon,
   ProgressBar,
   Skeleton,
 } from '@quiz/ui';
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { withoutMockExams, type MockView } from '@/lib/workspaces/home';
 import { withRunState } from '@/lib/questions/practice-runs';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
@@ -56,13 +53,13 @@ import {
   generationProgress,
   isGenerating,
   isWaiting,
+  mergeListRows,
   metaText,
   MOCK_POLL_MS,
   NOT_FOUND_TEXT,
   newOptions,
   progressPercent,
   progressValueText,
-  resumeLabel,
   STATUS_TONES,
   WAITING_TEXT,
   statusLabel,
@@ -137,6 +134,8 @@ export function MockExamsPanel({
   // the person left the form (closed the panel, went back to the list, opened another view or a
   // new 만들기) keeps the mock exam it made but never navigates or touches the newer form.
   const [formOpening, setFormOpening] = useState(0);
+  // The create form's step lives here so the header's back button can move it.
+  const [createStep, setCreateStep] = useState<0 | 1>(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   /** The opening a creation may still show its answer in (null: not on 만들기). */
@@ -150,6 +149,11 @@ export function MockExamsPanel({
     liveView.current = { open, view };
   });
   const reload = () => setReads((n) => n + 1);
+  const [seenView, setSeenView] = useState(view.view);
+  if (view.view !== seenView) {
+    setSeenView(view.view);
+    setCreateStep(0);
+  }
 
   // Read on every opening, then again while a mock exam is being made.
   const [wasOpen, setWasOpen] = useState(open);
@@ -161,6 +165,7 @@ export function MockExamsPanel({
     }
     // A new opening of the panel is a new 만들기 too (see formOpening).
     setFormOpening((n) => n + 1);
+    setCreateStep(0);
     setCreating(false);
     setCreateError(null);
   }
@@ -428,7 +433,6 @@ export function MockExamsPanel({
         onResume={onResume}
         onDismiss={(run) => void dismiss(run)}
         onResumeExam={resumeExam}
-        onDismissExamRun={(exam) => void dismissExamRun(exam)}
         onAdd={() => {
           setCreateError(null);
           onViewChange({ view: 'create' }, 'push');
@@ -466,6 +470,8 @@ export function MockExamsPanel({
       ) : (
         <MockExamForm
           key={formOpening}
+          step={createStep}
+          onStepChange={setCreateStep}
           workspaceId={workspaceId}
           mode="create"
           initial={newOptions(exams.length, llmAvailable)}
@@ -529,11 +535,26 @@ export function MockExamsPanel({
         }
       }}
       titleRef={titleRef}
+      headerStart={
+        view.view === 'create' ? (
+          <IconButton
+            label={createStep === 1 ? '이전 단계' : '모의고사 목록'}
+            disabled={creating}
+            icon={<ArrowLeftIcon />}
+            onClick={() =>
+              createStep === 1 ? setCreateStep(0) : onViewChange({ view: 'list' }, 'push')
+            }
+          />
+        ) : undefined
+      }
       closeLabel="모의고사 닫기"
       mobileLayout="full"
     >
-      <div className={styles.body} data-screen-id={screenId}>
-        {view.view !== 'list' ? (
+      <div
+        className={view.view === 'list' ? `${styles.body} ${styles.listBody}` : styles.body}
+        data-screen-id={screenId}
+      >
+        {view.view !== 'list' && view.view !== 'create' ? (
           // Mounted before the form's steps in the same fixed area, so it stays above them.
           <FloatingPanelPinned>
             <BackLink
@@ -594,7 +615,6 @@ function ListView({
   onResume,
   onDismiss,
   onResumeExam,
-  onDismissExamRun,
   onAdd,
   onOpen,
   onPractise,
@@ -614,7 +634,6 @@ function ListView({
   readonly onResume: (runId: string, position: number) => void;
   readonly onDismiss: (run: UnfinishedRun) => void;
   readonly onResumeExam: (exam: MockExam) => void;
-  readonly onDismissExamRun: (exam: MockExam) => void;
   readonly onAdd: () => void;
   readonly onOpen: (exam: MockExam) => void;
   readonly onPractise: (exam: MockExam) => void;
@@ -624,7 +643,6 @@ function ListView({
   readonly onSettings: (exam: MockExam) => void;
   readonly onDelete: (exam: MockExam, trigger: HTMLElement | null) => void;
 }) {
-  const groupTitle = useId();
   // Both first, so the empty text never shows ahead of a run.
   if (list.status === 'loading' || unfinished.status === 'loading') return <Loading />;
   if (list.status === 'error') {
@@ -641,9 +659,6 @@ function ListView({
     <>
       <div className={styles.toolbar}>
         <p className={styles.count}>모의고사 {items.length}개</p>
-        <Button variant="primary" onClick={onAdd}>
-          추가
-        </Button>
       </div>
       {unfinished.status === 'error' ? (
         <div role="alert" className={styles.alert}>
@@ -656,52 +671,50 @@ function ListView({
           {dismissError}
         </p>
       ) : null}
-      {runs.length > 0 ? (
-        <section className={styles.group} aria-labelledby={groupTitle}>
-          <h3 id={groupTitle} className={styles.groupTitle}>
-            이어 풀기
-          </h3>
-          <ul className={styles.list} aria-label="이어 풀기 목록">
-            {runs.map((run) => (
-              <UnfinishedRow
-                key={run.id}
-                run={run}
-                onResume={() => onResume(run.id, run.next_position)}
-                onDismiss={() => onDismiss(run)}
-              />
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {items.length === 0 ? (
-        runs.length === 0 ? (
-          <EmptyState
-            headingLevel={3}
-            title={EMPTY_TEXT}
-            description={canEdit ? EMPTY_HINT.replace(/`/g, '') : undefined}
-          />
-        ) : null
+      {items.length === 0 && runs.length === 0 ? (
+        <EmptyState
+          headingLevel={3}
+          title={EMPTY_TEXT}
+          description={canEdit ? EMPTY_HINT.replace(/`/g, '') : undefined}
+        />
       ) : (
-        <ul className={styles.list} aria-label="모의고사 목록">
-          {items.map((exam) => (
-            <ListRow
-              key={exam.id}
-              exam={exam}
-              canEdit={canEdit}
-              renaming={renaming === exam.id}
-              onOpen={() => onOpen(exam)}
-              onPractise={() => onPractise(exam)}
-              onResume={() => onResumeExam(exam)}
-              onDismissRun={() => onDismissExamRun(exam)}
-              onRename={() => onRename(exam)}
-              onRenamed={(title) => onRenamed(exam, title)}
-              onRenameCancel={onRenameCancel}
-              onSettings={() => onSettings(exam)}
-              onDelete={(trigger) => onDelete(exam, trigger)}
-            />
-          ))}
+        <ul className={`${styles.list} ${styles.listWithFab}`} aria-label="모의고사 목록">
+          {mergeListRows(runs, items).map((row) =>
+            row.kind === 'run' ? (
+              <UnfinishedRow
+                key={`run-${row.id}`}
+                run={row.run}
+                onResume={() => onResume(row.run.id, row.run.next_position)}
+                onDismiss={() => onDismiss(row.run)}
+              />
+            ) : (
+              <ListRow
+                key={row.id}
+                exam={row.exam}
+                canEdit={canEdit}
+                renaming={renaming === row.id}
+                onOpen={() => onOpen(row.exam)}
+                onPractise={() => onPractise(row.exam)}
+                onResume={() => onResumeExam(row.exam)}
+                onRename={() => onRename(row.exam)}
+                onRenamed={(title) => onRenamed(row.exam, title)}
+                onRenameCancel={onRenameCancel}
+                onSettings={() => onSettings(row.exam)}
+                onDelete={(trigger) => onDelete(row.exam, trigger)}
+              />
+            ),
+          )}
         </ul>
       )}
+      <div className={styles.fab}>
+        <IconButton
+          className={styles.fabButton}
+          variant="primary"
+          label="추가"
+          icon={<PlusIcon />}
+          onClick={onAdd}
+        />
+      </div>
     </>
   );
 }
@@ -720,16 +733,15 @@ function UnfinishedRow({
   return (
     <li className={styles.item}>
       <div className={styles.itemMain}>
-        <p className={styles.runName}>{name}</p>
+        <button type="button" className={styles.titleButton} onClick={onResume}>
+          {name}
+        </button>
         <p className={styles.meta}>
           {unfinishedRunProgress(run)} ·{' '}
           <time dateTime={run.last_touched_at}>{formatDateTime(run.last_touched_at)}</time>
         </p>
       </div>
       <div className={styles.itemActions}>
-        <Button size="sm" aria-label={`${name} 이어 풀기`} onClick={onResume}>
-          이어 풀기
-        </Button>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <IconButton size="sm" variant="ghost" label={`${name} 메뉴`} icon={<MoreIcon />} />
@@ -743,7 +755,9 @@ function UnfinishedRow({
               onDismiss();
             }}
           >
-            <DropdownMenuItem onSelect={() => (pending.current = true)}>지우기</DropdownMenuItem>
+            <DropdownMenuItem tone="danger" onSelect={() => (pending.current = true)}>
+              삭제
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -758,7 +772,6 @@ function ListRow({
   onOpen,
   onPractise,
   onResume,
-  onDismissRun,
   onRename,
   onRenamed,
   onRenameCancel,
@@ -771,7 +784,6 @@ function ListRow({
   readonly onOpen: () => void;
   readonly onPractise: () => void;
   readonly onResume: () => void;
-  readonly onDismissRun: () => void;
   readonly onRename: () => void;
   readonly onRenamed: (title: string) => Promise<string | null>;
   readonly onRenameCancel: () => void;
@@ -801,16 +813,25 @@ function ListRow({
               }}
             />
           ) : (
-            <button type="button" className={styles.titleButton} onClick={onOpen}>
+            <button
+              type="button"
+              className={styles.titleButton}
+              onClick={resumable ? onResume : canPractise(exam) ? onPractise : onOpen}
+            >
               {exam.title}
             </button>
           )}
+          <Badge>모의고사</Badge>
           <Badge tone={STATUS_TONES[exam.status]}>{statusLabel(exam)}</Badge>
         </div>
         <p className={styles.meta}>
-          {metaText(exam)} ·{' '}
-          <time dateTime={exam.created_at}>{formatDateTime(exam.created_at)}</time>
+          {unfinishedRunProgress({
+            answered: exam.unfinished_run?.answered ?? 0,
+            total: exam.unfinished_run?.total ?? exam.question_count_current,
+          })}{' '}
+          · <time dateTime={exam.created_at}>{formatDateTime(exam.created_at)}</time>
         </p>
+        {metaText(exam) ? <p className={styles.meta}>{metaText(exam)}</p> : null}
         {generating ? (
           <ProgressBar
             label="문제 생성 진행률"
@@ -821,78 +842,62 @@ function ListRow({
         {isWaiting(exam) ? <p className={styles.meta}>{WAITING_TEXT}</p> : null}
       </div>
       <div className={styles.itemActions}>
-        {resumable ? (
-          <Button
-            size="sm"
-            variant="primary"
-            aria-label={`${exam.title} ${resumeLabel(resumable)}`}
-            onClick={onResume}
-            disabled={renaming}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              ref={trigger}
+              size="sm"
+              variant="ghost"
+              label={`${exam.title} 메뉴`}
+              icon={<MoreIcon />}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              const action = pending.current;
+              pending.current = null;
+              if (!action) return;
+              event.preventDefault();
+              action();
+            }}
           >
-            {resumeLabel(resumable)}
-          </Button>
-        ) : canPractise(exam) ? (
-          <Button size="sm" onClick={onPractise} disabled={renaming}>
-            풀기
-          </Button>
-        ) : null}
-        {canEdit || resumable ? (
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <IconButton
-                ref={trigger}
-                size="sm"
-                variant="ghost"
-                label={`${exam.title} 메뉴`}
-                icon={<MoreIcon />}
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              onCloseAutoFocus={(event) => {
-                const action = pending.current;
-                pending.current = null;
-                if (!action) return;
-                event.preventDefault();
-                action();
-              }}
-            >
-              {resumable ? (
-                <>
-                  <DropdownMenuItem
-                    disabled={renaming}
-                    onSelect={() =>
-                      (pending.current = () => {
-                        trigger.current?.focus();
-                        onPractise();
-                      })
-                    }
-                  >
-                    풀기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => (pending.current = onDismissRun)}>
-                    이어 풀기 지우기
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-              {canEdit ? (
-                <>
-                  <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
-                    이름 바꾸기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
-                    설정 바꾸기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => (pending.current = () => onDelete(trigger.current))}
-                  >
-                    삭제
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
+            <DropdownMenuItem onSelect={() => (pending.current = onOpen)}>
+              상세 보기
+            </DropdownMenuItem>
+            {resumable ? (
+              <>
+                <DropdownMenuItem
+                  disabled={renaming}
+                  onSelect={() =>
+                    (pending.current = () => {
+                      trigger.current?.focus();
+                      onPractise();
+                    })
+                  }
+                >
+                  처음부터 풀기
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            {canEdit ? (
+              <>
+                <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
+                  이름 바꾸기
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
+                  설정 바꾸기
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  tone="danger"
+                  onSelect={() => (pending.current = () => onDelete(trigger.current))}
+                >
+                  삭제
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </li>
   );

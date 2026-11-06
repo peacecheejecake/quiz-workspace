@@ -38,7 +38,7 @@ export function StepList({
   ...rest
 }: StepListProps) {
   return (
-    <div className={cx('qz-step-progress', className)} {...rest}>
+    <div className={cx('qz-step-progress', 'qz-step-list', className)} {...rest}>
       <ol className="steps" aria-label={label}>
         {steps.map((step, i) => {
           const state = i < current ? 'done' : i === current ? 'current' : 'pending';

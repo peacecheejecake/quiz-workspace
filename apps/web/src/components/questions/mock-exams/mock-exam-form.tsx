@@ -91,6 +91,12 @@ export interface MockExamFormProps {
   readonly canCreateMock?: boolean;
   /** 설정 바꾸기: back to the detail without a new round. */
   readonly onCancel?: () => void;
+  /**
+   * The step (0 범위, 1 옵션) when the caller owns it: the create view's header back button moves
+   * it too (UX12-MOCKFORM3). Omitted, the form keeps its own.
+   */
+  readonly step?: 0 | 1;
+  readonly onStepChange?: (step: 0 | 1) => void;
 }
 
 export function MockExamForm({
@@ -105,8 +111,15 @@ export function MockExamForm({
   onBankSubmit,
   canCreateMock = true,
   onCancel,
+  step: stepProp,
+  onStepChange,
 }: MockExamFormProps) {
-  const [step, setStep] = useState<0 | 1>(0);
+  const [ownStep, setOwnStep] = useState<0 | 1>(0);
+  const step = stepProp ?? ownStep;
+  const setStep = (next: 0 | 1) => {
+    setOwnStep(next);
+    onStepChange?.(next);
+  };
   const [values, setValues] = useState<OptionValues>(() => {
     if (llmAvailable) return initial;
     const types = initial.types.filter((type) => !isAiType(type));
@@ -117,22 +130,25 @@ export function MockExamForm({
   });
   const [opening] = useState(() => JSON.stringify(values));
   const range = useRangeStep(workspaceId, step === 0, initialRange);
-  // HOMEDLG-01: a touched range, the options step or typed options are unsaved input (the
-  // backdrop keeps them).
-  useUnsavedChanges(step === 1 || range.touched || JSON.stringify(values) !== opening);
+  // HOMEDLG-01: a touched range or typed options on the range step are unsaved input (the backdrop
+  // keeps them). On the options step a backdrop click closes at once (user decision 2026-11-07,
+  // UX12-MOCKFORM3).
+  useUnsavedChanges(step === 0 && (range.touched || JSON.stringify(values) !== opening));
   const [randomOrder, setRandomOrder] = useState(false);
   // A default follows the range only until the person edits that field (UX12-MOCKFORM2).
   const edited = useRef({ title: false, count: false });
   const [optionError, setOptionError] = useState<OptionError | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
-  const [moved, setMoved] = useState(0);
+  // A step change, from the form or the panel's back button, moves focus to the step's heading.
+  const shownStep = useRef(step);
   useEffect(() => {
-    if (moved > 0) stepHeading.current?.focus();
-  }, [moved]);
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    stepHeading.current?.focus();
+  }, [step]);
 
   function moveTo(index: 0 | 1) {
     setStep(index);
-    setMoved((n) => n + 1);
   }
 
   function toOptions() {
@@ -211,7 +227,7 @@ export function MockExamForm({
           />
           <FloatingPanelFooter>
             {rangeReason ? (
-              <p id={reasonId} className={styles.muted}>
+              <p id={reasonId} className={`${styles.muted} ${styles.footerReason}`}>
                 {rangeReason}
               </p>
             ) : null}
@@ -357,7 +373,7 @@ export function MockExamForm({
               </p>
             ) : null}
             {optionsReason ? (
-              <p id={reasonId} className={styles.muted}>
+              <p id={reasonId} className={`${styles.muted} ${styles.footerReason}`}>
                 {optionsReason}
               </p>
             ) : null}
@@ -387,6 +403,7 @@ function VariationHelp({ types }: { readonly types: readonly VariationType[] }) 
     <Popover>
       <PopoverTrigger asChild>
         <IconButton
+          className={styles.helpButton}
           size="sm"
           variant="ghost"
           label="변형 유형 설명"

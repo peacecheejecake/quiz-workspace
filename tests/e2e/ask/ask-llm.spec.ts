@@ -1394,7 +1394,7 @@ test(
     await page.goto(mockExamsPath(s.workspaceId));
     const list = mockUi.dialog(page);
     await expect(list).toBeVisible();
-    await mockUi.practise(list.getByRole('listitem').filter({ hasText: exam.title })).click();
+    await mockUi.rowTitle(list.getByRole('listitem').filter({ hasText: exam.title })).click();
     let run = runUi.panel(page);
     await runUi.start(run).click();
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
