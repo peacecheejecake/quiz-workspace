@@ -325,8 +325,8 @@
   }
 }
 
-/* Favorite / retry toggles: the "on" state gets the shared selected fill (controls.css) and an
-   accent icon; the label flips and the favorite star fills, so it is never color alone. */
+/* Favorite / retry toggles: the "on" state has no fill (controls.css, UX12-OPTIONS): the accent
+   icon inverts its fill and stroke and the label flips, so it is never color alone. */
 .qz-study-toggle[data-state='on'] {
   color: var(--color-accent);
 }

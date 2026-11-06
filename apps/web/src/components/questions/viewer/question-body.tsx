@@ -1,15 +1,16 @@
 // QVIEW-01 `QuestionBody` (docs/screens/question-viewer.md "문제 본문 부품"): what every
 // QuestionViewer mode shows of one question.
 //   kind `answer` (practice, sequence): the stem, the numbered options as the answer input (or the
-//     answer box), the result status (정답/오답/채점 대기 in text, role=status) and, only once a
-//     submission revealed them, the accepted answers, rubric and explanation. Graded MCQ rows get
-//     the UX7-QDISPLAY result border with the 정답 / 내 선택 text mark (QPLAY-01-AC12).
+//     answer box), the result status (role=status; 채점 대기 and non-MCQ wording visible, an MCQ
+//     grade for assistive tech only, UX12-OPTIONS) and, only once a submission revealed them, the
+//     accepted answers, rubric and explanation. Graded MCQ rows get the UX7-QDISPLAY result border
+//     with a check/X icon and the 정답 / 내 선택 text as their description (QPLAY-01-AC12).
 //   kind `revision` (manage, read-only): a revision with its correct options marked ("정답" text +
 //     check icon), accepted answers, rubric and explanation; no answer input at all.
 // The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
 // 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only.
-import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
-import type { Ref } from 'react';
+import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
+import { useId, type Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { StemBlocks } from '@/components/questions/stem/stem-text';
 import type { Question } from '@/lib/questions/form';
@@ -19,6 +20,7 @@ import {
   finalResult,
   optionMark,
   optionTone,
+  resultIsVisuallyHidden,
   resultMessage,
   toggleOption,
   type AttemptResult,
@@ -80,7 +82,8 @@ interface AnswerBodyProps {
   readonly outcome: RevealedAnswers | null;
   readonly selfGrade: GradeResult | null;
   readonly error?: string | null;
-  readonly resultRef?: Ref<HTMLParagraphElement>;
+  /** The element a submission moves focus to: the visible result (UX12-OPTIONS-AC07). */
+  readonly resultRef?: Ref<HTMLElement>;
   /** The revealed explanation takes the reader's highlights (HILITE-01; bank questions only). */
   readonly highlighting?: ExplanationHighlighting | null;
 }
@@ -97,22 +100,35 @@ function AnswerBody({
   resultRef,
   highlighting = null,
 }: AnswerBodyProps) {
+  const resultId = useId();
+  // A hidden sentence cannot show a focus ring, so an MCQ grade focuses the options, named by it.
+  const hiddenResult =
+    outcome !== null && resultIsVisuallyHidden(question.question_type, outcome.result);
+  // Either element takes the viewer's ref, which only calls focus().
+  const focusRef = resultRef as Ref<HTMLDivElement & HTMLParagraphElement> | undefined;
   return (
     <>
       <QuestionStem stem={stem} />
-      <AnswerField
-        question={question}
-        answer={answer}
-        disabled={disabled}
-        correct={outcome?.correct_option_ids ?? null}
-        graded={outcome?.result ?? null}
-        onChange={onAnswerChange}
-      />
+      <div
+        ref={hiddenResult ? focusRef : undefined}
+        className={styles.answerField}
+        {...(hiddenResult ? { role: 'group', 'aria-labelledby': resultId, tabIndex: -1 } : {})}
+      >
+        <AnswerField
+          question={question}
+          answer={answer}
+          disabled={disabled}
+          correct={outcome?.correct_option_ids ?? null}
+          graded={outcome?.result ?? null}
+          onChange={onAnswerChange}
+        />
+      </div>
       <p
-        ref={resultRef}
+        ref={hiddenResult ? undefined : focusRef}
+        id={resultId}
         role="status"
         tabIndex={-1}
-        className={styles.result}
+        className={hiddenResult ? `${styles.result} qz-visually-hidden` : styles.result}
         data-result={outcome ? finalResult(outcome.result, selfGrade) : undefined}
       >
         {outcome ? resultMessage(outcome.result, selfGrade) : ''}
@@ -156,13 +172,26 @@ function AnswerField({
     );
   }
   // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
-  // only colors it; the text mark below the label is the meaning, linked as the description.
+  // only colors it; the row-end icon and the hidden text linked as the description are the meaning.
+  const toneOf = (id: string) =>
+    graded ? optionTone(id, correct, answer.selected, graded) : undefined;
   const mark = (id: string) => {
     const text = graded ? optionMark(id, correct, answer.selected) : undefined;
-    return text ? <span className={styles.mark}>{text}</span> : undefined;
+    if (!text) return undefined;
+    const tone = toneOf(id);
+    return (
+      <span className={styles.mark} data-option-mark={tone ? TONE_MARK[tone] : undefined}>
+        {tone === 'chosen' ? (
+          <CloseIcon width={16} height={16} strokeWidth={3} />
+        ) : tone ? (
+          <CheckIcon width={16} height={16} strokeWidth={3} />
+        ) : null}
+        <span className="qz-visually-hidden">{text}</span>
+      </span>
+    );
   };
   const rowClass = (id: string) => {
-    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
+    const tone = toneOf(id);
     return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
   };
   if (!question.is_multi_answer) {
@@ -221,19 +250,29 @@ const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
   answer: styles.toneAnswer,
 };
 
+const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
+  correct: 'correct',
+  chosen: 'wrong',
+  answer: 'correct',
+};
+
 /**
  * An option's display number (`1.`, by displayed position, so a shuffled session numbers its own
  * order) and text. The number is decorative: grading uses the option ID, and the radio/checkbox
- * keeps the option text as its name while its position is announced by the group.
+ * keeps the option text as its name while its position is announced by the group. `data-copy` is
+ * the hidden bold copy that reserves the hovered height (UX12-OPTIONS).
  */
 function OptionLabel({ index, text }: { readonly index: number; readonly text: string }) {
+  const number = `${index + 1}.`;
   return (
-    <>
-      <span className={styles.optionNumber} aria-hidden="true">
-        {index + 1}.
-      </span>{' '}
-      {text}
-    </>
+    <span className={styles.optionCopy} data-copy={`${number} ${text}`}>
+      <span>
+        <span className={styles.optionNumber} aria-hidden="true">
+          {number}
+        </span>{' '}
+        {text}
+      </span>
+    </span>
   );
 }
 

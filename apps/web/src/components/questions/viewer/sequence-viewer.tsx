@@ -923,7 +923,7 @@ function useSolveStep({
   }
 
   const formId = useId();
-  const resultRef = useRef<HTMLParagraphElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
   useEffect(() => {
     // The submit button leaves: keep focus in the panel, on the result.

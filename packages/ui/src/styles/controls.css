@@ -76,8 +76,10 @@
   background: transparent;
 }
 
+/* Study toggles show "on" by the icon alone (UX12-OPTIONS, QVIEW-01-C08), so they keep no fill. */
 :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
-    [data-variant='primary']
+    [data-variant='primary'],
+    .qz-study-toggle
   ) {
   background: var(--color-state-selected);
 }
@@ -114,7 +116,8 @@
   }
 
   :is(.qz-button, .qz-icon-button):is([aria-pressed='true'], [data-state='on']):not(
-      [data-variant='primary']
+      [data-variant='primary'],
+      .qz-study-toggle
     ):hover:not(:disabled) {
     background: var(--color-state-selected-hover);
   }
