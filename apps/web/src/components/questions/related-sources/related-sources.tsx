@@ -14,10 +14,11 @@
 //   error     role=alert + `다시 시도`
 // The expanded state is not remembered (a new question or session starts collapsed again). The
 // shared guest version is SharedRelatedSources.
-import { Badge, Button, ChevronDownIcon, ChevronUpIcon, Skeleton } from '@quiz/ui';
+import { Badge, Button, Skeleton } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { DocumentExcerptPanel } from '@/components/search/document-excerpt-panel';
+import { SectionDisclosure } from '../section-disclosure/section-disclosure';
 import type { ExplanationGate, ExplanationTarget } from '@/lib/ai-explanations/client';
 import {
   createRelatedClient,
@@ -227,31 +228,16 @@ export function RelatedShell({
   /** Kept outside the collapsible body (the excerpt panel). */
   readonly after?: ReactNode;
 }) {
-  const headingId = useId();
-  const bodyId = useId();
   return (
-    <section className={styles.area} aria-labelledby={headingId}>
-      <h3 id={headingId} className={styles.heading}>
-        <button
-          type="button"
-          className={`${styles.toggle} qz-focus-ring`}
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          onClick={onToggle}
-        >
-          {RELATED_TEXT.title}
-          {expanded ? (
-            <ChevronUpIcon width={16} height={16} aria-hidden="true" />
-          ) : (
-            <ChevronDownIcon width={16} height={16} aria-hidden="true" />
-          )}
-        </button>
-      </h3>
-      <div id={bodyId} className={styles.body} hidden={!expanded} aria-busy={busy || undefined}>
-        {children}
-      </div>
-      {after}
-    </section>
+    <SectionDisclosure
+      title={RELATED_TEXT.title}
+      expanded={expanded}
+      onToggle={onToggle}
+      busy={busy}
+      after={after}
+    >
+      {children}
+    </SectionDisclosure>
   );
 }
 

@@ -1,32 +1,5 @@
 /* AIEXPL-01 AI 해설 area. Semantic tokens only; every state is text (never colour alone). */
 
-.area {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  overflow-wrap: anywhere;
-}
-
-.heading {
-  margin: 0;
-  font-size: var(--font-size-body);
-  font-weight: var(--font-weight-semibold);
-}
-
-.heading:focus {
-  outline: none;
-}
-
-.heading:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
 .hint,
 .meta {
   margin: 0;
@@ -44,6 +17,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--control-gap);
 }
 
 .alert {

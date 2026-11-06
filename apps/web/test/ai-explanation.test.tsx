@@ -244,10 +244,13 @@ describe('AIEXPL-01 area states', () => {
     render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
-    const show = await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    const show = await within(area()).findByRole('button', { name: 'AI 해설' });
     expect(show).toHaveAttribute('aria-expanded', 'true');
+    expect(within(area()).getByRole('heading', { name: 'AI 해설', level: 3 })).toContainElement(
+      show,
+    );
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
-    expect(within(area()).queryByRole('button', { name: 'AI 해설' })).toBeNull();
+    expect(within(area()).queryByRole('button', { name: 'AI 해설 보기' })).toBeNull();
     await user.click(show);
     expect(show).toHaveAttribute('aria-expanded', 'false');
     expect(within(area()).queryByText('AI 생성')).toBeNull();
@@ -268,7 +271,7 @@ describe('AIEXPL-01 area states', () => {
     render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
-    await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    await within(area()).findByRole('button', { name: 'AI 해설' });
     expect(within(area()).getByText(/· 버전 2$/)).toBeInTheDocument();
     await user.click(within(area()).getByRole('button', { name: '다시 만들기' }));
     expect(await within(area()).findByRole('alert')).toHaveTextContent(
@@ -342,7 +345,7 @@ describe('AIEXPL-01 sources keep the pinned revision', () => {
         searchClient={{ block } as never}
       />,
     );
-    await within(area()).findByRole('button', { name: 'AI 해설 보기' });
+    await within(area()).findByRole('button', { name: 'AI 해설' });
     await user.click(within(area()).getByRole('button', { name: '출처 1' }));
     const doc = '66666666-6666-4666-8666-000000000001';
     await waitFor(() => expect(block).toHaveBeenCalledWith(doc, 'b-1', PINNED));
@@ -446,10 +449,10 @@ describe('AIEXPL-01 streaming', () => {
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
     );
     const region = area();
-    expect(await within(region).findByText('AI 해설을 만드는 중')).toBeInTheDocument();
+    expect((await within(region).findAllByText('작성중...')).length).toBeGreaterThan(0);
     expect(region.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(await within(region).findByText(/정답은 증발/)).toBeInTheDocument();
-    expect(within(region).getByRole('status')).toHaveTextContent('AI 해설을 만드는 중입니다');
+    expect(within(region).getByRole('status')).toHaveTextContent('작성중...');
     api.state.mockResolvedValue(stateOf({ can_create: false, explanation: done }));
     hold.release?.();
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
@@ -476,12 +479,12 @@ describe('AIEXPL-01 shared (guest)', () => {
     } as never);
     render(<SharedAiExplanation shareId={WS} questionId={QID} options={OPTIONS} client={some} />);
     await screen.findByRole('region', { name: 'AI 해설' });
-    expect(within(area()).getByRole('button', { name: 'AI 해설 보기' })).toHaveAttribute(
+    expect(within(area()).getByRole('button', { name: 'AI 해설' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
     expect(within(area()).getByText('AI 생성')).toBeInTheDocument();
-    for (const name of ['AI 해설', '다시 만들기', '출처 1']) {
+    for (const name of ['다시 만들기', '출처 1']) {
       expect(within(area()).queryByRole('button', { name })).toBeNull();
     }
     expect(within(area()).queryByText(/버전/)).toBeNull();

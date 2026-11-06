@@ -126,6 +126,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-NUMBER.0': ['UX12-NUMBER'],
   // UX12 DESIGN-1: which buttons may drop the boundary, hover backgrounds, compact button rows.
   'UX12-CONTROLS.0': ['UX12-CONTROLS'],
+  // UX12 EXPL-1 (2026-11-06): AI 해설 toolbar, shared disclosure heading, 작성중... text.
+  'UX12-EXPL.0': ['UX12-EXPL'],
 };
 
 const LEADING_ID = new RegExp(
