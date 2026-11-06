@@ -72,6 +72,9 @@ it('UX10-PLAY-AC06 disables detail play during rename and restores it on cancel'
       openSettings={false}
       onSettingsShown={() => undefined}
       onPractise={() => undefined}
+      onResume={() => undefined}
+      onDismissRun={() => undefined}
+      dismissError={null}
       onBankSubmit={() => undefined}
       bankBusy={false}
       bankError={null}

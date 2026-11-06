@@ -43,12 +43,14 @@ import {
 import { withoutMockExams, type MockView } from '@/lib/workspaces/home';
 import { withRunState } from '@/lib/questions/practice-runs';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
+import { rememberRun } from './mock-run';
 import type { RunRange } from '@/lib/questions/practice-runs';
 import { createMockExamApi, type MockExamApi } from './mock-exam-client';
 import { MockExamDetail } from './mock-exam-detail';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
 import {
   canPractise,
+  canResume,
   EMPTY_HINT,
   EMPTY_TEXT,
   generationProgress,
@@ -60,6 +62,7 @@ import {
   newOptions,
   progressPercent,
   progressValueText,
+  resumeLabel,
   STATUS_TONES,
   WAITING_TEXT,
   statusLabel,
@@ -123,6 +126,8 @@ export function MockExamsPanel({
   const api = useMemo(() => givenApi ?? createMockExamApi(workspaceId), [givenApi, workspaceId]);
   const [list, setList] = useState<Load<MockExamList>>({ status: 'loading' });
   const [reads, setReads] = useState(0);
+  const [detailVersion, setDetailVersion] = useState(0);
+  const [dismissError, setDismissError] = useState<string | null>(null);
   const [unfinished, setUnfinished] = useState<Load<readonly UnfinishedRun[]>>({
     status: 'loading',
   });
@@ -167,6 +172,7 @@ export function MockExamsPanel({
     if (!runOpen) {
       setReads((n) => n + 1);
       setRunReads((n) => n + 1);
+      setDetailVersion((n) => n + 1);
     }
   }
   useEffect(() => {
@@ -225,6 +231,7 @@ export function MockExamsPanel({
   if (seenKey !== viewKey) {
     setSeenKey(viewKey);
     setFocusTick((n) => n + 1);
+    setDismissError(null);
     // Every arrival on 만들기 is a new opening: a new form, its own creation key.
     setFormOpening((n) => n + 1);
     setCreating(false);
@@ -243,7 +250,6 @@ export function MockExamsPanel({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteReturn = useRef<HTMLElement | null>(null);
-  const [detailVersion, setDetailVersion] = useState(0);
 
   async function runDelete() {
     const exam = confirmDelete;
@@ -275,7 +281,6 @@ export function MockExamsPanel({
     reload();
   }
 
-  const [dismissError, setDismissError] = useState<string | null>(null);
   async function dismiss(run: UnfinishedRun) {
     setDismissError(null);
     const result = await api.dismissRun(run.id);
@@ -290,6 +295,29 @@ export function MockExamsPanel({
     );
     // The row and its menu are gone: the dialog's heading holds the focus.
     titleRef.current?.focus();
+  }
+
+  /** `이어 풀기` of a saved mock exam: the run's source is known, no read to learn it. */
+  function resumeExam(exam: MockExam) {
+    const run = exam.unfinished_run;
+    if (!run) return;
+    rememberRun({ id: run.id, source: 'mock', mock_exam_id: exam.id });
+    onResume(run.id, run.next_position);
+  }
+
+  /** `이어 풀기 지우기`: an older unfinished run may take its place, so the lists read again. */
+  async function dismissExamRun(exam: MockExam) {
+    const run = exam.unfinished_run;
+    if (!run) return;
+    setDismissError(null);
+    const result = await api.dismissRun(run.id);
+    if (!result.ok && result.kind !== 'notFound') {
+      setDismissError(result.message);
+      return;
+    }
+    reload();
+    setDetailVersion((n) => n + 1);
+    (liveView.current.view.view === 'detail' ? viewHeading : titleRef).current?.focus();
   }
 
   async function rename(exam: MockExam, title: string): Promise<string | null> {
@@ -399,6 +427,8 @@ export function MockExamsPanel({
         }}
         onResume={onResume}
         onDismiss={(run) => void dismiss(run)}
+        onResumeExam={resumeExam}
+        onDismissExamRun={(exam) => void dismissExamRun(exam)}
         onAdd={() => {
           setCreateError(null);
           onViewChange({ view: 'create' }, 'push');
@@ -461,6 +491,9 @@ export function MockExamsPanel({
         openSettings={settingsFor === view.mockExamId}
         onSettingsShown={() => setSettingsFor(null)}
         onPractise={onPractise}
+        onResume={resumeExam}
+        onDismissRun={(exam) => void dismissExamRun(exam)}
+        dismissError={dismissError}
         onBankSubmit={(range, count, random) => void startBank(range, count, random)}
         bankBusy={creating}
         bankError={createError}
@@ -560,6 +593,8 @@ function ListView({
   onRetryRuns,
   onResume,
   onDismiss,
+  onResumeExam,
+  onDismissExamRun,
   onAdd,
   onOpen,
   onPractise,
@@ -578,6 +613,8 @@ function ListView({
   readonly onRetryRuns: () => void;
   readonly onResume: (runId: string, position: number) => void;
   readonly onDismiss: (run: UnfinishedRun) => void;
+  readonly onResumeExam: (exam: MockExam) => void;
+  readonly onDismissExamRun: (exam: MockExam) => void;
   readonly onAdd: () => void;
   readonly onOpen: (exam: MockExam) => void;
   readonly onPractise: (exam: MockExam) => void;
@@ -614,16 +651,16 @@ function ListView({
           <Button onClick={onRetryRuns}>다시 시도</Button>
         </div>
       ) : null}
+      {dismissError ? (
+        <p role="alert" className={styles.error}>
+          {dismissError}
+        </p>
+      ) : null}
       {runs.length > 0 ? (
         <section className={styles.group} aria-labelledby={groupTitle}>
           <h3 id={groupTitle} className={styles.groupTitle}>
             이어 풀기
           </h3>
-          {dismissError ? (
-            <p role="alert" className={styles.error}>
-              {dismissError}
-            </p>
-          ) : null}
           <ul className={styles.list} aria-label="이어 풀기 목록">
             {runs.map((run) => (
               <UnfinishedRow
@@ -654,6 +691,8 @@ function ListView({
               renaming={renaming === exam.id}
               onOpen={() => onOpen(exam)}
               onPractise={() => onPractise(exam)}
+              onResume={() => onResumeExam(exam)}
+              onDismissRun={() => onDismissExamRun(exam)}
               onRename={() => onRename(exam)}
               onRenamed={(title) => onRenamed(exam, title)}
               onRenameCancel={onRenameCancel}
@@ -718,6 +757,8 @@ function ListRow({
   renaming,
   onOpen,
   onPractise,
+  onResume,
+  onDismissRun,
   onRename,
   onRenamed,
   onRenameCancel,
@@ -729,12 +770,15 @@ function ListRow({
   readonly renaming: boolean;
   readonly onOpen: () => void;
   readonly onPractise: () => void;
+  readonly onResume: () => void;
+  readonly onDismissRun: () => void;
   readonly onRename: () => void;
   readonly onRenamed: (title: string) => Promise<string | null>;
   readonly onRenameCancel: () => void;
   readonly onSettings: () => void;
   readonly onDelete: (trigger: HTMLElement | null) => void;
 }) {
+  const resumable = canResume(exam) ? exam.unfinished_run : null;
   const trigger = useRef<HTMLButtonElement>(null);
   const pending = useRef<(() => void) | null>(null);
   const generating = isGenerating(exam);
@@ -777,12 +821,22 @@ function ListRow({
         {isWaiting(exam) ? <p className={styles.meta}>{WAITING_TEXT}</p> : null}
       </div>
       <div className={styles.itemActions}>
-        {canPractise(exam) ? (
+        {resumable ? (
+          <Button
+            size="sm"
+            variant="primary"
+            aria-label={`${exam.title} ${resumeLabel(resumable)}`}
+            onClick={onResume}
+            disabled={renaming}
+          >
+            {resumeLabel(resumable)}
+          </Button>
+        ) : canPractise(exam) ? (
           <Button size="sm" onClick={onPractise} disabled={renaming}>
             풀기
           </Button>
         ) : null}
-        {canEdit ? (
+        {canEdit || resumable ? (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <IconButton
@@ -803,17 +857,39 @@ function ListRow({
                 action();
               }}
             >
-              <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
-                이름 바꾸기
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
-                설정 바꾸기
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => (pending.current = () => onDelete(trigger.current))}
-              >
-                삭제
-              </DropdownMenuItem>
+              {resumable ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={renaming}
+                    onSelect={() =>
+                      (pending.current = () => {
+                        trigger.current?.focus();
+                        onPractise();
+                      })
+                    }
+                  >
+                    풀기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => (pending.current = onDismissRun)}>
+                    이어 풀기 지우기
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+              {canEdit ? (
+                <>
+                  <DropdownMenuItem onSelect={() => (pending.current = onRename)}>
+                    이름 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => (pending.current = onSettings)}>
+                    설정 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => (pending.current = () => onDelete(trigger.current))}
+                  >
+                    삭제
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

@@ -28,6 +28,8 @@ import type { MockExamApi } from './mock-exam-client';
 import { MockExamForm, type MockExamSubmit } from './mock-exam-form';
 import {
   canPractise,
+  canResume,
+  resumeLabel,
   DIFFICULTY_LABELS,
   FAILED_TITLE,
   failureText,
@@ -78,6 +80,11 @@ export interface MockExamDetailProps {
   readonly openSettings: boolean;
   readonly onSettingsShown: () => void;
   readonly onPractise: (exam: MockExam) => void;
+  /** `이어 풀기` of the viewer's unfinished run (UX12-MOCKRESUME). */
+  readonly onResume: (exam: MockExam) => void;
+  /** `이어 풀기 지우기`. */
+  readonly onDismissRun: (exam: MockExam) => void;
+  readonly dismissError: string | null;
   readonly onBankSubmit: (range: RunRange, count: number | null, random: boolean) => void;
   readonly bankBusy: boolean;
   readonly bankError: string | null;
@@ -111,6 +118,9 @@ export function MockExamDetail({
   openSettings,
   onSettingsShown,
   onPractise,
+  onResume,
+  onDismissRun,
+  dismissError,
   onBankSubmit,
   bankBusy,
   bankError,
@@ -393,12 +403,16 @@ export function MockExamDetail({
         </p>
         {mode === 'view' ? (
           <div className={styles.actions}>
-            {canPractise(shown) ? (
+            {canResume(shown) && shown.unfinished_run ? (
+              <Button variant="primary" disabled={renaming} onClick={() => onResume(shown)}>
+                {resumeLabel(shown.unfinished_run)}
+              </Button>
+            ) : canPractise(shown) ? (
               <Button variant="primary" disabled={renaming} onClick={() => onPractise(shown)}>
                 풀기
               </Button>
             ) : null}
-            {canEdit ? (
+            {canEdit || canResume(shown) ? (
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <IconButton ref={moreButton} label="더보기" icon={<MoreIcon />} />
@@ -414,36 +428,61 @@ export function MockExamDetail({
                     action();
                   }}
                 >
-                  <DropdownMenuItem
-                    disabled={generating}
-                    onSelect={() => (pendingAction.current = startSettings)}
-                  >
-                    설정 바꾸기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={generating || starting}
-                    onSelect={() => (pendingAction.current = () => askRound({}))}
-                  >
-                    다시 만들기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => (pendingAction.current = () => setRenaming(true))}
-                  >
-                    이름 바꾸기
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      (pendingAction.current = () => onDelete(shown, moreButton.current))
-                    }
-                  >
-                    삭제
-                  </DropdownMenuItem>
+                  {canResume(shown) ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={renaming}
+                        onSelect={() => (pendingAction.current = () => onPractise(shown))}
+                      >
+                        풀기
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => (pendingAction.current = () => onDismissRun(shown))}
+                      >
+                        이어 풀기 지우기
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  {canEdit ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={generating}
+                        onSelect={() => (pendingAction.current = startSettings)}
+                      >
+                        설정 바꾸기
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={generating || starting}
+                        onSelect={() => (pendingAction.current = () => askRound({}))}
+                      >
+                        다시 만들기
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => (pendingAction.current = () => setRenaming(true))}
+                      >
+                        이름 바꾸기
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          (pendingAction.current = () => onDelete(shown, moreButton.current))
+                        }
+                      >
+                        삭제
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
           </div>
         ) : null}
       </div>
+
+      {dismissError ? (
+        <p role="alert" className={styles.error}>
+          {dismissError}
+        </p>
+      ) : null}
 
       {mode === 'settings' && canEdit ? (
         <section className={styles.form} aria-label="설정 바꾸기">

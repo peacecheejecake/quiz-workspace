@@ -76,7 +76,7 @@ async function answer(member: Member, run: PracticeRun, from: number, to: number
     await member.api.ok(
       'POST',
       `/mock-practice-sessions/${session.id}/submit`,
-      { selected_option_ids: [item.options[0]?.id] },
+      { selected_option_ids: [item.options?.[0]?.id] },
       [200],
     );
   }
@@ -181,7 +181,7 @@ test(
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     expect(new URL(page.url()).searchParams.get('mock')).toBe(exam.id);
     const item = await runItem(owner, run.id, 2);
-    await runUi.option(panel, item.options[0]?.text ?? '').check();
+    await runUi.option(panel, item.options?.[0]?.text ?? '').check();
     await runUi.submit(panel).click();
     await expect(runUi.result(panel)).toBeVisible();
     await runUi.close(panel).click();

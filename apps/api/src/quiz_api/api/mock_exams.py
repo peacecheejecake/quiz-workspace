@@ -30,6 +30,9 @@ workspace (409 `generation-busy`); MOCK_EXAM_GENERATION_RATE_LIMIT_PER_MINUTE st
 Retry-After). A retry with the same `Idempotency-Key` returns the first response before any
 limit is checked.
 
+`unfinished_run` is the caller's own (UX12-MOCKRESUME): the one run of the current generation
+that `이어 풀기` opens, as counts only, read in one statement for a whole list.
+
 Viewers never get answers or explanations (MOCK-01-C05); responses carry no prompt or LLM output,
 activities ids and counts only (MOCK-01-C07).
 """
@@ -94,6 +97,7 @@ from quiz_api.repositories.mock_exams import (
     GenerationRecord,
     MockExamRepository,
     QuestionRecord,
+    UnfinishedMockRun,
 )
 from quiz_api.repositories.question_imports import QuestionImportRepository
 from quiz_api.repositories.question_overview import QuestionOverviewRepository
@@ -191,6 +195,15 @@ class MockExamGeneration(BaseModel):
     finished_at: datetime | None
 
 
+class MockExamUnfinishedRun(BaseModel):
+    """The caller's run to resume: counts and a position, never question content."""
+
+    id: uuid.UUID
+    total: int = Field(description="Positions 1..total.")
+    answered: int = Field(description="Positions submitted.")
+    next_position: int = Field(description="The first position still answerable.")
+
+
 class MockExam(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -206,6 +219,9 @@ class MockExam(BaseModel):
     latest_generation: MockExamGeneration | None
     created_at: datetime
     updated_at: datetime
+    unfinished_run: MockExamUnfinishedRun | None = Field(
+        default=None, description="The caller's run of the shown generation to resume."
+    )
 
 
 class MockExamList(BaseModel):
@@ -429,8 +445,19 @@ def _exam_status(latest: MockExamGeneration | None) -> ExamStatus:
     return "failed"
 
 
-def exams_out(repo: MockExamRepository, exams: list[ExamRecord]) -> list[MockExam]:
+def _unfinished_out(run: UnfinishedMockRun | None) -> MockExamUnfinishedRun | None:
+    if run is None:
+        return None
+    return MockExamUnfinishedRun(
+        id=run.id, total=run.total, answered=run.answered, next_position=run.next_position
+    )
+
+
+def exams_out(
+    repo: MockExamRepository, exams: list[ExamRecord], viewer: WorkspaceAccess
+) -> list[MockExam]:
     generations = repo.generations([e.id for e in exams])
+    unfinished = repo.unfinished_runs(viewer.user_id, viewer.workspace_id, [e.id for e in exams])
     latest: dict[uuid.UUID, GenerationRecord] = {}
     for g in generations.values():
         if g.mock_exam_id not in latest or g.version > latest[g.mock_exam_id].version:
@@ -457,13 +484,14 @@ def exams_out(repo: MockExamRepository, exams: list[ExamRecord]) -> list[MockExa
                 latest_generation=newest_out,
                 created_at=exam.created_at,
                 updated_at=exam.updated_at,
+                unfinished_run=_unfinished_out(unfinished.get(exam.id)),
             )
         )
     return out
 
 
-def exam_out(repo: MockExamRepository, exam: ExamRecord) -> MockExam:
-    return exams_out(repo, [exam])[0]
+def exam_out(repo: MockExamRepository, exam: ExamRecord, viewer: WorkspaceAccess) -> MockExam:
+    return exams_out(repo, [exam], viewer)[0]
 
 
 def source_labels(
@@ -683,17 +711,17 @@ def _accepted(
     jobs: QuestionImportRepository,
     publisher: JobPublisher | None,
     exam_id: uuid.UUID,
-    user_id: uuid.UUID,
+    viewer: WorkspaceAccess,
     scope: str,
     key: str | None,
     body_hash: str,
 ) -> JSONResponse:
     exam = repo.exam(exam_id)
     assert exam is not None  # noqa: S101 - created/locked in this transaction
-    result = exam_out(repo, exam)
+    result = exam_out(repo, exam, viewer)
     payload = result.model_dump(mode="json")
     if key is not None:
-        idempotency.save(user_id, scope, key, body_hash, status.HTTP_202_ACCEPTED, payload)
+        idempotency.save(viewer.user_id, scope, key, body_hash, status.HTTP_202_ACCEPTED, payload)
     repo.commit()
     job_id = result.latest_generation.job_id if result.latest_generation else None
     _publish_job(jobs, publisher, job_id)
@@ -708,7 +736,7 @@ def list_mock_exams(access: ReadWorkspace, repo: Repo, settings: SettingsDep) ->
     """The workspace's mock exams, newest first, with their generation state."""
     return MockExamList(
         llm_available=settings.mock_exam_llm_available,
-        items=exams_out(repo, repo.exams(access.workspace_id)),
+        items=exams_out(repo, repo.exams(access.workspace_id), access),
     )
 
 
@@ -757,7 +785,7 @@ def create_mock_exam(
         repo, settings, limiter, exam, user_id, body.config, body.range, body.seed, new_config=True
     )
     return _accepted(
-        repo, idempotency, jobs, publisher, exam_id, user_id, scope, idempotency_key, body_hash
+        repo, idempotency, jobs, publisher, exam_id, access, scope, idempotency_key, body_hash
     )
 
 
@@ -771,7 +799,7 @@ def _load(repo: MockExamRepository, access: ResourceAccess, *, lock: bool = Fals
 @router.get("/mock-exams/{mock_exam_id}", operation_id="getMockExam")
 def get_mock_exam(access: ReadExam, repo: Repo) -> MockExam:
     """Settings, current and newest generation (status, progress, counts)."""
-    return exam_out(repo, _load(repo, access))
+    return exam_out(repo, _load(repo, access), access.workspace)
 
 
 @router.patch("/mock-exams/{mock_exam_id}", operation_id="renameMockExam")
@@ -782,7 +810,7 @@ def rename_mock_exam(access: EditExam, body: MockExamUpdate, repo: Repo) -> Mock
     exam = _load(repo, access, lock=True)
     if body.title.strip() != exam.title:
         repo.update_exam(exam, access.workspace.user_id, title=body.title.strip())
-    result = exam_out(repo, _load(repo, access))
+    result = exam_out(repo, _load(repo, access), access.workspace)
     repo.commit()
     return result
 
@@ -869,7 +897,15 @@ def create_mock_exam_generation(
         saved_range=body.range is None,
     )
     return _accepted(
-        repo, idempotency, jobs, publisher, exam.id, user_id, scope, idempotency_key, body_hash
+        repo,
+        idempotency,
+        jobs,
+        publisher,
+        exam.id,
+        access.workspace,
+        scope,
+        idempotency_key,
+        body_hash,
     )
 
 

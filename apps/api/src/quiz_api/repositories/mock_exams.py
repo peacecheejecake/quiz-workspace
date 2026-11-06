@@ -124,6 +124,57 @@ _QUESTIONS = """
 """
 
 
+@dataclass(frozen=True)
+class UnfinishedMockRun:
+    """The run a mock exam's `이어 풀기` opens (UX12-MOCKRESUME)."""
+
+    id: uuid.UUID
+    total: int
+    answered: int
+    next_position: int
+
+
+# The runs one read of `이어 풀기` looks at: bounds its cost when many runs were left open.
+UNFINISHED_SCAN = 100
+
+# One statement however many mock exams are listed. A position is answerable while its question
+# is still in the mock exam and it has no submission; mock exam practice has no reset epochs.
+_UNFINISHED_RUNS = """
+    with candidates as (
+      select pr.id, pr.mock_exam_id, pr.item_ids,
+             coalesce(
+               (select max(greatest(s.opened_at, s.submitted_at, s.graded_at))
+                  from public.mock_exam_practice_sessions s
+                 where s.practice_run_id = pr.id),
+               pr.created_at
+             ) as last_touched_at
+        from public.practice_runs pr
+        join public.mock_exams e
+          on e.id = pr.mock_exam_id and e.workspace_id = pr.workspace_id
+         and e.deleted_at is null and e.current_generation_id = pr.mock_exam_generation_id
+       where pr.user_id = :u and pr.workspace_id = :w and pr.source = 'mock'
+         and pr.mock_exam_id = any(:ids)
+         and pr.finished_at is null and pr.resume_dismissed_at is null
+       order by last_touched_at desc, pr.id desc
+       limit :scan
+    )
+    select c.id, c.mock_exam_id, cardinality(c.item_ids) as total, p.answered, p.next_position
+      from candidates c
+     cross join lateral (
+       select count(*) filter (where q.id is not null and s.state <> 'open') as answered,
+              min(i.position) filter (where q.id is not null
+                                        and (s.id is null or s.state = 'open')) as next_position
+         from unnest(c.item_ids) with ordinality as i(question_id, position)
+         left join public.mock_exam_questions q
+           on q.id = i.question_id and q.workspace_id = :w and q.removed_at is null
+         left join public.mock_exam_practice_sessions s
+           on s.practice_run_id = c.id and s.run_position = i.position
+     ) p
+     where p.next_position is not null
+     order by c.last_touched_at desc, c.id desc
+"""
+
+
 def _generation(row: Any) -> GenerationRecord:
     return GenerationRecord(
         id=row.id,
@@ -265,6 +316,25 @@ class MockExamRepository:
             {"e": exam_id},
         ).one_or_none()
         return _generation(row) if row is not None else None
+
+    def unfinished_runs(
+        self, user_id: uuid.UUID, workspace_id: uuid.UUID, exam_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, UnfinishedMockRun]:
+        """mock exam id -> the caller's most recently touched run of its current generation
+        that still has a position to answer."""
+        if not exam_ids:
+            return {}
+        rows = self._session.execute(
+            text(_UNFINISHED_RUNS),
+            {"u": user_id, "w": workspace_id, "ids": list(exam_ids), "scan": UNFINISHED_SCAN},
+        )
+        out: dict[uuid.UUID, UnfinishedMockRun] = {}
+        for r in rows:
+            out.setdefault(
+                r.mock_exam_id,
+                UnfinishedMockRun(r.id, int(r.total), int(r.answered), int(r.next_position)),
+            )
+        return out
 
     def question_counts(self, generation_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, int]:
         ids = list(set(generation_ids))

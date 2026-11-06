@@ -42,6 +42,9 @@ function renderDetail(overrides: { canEdit?: boolean; exam?: object; onDelete?: 
       openSettings={false}
       onSettingsShown={() => undefined}
       onPractise={() => undefined}
+      onResume={() => undefined}
+      onDismissRun={() => undefined}
+      dismissError={null}
       onBankSubmit={() => undefined}
       bankBusy={false}
       bankError={null}

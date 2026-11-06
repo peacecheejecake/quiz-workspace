@@ -5570,6 +5570,17 @@
             "title": "Title",
             "type": "string"
           },
+          "unfinished_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MockExamUnfinishedRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's run of the shown generation to resume."
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -6292,6 +6303,39 @@
           "label"
         ],
         "title": "MockExamSourceRef",
+        "type": "object"
+      },
+      "MockExamUnfinishedRun": {
+        "description": "The caller's run to resume: counts and a position, never question content.",
+        "properties": {
+          "answered": {
+            "description": "Positions submitted.",
+            "title": "Answered",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "next_position": {
+            "description": "The first position still answerable.",
+            "title": "Next Position",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Positions 1..total.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "total",
+          "answered",
+          "next_position"
+        ],
+        "title": "MockExamUnfinishedRun",
         "type": "object"
       },
       "MockExamUpdate": {
@@ -21314,7 +21358,7 @@
     },
     "/api/v1/practice-runs/{run_id}/dismiss": {
       "post": {
-        "description": "Take the run out of the `이어 풀기` list. The run, its sessions and attempts stay as they\nare, and it still opens by its URL. A mock run is not in that list (404).",
+        "description": "Stop offering the run for `이어 풀기` (the mock exam list's group or a mock exam's row).\nThe run, its sessions and attempts stay as they are, and it still opens by its URL.",
         "operationId": "dismissPracticeRun",
         "parameters": [
           {
