@@ -621,8 +621,6 @@ export const mockUi = {
       .or(dialog.getByRole('textbox', { name: /^(문항 수|number of questions)/i })),
   difficulty: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(난이도|difficulty)/i }),
   next: (dialog: Locator) => dialog.getByRole('button', { name: /^(다음|next)$/i }),
-  backToOptions: (dialog: Locator) =>
-    dialog.getByRole('button', { name: /^(옵션 단계로 돌아가기|back to options)$/i }),
   backToRange: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(범위 단계로 돌아가기|back to range)$/i }),
   /** The one `?` beside 변형 유형, and the Popover it opens (portalled out of the dialog). */

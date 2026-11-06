@@ -165,7 +165,9 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
         onSubmit={onSubmit}
       />,
     );
-    await user.click(screen.getByRole('button', { name: '다음' }));
+    const next = screen.getByRole('button', { name: '다음' });
+    await waitFor(() => expect(next).toBeEnabled());
+    await user.click(next);
     const remake = screen.getByRole('button', { name: '다시 만들기' });
     await waitFor(() => expect(remake).toBeEnabled());
     await user.click(remake);
@@ -195,9 +197,12 @@ describe('설정 바꾸기 keeps the saved range intent', () => {
         onSubmit={vi.fn()}
       />,
     );
+    const next = screen.getByRole('button', { name: '다음' });
+    await waitFor(() => expect(next).toBeEnabled());
+    await userEvent.setup().click(next);
     expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeChecked();
-    expect(screen.queryByRole('checkbox', { name: /발문/ })).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.queryByRole('checkbox', { name: /문구 변형/ })).toBeNull();
+    expect(screen.queryByText(/이 환경에서는 AI 변형을/)).toBeNull();
     expect(await screen.findByRole('button', { name: '다시 만들기' })).toBeInTheDocument();
   });
 });
@@ -452,10 +457,10 @@ describe('만들기 after leaving the form', () => {
     const user = userEvent.setup();
     const { rerender } = render(<MockExamsPanel {...props} view={{ view: 'create' }} />);
     async function make() {
-      await user.click(await screen.findByRole('checkbox', { name: /보기 섞기/ }));
-      await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
-      await user.click(await screen.findByRole('button', { name: '다음' }));
       await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+      await user.click(screen.getByRole('button', { name: '다음' }));
+      await user.click(screen.getByRole('checkbox', { name: /보기 섞기/ }));
+      await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
       await user.click(screen.getByRole('button', { name: '만들기' }));
     }
 
@@ -505,10 +510,10 @@ describe('UX10-PLAY-AC01 unified bank mode', () => {
         onBankSubmit={onBankSubmit}
       />,
     );
-    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).not.toBeChecked();
     expect(screen.queryByRole('progressbar')).toBeNull();
-    await user.click(screen.getByRole('button', { name: '다음' }));
     await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).not.toBeChecked();
     await user.click(screen.getByRole('button', { name: '시작' }));
     expect(onBankSubmit).toHaveBeenCalledWith(expect.objectContaining({ all: true }), null, false);
     expect(onSubmit).not.toHaveBeenCalled();
@@ -556,9 +561,9 @@ it('UX10-PLAY-AC01 invokes the supplied bank navigation callback after creation'
       api={api as never}
     />,
   );
-  await user.click(await screen.findByRole('checkbox', { name: '선택 범위의 모든 문항' }));
-  await user.click(screen.getByRole('button', { name: '다음' }));
   await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+  await user.click(screen.getByRole('button', { name: '다음' }));
+  await user.click(screen.getByRole('checkbox', { name: '선택 범위의 모든 문항' }));
   await user.click(screen.getByRole('button', { name: '시작' }));
   await waitFor(() => expect(onBankStarted).toHaveBeenCalledWith(RUN));
 });

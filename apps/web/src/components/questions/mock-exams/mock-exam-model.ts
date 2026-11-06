@@ -5,8 +5,9 @@
 import type { Schemas } from '@quiz/api-client';
 import type { QuestionDotStatus } from '@quiz/ui';
 import type { RangeFilterState, RangeGroup } from '../viewer/range-model';
-import { EMPTY_RANGE_FILTERS } from '../viewer/range-model';
+import { allIds, EMPTY_RANGE_FILTERS, triState } from '../viewer/range-model';
 import { displayStem } from '@/lib/questions/display-stem';
+import { NO_CHAPTER_KEY } from '@/lib/questions/overview-placement';
 
 export type MockExam = Schemas['MockExam'];
 export type MockExamList = Schemas['MockExamList'];
@@ -180,6 +181,30 @@ export function defaultTitle(existing: number): string {
   return `모의고사 ${existing + 1}`;
 }
 
+/**
+ * The name the chosen range suggests (UX12-MOCKFORM2-AC02): the chapter's title, or the first
+ * chapter's plus " 외 n개". `fallback` stands for `전체 선택` and for questions without a chapter.
+ */
+export function chapterDefaultTitle(
+  groups: readonly RangeGroup[],
+  selected: ReadonlySet<string>,
+  fallback: string,
+): string {
+  if (triState(allIds(groups), selected) === true) return fallback;
+  const chapters = groups.filter(
+    (group) => group.key !== NO_CHAPTER_KEY && group.questions.some((q) => selected.has(q.id)),
+  );
+  const [first] = chapters;
+  if (!first) return fallback;
+  const others = chapters.length > 1 ? ` 외 ${chapters.length - 1}개` : '';
+  return `${first.title.slice(0, TITLE_MAX - others.length)}${others}`;
+}
+
+/** The starting 문항 수 once the selection is known (UX12-MOCKFORM2-AC06). */
+export function cappedCount(count: string, selected: number): string {
+  return String(Math.min(Number(count), selected));
+}
+
 /** A question row's title: "문제 k · <발문 앞 40자>". */
 export function questionRowTitle(stem: string, k: number): string {
   const text = displayStem(stem).replace(/\s+/g, ' ').trim();
@@ -233,7 +258,7 @@ export type OptionError =
   | { readonly field: 'count'; readonly message: string };
 
 /**
- * What blocks `다음`: an empty or long name, an AI type that is off, a bad count. No type is a
+ * What blocks the last action: an empty or long name, an AI type that is off, a bad count. No type is a
  * bank run, which stores no name (UX12-PLAY-AC01).
  */
 export function checkOptions(values: OptionValues, llmAvailable: boolean): OptionError | null {

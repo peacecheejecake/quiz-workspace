@@ -110,7 +110,10 @@ it('UX12-MOCKNAV-AC02 returns focus to 더보기 after a cancelled rename and pa
 it('UX12-MOCKNAV-AC02 returns focus to 더보기 after a cancelled 설정 바꾸기', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(JSON.stringify({ chapters: [] }), { status: 200 })),
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ chapters: [], items: [], counts: {} }), { status: 200 }),
+    ),
   );
   const user = userEvent.setup();
   renderDetail();
@@ -164,9 +167,31 @@ it('UX12-MOCKNAV-AC05 keeps the hint for editors', async () => {
 it('UX12-MOCKNAV-AC05 offers no variation in the form without edit rights', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(JSON.stringify({ chapters: [] }), { status: 200 })),
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            chapters: [],
+            items: [
+              {
+                question_id: '22222222-2222-4222-8222-000000000001',
+                chapter_id: null,
+                question_number: 1,
+                question_type: 'MCQ',
+                preview: '발문',
+                status: 'unseen',
+              },
+            ],
+            counts: {},
+          }),
+          { status: 200 },
+        ),
+    ),
   );
   renderPanel(false, { view: 'create' });
-  expect(await screen.findByText('변형 출제에는 편집 권한이 필요합니다.')).toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('checkbox', { name: '전체 선택' }));
+  await user.click(screen.getByRole('button', { name: '다음' }));
+  expect(screen.getByText('변형 출제에는 편집 권한이 필요합니다.')).toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /보기 섞기/ })).toBeDisabled();
 });

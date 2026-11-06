@@ -421,12 +421,12 @@ test(
     await page.getByRole('button', { name: /^모의고사$/ }).click();
     const play = page.getByRole('dialog', { name: /모의고사|mock exam/i });
     await play.getByRole('button', { name: /^(추가|add)$/i }).click();
+    await runUi.selectAll(play).check();
+    await play.getByRole('button', { name: /다음|next/i }).click();
     const random = play.getByRole('checkbox', { name: /문제 순서 무작위/ });
     await expect(random).not.toBeChecked();
     await random.check();
     await play.getByRole('checkbox', { name: /선택 범위의 모든 문항/ }).check();
-    await play.getByRole('button', { name: /다음|next/i }).click();
-    await runUi.selectAll(play).check();
     await play.getByRole('button', { name: /시작|start/i }).click();
     await expect(page).toHaveURL(/[?&]practice=[0-9a-f-]{36}(&|$)/);
     await expect(page).toHaveURL(/[?&]i=1(&|$)/);
