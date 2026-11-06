@@ -1,4 +1,6 @@
+// @vitest-environment jsdom
 // UX12-HOMEFILTER: the home's status chips, 즐겨찾기만 and the 미열람 rule.
+import './dom-setup';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QUESTION_DOT_STATUSES, type QuestionDotStatus } from '@quiz/ui';

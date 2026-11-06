@@ -37,9 +37,9 @@
 //              name with 원문/텍스트) whose current block carries aria-current="true"; block
 //              "편집"/"저장", revision status "초안"/"발행됨", "발행". The layout around them
 //              (settings bar, outline panel, splitter) is in fixtures/document-viewer.ts.
-//   UX12-FILTER  under the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
+//   UX12-FILTER  on the sticky line: icon button "검색" ("검색 닫기" once open) that opens the
 //              문제 search box, and icon button "필터" → popover "필터" (combobox "챕터" = tree popover
-//              UX12-PICKER, combobox "유형" = Select).
+//              UX12-PICKER, combobox "유형" = Select, group "상태 필터" of chips, UX12-HOMEFILTER).
 //   SEARCH-01  the home's unified search: searchbox "검색어"; in the "본문 검색 설정" popover
 //              (portalled to <body>) radiogroup "검색 방식" (키워드/의미/하이브리드), comboboxes
 //              "문서"/"장"; in "문제 검색 설정" comboboxes "챕터"/"유형"; region "본문 검색 결과" with list "검색 결과" whose items quote the source text in a

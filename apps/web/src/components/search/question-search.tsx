@@ -1,8 +1,8 @@
 'use client';
 
-// UX12-FILTER (docs/screens/ux12-home-filter.md) the workspace home's search and filter line under
-// the sticky line: a 검색 button that opens the 문제 search box between itself and the 필터 button,
-// whose popover holds the heatmap's chapter/type filters. The box filters as you type
+// UX12-FILTER (docs/screens/ux12-home-filter.md), UX12-HOMEFILTER: 검색 and 필터 on the home's sticky
+// line. The 검색 button opens the 문제 search box between itself and the 필터 button, whose popover
+// holds the heatmap's chapter, type and status filters. The box filters as you type
 // (SEARCH-01-AC12, useLiveQuery) and closing it clears the query (D-7). Without any question to
 // search the button is disabled and a visible status message, linked by aria-describedby, says why.
 // The page owns the state; this renders it.
@@ -72,74 +72,79 @@ export function QuestionSearch({
   }
 
   return (
-    <form
-      role="search"
-      aria-label="문제 검색"
-      className={styles.form}
-      onSubmit={submit}
-      data-screen-id={screenId}
-    >
-      <div className={styles.searchLine} data-open={open || undefined}>
-        <IconButton
-          ref={buttonRef}
-          label={open ? '검색 닫기' : '검색'}
-          icon={open ? <ChevronLeftIcon /> : <SearchIcon />}
-          variant={open ? 'ghost' : 'secondary'}
-          aria-expanded={open}
-          aria-controls={slotId}
-          aria-describedby={message ? messageId : undefined}
-          disabled={!searchable && !open}
-          onClick={toggle}
-        />
-        <div id={slotId} className={styles.searchSlot} inert={!open || undefined}>
-          <Input
-            ref={inputRef}
-            type="search"
-            label="문제 검색"
-            hideLabel
-            placeholder="문제 검색"
-            maxLength={max}
-            autoComplete="off"
-            enterKeyHint="search"
-            disabled={!searchable}
+    <>
+      <form
+        role="search"
+        aria-label="문제 검색"
+        className={styles.lineForm}
+        onSubmit={submit}
+        data-screen-id={screenId}
+      >
+        <div className={styles.searchLine} data-open={open || undefined}>
+          <IconButton
+            ref={buttonRef}
+            label={open ? '검색 닫기' : '검색'}
+            icon={open ? <ChevronLeftIcon /> : <SearchIcon />}
+            variant={open ? 'ghost' : 'secondary'}
+            aria-expanded={open}
+            aria-controls={slotId}
             aria-describedby={message ? messageId : undefined}
-            fieldClassName={styles.field}
-            {...query.inputProps}
+            disabled={!searchable && !open}
+            onClick={toggle}
           />
-        </div>
-        <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-          <PopoverTrigger asChild>
-            <IconButton
-              label="필터"
-              icon={<FilterIcon />}
-              variant="secondary"
-              className={styles.filterButton}
-              data-active={filterActive || undefined}
-              aria-describedby={filterActive ? filterStateId : undefined}
+          <div id={slotId} className={styles.searchSlot} inert={!open || undefined}>
+            <Input
+              ref={inputRef}
+              type="search"
+              label="문제 검색"
+              hideLabel
+              placeholder="문제 검색"
+              maxLength={max}
+              autoComplete="off"
+              enterKeyHint="search"
+              disabled={!searchable}
+              aria-describedby={message ? messageId : undefined}
+              fieldClassName={styles.field}
+              {...query.inputProps}
             />
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            collisionPadding={16}
-            aria-label="필터"
-            className={styles.filterPopover}
-          >
-            {filters}
-          </PopoverContent>
-        </Popover>
-        <span id={filterStateId} className="qz-visually-hidden">
-          {filterActive ? '필터 적용 중' : ''}
-        </span>
-      </div>
-      {/* Always mounted so a change is announced; empty while there is nothing to say. */}
+          </div>
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+            <PopoverTrigger asChild>
+              <IconButton
+                label="필터"
+                icon={<FilterIcon />}
+                variant="secondary"
+                className={styles.filterButton}
+                data-active={filterActive || undefined}
+                data-home-filter=""
+                aria-describedby={filterActive ? filterStateId : undefined}
+              />
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              collisionPadding={16}
+              aria-label="필터"
+              className={styles.filterPopover}
+            >
+              {filters}
+            </PopoverContent>
+          </Popover>
+          <span id={filterStateId} className="qz-visually-hidden">
+            {filterActive ? '필터 적용 중' : ''}
+          </span>
+        </div>
+      </form>
+      {/* Beside the form, to take a row of its own in the line. Always mounted so a change is
+          announced; out of the flow while there is nothing to say. */}
       <p
         id={messageId}
         role="status"
-        className={styles.message}
+        aria-label="문제 검색 안내"
+        className={styles.lineMessage}
         data-blocked={!searchable || undefined}
       >
         {message}
       </p>
-    </form>
+    </>
   );
 }

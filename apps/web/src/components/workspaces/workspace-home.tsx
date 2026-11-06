@@ -5,11 +5,10 @@
 //
 //   Workspace header  a line that sticks under the app header (UX12-HEADER, D-7): the `문서 N` menu
 //                     (문서 관리 · 본문 검색 | 직접 추가 · 중복 문제 정리 · 챕터 재분배 | 보관·초안 문제),
-//                     the primary `모의고사` and, aligned right, `AI 질문` (icon + text, every member) ·
-//                     `이력` · `공유하기` (icon buttons; share for the owner only). Under it the 검색
-//                     and 필터 buttons (UX12-FILTER): the first opens the 문제 search (SEARCH-01-AC12:
-//                     filters the heatmap as you type), the second a popover with the chapter/type
-//                     filters.
+//                     the primary `모의고사`, 검색 · 필터 and, aligned right, `AI 질문` (icon + text, every member) ·
+//                     `이력` · `공유하기` (icon buttons; share for the owner only). 검색 opens the 문제
+//                     search (UX12-FILTER, SEARCH-01-AC12: filters the heatmap as you type), 필터 a
+//                     popover with the chapter, type and status filters (UX12-HOMEFILTER).
 //   문제 영역         the heatmap (QuestionsOverview)
 //   floating dialogs  문서 관리 (문제 PDF 관리 merged in, UX7-DOCS) · 모의고사 · 이력 · 링크 공유 · 정리 노트 · 문서 요약
 //                     (DOCSUM-01, `?panel=document-summary&document=<id>`, from a 문서 관리 row): modal
@@ -81,6 +80,7 @@ import { ChapterNotePanel } from '@/components/questions/notes/chapter-note-pane
 import { ChapterManagementPanel } from '@/components/chapters/chapter-management-panel';
 import { ChapterRedistributionDialog } from '@/components/questions/redistribution/chapter-redistribution-dialog';
 import { QuestionsOverview } from '@/components/questions/overview/questions-overview';
+import { StatusFilter } from '@/components/questions/overview/status-filter';
 import {
   ChapterRunDialog,
   type ChapterRunTarget,
@@ -113,6 +113,7 @@ import { outlineChoiceNodes } from '@/lib/questions/chapter-picker';
 import type { ChapterChoice, QuestionOverview } from '@/lib/questions/overview-data';
 import {
   EMPTY_OVERVIEW_FILTERS,
+  isOverviewFiltered,
   mergeOverviewFilters,
   parseOverviewFilters,
   OVERVIEW_SEARCH_MAX,
@@ -930,41 +931,16 @@ function WorkspaceHomeContent({
             모의고사
           </Button>
         </div>
-        <div className={styles.actionGroup} data-align="end">
-          {askAvailable ? (
-            <Button className={styles.askButton} onClick={openAsk}>
-              <AskIcon width={16} height={16} />
-              <span className={styles.askLabel}>AI 질문</span>
-            </Button>
-          ) : null}
-          <IconButton
-            label="이력"
-            icon={<HistoryIcon />}
-            variant="secondary"
-            onClick={() => setPanel('history', true)}
-          />
-          {isOwner ? (
-            <IconButton
-              label="공유하기"
-              icon={<ShareIcon />}
-              variant="secondary"
-              onClick={() => setPanel('share', true)}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className={styles.header}>
-        <div className={searchStyles.column}>
-          <QuestionSearch
-            screenId={screenIds.search}
-            query={questionSearch}
-            max={OVERVIEW_SEARCH_MAX}
-            searchable={hasSearchableQuestions(
-              hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
-            )}
-            filterActive={view.chapter !== null || view.type !== null}
-            filters={
+        <QuestionSearch
+          screenId={screenIds.search}
+          query={questionSearch}
+          max={OVERVIEW_SEARCH_MAX}
+          searchable={hasSearchableQuestions(
+            hasQuestions === false && shown.overview.counts.total > 0 ? true : hasQuestions,
+          )}
+          filterActive={isOverviewFiltered({ ...view, q: '' })}
+          filters={
+            <div className={searchStyles.filterStack}>
               <div className={searchStyles.optionRow}>
                 <ChapterPicker
                   label="챕터"
@@ -989,8 +965,35 @@ function WorkspaceHomeContent({
                   }
                 />
               </div>
-            }
+              <StatusFilter
+                status={view.status}
+                favorite={view.favorite}
+                onFiltersChange={changeFilters}
+              />
+            </div>
+          }
+        />
+        <div className={styles.actionGroup} data-align="end">
+          {askAvailable ? (
+            <Button className={styles.askButton} onClick={openAsk}>
+              <AskIcon width={16} height={16} />
+              <span className={styles.askLabel}>AI 질문</span>
+            </Button>
+          ) : null}
+          <IconButton
+            label="이력"
+            icon={<HistoryIcon />}
+            variant="secondary"
+            onClick={() => setPanel('history', true)}
           />
+          {isOwner ? (
+            <IconButton
+              label="공유하기"
+              icon={<ShareIcon />}
+              variant="secondary"
+              onClick={() => setPanel('share', true)}
+            />
+          ) : null}
         </div>
       </div>
 
@@ -1001,9 +1004,7 @@ function WorkspaceHomeContent({
           workspaceId={workspace.id}
           readOnly={readOnly}
           filters={shown.filters}
-          view={view}
           navigating={navigating || fetchingKey !== null}
-          onFiltersChange={changeFilters}
           onResetFilters={resetAll}
           overview={shown.overview}
           failure={shown.failure}

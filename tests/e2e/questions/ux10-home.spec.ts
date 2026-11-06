@@ -2,6 +2,7 @@ import {
   createNumberedQuestions,
   expect,
   openQuestionSearch,
+  openStatusFilters,
   overviewPath,
   overviewUi,
   signInAs,
@@ -42,6 +43,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(overviewPath(workspace.id));
     await expect(overviewUi.markers(page)).toHaveCount(1);
+    await openStatusFilters(page);
     const chips = page.locator('button[data-status][aria-pressed]');
     await expect(chips).toHaveCount(5);
     for (const chip of await chips.all()) {
@@ -52,6 +54,7 @@ test(
     await expect(overviewUi.markers(page)).toHaveCount(0);
     await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
     await page.reload();
+    await openStatusFilters(page);
     await expect(chips.first()).toHaveAttribute('aria-pressed', 'false');
     await expect(overviewUi.markers(page)).toHaveCount(0);
   },
@@ -67,6 +70,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(overviewPath(workspace.id));
     await expect(overviewUi.markers(page)).toHaveCount(1);
+    await openStatusFilters(page);
     const unseen = page.locator('button[data-status="unseen"][aria-pressed]');
     await unseen.click();
     await unseen.click();
@@ -79,6 +83,7 @@ test(
     });
     await unseen.click();
     await page.goBack();
+    await openStatusFilters(page);
     await expect(unseen).toHaveAttribute('aria-pressed', 'true');
     await page.waitForTimeout(450); // the cancelled 350ms timer must not write after Back
     await expect(page).not.toHaveURL(/status=/);
@@ -88,9 +93,11 @@ test(
     await expect(page).toHaveURL(/q=ux10/);
     await expect(page).toHaveURL(/status=/);
     await page.goto(overviewPath(workspace.id));
+    await openStatusFilters(page);
     await unseen.click();
     await page.goBack();
     await expect(page).toHaveURL(/q=ux10/);
+    await openStatusFilters(page);
     await expect(unseen).toHaveAttribute('aria-pressed', 'false');
   },
 );

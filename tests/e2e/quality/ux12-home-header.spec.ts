@@ -1,5 +1,5 @@
-// UX12-HEADER (docs/screens/ux12-home-header.md): the sticky 문서 N · 모의고사 line above the 문제
-// search, and the single 문서 N menu that took in 문서 관리 and 본문 검색.
+// UX12-HEADER (docs/screens/ux12-home-header.md): the sticky 문서 N · 모의고사 line that also holds
+// the 문제 search, and the single 문서 N menu that took in 문서 관리 and 본문 검색.
 
 import type { Locator, Page } from '@playwright/test';
 import {
@@ -92,7 +92,7 @@ async function openMenu(page: Page): Promise<void> {
 }
 
 test(
-  'UX12-HEADER-AC01 the line reads 문서 N, 모의고사, 이력, 공유하기 above the 문제 search and one menu holds everything',
+  'UX12-HEADER-AC01 the line reads 문서 N, 모의고사, 검색, 필터, 이력, 공유하기 and one menu holds everything',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await ownerHome(page, workspaceFactory, 'ux12-hdr-01');
@@ -104,13 +104,18 @@ test(
     await expect(main(page).getByRole('link', { name: BODY_SEARCH })).toHaveCount(0);
 
     const parts = await Promise.all(
-      [trigger(page), play(page), homeUi.historyButton(page), homeUi.shareButton(page)].map(box),
+      [
+        trigger(page),
+        play(page),
+        homeUi.questionSearchButton(page),
+        homeUi.searchSettingsButton(page, 'questions'),
+        homeUi.historyButton(page),
+        homeUi.shareButton(page),
+      ].map(box),
     );
     const xs = parts.map((part) => part.x);
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
     for (const part of parts) expect(part.y).toBe(parts[0]?.y);
-    const search = await box(homeUi.header(page));
-    expect(search.y).toBeGreaterThanOrEqual((parts[0]?.y ?? 0) + (parts[0]?.height ?? 0));
 
     await openMenu(page);
     const entries = await menu(page)
@@ -202,7 +207,7 @@ test(
     await scrollTo(page, 500);
     expect((await box(line)).y).toBe(appBottom);
     const search = await box(homeUi.header(page));
-    expect(search.y + search.height).toBeLessThanOrEqual(appBottom);
+    expect(search.y).toBeGreaterThanOrEqual(appBottom); // sticks with the line (UX12-HOMEFILTER)
 
     const style = await line.evaluate((el) => {
       const computed = getComputedStyle(el);
@@ -272,9 +277,15 @@ test.describe('375px', () => {
       await expect(ask).toHaveText(/^\s*AI 질문\s*$/); // visually hidden, still its name
       await showThreeDigitCount(page);
       const parts = await Promise.all(
-        [trigger(page), play(page), ask, homeUi.historyButton(page), homeUi.shareButton(page)].map(
-          box,
-        ),
+        [
+          trigger(page),
+          play(page),
+          homeUi.questionSearchButton(page),
+          homeUi.searchSettingsButton(page, 'questions'),
+          ask,
+          homeUi.historyButton(page),
+          homeUi.shareButton(page),
+        ].map(box),
       );
       const centers = parts.map((part) => part.y + part.height / 2);
       for (const center of centers) expect(Math.abs(center - (centers[0] ?? 0))).toBeLessThan(1);
