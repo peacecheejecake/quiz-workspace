@@ -65,6 +65,7 @@ import {
   type Member,
   type Problem,
   type Question,
+  QUESTION_DOT_NAME,
 } from '../fixtures/test.ts';
 import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages.ts';
 
@@ -923,7 +924,7 @@ test(
 
     // The heatmap re-reads: one dot in that chapter's group.
     const group = overviewUi.heatmap(page).getByRole('region', { name: new RegExp(CH1.title) });
-    await expect(group.getByRole('button', { name: /\d+번 문제|question \d+/i })).toHaveCount(1);
+    await expect(group.getByRole('button', { name: QUESTION_DOT_NAME })).toHaveCount(1);
     await expect(overviewUi.dots(page)).toHaveCount(1);
 
     // Server: one CONFIRMED MCQ in that chapter, answered by the stable id of "증발".

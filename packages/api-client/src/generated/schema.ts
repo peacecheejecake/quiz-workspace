@@ -4314,7 +4314,7 @@ export type components = {
       answer_missing: boolean;
       /**
        * Block Ids
-       * @description The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids only, for the document viewer to mark the whole printed question.
+       * @description The draft's source blocks: present only with `include_blocks=true` (UX12-EXTRACT). Ids only, for the document viewer to mark the whole printed question.
        */
       block_ids?: string[];
       /**

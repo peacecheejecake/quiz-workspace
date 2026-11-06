@@ -1295,6 +1295,8 @@ test(
     // 375 px: the box fits the panel without horizontal scrolling.
     await page.setViewportSize({ width: 375, height: 812 });
     panel = await openPanel(page, 1);
+    // The overview preview draws the same list until the session replaces it (a detached box).
+    await expect(panelUi.options(panel)).toHaveCount(4);
     const list = itemList(panel);
     await expect(list).toBeVisible();
     const box = await list.boundingBox();
