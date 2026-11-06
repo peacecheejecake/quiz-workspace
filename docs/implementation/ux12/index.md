@@ -266,7 +266,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 
 | Task | Wave | 상태 | 커밋·리뷰 |
 |---|---|---|---|
-| EXTRACT-1 | 1 | 진행 | |
+| EXTRACT-1 | 1 | 완료 | EXTRACT-2에 포함 · Codex P2 1건 수정, 72번 원인 확정 |
 | EXTRACT-2 | 1 | 완료 | c55e0835 · Codex P2 2건 수정 후 재리뷰 통과, pytest 164·Vitest 73, 실제 PDF 6개 비교 일치 |
 | SHELL-1 | 1 | 완료 | 12cb1e79 · Codex P2 1건 수정(9e71118c), 재리뷰 지적 없음, E2E 22·Vitest 38 GREEN |
 | DESIGN-2 | 1 | 완료 | 44b7afcd · Codex P2(CI phase)는 merge에서 반영, tooltip 여백·Select touch 재클릭 수정, E2E 30 GREEN |
