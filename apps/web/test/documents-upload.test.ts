@@ -207,7 +207,7 @@ function harness(transferBehaviour: ('ok' | 'network' | 'hang')[]): Harness {
   const client = {
     createUploadIntent: vi.fn(async () => intent(++intents)),
     completeUpload: vi.fn(async () => ({ document_id: 'doc-1', job_id: 'job-1' })),
-    listDocuments: vi.fn(async () => []),
+    listDocuments: vi.fn(async () => ({ items: [], summary_available: true })),
     deleteDocument: vi.fn(async () => undefined),
     updateDocumentKind: vi.fn(async () => {
       throw new Error('not used by uploads');

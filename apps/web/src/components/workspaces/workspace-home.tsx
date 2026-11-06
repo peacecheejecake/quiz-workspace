@@ -483,6 +483,7 @@ function WorkspaceHomeContent({
     initialDocuments: documents,
     canEdit,
     loadFailed: documentsLoadFailed,
+    summaryAvailable,
   });
   // UX6-UPLOAD: `문서 n` counts the PDFs with body text (교재, 교재+문제).
   const bookCount = bodyDocumentCount(library.documents);
@@ -1036,7 +1037,7 @@ function WorkspaceHomeContent({
                 summary={{
                   onOpen: openSummary,
                   busy: summaryActivity.busy,
-                  available: summaryAvailable,
+                  available: library.summaryAvailable,
                 }}
               />
             </div>

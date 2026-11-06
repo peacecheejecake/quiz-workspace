@@ -14,6 +14,7 @@ vi.mock('next/navigation', () => ({
 }));
 const { useDocumentLibrary } = await import('../src/components/documents/use-document-library');
 const { DocumentsLibrary } = await import('../src/components/documents/documents-library');
+const ROW_SUMMARY = { name: /^수학 책\s*요약$/ };
 
 const AT = '2026-10-28T00:00:00Z';
 const DOC: DocumentSummary = {
@@ -37,7 +38,12 @@ const DOC: DocumentSummary = {
 const DOCS = [DOC];
 
 function Library() {
-  const library = useDocumentLibrary({ workspaceId: 'ws', initialDocuments: DOCS, canEdit: true });
+  const library = useDocumentLibrary({
+    workspaceId: 'ws',
+    initialDocuments: DOCS,
+    canEdit: true,
+    summaryAvailable: true,
+  });
   return <DocumentsLibrary workspaceId="ws" library={library} canEdit />;
 }
 
@@ -61,7 +67,7 @@ function stubApi(patch: Patch, listed: () => DocumentSummary) {
       patches.push(kind);
       return patch(kind);
     }
-    return Response.json({ items: [listed()] });
+    return Response.json({ items: [listed()], summary_available: true });
   });
   vi.stubGlobal('fetch', fetchMock);
   return patches;
@@ -84,11 +90,55 @@ function TwoLibrary() {
     workspaceId: 'ws',
     initialDocuments: TWO_DOCS,
     canEdit: true,
+    summaryAvailable: true,
   });
   return <DocumentsLibrary workspaceId="ws" library={library} canEdit />;
 }
 
+const NO_DOCS: DocumentSummary[] = [];
+const BUSY = new Set<string>();
+
+/** The home after its server list failed: `first` is what the page knew about summaries. */
+function FailedListLibrary({ first }: { readonly first: boolean }) {
+  const library = useDocumentLibrary({
+    workspaceId: 'ws',
+    initialDocuments: NO_DOCS,
+    canEdit: true,
+    loadFailed: true,
+    summaryAvailable: first,
+  });
+  const summary = { onOpen: vi.fn(), busy: BUSY, available: library.summaryAvailable };
+  return <DocumentsLibrary workspaceId="ws" library={library} canEdit summary={summary} />;
+}
+
 afterEach(() => vi.unstubAllGlobals());
+
+describe('UX12-AIOFF-AC01 summary capability of a retried list', () => {
+  async function retry(first: boolean, available: boolean) {
+    const items = [{ ...DOC, has_summary: false }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ items, summary_available: available })),
+    );
+    render(
+      <ToastProvider>
+        <FailedListLibrary first={first} />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: '목록 새로고침' }));
+    await screen.findByRole('list', { name: '문서 목록' });
+  }
+
+  it('hides 요약 when the retried list says summaries are off', async () => {
+    await retry(true, false);
+    expect(screen.queryByRole('button', ROW_SUMMARY)).toBeNull();
+  });
+
+  it('offers 요약 when the retried list says summaries are on', async () => {
+    await retry(false, true);
+    expect(screen.getByRole('button', ROW_SUMMARY)).toBeTruthy();
+  });
+});
 
 describe('종류 변경 saving', () => {
   it('disables the menu while the save runs (focus stays on it), then shows the new kind', async () => {

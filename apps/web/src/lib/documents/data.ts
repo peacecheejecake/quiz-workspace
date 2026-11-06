@@ -37,7 +37,7 @@ async function loadDocumentList(workspaceId: string): Promise<Schemas['DocumentL
 /**
  * `loadDocuments` for a page that still renders without its documents (the home's 문서 n and
  * 문서 관리 dialog): a failure becomes `failed: true`; redirects still apply. After a failure the
- * environment is unknown: `summaryAvailable` stays true so a retried list never loses `요약`.
+ * environment is unknown: `summaryAvailable` is false until a list says otherwise.
  */
 export async function loadDocumentsOrFailure(workspaceId: string): Promise<{
   readonly documents: DocumentSummary[];
@@ -49,7 +49,7 @@ export async function loadDocumentsOrFailure(workspaceId: string): Promise<{
     return { documents: list.items, failed: false, summaryAvailable: list.summary_available };
   } catch (error) {
     unstable_rethrow(error);
-    return { documents: [], failed: true, summaryAvailable: true };
+    return { documents: [], failed: true, summaryAvailable: false };
   }
 }
 
