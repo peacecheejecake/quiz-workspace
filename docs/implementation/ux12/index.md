@@ -373,7 +373,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-7 | 10 | 완료 | Codex 지적 없음, 지우기는 resume_dismissed_at 컬럼(migration 20261106180000), lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
-| DESIGN-5 | 10 | 진행 | |
+| DESIGN-5 | 10 | 완료 | Codex P2 수정, 블러 원인(Lightning CSS의 -webkit 순서) 수정, PDF 위 유리는 불투명, Heatmap 1.3은 기존값, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-9 | 10 | 진행 | |
 | MOCKUX-10 | 10 | 진행 | |
