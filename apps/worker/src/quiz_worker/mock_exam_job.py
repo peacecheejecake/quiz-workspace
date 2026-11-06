@@ -12,7 +12,8 @@ Pipeline, serialised per mock exam by an advisory lock:
    mock exam (`mock_exam_unavailable`) or a workspace the user can no longer edit; AI variation
    types need the feature (`WORKER_MOCK_EXAMS`) and an LLM (`mock_llm_disabled`);
 2. mark it running and create the per-item checkpoints once (`mock_exam_generation_items`);
-3. `OPTION_SHUFFLE` items: the pinned revision copied with a seeded option order (no LLM);
+3. `OPTION_SHUFFLE` items: the pinned revision copied in its source option order (no LLM; the
+   order is drawn per run, UX12-MOCKSHUFFLE-C05);
 4. AI items: each source's cited-page passages (`quiz_worker.question_sources`), packed
    into as few calls as the budgets allow (`book_core.mock_exam.pack_batches`); oversized
    sources are narrowed or skipped `source_too_large`. Batches run up to
@@ -67,7 +68,6 @@ from book_core.mock_exam import (
     estimate_tokens,
     halves,
     pack_batches,
-    shuffled_options,
     source_block,
     source_tag,
 )
@@ -313,7 +313,7 @@ class _Pipeline:
                     stem_tables=stem_tables_json(
                         variant_stem_tables(row.stem, row.stem, pinned.stem_tables)
                     ),
-                    options=shuffled_options(row.options, self.generation.seed, position),
+                    options=row.options,
                     correct_option_ids=row.correct_option_ids,
                     accepted_answers=row.accepted_answers,
                     is_multi_answer=row.is_multi_answer,

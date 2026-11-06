@@ -1393,7 +1393,7 @@ def _mock_exam(
         },
         (202,),
     )
-    owner.wait_for_job(str(exam["latest_generation"]["job_id"]))
+    assert exam["status"] == "ready"
     questions = owner.ok("GET", f"/mock-exams/{exam['id']}/questions?include=answers")["items"]
     return str(exam["id"]), questions
 

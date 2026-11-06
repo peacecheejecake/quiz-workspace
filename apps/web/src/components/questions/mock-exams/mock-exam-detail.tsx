@@ -299,6 +299,10 @@ export function MockExamDetail({
       return;
     }
     setExam({ status: 'ready', data: result.data });
+    // 보기 섞기 only: the round is already finished, so no generating state announces it.
+    if (result.data.latest_generation?.status === 'succeeded') {
+      setAnnouncement('모의고사 문제를 만들었습니다.');
+    }
     if (liveRound.current === opening) setMode('view');
   }
   function startSettings() {

@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
+from book_core.mock_exam import PlanCandidate
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from quiz_api.api.mock_exams import (
@@ -16,6 +18,7 @@ from quiz_api.api.mock_exams import (
     MockExamSourceRef,
     _check_config,
     _question_json,
+    _start,
     generation_out,
     question_out,
 )
@@ -73,6 +76,91 @@ def test_a_client_workspace_id_is_refused() -> None:
                 "workspace_id": str(uuid.uuid4()),
             }
         )
+
+
+class StartRepo:
+    """What `_start` asks of the repository, recording what it writes."""
+
+    session = None
+
+    def __init__(self, running: int = 0) -> None:
+        self.running = running
+        self.generations: list[dict[str, object]] = []
+        self.copied: list[tuple[uuid.UUID, dict[str, object]]] = []
+        self.generation_id = uuid.uuid4()
+
+    def lock_workspace_generations(self, workspace_id: uuid.UUID) -> None:
+        pass
+
+    def running_count(self, workspace_id: uuid.UUID) -> int:
+        return self.running
+
+    def create_generation(self, exam: object, actor: uuid.UUID, **kw: object) -> uuid.UUID:
+        self.generations.append(kw)
+        return self.generation_id
+
+    def source_evidence(
+        self, workspace_id: uuid.UUID, question_ids: list[uuid.UUID]
+    ) -> dict[str, object]:
+        return {str(q): [] for q in question_ids}
+
+    def store_shuffle_copies(self, generation_id: uuid.UUID, evidence: dict[str, object]) -> None:
+        self.copied.append((generation_id, evidence))
+
+
+class Limiter:
+    def acquire(self, key: str) -> None:
+        return None
+
+
+def start(repo: StartRepo, types: list[str], monkeypatch: pytest.MonkeyPatch) -> uuid.UUID:
+    candidates = [
+        PlanCandidate(str(uuid.uuid4()), str(uuid.uuid4()), chapter_rank=0) for _ in range(3)
+    ]
+    monkeypatch.setattr("quiz_api.api.mock_exams.resolve_candidates", lambda *a, **k: candidates)
+    exam = SimpleNamespace(id=uuid.uuid4(), workspace_id=uuid.uuid4())
+    return _start(
+        repo,  # type: ignore[arg-type]
+        Settings(APP_ENV="test", MOCK_EXAM_MAX_RUNNING_PER_WORKSPACE=1),  # type: ignore[call-arg]
+        Limiter(),  # type: ignore[arg-type]
+        exam,  # type: ignore[arg-type]
+        uuid.uuid4(),
+        MockExamConfig(variation_types=types, question_count=2),  # type: ignore[arg-type]
+        QuestionRange(all=True),
+        7,
+        new_config=True,
+    )
+
+
+def test_ux12_mockshuffle_c01_shuffle_only_copies_in_the_request_without_a_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = StartRepo()
+    assert start(repo, ["OPTION_SHUFFLE"], monkeypatch) == repo.generation_id
+    assert repo.generations[0]["with_job"] is False
+    [(copied, evidence)] = repo.copied
+    assert copied == repo.generation_id
+    assert len(evidence) == 2
+
+
+def test_ux12_mockshuffle_c01_a_mixed_exam_still_runs_a_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = StartRepo()
+    start(repo, ["OPTION_SHUFFLE", "PARAPHRASE"], monkeypatch)
+    assert repo.generations[0]["with_job"] is True
+    assert repo.copied == []
+
+
+def test_ux12_mockshuffle_c02_only_a_job_counts_against_the_running_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    busy = StartRepo(running=1)
+    with pytest.raises(ProblemException) as info:
+        start(busy, ["PARAPHRASE"], monkeypatch)
+    assert info.value.problem_type is ProblemType.GENERATION_BUSY
+    start(busy, ["OPTION_SHUFFLE"], monkeypatch)
+    assert len(busy.copied) == 1
 
 
 def generation(**kw: object) -> GenerationRecord:

@@ -41,6 +41,8 @@ from quiz_api.repositories.tables import (
 
 # Characters of the stem fetched for a results preview (as for bank runs).
 STEM_HEAD = 1000
+# Its MCQ options are ordered per run or session, not by the copy (UX12-MOCKSHUFFLE-C03, C04).
+OPTION_SHUFFLE = "OPTION_SHUFFLE"
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,10 @@ class MockQuestionTarget:
     exam_deleted: bool
     current_generation_id: uuid.UUID | None
     revision: MockRevision
+
+    @property
+    def shuffles_options(self) -> bool:
+        return self.variation_type == OPTION_SHUFFLE
 
     @property
     def shown(self) -> bool:
@@ -157,6 +163,7 @@ class LiveMockQuestion:
     options: list[dict[str, str]]
     is_multi_answer: bool
     stem_tables: list[Any] | None = None
+    shuffles_options: bool = False
 
 
 def _revision(row: Any) -> MockRevision:
@@ -564,8 +571,8 @@ class MockPracticeRepository:
     ) -> LiveMockQuestion | None:
         row = self._session.execute(
             text(
-                "select q.id, q.question_type, r.stem, r.options, r.is_multi_answer, r.stem_tables "
-                "from public.mock_exam_questions q "
+                "select q.id, q.question_type, q.variation_type, r.stem, r.options, "
+                "r.is_multi_answer, r.stem_tables from public.mock_exam_questions q "
                 "join public.mock_exam_question_revisions r "
                 "on r.id = q.active_revision_id and r.mock_exam_question_id = q.id "
                 "where q.id = :q and q.workspace_id = :w and q.removed_at is null"
@@ -581,6 +588,7 @@ class MockPracticeRepository:
             options=list(row.options or []),
             is_multi_answer=bool(row.is_multi_answer),
             stem_tables=row.stem_tables,
+            shuffles_options=row.variation_type == OPTION_SHUFFLE,
         )
 
     def progress(self, run: RunRecord) -> RunProgress:

@@ -434,7 +434,7 @@ def shuffle_exam(client: Any, ws: str, question_ids: list[str]) -> tuple[str, li
         },
         (202,),
     )
-    client.wait_for_job(str(created["latest_generation"]["job_id"]))
+    assert created["status"] == "ready"
     items: list[dict[str, Any]] = client.ok(
         "GET", f"/mock-exams/{created['id']}/questions?include=answers"
     )["items"]

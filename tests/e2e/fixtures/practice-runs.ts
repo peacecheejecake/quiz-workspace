@@ -85,7 +85,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { apiError, type ApiResponse } from './api.ts';
-import { outlineNodeId, uploadReadyBook, waitForJob } from './documents.ts';
+import { outlineNodeId, uploadReadyBook } from './documents.ts';
 import { seedMembership } from './db.ts';
 import { localDbAdminUrl } from './local-env.ts';
 import { rangePickerUi } from './range-picker.ts';
@@ -280,9 +280,7 @@ export async function createShuffleMockExam(
     },
     [202],
   );
-  const jobId = created.latest_generation?.job_id;
-  if (!jobId) throw new Error('mock exam: no generation job');
-  await waitForJob(owner, jobId);
+  // 보기 섞기 only: saved in the request, no job (UX12-MOCKSHUFFLE-C01).
   const exam = await owner.api.ok<MockExam>('GET', `/mock-exams/${created.id}`, undefined, [200]);
   expect(exam.status, 'mock exam status').toBe('ready');
   return exam;

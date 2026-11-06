@@ -19664,7 +19664,7 @@
     },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}/practice-sessions": {
       "post": {
-        "description": "Open a mock exam question: pins its active revision and optionally shuffles MCQ options.\nNo answers in the response, nothing recorded outside the mock exam tables. With a run\nposition the caller's mock run must hold this question; an open session is resumed, and a\nsubmitted one is 409 `already-submitted`.",
+        "description": "Open a mock exam question: pins its active revision and its MCQ option order.\nNo answers in the response, nothing recorded outside the mock exam tables. With a run\nposition the caller's mock run must hold this question; an open session is resumed, and a\nsubmitted one is 409 `already-submitted`.",
         "operationId": "startMockPracticeSession",
         "parameters": [
           {
@@ -28680,7 +28680,7 @@
         ]
       },
       "post": {
-        "description": "Save a mock exam and start its first generation. With an AI variation type the range's\nquestions, answers, explanations and related book text are sent to the LLM provider.",
+        "description": "Save a mock exam and start its first generation. With an AI variation type the range's\nquestions, answers, explanations and related book text are sent to the LLM provider;\nwith 보기 섞기 only the response is already `ready` (`job_id` null).",
         "operationId": "createMockExam",
         "parameters": [
           {
