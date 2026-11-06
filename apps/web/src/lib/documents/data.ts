@@ -14,6 +14,10 @@ export class DocumentsLoadError extends Error {
 }
 
 export async function loadDocuments(workspaceId: string): Promise<DocumentSummary[]> {
+  return (await loadDocumentList(workspaceId)).items;
+}
+
+async function loadDocumentList(workspaceId: string): Promise<Schemas['DocumentList']> {
   const returnTo = `/workspaces/${workspaceId}`;
   let api;
   try {
@@ -25,23 +29,27 @@ export async function loadDocuments(workspaceId: string): Promise<DocumentSummar
   const { data, response } = await api.GET('/api/v1/workspaces/{workspace_id}/documents', {
     params: { path: { workspace_id: workspaceId } },
   });
-  if (data) return data.items;
+  if (data) return data;
   if (response.status === 401) redirect(loginRedirectPath(returnTo));
   throw new DocumentsLoadError(response.status);
 }
 
 /**
  * `loadDocuments` for a page that still renders without its documents (the home's 문서 n and
- * 문서 관리 dialog): a failure becomes `failed: true`; redirects still apply.
+ * 문서 관리 dialog): a failure becomes `failed: true`; redirects still apply. After a failure the
+ * environment is unknown: `summaryAvailable` stays true so a retried list never loses `요약`.
  */
-export async function loadDocumentsOrFailure(
-  workspaceId: string,
-): Promise<{ readonly documents: DocumentSummary[]; readonly failed: boolean }> {
+export async function loadDocumentsOrFailure(workspaceId: string): Promise<{
+  readonly documents: DocumentSummary[];
+  readonly failed: boolean;
+  readonly summaryAvailable: boolean;
+}> {
   try {
-    return { documents: await loadDocuments(workspaceId), failed: false };
+    const list = await loadDocumentList(workspaceId);
+    return { documents: list.items, failed: false, summaryAvailable: list.summary_available };
   } catch (error) {
     unstable_rethrow(error);
-    return { documents: [], failed: true };
+    return { documents: [], failed: true, summaryAvailable: true };
   }
 }
 

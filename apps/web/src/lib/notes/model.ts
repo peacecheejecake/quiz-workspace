@@ -32,7 +32,6 @@ export const NOTE_TEXT = {
   notFound: '장을 찾을 수 없습니다.',
   generating: '정리 노트를 만드는 중',
   failed: '정리 노트를 만들지 못했습니다',
-  unavailable: '이 환경에서는 AI 정리 노트를 사용할 수 없습니다.',
   previous: '이전 버전입니다. 최신 버전은 버전 선택에서 고를 수 있습니다.',
   answersNotice: '이 노트에는 문제의 정답과 해설 내용이 들어 있습니다.',
   search: '노트에서 찾기',
@@ -126,8 +125,6 @@ export interface NoteView {
   readonly canRegenerate: boolean;
   /** `다시 시도` in the failure alert is offered. */
   readonly canRetry: boolean;
-  /** Creating is offered but this environment has the feature off (shown disabled + reason). */
-  readonly createDisabled: boolean;
   /** The shown note is an older version than the newest. */
   readonly previous: boolean;
 }
@@ -137,7 +134,8 @@ export function noteView(state: ChapterNoteState, canEdit: boolean): NoteView {
   const failed = state.generation?.status === 'failed';
   const hasQuestions = state.confirmed_question_count > 0;
   const kind = state.note ? 'note' : hasQuestions ? 'empty' : 'noQuestions';
-  const actions = canEdit && hasQuestions && !generating;
+  // Where the feature is off nothing is offered, not even the send notice (UX12-AIOFF-AC03).
+  const actions = canEdit && hasQuestions && !generating && state.available;
   const newest = state.versions[0]?.version;
   return {
     kind,
@@ -146,7 +144,6 @@ export function noteView(state: ChapterNoteState, canEdit: boolean): NoteView {
     canCreate: actions && kind === 'empty' && !failed,
     canRegenerate: actions && kind === 'note' && !failed,
     canRetry: actions && failed,
-    createDisabled: !state.available,
     previous: state.note !== null && newest !== undefined && state.note.version !== newest,
   };
 }

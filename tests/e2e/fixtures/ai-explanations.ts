@@ -107,8 +107,8 @@
 //   the reason + button "다시 시도"; reasons: llm_unavailable → "AI 서비스에 연결하지 못했습니다.
 //   잠시 후 다시 시도하세요.", explanation_answer_mismatch → "정답과 맞지 않는 해설이 나와 보여 주지
 //   않았습니다. 다시 시도하세요.", 429 → "잠시 후 다시 시도하세요 (n초)", regenerate cap → "오늘은 이
-//   문제의 해설을 더 다시 만들 수 없습니다." (wording assumed), feature off → "이 환경에서는 AI 해설을
-//   사용할 수 없습니다.", archived → "보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.".
+//   문제의 해설을 더 다시 만들 수 없습니다." (wording assumed), feature off → no button and no
+//   reason (UX12-AIOFF-AC04), archived → "보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.".
 //   Share panel: disclosure "AI 해설" only when one exists; no create/regenerate/status/version.
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';

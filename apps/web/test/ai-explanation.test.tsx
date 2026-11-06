@@ -303,12 +303,13 @@ describe('AIEXPL-01 area states', () => {
     expect(within(area()).queryByRole('alert')).toBeNull();
   });
 
-  it('feature off and archived: the reason instead of a button', async () => {
+  it('feature off shows nothing, archived the reason instead of a button', async () => {
     const off = fakeClient(stateOf({ available: false, can_create: false }));
     const { unmount } = render(
       <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={off} />,
     );
-    expect(await within(area()).findByText(model.EXPL_TEXT.disabled)).toBeInTheDocument();
+    await waitFor(() => expect(within(area()).queryByText(model.EXPL_TEXT.loading)).toBeNull());
+    expect(within(area()).queryByText(model.EXPL_TEXT.disabled)).toBeNull();
     expect(within(area()).queryByRole('button')).toBeNull();
     unmount();
     const archived = fakeClient(stateOf({ can_create: false }));

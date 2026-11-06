@@ -195,6 +195,8 @@ export interface WorkspaceHomeProps {
   readonly hasQuestions?: boolean | null;
   readonly documents: readonly DocumentSummary[];
   readonly documentsLoadFailed: boolean;
+  /** This environment can create document summaries (from the document list). */
+  readonly summaryAvailable: boolean;
   /** Screen ids of the parts of this page (`data-screen-id`, docs/screens/index.md). */
   readonly screenIds: {
     readonly documents: string;
@@ -231,6 +233,7 @@ function WorkspaceHomeContent({
   hasQuestions = null,
   documents,
   documentsLoadFailed,
+  summaryAvailable,
   screenIds,
 }: WorkspaceHomeProps) {
   const router = useRouter();
@@ -1030,7 +1033,11 @@ function WorkspaceHomeContent({
                     ? '뷰어 권한으로는 문서를 볼 수만 있습니다.'
                     : undefined
                 }
-                summary={{ onOpen: openSummary, busy: summaryActivity.busy }}
+                summary={{
+                  onOpen: openSummary,
+                  busy: summaryActivity.busy,
+                  available: summaryAvailable,
+                }}
               />
             </div>
           </FloatingSidePanel>

@@ -19,7 +19,6 @@ import { AskPanel, type AskIntent } from '@/components/ask/ask-panel';
 import { AskSearchButton } from '@/components/ask/ask-search-button';
 import { useAskState } from '@/components/ask/use-ask-state';
 import { WorkspaceBreadcrumb, type WorkspaceCrumb } from '@/components/workspaces/sub-page-nav';
-import { unavailableReason, unavailableText } from '@/lib/ask/model';
 import { CONTENT_QUERY_PARAM, MAX_QUERY_CHARS, parseSearchParams } from '@/lib/search/state';
 import { workspaceHomePath } from '@/lib/workspaces/home';
 import {
@@ -84,8 +83,6 @@ export function ContentSearchPage({
 
   // --- AI에게 묻기 (ASK-01) ---------------------------------------------------------------------
   const ask = useAskState(workspace.id);
-  const askReason = unavailableReason(ask.state, workspace.archived);
-  const askUnavailable = askReason ? unavailableText(askReason) : null;
   const [askOpen, setAskOpen] = useState(false);
   // Each opening starts the panel afresh: unsent input never survives a close.
   const [askSession, setAskSession] = useState(0);
@@ -135,7 +132,7 @@ export function ContentSearchPage({
         searchable={searchable}
         extraAction={
           ask.state?.available && !workspace.archived ? (
-            <AskSearchButton unavailable={askUnavailable} onAsk={askFromSearch} />
+            <AskSearchButton onAsk={askFromSearch} />
           ) : null
         }
         settings={

@@ -71,11 +71,6 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.disabled[aria-disabled='true'] {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .previous {
   margin: 0;
   padding: var(--space-2) var(--space-3);

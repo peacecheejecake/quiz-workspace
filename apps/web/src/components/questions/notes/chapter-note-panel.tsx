@@ -15,7 +15,7 @@
 // an explanation row's `위치로 이동` stacks 문제 상세 over the note.
 import { Badge, Button, FloatingSidePanel, Select, Skeleton } from '@quiz/ui';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getChapterlessHighlights } from '@/lib/highlights/client';
 import {
   createChapterNote,
@@ -261,7 +261,6 @@ function NoteContent({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const reasonId = useId();
   const [version, setVersion] = useState<number | null>(null);
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
@@ -421,27 +420,11 @@ function NoteContent({
   const progress = batchProgress(state.generation);
   const newest = state.versions[0]?.version;
 
-  // Generation actions are hidden when unavailable; stored notes stay readable.
-  const actionButton = (label: string, variant: 'primary' | 'secondary') =>
-    view.createDisabled ? null : (
-      <Button
-        size="sm"
-        variant={variant}
-        className={styles.disabled}
-        loading={requesting}
-        aria-disabled={view.createDisabled || undefined}
-        aria-describedby={view.createDisabled ? reasonId : undefined}
-        onClick={view.createDisabled ? undefined : () => void create()}
-      >
-        {label}
-      </Button>
-    );
-  const offReason =
-    view.createDisabled && (view.canCreate || view.canRegenerate || view.canRetry) ? (
-      <p id={reasonId} className={styles.hint}>
-        {NOTE_TEXT.unavailable}
-      </p>
-    ) : null;
+  const actionButton = (label: string, variant: 'primary' | 'secondary') => (
+    <Button size="sm" variant={variant} loading={requesting} onClick={() => void create()}>
+      {label}
+    </Button>
+  );
 
   return (
     <div
@@ -483,7 +466,6 @@ function NoteContent({
             <>
               <p className={styles.hint}>{sendNotice(state.confirmed_question_count)}</p>
               {actionButton('정리 노트 만들기', 'primary')}
-              {offReason}
             </>
           ) : null}
         </div>
@@ -500,12 +482,7 @@ function NoteContent({
         <div className={styles.alert} role="alert">
           <p className={styles.alertTitle}>{NOTE_TEXT.failed}</p>
           <p>{failureReason(state.generation?.error_code)}</p>
-          {view.canRetry ? (
-            <>
-              {actionButton('다시 시도', 'secondary')}
-              {offReason}
-            </>
-          ) : null}
+          {view.canRetry ? actionButton('다시 시도', 'secondary') : null}
         </div>
       ) : null}
 
@@ -533,7 +510,6 @@ function NoteContent({
       {note && view.canRegenerate ? (
         <div className={styles.state}>
           <div className={styles.actions}>{actionButton('다시 만들기', 'secondary')}</div>
-          {offReason}
         </div>
       ) : null}
       {detail.dialog}
