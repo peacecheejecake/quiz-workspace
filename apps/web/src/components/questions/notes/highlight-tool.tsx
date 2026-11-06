@@ -21,7 +21,7 @@ import {
   recolorHighlight,
   type HighlightTargetInput,
 } from '@/lib/highlights/client';
-import { HIGHLIGHT_TEXT, withCreated, withUpdated } from '@/lib/highlights/model';
+import { withCreated, withUpdated } from '@/lib/highlights/model';
 import type { MyHighlight } from '@/lib/notes/model';
 import { newIdempotencyKey } from '@/lib/workspaces/idempotency';
 
@@ -128,7 +128,6 @@ export function useHighlightTool({
   const [selection, setSelection] = useState<HighlightSelection | null>(null);
   // A refused change is said next to the area.
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
   const { update, reload } = store;
   const fail = (failure: unknown) => {
     const kind = failure instanceof HighlightApiError ? failure.kind : 'failed';
@@ -175,7 +174,6 @@ export function useHighlightTool({
         returnFocusTo={areaRef}
         onClose={() => setSelection(null)}
         onAction={(action) => void act(action)}
-        onCopied={() => toast({ tone: 'success', title: HIGHLIGHT_TEXT.copied })}
       />
       {error ? <p role="alert">{error}</p> : null}
     </>

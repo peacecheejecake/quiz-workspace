@@ -46,7 +46,7 @@ linked_tests: [UX12-SETTINGS-AC01, UX12-SETTINGS-AC02, UX12-SETTINGS-AC03, UX12-
 
 ### UX12-SETTINGS-AC07
 
-`HighlightableText`(정리 노트·해설)에서는 복사 내용이 메뉴의 `복사`·Ctrl+C와 같다: 숨김 라벨과 각주 표시를 뺀 `rangeText` 결과다. 하이라이트 메뉴는 평소처럼 열리고, 자동 복사가 선택을 지우거나 focus를 옮기지 않는다. 그 밖의 화면은 브라우저 기본 복사와 같은 `Selection.toString()`을 쓴다(문단 줄바꿈 유지).
+`HighlightableText`(정리 노트·해설)에서는 복사 내용이 Ctrl+C·OS 복사와 같다(하이라이트 메뉴의 `복사`는 2026-11-07에 없앴다): 숨김 라벨과 각주 표시를 뺀 `rangeText` 결과다. 하이라이트 메뉴는 평소처럼 열리고, 자동 복사가 선택을 지우거나 focus를 옮기지 않는다. 그 밖의 화면은 브라우저 기본 복사와 같은 `Selection.toString()`을 쓴다(문단 줄바꿈 유지).
 
 ### UX12-SETTINGS-AC08
 

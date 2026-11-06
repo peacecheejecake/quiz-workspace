@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // HILITE-01 explanation toasts (docs/screens/highlights.md): making or recoloring a highlight shows
-// no toast (2026-11-07), and `복사` confirms with a toast over the same tool.
+// no toast (2026-11-07); the menu has no `복사` (the OS menu and Ctrl/Cmd+C copy).
 import './dom-setup';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -94,20 +94,5 @@ describe('HILITE-01 explanation toasts', () => {
     await waitFor(() => expect(client.recolorHighlight).toHaveBeenCalled());
     await act(async () => new Promise((r) => setTimeout(r, 10)));
     expect(document.querySelectorAll('.qz-toast')).toHaveLength(0);
-  });
-
-  it('confirms 복사 with a toast', async () => {
-    const user = userEvent.setup();
-    const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
-    renderExplanation();
-
-    selectFirstWord();
-    await user.click(within(await menu()).getByRole('menuitem', { name: '복사' }));
-    expect(writeText).toHaveBeenCalledWith(TEXT.slice(0, 1));
-    await waitFor(() =>
-      expect(document.querySelector('.qz-toast')).toHaveTextContent('복사했습니다.'),
-    );
-    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

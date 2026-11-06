@@ -75,7 +75,7 @@ test(
     await expect.poll(() => selectionText(page)).toBe(PHRASE_A);
 
     // So does the keyboard.
-    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
     await expect(highlightUi.colorItem(menu, 'pink')).toBeFocused();
     await expect.poll(() => selectionText(page)).toBe(PHRASE_A);
 

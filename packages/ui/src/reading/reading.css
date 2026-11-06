@@ -108,14 +108,31 @@
   }
 }
 
-/* HighlightMenu: color items carry a swatch next to their name. */
+/* HighlightMenu: one compact row of icon-only items (colors, then remove). The current color is
+   marked by a check over its swatch and each swatch carries its marks' underline shape. */
 .qz-highlight-menu {
-  > [role='group'] > .item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+
+  > [role='group'] {
     display: flex;
+    flex-direction: row;
+    gap: var(--space-1);
+  }
+
+  .item {
+    position: relative;
+    display: inline-flex;
+    flex: none;
     align-items: center;
-    gap: var(--space-2);
-    min-height: var(--control-height-md);
-    padding: 0 var(--space-3);
+    justify-content: center;
+    box-sizing: border-box;
+    width: var(--control-height-md);
+    height: var(--control-height-md);
+    padding: 0;
     border-radius: var(--radius-sm);
     color: var(--color-text-primary);
     outline: none;
@@ -137,52 +154,69 @@
       opacity: 0.55;
     }
 
-    > .text {
-      flex: 1;
-    }
-
     > .check {
+      position: absolute;
+      inset: 0;
       display: inline-flex;
+      align-items: center;
+      justify-content: center;
       color: var(--color-text-primary);
+      pointer-events: none;
     }
   }
 
+  > .separator {
+    align-self: stretch;
+    width: 1px;
+    margin: var(--space-1) 0;
+    background: var(--color-border);
+  }
+
   .swatch {
+    position: relative;
     flex: none;
-    width: 16px;
-    height: 16px;
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-sm);
     background: var(--color-highlight-yellow);
-    text-decoration-line: underline;
+
+    /* The same underline as the marks: solid, double, dotted. */
+    &::after {
+      content: '';
+      position: absolute;
+      inset: auto 3px 3px;
+      border-bottom: 1px solid var(--color-text-primary);
+    }
 
     &[data-highlight-color='blue'] {
       background: var(--color-highlight-blue);
+
+      &::after {
+        border-bottom: 3px double var(--color-text-primary);
+      }
     }
 
     &[data-highlight-color='pink'] {
       background: var(--color-highlight-pink);
-    }
-  }
 
-  > .reason {
-    margin: 0;
-    padding: var(--space-1) var(--space-3);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-label);
-    line-height: var(--line-height-snug);
+      &::after {
+        border-bottom: 2px dotted var(--color-text-primary);
+      }
+    }
   }
 
   /* Touch: 44px targets. */
   @media (pointer: coarse) {
-    > .item,
-    > [role='group'] > .item {
-      min-height: 44px;
+    .item {
+      width: 44px;
+      height: 44px;
     }
   }
 
   @media (forced-colors: active) {
-    > [role='group'] > .item:is([data-highlighted], :focus-visible) {
+    .item:is([data-highlighted], :focus-visible) {
       outline: 2px solid Highlight;
       outline-offset: -2px;
     }

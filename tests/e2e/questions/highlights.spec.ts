@@ -25,7 +25,6 @@ import {
   chooseColor,
   chooseRowItem,
   COLOR_UNDERLINE,
-  copiedTexts,
   dragSelect,
   highlightExplanation,
   highlightKeysIn,
@@ -33,7 +32,6 @@ import {
   highlightRequest,
   highlightRowCount,
   highlightUi,
-  isOnTop,
   itemText,
   markStyle,
   noteSetup,
@@ -174,11 +172,13 @@ test(
     await dragSelect(body, PHRASE_A);
     const menu = highlightUi.menu(page);
     await expect(menu).toBeVisible();
-    await expect(menu.locator('[role^="menuitem"]')).toHaveCount(4);
+    await expect(menu.locator('[role^="menuitem"]')).toHaveCount(3);
     for (const color of ['yellow', 'blue', 'pink'] as const) {
       await expect(highlightUi.colorItem(menu, color)).toBeVisible();
     }
-    await expect(highlightUi.copyItem(menu)).toBeVisible();
+    // One compact icon-only row: no 복사 item, no text (HILITE-MENU 2026-11-07).
+    await expect(highlightUi.copyItem(menu)).toHaveCount(0);
+    await expect(menu).toHaveText('');
     await expect(highlightUi.removeItem(menu)).toHaveCount(0);
     // The menu sits above the selection.
     // Placed next to the selection (above, or below without room), never over it.
@@ -275,17 +275,6 @@ test(
     await expect(highlightUi.marks(body)).toHaveCount(0);
     await expect(highlightUi.heading(section, 0)).toBeVisible();
 
-    // Copy: the selected text only (no hidden labels, no footnote numbers).
-    await dragSelect(body, PHRASE_B);
-    menu = highlightUi.menu(page);
-    await highlightUi.copyItem(menu).click();
-    // The menu closes, the selection goes and the toast shows over the modal panel.
-    await expect(menu).toBeHidden();
-    await expect(highlightUi.copiedToast(page)).toBeVisible();
-    await expect.poll(() => isOnTop(highlightUi.copiedToast(page))).toBe(true);
-    await expect.poll(() => selectionText(page)).toBe('');
-    expect(await copiedTexts(page)).toEqual([PHRASE_B]);
-
     // Escape closes the menu, keeps the selection and returns focus to the note body.
     await dragSelect(body, PHRASE_B);
     await expect(highlightUi.menu(page)).toBeVisible();
@@ -303,7 +292,7 @@ test(
     for (const color of ['yellow', 'blue', 'pink'] as const) {
       await expect(highlightUi.colorItem(menu, color)).toHaveAttribute('aria-disabled', 'true');
     }
-    await expect(highlightUi.oneBlockReason(page)).toBeVisible();
+    await expect(highlightUi.oneBlockReason(page)).toBeAttached(); // read out, not shown
     expect(await chapterHighlights(s.owner, s.ch1)).toHaveLength(0);
   },
 );
