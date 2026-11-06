@@ -37,9 +37,9 @@ describe('SSR keyword-clear cache seed', () => {
     });
     const data = await loadOverview('workspace', filters);
     expect(api.GET.mock.calls.map(([, init]) => init.params.query)).toEqual([
-      { chapter: 'none', type: 'MCQ', favorite: true, q: 'chlorine' },
+      { chapter: 'none', type: ['MCQ'], favorite: true, q: 'chlorine' },
       {},
-      { chapter: 'none', type: 'MCQ', favorite: true },
+      { chapter: 'none', type: ['MCQ'], favorite: true },
     ]);
     const cache = seedOverviewCache(
       'workspace',

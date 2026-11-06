@@ -62,8 +62,7 @@ async function openQuestion(page: Page, workspaceId: string, q: Question): Promi
 const menuButton = (panel: Locator) => panelUi.manage(panel).or(panelUi.info(panel));
 
 async function advance(panel: Locator): Promise<void> {
-  const next = runUi.next(panel);
-  await ((await next.isVisible()) ? next : runUi.skip(panel)).click();
+  await runUi.next(panel).click();
 }
 
 test(

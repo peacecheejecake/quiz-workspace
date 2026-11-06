@@ -116,6 +116,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX10-HOME.0': ['UX10-HOME'],
   'UX11-RETURN': ['UX11-RETURN'],
   'UX12-PLAY.0': ['UX12-PLAY'],
+  // UX12 MOCKUX-2: the home 풀기 opens the list, the detail's 더보기 menu, 문제 풀기 → 모의고사.
+  'UX12-MOCKNAV.0': ['UX12-MOCKNAV'],
   'UX12-HOME.0': ['UX12-HOME'],
   // UX12 HOME-4: the sticky 문서 N · 풀기 line and the single 문서 N menu (D-7).
   'UX12-HEADER.0': ['UX12-HEADER'],
@@ -144,6 +146,12 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-ASK.0': ['UX12-ASK'],
   // UX12 VIEW-1: sequence arrows, footer 다시 풀기·초기화, panel body back to the top.
   'UX12-VIEW.0': ['UX12-VIEW'],
+  // UX12 MOCKUX-3: the run's footer matches the Heatmap path; `건너뛰기` is gone.
+  'UX12-RUNBAR.0': ['UX12-RUNBAR'],
+  // UX12 MOCKUX-5: a question marked 다시 풀기 opens to be answered, without its last result.
+  'UX12-RETRYOPEN.0': ['UX12-RETRYOPEN'],
+  // UX12 MOCKUX-6: a mock exam run's 질문하기 appears once the position is graded.
+  'UX12-RUNASK.0': ['UX12-RUNASK'],
   // UX12 VIEW-3: drag handle for the editor's options, multi-line option input.
   'UX12-QEDIT.0': ['UX12-QEDIT'],
   // UX12 VIEW-6: pending mark on page links; DOC-02 keeps its 404 (no loading boundary).
@@ -177,6 +185,10 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-REEXTRACT.0': ['UX12-REEXTRACT'],
   // UX12 EXTRACT-9: structured cells beside the stem's GFM tables, and editing them as tables.
   'UX12-STEMTABLE.0': ['UX12-STEMTABLE'],
+  // UX12 MOCKUX-1: the mock exam create and 설정 바꾸기 screens.
+  'UX12-MOCKFORM.0': ['UX12-MOCKFORM'],
+  // UX12 MOCKUX-4: a Heatmap chapter's 풀기, a bank run of the whole chapter with two options.
+  'UX12-CHAPTERRUN.0': ['UX12-CHAPTERRUN'],
   // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).
   'CHMAN.0': ['CHMAN-01'],
 };

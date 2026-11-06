@@ -91,6 +91,7 @@ from quiz_api.practice_grading import (
     grade_mcq,
     grade_short_answer,
     new_shuffle_seed,
+    run_option_seed,
     shuffled_option_ids,
 )
 from quiz_api.question_rules import MAX_LONG_TEXT, MAX_OPTIONS, Issues, QuestionType, storable
@@ -181,12 +182,15 @@ class PracticeSessionCreate(BaseModel):
 
 class PracticeOpenBody(BaseModel):
     """What the panel knows of this question: an open session it keeps in memory and the latest
-    attempt when that session was opened, or `force_new` for another try after a result."""
+    attempt when that session was opened, or `force_new` for another try after a result.
+    `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
+    result the question would otherwise open with."""
 
     model_config = ConfigDict(extra="forbid")
 
     cached_session_id: uuid.UUID | None = None
     baseline_attempt_id: uuid.UUID | None = None
+    cached_another_try: bool = False
     force_new: bool = False
 
     @model_validator(mode="after")
@@ -528,10 +532,12 @@ def _open_session(
     epoch: int,
     *,
     shuffle: bool = False,
+    shuffle_seed: int | None = None,
     run_id: uuid.UUID | None = None,
     position: int | None = None,
 ) -> PracticeSession:
-    """A new session on the active revision; also records the caller's view."""
+    """A new session on the active revision; also records the caller's view. `shuffle_seed` (a
+    `shuffle_options` run's position) fixes the shuffle, `shuffle` draws a new one."""
     if question.publication_status != "CONFIRMED":
         raise ProblemException(
             409,
@@ -542,8 +548,8 @@ def _open_session(
     displayed: list[str] = []
     if question.question_type == "MCQ":
         displayed = [o["id"] for o in question.revision.options]
-        if shuffle:
-            seed = new_shuffle_seed()
+        if shuffle or shuffle_seed is not None:
+            seed = new_shuffle_seed() if shuffle_seed is None else shuffle_seed
             displayed = shuffled_option_ids(displayed, seed)
 
     opened = practice.open_session(
@@ -647,6 +653,7 @@ def start_practice_session(
                 )
             return replay(stored, body_hash)
     run_id, position = body.practice_run_id, body.run_position
+    run_seed: int | None = None
     if run_id is not None and position is not None:
         run = runs.get_in_workspace(run_id, user.id, access.workspace.workspace_id)
         if run is None:
@@ -680,6 +687,8 @@ def start_practice_session(
                 )
             practice.commit()
             return resumed
+        if run.shuffle_options:
+            run_seed = run_option_seed(run.seed, position)
 
     question = questions.get(access.resource_id, with_sources=False)
     if question is None:  # soft-deleted after the authorization lookup
@@ -690,6 +699,7 @@ def start_practice_session(
         user.id,
         epoch,
         shuffle=body.shuffle_options,
+        shuffle_seed=run_seed,
         run_id=run_id,
         position=position,
     )
@@ -775,7 +785,10 @@ class PracticeOpened(BaseModel):
     session: PracticeSession | None = Field(description="The open session to answer.")
     reused: bool = Field(description="`session` is the cached one; nothing was written.")
     result: PracticeSessionDetail | None = Field(
-        description="The latest submitted session of the active revision, with its outcome."
+        description=(
+            "The latest submitted session of the active revision, with its outcome. Left out for "
+            "a question marked for retry, unless that submission still waits for grading."
+        )
     )
     submitted_answer: dict[str, Any] | None = None
 
@@ -817,7 +830,9 @@ def open_question_practice(
     latest result, then reuse the cached session, show that result or open a session. Only a new
     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
     user and question, so no separate key lock is taken. A key seen again replays its session
-    while it is open: once submitted, the latest result answers instead, or 409 without one."""
+    while it is open: once submitted, the latest result answers instead, or 409 without one.
+    A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
+    its latest submission still waits for grading: nothing else can finish that one."""
     body = body or PracticeOpenBody()
     epoch, reset_since_start = practice.lock_epoch_with_reset(user.id, access.resource_id)
     if reset_since_start:
@@ -864,13 +879,17 @@ def open_question_practice(
             }
         )
 
-    if body.cached_session_id is not None:
+    # What this opening shows decides first: only another try outranks a result, so a cached
+    # session of a question whose 다시 풀기 mark was cleared gives way to the result.
+    marked_for_retry = found is not None and found.needs_retry and found.latest_result != "pending"
+    result = None if body.force_new or marked_for_retry else latest_result()
+    if body.cached_session_id is not None and (result is None or body.cached_another_try):
         cached = practice.get_session(body.cached_session_id, user.id)
         if cached is not None and _reusable(
             cached, question.id, active, epoch, body.baseline_attempt_id, latest_id
         ):
             return response(_session_out(cached), reused=True)
-    if not body.force_new and (result := latest_result()) is not None:
+    if result is not None:
         return result
 
     # The hash leaves the cached ids out: a re-run of one opening may no longer have them.
@@ -889,8 +908,8 @@ def open_question_practice(
                 )
             if session.state == "open":
                 return replayed
-            if (result := latest_result()) is not None:
-                return result
+            if (own_result := latest_result()) is not None:
+                return own_result
             # No result to show (the question has a new revision). The key's record cannot be
             # replaced, so opening here would add a session on every retry; a new key opens one.
             raise ProblemException(

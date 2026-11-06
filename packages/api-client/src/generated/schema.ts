@@ -1591,6 +1591,8 @@ export type paths = {
      *     session is stored under `Idempotency-Key`; the reset lock already serialises retries of this
      *     user and question, so no separate key lock is taken. A key seen again replays its session
      *     while it is open: once submitted, the latest result answers instead, or 409 without one.
+     *     A question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless
+     *     its latest submission still waits for grading: nothing else can finish that one.
      */
     post: operations['openQuestionPractice'];
     delete?: never;
@@ -6130,10 +6132,17 @@ export type components = {
      * PracticeOpenBody
      * @description What the panel knows of this question: an open session it keeps in memory and the latest
      *     attempt when that session was opened, or `force_new` for another try after a result.
+     *     `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
+     *     result the question would otherwise open with.
      */
     PracticeOpenBody: {
       /** Baseline Attempt Id */
       baseline_attempt_id?: string | null;
+      /**
+       * Cached Another Try
+       * @default false
+       */
+      cached_another_try?: boolean;
       /** Cached Session Id */
       cached_session_id?: string | null;
       /**
@@ -6162,7 +6171,7 @@ export type components = {
       previous_revision: boolean;
       /** Reset Epoch */
       reset_epoch: number;
-      /** @description The latest submitted session of the active revision, with its outcome. */
+      /** @description The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading. */
       result: components['schemas']['PracticeSessionDetail'] | null;
       /**
        * Reused
@@ -6228,6 +6237,8 @@ export type components = {
       reached: number;
       /** Seed */
       seed: number;
+      /** Shuffle Options */
+      shuffle_options: boolean;
       /**
        * Source
        * @enum {string}
@@ -6267,6 +6278,12 @@ export type components = {
        * @description Shuffle seed; the server picks one if absent.
        */
       seed?: number | null;
+      /**
+       * Shuffle Options
+       * @description Shuffle each MCQ's options for this run (bank only).
+       * @default false
+       */
+      shuffle_options?: boolean;
       /**
        * Source
        * @enum {string}
@@ -7054,8 +7071,11 @@ export type components = {
        * @description Keep these dot statuses; empty selects none, omitted selects all.
        */
       status?: ('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry')[] | null;
-      /** Type */
-      type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+      /**
+       * Types
+       * @description Keep these question types; omitted selects all.
+       */
+      types?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[] | null;
     };
     /** ReadinessReport */
     ReadinessReport: {
@@ -19326,7 +19346,8 @@ export interface operations {
         retry?: boolean | null;
         /** @description Repeatable statuses; none selects no questions, omitted selects all. */
         status?: (('unseen' | 'viewed' | 'incorrect' | 'correct' | 'retry') | 'none')[] | null;
-        type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY') | null;
+        /** @description Repeatable. */
+        type?: ('MCQ' | 'SHORT_ANSWER' | 'ESSAY')[] | null;
       };
       header?: never;
       path: {

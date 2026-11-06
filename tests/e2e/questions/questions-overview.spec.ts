@@ -553,7 +553,7 @@ test(
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(main(page).getByText(/문제 하나가 점 하나입니다/)).toHaveCount(0);
 
-    // Header: the `문서 N` menu · 풀기 and the icon buttons 이력 · 공유하기, then the 문제 search
+    // Header: the `문서 N` menu · 모의고사 and the icon buttons 이력 · 공유하기, then the 문제 search
     // (UX12-HEADER). No 문제은행 button (UX6-PROGRESS) and no 전체 문제 page (UX7-BANK).
     await expect(homeUi.header(page)).toBeVisible();
     await expect(homeUi.questionSearchButton(page)).toBeVisible();
@@ -577,7 +577,7 @@ test(
     const order = await Promise.all(
       [
         homeUi.documentsButton(page),
-        main(page).getByRole('button', { name: /^풀기$/ }),
+        main(page).getByRole('button', { name: /^모의고사$/ }),
         homeUi.historyButton(page),
         homeUi.shareButton(page),
       ].map(async (l) => (await l.boundingBox())?.x ?? 0),
@@ -812,7 +812,7 @@ test(
 );
 
 test(
-  'QOV-01-AC11 the question menu supports keyboard and editor permissions while 풀기 opens the unified flow',
+  'QOV-01-AC11 the question menu supports keyboard and editor permissions while 모의고사 opens the unified flow',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac11', 1);
@@ -841,8 +841,11 @@ test(
     await expect(homeUi.questionMenu(page)).toBeHidden();
     await expect(button).toBeFocused();
 
-    await page.getByRole('button', { name: /^풀기$/ }).click();
-    await expect(page).toHaveURL(/[?&]mock=new/);
+    await page.getByRole('button', { name: /^모의고사$/ }).click();
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.getAll('panel').includes('mock-exams') && !url.searchParams.has('mock'),
+    );
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
     await page.keyboard.press('Escape');
 

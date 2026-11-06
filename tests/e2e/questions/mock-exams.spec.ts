@@ -238,12 +238,13 @@ test(
     await expect(mockUi.dialog(page)).toBeVisible();
     await expect(homeUi.generateDialog(page)).toHaveCount(0);
 
-    // A viewer gets the same entry (enabled) and the empty state, without 추가.
+    // A viewer gets the same entry (enabled), the empty state and 추가, without the hint.
     await switchUser(page, viewer, ws.id);
     await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const viewerDialog = mockUi.dialog(page);
     await expect(viewerDialog.getByText(MOCK_TEXT.empty)).toBeVisible();
-    await expect(mockUi.add(viewerDialog)).toHaveCount(0);
+    await expect(mockUi.add(viewerDialog)).toHaveCount(1);
+    await expect(viewerDialog.getByText(MOCK_TEXT.emptyHint)).toHaveCount(0);
   },
 );
 
@@ -448,13 +449,13 @@ test(
     await expect(mockUi.row(dialog, '기말 대비')).toBeVisible();
     await mockUi.open(mockUi.row(dialog, '기말 대비'), '기말 대비').click();
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
-    // The detail header's rename: Escape cancels it and focus returns to `이름 바꾸기`.
-    await mockUi.rename(dialog).click();
+    // The detail header's rename: Escape cancels it and focus returns to `더보기`.
+    await mockUi.chooseDetailAction(dialog, 'rename');
     await mockUi.renameField(dialog).fill('버릴 이름');
     await mockUi.renameField(dialog).press('Escape');
     await expect(mockUi.renameField(dialog)).toHaveCount(0);
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
-    await expect(mockUi.rename(dialog)).toBeFocused();
+    await expect(mockUi.more(dialog)).toBeFocused();
     await page.reload();
     dialog = mockUi.dialog(page);
     await expect(mockUi.heading(dialog, '기말 대비')).toBeVisible();
@@ -537,14 +538,7 @@ test(
     await page.goto(mockExamsPath(s.workspaceId, exam.id));
     const viewerDialog = mockUi.dialog(page);
     await expect(mockUi.heading(viewerDialog, '편집 점검')).toBeVisible();
-    for (const control of [
-      mockUi.changeSettings(viewerDialog),
-      mockUi.remake(viewerDialog),
-      mockUi.delete(viewerDialog),
-      mockUi.rename(viewerDialog),
-    ]) {
-      await expect(control).toHaveCount(0);
-    }
+    await expect(mockUi.more(viewerDialog)).toHaveCount(0);
     await questionRow(viewerDialog, 1).click();
     const preview = mockUi.viewer(page, 1);
     await expect(preview).toBeVisible();
@@ -589,7 +583,7 @@ test(
     await expect(mockUi.questions(dialog)).toHaveCount(4);
 
     // 설정 바꾸기: 보기 섞기 only, 2장 only → 다시 만들기 (confirmed).
-    await mockUi.changeSettings(dialog).click();
+    await mockUi.chooseDetailAction(dialog, 'settings');
     await mockUi.variation(dialog, 'PARAPHRASE').uncheck();
     await mockUi.variation(dialog, 'OPTION_SHUFFLE').check();
     await mockUi.questionCount(dialog).fill('2');
@@ -612,7 +606,7 @@ test(
 
     // The changed settings survive a reload.
     await page.reload();
-    await mockUi.changeSettings(dialog).click();
+    await mockUi.chooseDetailAction(dialog, 'settings');
     await expect(mockUi.variation(dialog, 'OPTION_SHUFFLE')).toBeChecked();
     await expect(mockUi.variation(dialog, 'PARAPHRASE')).not.toBeChecked();
     await mockUi.next(dialog).click();
@@ -621,7 +615,7 @@ test(
 
     // A failing round (문구 변형 on 2장, provider unavailable): progress over the old questions,
     // then the alert; the 2회차 questions stay.
-    await mockUi.previous(dialog).click();
+    await mockUi.backToOptions(dialog).click();
     await mockUi.variation(dialog, 'OPTION_SHUFFLE').uncheck();
     await mockUi.variation(dialog, 'PARAPHRASE').check();
     await mockUi.next(dialog).click();
@@ -659,13 +653,13 @@ test(
     const outsider = await workspaceFactory.member('mock01-ac07-outsider');
     await workspaceFactory.create(outsider);
 
-    // Viewer: the list and 풀기 only; writes are 403.
+    // Viewer: the list, 풀기 and 추가 for a variation-free run; writes are 403.
     await openHome(page, viewer, s.workspaceId);
     let dialog = await openMockExams(page);
     const row = mockUi.row(dialog, '권한 점검');
     await expect(row).toBeVisible();
     await expect(mockUi.practise(row)).toBeVisible();
-    await expect(mockUi.add(dialog)).toHaveCount(0);
+    await expect(mockUi.add(dialog)).toHaveCount(1);
     await expect(mockUi.rowMenu(row, '권한 점검')).toHaveCount(0);
     const config = { variation_types: ['OPTION_SHUFFLE'] as VariationType[], question_count: 1 };
     await expectProblem(
@@ -705,17 +699,10 @@ test(
     dialog = await openMockExams(page);
     const archivedRow = mockUi.row(dialog, '권한 점검');
     await expect(archivedRow).toBeVisible();
-    await expect(mockUi.add(dialog)).toHaveCount(0);
+    await expect(mockUi.add(dialog)).toHaveCount(1);
     await expect(mockUi.rowMenu(archivedRow, '권한 점검')).toHaveCount(0);
     await mockUi.open(archivedRow, '권한 점검').click();
-    for (const control of [
-      mockUi.changeSettings(dialog),
-      mockUi.remake(dialog),
-      mockUi.delete(dialog),
-      mockUi.rename(dialog),
-    ]) {
-      await expect(control).toHaveCount(0);
-    }
+    await expect(mockUi.more(dialog)).toHaveCount(0);
     await mockUi.practise(dialog).click();
     const practice = mockUi.practicePanel(page);
     await expect(mockUi.practiceTitle(practice, '권한 점검')).toBeVisible();

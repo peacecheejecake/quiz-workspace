@@ -1,14 +1,27 @@
 'use client';
 
 // MOCK-01 상세 (docs/screens/mock-exams.md "상세 화면"): the mock exam's name (heading), status badge,
-// meta (settings, "2회차", 만든 시각), `풀기` and, for editors of an active workspace, `설정 바꾸기`
-// (the 만들기 steps with the current values, ending in `다시 만들기`), `다시 만들기` (the same
-// settings), `이름 바꾸기` and `삭제`. A round being made shows the "문제 생성 진행률" bar and
-// "문제를 만드는 중입니다…" above the previous questions (they stay until the new round succeeds);
+// meta (settings, "2회차", 만든 시각), `풀기` and, for editors of an active workspace, the 더보기
+// menu (UX12-MOCKNAV): `설정 바꾸기` (the 만들기 steps with the current values, ending in `다시
+// 만들기`), `다시 만들기` (the same settings), `이름 바꾸기` and `삭제`. A round being made shows the
+// "문제 생성 진행률" bar and "문제를 만드는 중입니다…" above the previous questions (they stay until
+// the new round succeeds);
 // a failed one the alert with its reason and `다시 시도`; a partial one how many passed. The
 // 문제 목록 rows open MockQuestionDialog (manage for editors, an answer-free preview otherwise).
 // While a round runs the mock exam is read again every MOCK_POLL_MS; its end is announced.
-import { Badge, Button, ConfirmDialog, ProgressBar, Skeleton } from '@quiz/ui';
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  IconButton,
+  MoreIcon,
+  ProgressBar,
+  Skeleton,
+} from '@quiz/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { RunRange } from '@/lib/questions/practice-runs';
 import type { MockExamApi } from './mock-exam-client';
@@ -217,9 +230,16 @@ export function MockExamDetail({
     if (openSettings) onSettingsShown();
   }, [openSettings, onSettingsShown]);
   const [renaming, setRenaming] = useState(false);
-  const renameButton = useRef<HTMLButtonElement>(null);
-  const deleteButton = useRef<HTMLButtonElement>(null);
-  const settingsButton = useRef<HTMLButtonElement>(null);
+  // 더보기 stays mounted through a rename; the 설정 바꾸기 form replaces it, so leaving that form
+  // focuses it once it is back. Menu actions run after the menu closed (the list row's pattern).
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const pendingAction = useRef<(() => void) | null>(null);
+  const focusMore = useRef(false);
+  useEffect(() => {
+    if (mode !== 'view' || !focusMore.current) return;
+    focusMore.current = false;
+    moreButton.current?.focus();
+  }, [mode]);
 
   // --- a new round (설정 바꾸기 / 다시 만들기 / 다시 시도) ---------------------------------------------
   const [confirm, setConfirm] = useState<{ body: Partial<MockExamSubmit> } | null>(null);
@@ -340,14 +360,14 @@ export function MockExamDetail({
                 if (!failure) {
                   setExam({ status: 'ready', data: { ...shown, title } });
                   setRenaming(false);
-                  renameButton.current?.focus();
+                  moreButton.current?.focus();
                   onChanged();
                 }
                 return failure;
               }}
               onCancel={() => {
                 setRenaming(false);
-                renameButton.current?.focus();
+                moreButton.current?.focus();
               }}
             />
           </>
@@ -373,20 +393,47 @@ export function MockExamDetail({
               </Button>
             ) : null}
             {canEdit ? (
-              <>
-                <Button ref={settingsButton} disabled={generating} onClick={startSettings}>
-                  설정 바꾸기
-                </Button>
-                <Button disabled={generating || starting} onClick={() => askRound({})}>
-                  다시 만들기
-                </Button>
-                <Button ref={renameButton} onClick={() => setRenaming(true)}>
-                  이름 바꾸기
-                </Button>
-                <Button ref={deleteButton} onClick={() => onDelete(shown, deleteButton.current)}>
-                  삭제
-                </Button>
-              </>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <IconButton ref={moreButton} label="더보기" icon={<MoreIcon />} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onCloseAutoFocus={(event) => {
+                    const action = pendingAction.current;
+                    pendingAction.current = null;
+                    if (!action) return;
+                    event.preventDefault();
+                    moreButton.current?.focus();
+                    action();
+                  }}
+                >
+                  <DropdownMenuItem
+                    disabled={generating}
+                    onSelect={() => (pendingAction.current = startSettings)}
+                  >
+                    설정 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={generating || starting}
+                    onSelect={() => (pendingAction.current = () => askRound({}))}
+                  >
+                    다시 만들기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => (pendingAction.current = () => setRenaming(true))}
+                  >
+                    이름 바꾸기
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() =>
+                      (pendingAction.current = () => onDelete(shown, moreButton.current))
+                    }
+                  >
+                    삭제
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
           </div>
         ) : null}
@@ -406,8 +453,8 @@ export function MockExamDetail({
             onBankSubmit={onBankSubmit}
             onSubmit={(value) => askRound({ config: value.config, range: value.range })}
             onCancel={() => {
+              focusMore.current = true;
               setMode('view');
-              settingsButton.current?.focus();
             }}
           />
         </section>
@@ -525,6 +572,7 @@ export function MockExamDetail({
         description={replaceText(shown.question_count_current)}
         confirmLabel="다시 만들기"
         loading={starting}
+        returnFocusRef={moreButton}
         onConfirm={() => confirm && void startRound(confirm.body)}
       />
     </div>

@@ -4,7 +4,8 @@
 // (UX9, HOMEDLG-01; `?panel=mock-exams`, the DOC-01 list dialog pattern), opened from `문제 › 모의고사` by every
 // member. It opens at once with a skeleton (aria-busy) and shows one of three views in place,
 // each with a heading that takes focus:
-//   list    "모의고사 n개" + `추가` (editors of an active workspace), one row per mock exam (name →
+//   list    "모의고사 n개" + `추가` (every member; without edit rights the form starts only a
+//           variation-free run, UX12-MOCKNAV-AC05), one row per mock exam (name →
 //           detail, status badge in text, meta line, a "문제 생성 진행률" bar while it is made,
 //           `풀기`, and the editors' row menu 이름 바꾸기 / 설정 바꾸기 / 삭제), or the empty state.
 //   create  `&mock=new`: MockExamForm (옵션 → 범위) → `만들기` saves and shows the detail.
@@ -22,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   EmptyState,
+  FloatingPanelPinned,
   FloatingSidePanel,
   IconButton,
   MoreIcon,
@@ -174,7 +176,7 @@ export function MockExamsPanel({
   }
   useEffect(() => {
     if (focusTick === 0 || !open) return;
-    (view.view === 'list' ? titleRef.current : viewHeading.current)?.focus();
+    (view.view === 'detail' ? viewHeading.current : titleRef.current)?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTick]);
 
@@ -308,7 +310,6 @@ export function MockExamsPanel({
       );
   }
 
-  let heading: ReactNode = null;
   let body: ReactNode;
   if (view.view === 'list') {
     body = (
@@ -342,7 +343,6 @@ export function MockExamsPanel({
       />
     );
   } else if (view.view === 'create') {
-    heading = '문제 풀기';
     body =
       list.status === 'loading' ? (
         <Loading />
@@ -401,7 +401,7 @@ export function MockExamsPanel({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
-      title={view.view === 'create' ? '문제 풀기' : '모의고사'}
+      title="모의고사"
       onOpenerResolved={(opener) => {
         panelOpener.current = opener;
       }}
@@ -420,12 +420,13 @@ export function MockExamsPanel({
     >
       <div className={styles.body} data-screen-id={screenId}>
         {view.view !== 'list' ? (
-          <BackLink label="모의고사 목록" onClick={() => onViewChange({ view: 'list' }, 'push')} />
-        ) : null}
-        {heading ? (
-          <h2 ref={viewHeading} tabIndex={-1} className={styles.heading}>
-            {heading}
-          </h2>
+          // Mounted before the form's steps in the same fixed area, so it stays above them.
+          <FloatingPanelPinned>
+            <BackLink
+              label="모의고사 목록"
+              onClick={() => onViewChange({ view: 'list' }, 'push')}
+            />
+          </FloatingPanelPinned>
         ) : null}
         {body}
       </div>
@@ -509,11 +510,9 @@ function ListView({
     <>
       <div className={styles.toolbar}>
         <p className={styles.count}>모의고사 {items.length}개</p>
-        {canEdit ? (
-          <Button variant="primary" onClick={onAdd}>
-            추가
-          </Button>
-        ) : null}
+        <Button variant="primary" onClick={onAdd}>
+          추가
+        </Button>
       </div>
       {items.length === 0 ? (
         <EmptyState

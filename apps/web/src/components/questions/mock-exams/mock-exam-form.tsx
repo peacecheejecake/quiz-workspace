@@ -1,14 +1,26 @@
 'use client';
 
-// MOCK-01 만들기 / 설정 바꾸기 (docs/screens/mock-exams.md "만들기 화면"): two steps `옵션 → 범위`
-// (a plain step list). 옵션: 이름 (with a type chosen: a bank run stores no name), the four 변형
+// MOCK-01 만들기 / 설정 바꾸기 (docs/screens/mock-exams.md "만들기 화면", UX12-MOCKFORM): two steps
+// `옵션 → 범위`. The StepList and the action row live in the panel's fixed areas, outside the
+// scrolling body; pressing the done step goes back with every entered value kept. 옵션: 이름 (with a type chosen: a bank run stores no name), the four 변형
 // 유형 (each described in a Tooltip; the AI ones disabled with the reason where the environment
 // has no LLM), 문항 수 (1–100 with an AI type; 보기 섞기 only
 // up to the range, or 범위 전체) and 난이도. 범위: the shared QuestionRangePicker over this
 // workspace's confirmed questions with its filters, "선택 n문제 중 m문항을 만듭니다", the AI notice
 // and `만들기` (설정 바꾸기: `다시 만들기`), disabled with "출제 범위를 고르세요" while nothing is
 // selected. A saved range comes back as the selection it meant (selectionFromRange).
-import { Button, Checkbox, IconButton, Input, Select, Tooltip, useUnsavedChanges } from '@quiz/ui';
+import {
+  Button,
+  Checkbox,
+  FloatingPanelFooter,
+  FloatingPanelPinned,
+  IconButton,
+  Input,
+  Select,
+  StepList,
+  Tooltip,
+  useUnsavedChanges,
+} from '@quiz/ui';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import { RUN_FAILURE_MESSAGES } from '@/lib/questions/practice-run-problems';
@@ -119,7 +131,11 @@ export function MockExamForm({
       document.getElementById(`${formId}-${found.field}`)?.focus();
       return;
     }
-    setStep(1);
+    moveTo(1);
+  }
+
+  function moveTo(index: 0 | 1) {
+    setStep(index);
     setMoved((n) => n + 1);
   }
 
@@ -151,15 +167,18 @@ export function MockExamForm({
 
   return (
     <div className={`${styles.form} ${styles.playForm}`}>
-      <ol className={styles.steps} aria-label="풀기 단계">
-        {STEPS.map((item, index) => (
-          <li key={item.id} aria-current={step === index ? 'step' : undefined}>
-            {index + 1}. {item.label}
-          </li>
-        ))}
-      </ol>
+      <FloatingPanelPinned>
+        <StepList
+          label="모의고사 단계"
+          steps={STEPS}
+          current={step}
+          disabled={busy}
+          onStepSelect={() => moveTo(0)}
+          stepActionLabel={(item) => `${item.label} 단계로 돌아가기`}
+        />
+      </FloatingPanelPinned>
       {step === 0 ? (
-        <form className={`${styles.form} ${styles.playForm}`} onSubmit={next} noValidate>
+        <form id={`${formId}-options`} className={styles.form} onSubmit={next} noValidate>
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
             옵션
           </h3>
@@ -270,19 +289,19 @@ export function MockExamForm({
               onCheckedChange={(checked) => setValues({ ...values, wholeRange: checked === true })}
             />
           ) : null}
-          <div className={`${styles.footer} ${styles.playFooter}`}>
+          <FloatingPanelFooter>
             {onCancel ? (
               <Button type="button" onClick={onCancel} disabled={busy}>
                 취소
               </Button>
             ) : null}
-            <Button type="submit" variant="primary">
+            <Button type="submit" form={`${formId}-options`} variant="primary">
               다음
             </Button>
-          </div>
+          </FloatingPanelFooter>
         </form>
       ) : (
-        <div className={`${styles.form} ${styles.playForm}`}>
+        <div className={styles.form}>
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
             범위
           </h3>
@@ -305,21 +324,17 @@ export function MockExamForm({
             </p>
           ) : null}
           {ai ? <p className={styles.notice}>{AI_NOTICE_TEXT}</p> : null}
-          {error ? (
-            <p role="alert" className={styles.error}>
-              {error}
-            </p>
-          ) : null}
-          <div className={`${styles.footer} ${styles.playFooter}`}>
-            <Button
-              onClick={() => {
-                setStep(0);
-                setMoved((n) => n + 1);
-              }}
-              disabled={busy}
-            >
-              이전
-            </Button>
+          <FloatingPanelFooter>
+            {error ? (
+              <p role="alert" className={`${styles.error} ${styles.footerLine}`}>
+                {error}
+              </p>
+            ) : null}
+            {reason ? (
+              <p id={reasonId} className={styles.muted}>
+                {reason}
+              </p>
+            ) : null}
             <Button
               variant="primary"
               loading={busy}
@@ -335,12 +350,7 @@ export function MockExamForm({
             >
               {values.types.length === 0 ? '시작' : mode === 'create' ? '만들기' : '다시 만들기'}
             </Button>
-            {reason ? (
-              <p id={reasonId} className={styles.muted}>
-                {reason}
-              </p>
-            ) : null}
-          </div>
+          </FloatingPanelFooter>
         </div>
       )}
     </div>

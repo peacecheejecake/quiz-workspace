@@ -5,8 +5,8 @@
 //   checkbox "전체 선택" (aria-checked="mixed" when partly selected); one checkbox per chapter
 //   named by the chapter title (+ count; "챕터 없음" for questions without a chapter) with its own
 //   expand button "<장 제목> 펼치기" (aria-expanded); question checkboxes "1번 · <발문 앞부분> ·
-//   <유형>"; the text "선택 n문제"; a collapsible "상태 필터" group
-//   with the home chips (틀린 문제/오답, 다시 풀기, 즐겨찾기만, …) and "필터 초기화".
+//   <유형>"; the text "선택 n문제"; an always shown "상태 필터" group with the home chips
+//   (틀린 문제/오답, 다시 풀기, 즐겨찾기만, …) and "필터 초기화", and a "유형" checkbox group.
 import { expect, type Locator } from '@playwright/test';
 
 function escape(text: string): string {
@@ -40,10 +40,9 @@ export const rangePickerUi = {
   questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^(\d+번|번호 없음) · / }),
   selected: (scope: Locator, n: number) =>
     scope.getByText(new RegExp(`선택 ${n}문제(?!\\d)|(?<!\\d)${n} selected`, 'i')),
-  filterToggle: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(상태 필터|필터|status filter|filters?)$/i }),
   filters: (scope: Locator) =>
     scope.getByRole('group', { name: /^(상태 필터|필터|status filter|filters?)$/i }),
+  typeFilters: (scope: Locator) => scope.getByRole('group', { name: /^(유형|types?)$/i }),
   incorrectFilter: (scope: Locator) =>
     chip(rangePickerUi.filters(scope), /^(틀린 문제|오답|incorrect)$/i),
   retryFilter: (scope: Locator) =>
@@ -54,10 +53,8 @@ export const rangePickerUi = {
     scope.getByRole('button', { name: /^(필터 초기화|reset filters?|clear filters?)$/i }),
 };
 
-/** Expands the collapsible "상태 필터" group (no-op when it is open). */
+/** The "상태 필터" group, which is always shown. */
 export async function openRangeFilters(scope: Locator): Promise<Locator> {
-  const toggle = rangePickerUi.filterToggle(scope);
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
   const group = rangePickerUi.filters(scope);
   await expect(group).toBeVisible();
   return group;

@@ -10,7 +10,9 @@ interface Latest {
   readonly active_revision_id?: string;
   readonly latest_attempt_id?: string | null;
   readonly submitted_answer?: unknown;
-  readonly session?: { readonly outcome?: unknown } | null;
+  readonly session?: { readonly outcome?: { readonly result?: string } } | null;
+  /** UX12-RETRYOPEN: marked 다시 풀기, so a graded result stays out of the opening. */
+  readonly needs_retry?: boolean;
 }
 
 type Outcome<T> = { readonly ok: true; readonly data: T } | { readonly ok: false };
@@ -37,17 +39,21 @@ export function fakePracticeOpen(deps: {
       result: null,
       reused: false,
     };
+    const outcome = found.data.session?.outcome;
+    const showsResult =
+      !!outcome && !(found.data.needs_retry === true && outcome.result !== 'pending');
     const cached = request.cached ? known.get(request.cached.sessionId) : undefined;
     if (
       cached &&
       cached.epoch === epoch &&
       request.cached?.baselineAttemptId === attempt &&
       (found.data.active_revision_id ?? cached.session.question_revision_id) ===
-        cached.session.question_revision_id
+        cached.session.question_revision_id &&
+      (!showsResult || request.cached?.anotherTry)
     ) {
       return { ok: true, data: { ...metadata, session: cached.session, reused: true } };
     }
-    if (!request.forceNew && found.data.session?.outcome) {
+    if (!request.forceNew && showsResult) {
       return {
         ok: true,
         data: {

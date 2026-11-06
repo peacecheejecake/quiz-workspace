@@ -227,8 +227,9 @@ describe('AIEXPL-01 area states', () => {
     pending.answer?.(stateOf({ explanation: explanation(), can_create: false }));
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.create).toHaveBeenCalledWith(target, gate);
-    // The area mounts with the result; focus moves to its heading.
-    expect(await within(region).findByRole('heading', { name: 'AI 해설', level: 3 })).toHaveFocus();
+    // The area mounts with the result; focus moves to its heading in the effect after that commit.
+    const heading = await within(region).findByRole('heading', { name: 'AI 해설', level: 3 });
+    await waitFor(() => expect(heading).toHaveFocus());
     // A cache hit: shown open at once, every option by its text and a footnote button.
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
     expect(within(region).getByText('1. 증발')).toBeInTheDocument();
@@ -696,6 +697,7 @@ const RUN_DATA: PracticeRun = {
   source: 'bank',
   mock_exam_id: null,
   random_order: false,
+  shuffle_options: false,
   seed: 1,
   total: 1,
   answered: 0,

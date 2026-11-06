@@ -27,6 +27,7 @@ from sqlalchemy import (
     Integer,
     and_,
     case,
+    false,
     func,
     insert,
     literal,
@@ -68,6 +69,7 @@ class RunRecord:
     total: int
     created_at: datetime
     finished_at: datetime | None
+    shuffle_options: bool = False
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,9 @@ _RUN_COLUMNS = (
     func.cardinality(practice_runs.c.item_ids).label("total"),
     practice_runs.c.created_at,
     practice_runs.c.finished_at,
+    func.coalesce(practice_runs.c.range["shuffle_options"].as_boolean(), false()).label(
+        "shuffle_options"
+    ),
 )
 
 
@@ -138,6 +143,7 @@ def _run(row: Any) -> RunRecord:
         total=int(row.total),
         created_at=row.created_at,
         finished_at=row.finished_at,
+        shuffle_options=row.shuffle_options,
     )
 
 

@@ -23,6 +23,12 @@ QVIEW-01-AC03 "fake seed 고정") and stored; a run's ids and seed never change.
 than the documented ones (e.g. a client `workspace_id`/`user_id`) are ignored: the workspace is
 the path's, the user the verified JWT's.
 
+Option shuffle (UX12-CHAPTERRUN-C03): `shuffle_options` is a bank run's setting, kept in the
+`practice_runs.range` jsonb (`run_range`; no key means off, as on every older run). A position of
+such a run shows `shuffled_option_ids` under `run_option_seed(seed, position)` whether or not its
+session is open yet, the session stores that order and grading stays on option ids. A retry of a
+position draws a new shuffle. A mock run has its own question copies and refuses the field (422).
+
 No answers (C03): `PracticeRun` and `RunResults` carry no question content and no answers.
 `RunItem` carries the question without answers; the answers of a position appear only in its
 `attempt`, which exists only once that position was submitted.
@@ -85,7 +91,7 @@ from quiz_api.authz import (
 from quiz_api.db import get_db_session
 from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.idempotency import IdempotencyKey, replay, request_hash
-from quiz_api.practice_grading import AttemptResult
+from quiz_api.practice_grading import AttemptResult, run_option_seed, shuffled_option_ids
 from quiz_api.question_ranges import (
     MAX_RANGE_QUESTIONS,
     QuestionRange,
@@ -139,6 +145,9 @@ class PracticeRunCreate(BaseModel):
     mock_exam_id: uuid.UUID | None = None
     range: QuestionRange
     random_order: bool = False
+    shuffle_options: bool = Field(
+        default=False, description="Shuffle each MCQ's options for this run (bank only)."
+    )
     question_count: int | None = Field(default=None, ge=1, le=MAX_RUN)
     seed: int | None = Field(
         default=None, ge=0, le=MAX_SEED, description="Shuffle seed; the server picks one if absent."
@@ -150,6 +159,8 @@ class PracticeRunCreate(BaseModel):
             raise ValueError("mock_exam_id is required for source=mock and only for it.")
         if self.source == "mock" and self.question_count is not None:
             raise ValueError("question_count is only supported for source=bank.")
+        if self.source == "mock" and self.shuffle_options:
+            raise ValueError("shuffle_options is only supported for source=bank.")
         return self
 
 
@@ -195,6 +206,7 @@ class PracticeRun(BaseModel):
     source: RunSource
     mock_exam_id: uuid.UUID | None
     random_order: bool
+    shuffle_options: bool
     seed: int
     total: int = Field(description="Positions 1..total.")
     answered: int = Field(description="Positions submitted.")
@@ -374,6 +386,21 @@ def run_order(heatmap_ids: list[uuid.UUID], random_order: bool, seed: int) -> li
     return out
 
 
+def run_range(body: PracticeRunCreate) -> dict[str, Any]:
+    """`practice_runs.range`: the range as sent, plus `shuffle_options` when the run has it."""
+    stored = stored_range(body.range)
+    return {**stored, "shuffle_options": True} if body.shuffle_options else stored
+
+
+def position_options(run: RunRecord, position: int, options: list[Any]) -> list[RunOption]:
+    """The options of a position without a session, in the order its session will show."""
+    by_id = {o["id"]: o["text"] for o in options}
+    ids = list(by_id)
+    if run.shuffle_options:
+        ids = shuffled_option_ids(ids, run_option_seed(run.seed, position))
+    return [RunOption(id=i, text=by_id[i]) for i in ids]
+
+
 def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange) -> list[uuid.UUID]:
     """The mock exam questions a range selects, in mock exam order (pure; see the module
     docstring). Raises `range-invalid` for chapters, personal state filters and ids the mock exam
@@ -391,7 +418,7 @@ def select_mock_range(candidates: list[MockRunCandidate], range_: QuestionRange)
         for c in candidates
         if (range_.all or c.id in picked)
         and c.id not in excluded
-        and (f.type is None or c.question_type == f.type)
+        and (f.types is None or c.question_type in f.types)
     ]
 
 
@@ -429,6 +456,7 @@ def _run_out(run: RunRecord, progress: RunProgress) -> PracticeRun:
         source=run.source,  # type: ignore[arg-type]
         mock_exam_id=run.mock_exam_id,
         random_order=run.random_order,
+        shuffle_options=run.shuffle_options,
         seed=run.seed,
         total=run.total,
         answered=progress.submitted,
@@ -590,7 +618,7 @@ def create_practice_run(
         source=body.source,
         mock_exam_id=body.mock_exam_id if body.source == "mock" else None,
         mock_exam_generation_id=generation_id,
-        range_=stored_range(body.range),
+        range_=run_range(body),
         random_order=body.random_order,
         seed=seed,
         item_ids=ordered,
@@ -684,7 +712,10 @@ def start_run_item_retry_session(
             runs,
             idempotency,
             user,
-            PracticeSessionCreate(expected_reset_epoch=body.expected_reset_epoch),
+            PracticeSessionCreate(
+                expected_reset_epoch=body.expected_reset_epoch,
+                shuffle_options=run.shuffle_options,
+            ),
             scoped_key,
         )
 
@@ -783,7 +814,7 @@ def get_practice_run_item(
         stem, multi = session.revision.stem, session.revision.is_multi_answer
         stem_tables = session.revision.stem_tables
     else:
-        options = [RunOption(id=o["id"], text=o["text"]) for o in live.options]
+        options = position_options(run, position, live.options)
         stem, multi = live.stem, live.is_multi_answer
         stem_tables = live.stem_tables
     numbers = _chapter_numbers(overview, [live.chapter_id])

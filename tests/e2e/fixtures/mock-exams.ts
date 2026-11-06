@@ -91,25 +91,25 @@
 //   `문제` menu (portalled) menuitem "모의고사" (requiresEdit false). Dialog: non-modal
 //   FloatingSidePanel inside <main> named "모의고사" (`?panel=mock-exams[&mock=new|<id>]`), close
 //   button "모의고사 닫기"; while loading `[aria-busy="true"]` + status "불러오는 중"; each view's
-//   title is a heading that gets focus (list: "모의고사", create: "모의고사 만들기", detail: the
-//   mock exam's name); BackLink "모의고사 목록" on create/detail.
-//   List: text "모의고사 n개", button "추가" (editors of active workspaces only), list "모의고사
+//   title is a heading that gets focus (list and create: "모의고사", detail: the mock exam's
+//   name); BackLink "모의고사 목록" on create/detail.
+//   List: text "모의고사 n개", button "추가" (every member; UX12-MOCKNAV-AC05), list "모의고사
 //   목록" with one listitem per mock exam: button named by the title (opens the detail), status
 //   badge text, meta "문제 n개 · <유형, …> · <시각>", button "풀기" (ready/partial), menu button
 //   "<이름> 메뉴" (editors) with menuitems 이름 바꾸기 / 설정 바꾸기 / 삭제; progressbar "문제 생성
 //   진행률" (value text "n개 중 k개") while generating. Empty: "아직 모의고사가 없습니다." (+ the hint
 //   for editors). Rename: inline textbox "모의고사 이름" (Enter saves, Escape cancels).
-//   Create / 설정 바꾸기: step list "풀기 단계" with 옵션 → 범위; step 1 textbox "이름" (once a type is chosen),
+//   Create / 설정 바꾸기: step list "모의고사 단계" with 옵션 → 범위 (on 범위 the done step is the button "옵션 단계로 돌아가기"); step 1 textbox "이름" (once a type is chosen),
 //   group "변형 유형" with four checkboxes (an unavailable one is disabled and described by
 //   "이 환경에서는 AI 변형을 쓸 수 없습니다."), spinbutton "문항 수", combobox "난이도", button "다음";
 //   step 2 QuestionRangePicker (shared with QVIEW-01; labels in fixtures/range-picker.ts: "전체
 //   선택", chapter checkboxes by title — "챕터 없음" for questions without one — with "<장 제목>
 //   펼치기", question checkboxes "<m>번 · …", "선택 n문제", the "상태 필터" chips incl.
 //   "즐겨찾기만"), text "선택 n문제 중 m문항을 만듭니다", the AI
-//   notice "…AI 서비스로 전송됩니다.", buttons "이전" and "만들기" (설정 바꾸기: "다시 만들기"), disabled
+//   notice "…AI 서비스로 전송됩니다.", button "만들기" (설정 바꾸기: "다시 만들기"), disabled
 //   and described by "출제 범위를 고르세요" when nothing is selected; "아직 확정된 문제가 없습니다."
-//   Detail: heading (name), badge, meta with "<k>회차", buttons 풀기 · 설정 바꾸기 · 다시 만들기 ·
-//   이름 바꾸기 · 삭제 (editors), alert "모의고사를 만들지 못했습니다" + reason + "다시 시도", partial text
+//   Detail: heading (name), badge, meta with "<k>회차", button 풀기, menu button "더보기" (editors)
+//   with menuitems 설정 바꾸기 · 다시 만들기 · 이름 바꾸기 · 삭제 (UX12-MOCKNAV), alert "모의고사를 만들지 못했습니다" + reason + "다시 시도", partial text
 //   "n문항 중 k문항을 만들었습니다. j개는 검증을 통과하지 못했습니다.", status text "문제를 만드는
 //   중입니다. 창을 닫아도 계속 만듭니다.", list "문제 목록" with one listitem per question ("문제 k ·
 //   <발문 앞 40자>", variation badge, source "n장 m번" / "원본 삭제됨", "편집됨" / "확인 필요"
@@ -305,7 +305,7 @@ export interface QuestionRange {
     readonly status?: readonly DotStatus[];
     readonly favorite?: boolean;
     readonly retry?: boolean;
-    readonly type?: QuestionType;
+    readonly types?: readonly QuestionType[];
   };
 }
 
@@ -561,6 +561,13 @@ export function partialText(requested: number, created: number): RegExp {
   );
 }
 
+const DETAIL_ACTIONS = {
+  settings: /^(설정 바꾸기|change settings)$/i,
+  remake: /^(다시 만들기|regenerate)$/i,
+  rename: /^(이름 바꾸기|rename)$/i,
+  delete: /^(삭제|delete)$/i,
+} as const;
+
 export const mockUi = {
   menuItem: (page: Page) =>
     page
@@ -571,7 +578,7 @@ export const mockUi = {
       .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(변형 출제|generate variants?)$/i }),
   dialog: (page: Page) =>
-    main(page).getByRole('dialog', { name: /^(모의고사|문제 풀기|mock exams?|practice)$/i }),
+    main(page).getByRole('dialog', { name: /^(모의고사|mock exams?|practice)$/i }),
   close: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(모의고사 닫기|close mock exams?|닫기|close)$/i }),
   busy: (dialog: Locator) => dialog.locator('[aria-busy="true"]'),
@@ -601,7 +608,7 @@ export const mockUi = {
   heading: (dialog: Locator, name: RegExp | string) => dialog.getByRole('heading', { name }),
   // Create / 설정 바꾸기 (two steps)
   steps: (dialog: Locator) =>
-    dialog.getByRole('list', { name: /^(진행 단계|풀기 단계|progress steps)$/i }),
+    dialog.getByRole('list', { name: /^(모의고사 단계|mock exam steps)$/i }),
   title: (dialog: Locator) => dialog.getByRole('textbox', { name: /^(이름|name)$/i }),
   variationGroup: (dialog: Locator) =>
     dialog.getByRole('group', { name: /^(변형 유형|variation types?)$/i }),
@@ -614,7 +621,8 @@ export const mockUi = {
       .or(dialog.getByRole('textbox', { name: /^(문항 수|number of questions)/i })),
   difficulty: (dialog: Locator) => dialog.getByRole('combobox', { name: /^(난이도|difficulty)/i }),
   next: (dialog: Locator) => dialog.getByRole('button', { name: /^(다음|next)$/i }),
-  previous: (dialog: Locator) => dialog.getByRole('button', { name: /^(이전|back|previous)$/i }),
+  backToOptions: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(옵션 단계로 돌아가기|back to options)$/i }),
   make: (dialog: Locator) => dialog.getByRole('button', { name: /^(만들기|create)$/i }),
   remake: (scope: Locator) => scope.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /^(다시 시도|try again)$/i }),
@@ -628,10 +636,15 @@ export const mockUi = {
   edit: (scope: Locator) => scope.getByRole('button', { name: /^(편집|edit)$/i }),
   remove: (scope: Locator) =>
     scope.getByRole('button', { name: /이 모의고사에서 빼기|remove from (this )?mock exam/i }),
-  changeSettings: (scope: Locator) =>
-    scope.getByRole('button', { name: /^(설정 바꾸기|change settings)$/i }),
-  rename: (scope: Locator) => scope.getByRole('button', { name: /^(이름 바꾸기|rename)$/i }),
-  delete: (scope: Locator) => scope.getByRole('button', { name: /^(삭제|delete)$/i }),
+  /** The detail's 더보기 menu (editors of an active workspace, UX12-MOCKNAV). */
+  more: (scope: Locator) => scope.getByRole('button', { name: /^(더보기|more)$/i }),
+  detailAction: (page: Page, action: keyof typeof DETAIL_ACTIONS) =>
+    mockUi.menuAction(page, DETAIL_ACTIONS[action]),
+  /** Opens 더보기 and picks an action. */
+  chooseDetailAction: async (dialog: Locator, action: keyof typeof DETAIL_ACTIONS) => {
+    await mockUi.more(dialog).click();
+    await mockUi.detailAction(dialog.page(), action).click();
+  },
   confirm: (page: Page) => page.getByRole('alertdialog'),
   confirmButton: (confirm: Locator) =>
     confirm.getByRole('button', {

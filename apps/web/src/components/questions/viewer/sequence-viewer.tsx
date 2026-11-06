@@ -9,10 +9,11 @@ import { GroupedResults } from './grouped-results';
 //            resolves the range into a fixed, ordered run (QVIEW-01-C01/C02).
 //   solve    one position at a time: the title names the question ("12번"; mock "문제 k") and
 //            takes focus on every move, a progress bar with "n문제 중 k번째" (also announced), the
-//            QuestionBody, `제출` → result + answers + explanation, `다음` / `결과 보기`, `이전`,
-//            `건너뛰기`. A submitted position shows its answer and result read-only (one submission
-//            per position; `처음부터 다시` starts a new run). Opening a position opens its practice
-//            session, which records the view; nothing before a submission carries an answer (C03).
+//            QuestionBody, `제출` → result + answers + explanation, `이전 문제`, `다음 문제` (also
+//            skips an open position), `결과 보기` last. A submitted position shows its answer and
+//            result read-only (one submission per position; `처음부터 다시` starts a new run).
+//            Opening a position opens its practice session, which records the view; nothing
+//            before a submission carries an answer (C03).
 //   results  "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w", the per-position results (a row reopens that
 //            position read-only), `처음부터 다시` (a new run of the same questions and order
 //            setting) and `닫기`.
@@ -81,7 +82,6 @@ import {
   type GradeResult,
   type PracticeAnswer,
 } from './practice-model';
-import { NavButton } from './nav-button';
 import { SelfGradeButtons, StudyToggles, type Invalidation } from './practice-viewer';
 import {
   QuestionBody,
@@ -89,6 +89,7 @@ import {
   type AnswerQuestion,
   type RevealedAnswers,
 } from './question-body';
+import { AnotherTryButton, QuestionNav } from './question-footer';
 import { SeparateRetry } from './separate-retry';
 import { QuestionRangePicker } from './question-range-picker';
 import {
@@ -138,7 +139,12 @@ export interface RunClient {
   listRange(
     filters: RangeFilterState,
   ): Promise<RunActionResult<Pick<QuestionOverview, 'chapters' | 'items'>>>;
-  create(range: RunRange, randomOrder: boolean, key: string): Promise<RunActionResult<PracticeRun>>;
+  create(
+    range: RunRange,
+    randomOrder: boolean,
+    key: string,
+    shuffleOptions?: boolean,
+  ): Promise<RunActionResult<PracticeRun>>;
   getRun(runId: string): Promise<RunActionResult<PracticeRun>>;
   getItem(runId: string, position: number): Promise<RunActionResult<RunItem>>;
   openSession(
@@ -162,7 +168,8 @@ export function bankRunClient(workspaceId: string): RunClient {
   const api = createPracticeRunApi(workspaceId);
   return {
     listRange: (filters) => api.rangeQuestions(filters),
-    create: (range, randomOrder, key) => api.create(range, randomOrder, key),
+    create: (range, randomOrder, key, shuffleOptions) =>
+      api.create(range, randomOrder, key, null, shuffleOptions),
     getRun: (runId) => api.getRun(runId),
     getItem: (runId, position) => api.getItem(runId, position),
     openSession: (questionId, runId, position, key, epoch) =>
@@ -304,7 +311,7 @@ export function SequenceViewer({
   state,
   archived,
   source = 'bank',
-  pickerTitle = '문제 풀기',
+  pickerTitle = '모의고사',
   onNavigate,
   onClose,
   onViewed,
@@ -413,8 +420,8 @@ export function SequenceViewer({
     footer = solve.footer;
     const info = solve.question;
     if (solve.attachment) {
-      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기` (hint before its submission,
-      // full after — the server decides from the session). The bank's run has none.
+      // ASK-01 "문제 쪽 진입점": a mock exam question's `질문하기`, once its position is graded
+      // (UX12-RUNASK). The bank's run has none.
       header = <AskQuestionButton attachment={solve.attachment} />;
     } else if (info && source === 'bank') {
       header = (
@@ -570,7 +577,7 @@ function usePickerStep({
   async function start() {
     if (!request || tooLarge || starting || busy) return;
     const token = opening;
-    // A new opening is a new 문제 풀기 (a new run, QVIEW-01 "도중에 닫기"): its own key.
+    // A new opening is a new range run (a new run, QVIEW-01 "도중에 닫기"): its own key.
     const key = startKey.keyFor(JSON.stringify([token, request, random]));
     setStarting(true);
     setStartError(null);
@@ -1044,7 +1051,6 @@ function useSolveStep({
   const toResults = () => {
     if (!holding) onNavigate({ step: 'results', runId: view.runId }, 'replace');
   };
-  const forward = () => (last ? toResults() : go(position + 1));
 
   const revealed: RevealedAnswers | null = work.outcome ?? item?.attempt ?? null;
   const answered = revealed !== null;
@@ -1240,43 +1246,30 @@ function useSolveStep({
         <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
       {item?.available && item.question_id && run && !archived ? (
-        <Button
-          disabled={holding}
-          onClick={() =>
+        <AnotherTryButton
+          // A position skipped in a finished run can no longer be submitted: nothing to wait for.
+          available={!holding && !pendingSessionId && (answered || finished)}
+          onTry={() =>
             setRetryTarget({ key: `${runId}:${position}`, questionId: item.question_id ?? '' })
           }
+        />
+      ) : null}
+      {last ? (
+        <Button
+          variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
+          disabled={holding}
+          onClick={toResults}
         >
-          다시 풀기
+          결과 보기
         </Button>
       ) : null}
-      <nav className={styles.nav} aria-label="문제 이동">
-        <NavButton
-          direction="previous"
-          label="이전"
-          unavailable={position <= 1 || holding}
-          onClick={() => go(position - 1)}
-        />
-        {/* Always a way forward, also while the position loads (it is skipped then). */}
-        {total === null ? null : last ? (
-          <Button
-            variant={!item || !run || canAnswer ? 'secondary' : 'primary'}
-            disabled={holding}
-            onClick={toResults}
-          >
-            결과 보기
-          </Button>
-        ) : !item || !run || canAnswer ? (
-          <NavButton direction="next" label="건너뛰기" unavailable={holding} onClick={forward} />
-        ) : (
-          <NavButton
-            direction="next"
-            label="다음"
-            variant="primary"
-            unavailable={holding}
-            onClick={forward}
-          />
-        )}
-      </nav>
+      {/* Always a way forward, also while the position loads (it is skipped then). */}
+      <QuestionNav
+        previousUnavailable={position <= 1 || holding}
+        nextUnavailable={total === null || last || holding}
+        onPrevious={() => go(position - 1)}
+        onNext={() => go(position + 1)}
+      />
     </>
   );
 
@@ -1290,17 +1283,18 @@ function useSolveStep({
           chapterTitle: item.chapter_title ?? '챕터 없음',
         }
       : null;
-  // The mock exam position's practice session (open, or the submitted one), with the answer chosen
-  // so far; a question no longer in the mock exam (or a deleted mock exam) has none.
+  // The mock exam position's graded session (UX12-RUNASK: nothing to ask about before that); a
+  // question no longer in the mock exam (or a deleted mock exam) has none.
   const mockSessionId = session?.id ?? item?.practice_session_id ?? null;
+  const graded = answered && pendingSessionId === null;
   const attachment: AskAttachmentInput | null =
-    source === 'mock' && question && mockSessionId
+    source === 'mock' && question && mockSessionId && graded
       ? {
           kind: 'mock_exam_question',
           view: 'practice',
           mock_exam_question_id: question.questionId,
           mock_practice_session_id: mockSessionId,
-          selected_option_ids: answered ? [] : answer.selected.slice(0, 50),
+          selected_option_ids: [],
         }
       : null;
   return {
@@ -1443,7 +1437,7 @@ function useResultsStep({
     let failure: string | null = null;
     let started: string | null = null;
     try {
-      // The same questions (those still available) and the same order setting, as a new run.
+      // The same questions (those still available) and the same settings, as a new run.
       const all = [...items];
       while (all.length < data.total) {
         const page = await client.results(runId, all.length);
@@ -1452,8 +1446,9 @@ function useResultsStep({
         all.push(...page.data.items);
       }
       const range = restartRange(all);
-      const key = restartKey.keyFor(JSON.stringify([token, range, data.run.random_order]));
-      const created = await client.create(range, data.run.random_order, key);
+      const { random_order: random, shuffle_options: shuffle } = data.run;
+      const key = restartKey.keyFor(JSON.stringify([token, range, random, shuffle]));
+      const created = await client.create(range, random, key, shuffle);
       if (created.ok) {
         restartKey.succeeded(key);
         started = created.data.id;

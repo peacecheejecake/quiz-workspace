@@ -19,7 +19,7 @@
 //      | {source: "mock", mock_exam_id, range: RunRange, random_order, seed?}
 //      RunRange = {all?: boolean, chapter_ids?: string[], question_ids?: string[],
 //                  excluded_question_ids?: string[], filters?: {status?: DotStatus[],
-//                  favorite?: boolean, retry?: boolean, type?: QuestionType}}
+//                  favorite?: boolean, retry?: boolean, types?: QuestionType[]}}
 //      (`all` / `chapter_ids` select whole groups; `question_ids` adds single questions;
 //      `excluded_question_ids` removes questions from those groups; filters narrow the result the
 //      way the overview's `status` / `favorite` / `retry` / `type` query does) → 201 PracticeRun.
@@ -64,8 +64,8 @@
 //      /mock-exams/{id}/questions → {items: [{id, ...}]}. `보기 섞기` needs no LLM.
 //
 // UI contract (Korean first, English accepted; AGENTS.md §5):
-//   `문제` menu item "문제 풀기" (every member, archived workspaces too) opens a modal
-//   FloatingSidePanel (aria-modal="true") named "문제 풀기" (mock: "<모의고사 이름> 풀기") at
+//   A 모의고사 만들기 without variations (every member, archived workspaces too) opens a modal
+//   FloatingSidePanel (aria-modal="true") named "모의고사" (mock: "<모의고사 이름> 풀기") at
 //   `?practice=new&source=bank`, busy skeleton "불러오는 중" first. Range step: checkbox "전체 선택"
 //   (aria-checked="mixed" when partly selected), one checkbox per chapter named by the chapter
 //   title (+ count) with its own expand button "<장 제목> 펼치기" (aria-expanded), question
@@ -75,8 +75,8 @@
 //   Solving step: heading "1번" (mock "문제 k", focused on each change), progressbar with
 //   aria-valuetext "n문제 중 k번째" and the same text in an aria-live="polite" region, the
 //   QPLAY-01 body (radios/checkboxes named by the option text, textbox "답안", button "제출",
-//   role=status result 정답/오답/채점 대기, self-grade 맞음/틀림), footer "이전", "다음" (after a
-//   result; "결과 보기" on the last position), "건너뛰기". URL `?practice=<id>&i=<k>`.
+//   role=status result 정답/오답/채점 대기, self-grade 맞음/틀림), footer "이전 문제", "다음 문제"
+//   ("결과 보기" too on the last position). URL `?practice=<id>&i=<k>`.
 //   Results step: text "맞음 x · 틀림 y · 채점 대기 z · 건너뜀 w", list "문제별 결과" of buttons
 //   ("<번호> · <발문> · <결과 글자>"), buttons "처음부터 다시", "닫기".
 //   Notices: "이 문제는 더 이상 풀 수 없습니다.", "조건에 맞는 문제가 없습니다.", "풀이를 찾을 수
@@ -100,7 +100,6 @@ import {
   type QuestionInput,
   type QuestionType,
 } from './questions.ts';
-import { homeUi } from './workspace-ui.ts';
 import type { Member, WorkspaceFactory } from './workspaces.ts';
 
 export const CH1 = '1장 물의 순환';
@@ -130,7 +129,7 @@ export interface RunRange {
     readonly status?: readonly DotStatus[];
     readonly favorite?: boolean;
     readonly retry?: boolean;
-    readonly type?: QuestionType;
+    readonly types?: readonly QuestionType[];
   };
 }
 
@@ -155,6 +154,7 @@ export interface PracticeRun {
   readonly source: 'bank' | 'mock';
   readonly mock_exam_id: string | null;
   readonly random_order: boolean;
+  readonly shuffle_options: boolean;
   readonly seed: number;
   readonly total: number;
   readonly finished_at: string | null;
@@ -492,17 +492,13 @@ export function progressText(k: number, n: number): RegExp {
 }
 
 export const runUi = {
-  menuItem: (page: Page) =>
-    homeUi
-      .questionMenu(page)
-      .getByRole('menuitem', { name: /^(문제 풀기|practice questions?|start practice)$/i }),
   /** The modal QuestionViewer panel of a run, whatever its step's title. */
   // Portalled to <body>; since UX9 the home dialogs (portalled into <main>) are modal too.
   panel: (page: Page) =>
     page.getByRole('dialog').and(page.locator('body > [role="dialog"][aria-modal="true"]')),
   /** The range step's panel title. */
   pickerTitle: (panel: Locator) =>
-    panel.getByRole('heading', { name: /^(문제 풀기|practice questions?)$/i }),
+    panel.getByRole('heading', { name: /^(모의고사|practice questions?)$/i }),
   busy: (panel: Locator) =>
     panel.locator('[aria-busy="true"]').or(panel.getByText(/불러오는 중|loading/i)),
   // QuestionRangePicker (shared with MOCK-01, fixtures/range-picker.ts)
@@ -513,7 +509,6 @@ export const runUi = {
   question: rangePickerUi.question,
   questions: rangePickerUi.questions,
   selected: rangePickerUi.selected,
-  filterToggle: rangePickerUi.filterToggle,
   filters: rangePickerUi.filters,
   incorrectFilter: rangePickerUi.incorrectFilter,
   retryFilter: (panel: Locator) =>
@@ -541,9 +536,9 @@ export const runUi = {
     panel.getByRole('status').filter({ hasText: /정답|오답|채점 대기|correct|pending/i }),
   selfGradeCorrect: (panel: Locator) =>
     panel.getByRole('button', { name: /^(맞음|맞았|정답으로|correct)/i }),
-  next: (panel: Locator) => panel.getByRole('button', { name: /^(다음|next)$/i }),
-  previous: (panel: Locator) => panel.getByRole('button', { name: /^(이전|previous)$/i }),
-  skip: (panel: Locator) => panel.getByRole('button', { name: /^(건너뛰기|skip)$/i }),
+  next: (panel: Locator) => panel.getByRole('button', { name: /^(다음 문제|next question)$/i }),
+  previous: (panel: Locator) =>
+    panel.getByRole('button', { name: /^(이전 문제|previous question)$/i }),
   showResults: (panel: Locator) =>
     panel.getByRole('button', { name: /^(결과 보기|show results|see results)$/i }),
   close: (panel: Locator) =>
@@ -577,8 +572,8 @@ export const runUi = {
 };
 
 /**
- * Opens the header's `문제` menu and checks it lists `문제 풀기` (the menu itself must open with
- * its existing items first, so a missing item is told apart from a menu that did not open).
+ * Opens the range step of a bank run by its URL (the home's 모의고사 opens the 모의고사 list, and its
+ * 만들기 without variations starts a run with a chosen range instead of this step).
  */
 export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
   const url = new URL(page.url());
@@ -590,7 +585,7 @@ export async function openQuestionMenuWithPractice(page: Page): Promise<void> {
 }
 
 /**
- * Opens `문제` › `문제 풀기` and waits for the range step's panel and its list (the panel opens
+ * Opens a bank run's range step and waits for the step's panel and its list (the panel opens
  * busy before the data arrives, QVIEW-01-AC01: callers then expand or count the groups).
  */
 export async function openRangePicker(page: Page): Promise<Locator> {
@@ -604,18 +599,19 @@ export async function openRangePicker(page: Page): Promise<Locator> {
 
 /**
  * Moves forward to the results step from wherever the run is: `결과 보기` when shown, otherwise
- * `다음` (a position with a result) or `건너뛰기` (an open position).
+ * `다음 문제`.
  */
 export async function goToResults(panel: Locator, maxSteps = 10): Promise<void> {
   for (let step = 0; step < maxSteps; step += 1) {
+    const progress = await runUi.progress(panel).getAttribute('aria-valuetext');
     if (await runUi.showResults(panel).isVisible()) {
       await runUi.showResults(panel).click();
       await expect(runUi.restart(panel)).toBeVisible();
       return;
     }
-    const next = runUi.next(panel);
-    const target = (await next.isVisible()) ? next : runUi.skip(panel);
-    await target.click();
+    await runUi.next(panel).click();
+    // Settled on the new position: on the last one `다음 문제` can no longer be pressed.
+    await expect(runUi.progress(panel)).not.toHaveAttribute('aria-valuetext', progress ?? '');
   }
   throw new Error('results step not reached');
 }

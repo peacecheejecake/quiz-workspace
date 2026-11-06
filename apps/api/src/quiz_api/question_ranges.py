@@ -11,7 +11,7 @@ a range — in Heatmap order whatever order the request listed them in.
     result   = [q for q in heatmap if q in selected and q matches filters]
 
 Filters narrow the whole selection ("선택 = 보이는 문제 중에서만"), the way the overview's query
-filters do: `type`, `status` (the caller's dot status), `favorite`, `retry`. The caller's study
+filters do: `types`, `status` (the caller's dot status), `favorite`, `retry`. The caller's study
 state is read through the `question_merged_user_states` view, so a question's state includes its
 actively merged duplicates' (questions.md §10.2) and the filter picks what the Heatmap shows.
 
@@ -26,9 +26,9 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
@@ -64,7 +64,23 @@ class RangeFilters(BaseModel):
     )
     favorite: bool | None = None
     retry: bool | None = Field(default=None, description="The `needs_retry` flag.")
-    type: QuestionType | None = None
+    types: list[QuestionType] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=len(get_args(QuestionType)),
+        description="Keep these question types; omitted selects all.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _single_type(cls, data: Any) -> Any:
+        """Ranges saved before the multi-select hold one `type`, or a null one."""
+        if not isinstance(data, dict) or "type" not in data:
+            return data
+        filters = {k: v for k, v in data.items() if k != "type"}
+        if data["type"] is not None and filters.get("types") is None:
+            filters["types"] = [data["type"]]
+        return filters
 
 
 class QuestionRange(BaseModel):
@@ -125,7 +141,7 @@ def select_rows(
             or (r.chapter_id in chapter_ids if r.chapter_id is not None else no_chapter)
         )
         and r.question_id not in excluded
-        and (f.type is None or r.question_type == f.type)
+        and (f.types is None or r.question_type in f.types)
         and (wanted is None or r.status in wanted)
         and (f.favorite is None or r.is_favorite == f.favorite)
         and (f.retry is None or r.needs_retry == f.retry)

@@ -20,7 +20,7 @@ linked_tests: [UX12-OPEN-AC01 … UX12-OPEN-AC08]
 
 UX10의 "서버 metadata를 먼저 확인한다"는 보장은 그대로이며, 확인과 열기가 한 호출 안으로 들어온다. 캐시된 session도 응답을 받기 전에는 답을 입력할 수 없다.
 
-- **재사용 조건(서버 판정):** `cached_session_id`가 본인의 이 문제 session이고, 범위 풀이 session이 아니며, `open` 상태이고, 현재 epoch·현재 revision이며, `baseline_attempt_id`가 최신 attempt와 같을 때만 재사용한다. 이 조건 중 하나라도 어긋나면 UX10과 같은 순서로 판단한다. 결과가 있으면 결과를, 없으면 새 session을 준다.
+- **재사용 조건(서버 판정):** `cached_session_id`가 본인의 이 문제 session이고, 범위 풀이 session이 아니며, `open` 상태이고, 현재 epoch·현재 revision이며, `baseline_attempt_id`가 최신 attempt와 같을 때만 재사용한다. 이 열기가 결과를 보일 문제이면 재사용하지 않는다. `다시 풀기`로 연 session(`cached_another_try`)만 결과보다 앞선다([UX12-RETRYOPEN](ux12-retry-open.md)). 이 조건 중 하나라도 어긋나면 UX10과 같은 순서로 판단한다. 결과가 있으면 결과를, 없으면 새 session을 준다. `다시 풀기` 상태인 문제는 결과가 있어도 새 session을 준다([UX12-RETRYOPEN](ux12-retry-open.md)).
 - **응답 분리:** 미제출 session은 `session`(`PracticeSession`, 답 필드 없음), 제출한 결과는 `result`(`PracticeSessionDetail`)에 담는다. 정답·해설은 `result.outcome`에만 있다.
 - **멱등성:** `Idempotency-Key`는 새 session을 열 때만 저장한다. 같은 key가 다시 오면 그 session이 아직 `open`일 때 응답을 재생한다. 이미 제출됐으면 결과를 준다. 같은 사용자·문제의 reset 잠금이 요청을 직렬화하므로 별도 key 잠금은 두지 않는다.
 - **`practice-recent`·`expected_reset_epoch`:** web은 더 쓰지 않는다. epoch를 읽는 시점과 여는 시점 사이의 틈이 없어졌기 때문이다. 다른 탭의 reset이 먼저 커밋되고 그 뒤에 도착한 열기는 새 열기로 처리된다. 잠금을 기다리던 열기는 지금처럼 409 `practice-session-reset`이다. API endpoint 자체는 호환을 위해 유지한다.

@@ -144,12 +144,12 @@ const DIALOGS: readonly HomeDialog[] = [
     opener: homeUi.questionMenuButton,
   },
   {
-    name: '문제 풀기',
+    name: '모의고사',
     panel: 'mock-exams',
     dialog: (page) =>
-      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
-    open: (page) => page.getByRole('button', { name: /^풀기$/ }).click(),
-    opener: (page) => page.getByRole('button', { name: /^풀기$/ }),
+      page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i, includeHidden: true }),
+    open: (page) => page.getByRole('button', { name: /^모의고사$/ }).click(),
+    opener: (page) => page.getByRole('button', { name: /^모의고사$/ }),
   },
   {
     name: '이력',
@@ -468,10 +468,10 @@ const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
     open: (page) => domClick(noteUi.opener(page, CH1)),
   },
   {
-    name: '문제 풀기',
+    name: '모의고사',
     dialog: (page) =>
-      page.getByRole('dialog', { name: /^(문제 풀기|practice)$/i, includeHidden: true }),
-    open: (page) => domClick(page.getByRole('button', { name: /^풀기$/ })),
+      page.getByRole('dialog', { name: /^(모의고사|mock exams?)$/i, includeHidden: true }),
+    open: (page) => domClick(page.getByRole('button', { name: /^모의고사$/ })),
   },
   {
     name: '이력',

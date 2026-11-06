@@ -7725,7 +7725,7 @@
       },
       "PracticeOpenBody": {
         "additionalProperties": false,
-        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.",
+        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.\n`cached_another_try`: the cached session came from `force_new`, so it stays in front of a\nresult the question would otherwise open with.",
         "properties": {
           "baseline_attempt_id": {
             "anyOf": [
@@ -7738,6 +7738,11 @@
               }
             ],
             "title": "Baseline Attempt Id"
+          },
+          "cached_another_try": {
+            "default": false,
+            "title": "Cached Another Try",
+            "type": "boolean"
           },
           "cached_session_id": {
             "anyOf": [
@@ -7798,7 +7803,7 @@
                 "type": "null"
               }
             ],
-            "description": "The latest submitted session of the active revision, with its outcome."
+            "description": "The latest submitted session of the active revision, with its outcome. Left out for a question marked for retry, unless that submission still waits for grading."
           },
           "reused": {
             "description": "`session` is the cached one; nothing was written.",
@@ -7936,6 +7941,10 @@
             "title": "Seed",
             "type": "integer"
           },
+          "shuffle_options": {
+            "title": "Shuffle Options",
+            "type": "boolean"
+          },
           "source": {
             "enum": [
               "bank",
@@ -7964,6 +7973,7 @@
           "source",
           "mock_exam_id",
           "random_order",
+          "shuffle_options",
           "seed",
           "total",
           "answered",
@@ -8024,6 +8034,12 @@
             ],
             "description": "Shuffle seed; the server picks one if absent.",
             "title": "Seed"
+          },
+          "shuffle_options": {
+            "default": false,
+            "description": "Shuffle each MCQ's options for this run (bank only).",
+            "title": "Shuffle Options",
+            "type": "boolean"
           },
           "source": {
             "enum": [
@@ -10024,21 +10040,27 @@
             "description": "Keep these dot statuses; empty selects none, omitted selects all.",
             "title": "Status"
           },
-          "type": {
+          "types": {
             "anyOf": [
               {
-                "enum": [
-                  "MCQ",
-                  "SHORT_ANSWER",
-                  "ESSAY"
-                ],
-                "type": "string"
+                "items": {
+                  "enum": [
+                    "MCQ",
+                    "SHORT_ANSWER",
+                    "ESSAY"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "minItems": 1,
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Type"
+            "description": "Keep these question types; omitted selects all.",
+            "title": "Types"
           }
         },
         "title": "RangeFilters",
@@ -23898,7 +23920,7 @@
     },
     "/api/v1/questions/{question_id}/practice-open": {
       "post": {
-        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.",
+        "description": "Open the practice panel in one transaction (UX12-OPEN): under the reset lock, confirm the\nlatest result, then reuse the cached session, show that result or open a session. Only a new\nsession is stored under `Idempotency-Key`; the reset lock already serialises retries of this\nuser and question, so no separate key lock is taken. A key seen again replays its session\nwhile it is open: once submitted, the latest result answers instead, or 409 without one.\nA question marked for retry opens to be answered, without its result (UX12-RETRYOPEN), unless\nits latest submission still waits for grading: nothing else can finish that one.",
         "operationId": "openQuestionPractice",
         "parameters": [
           {
@@ -29810,23 +29832,29 @@
             }
           },
           {
+            "description": "Repeatable.",
             "in": "query",
             "name": "type",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "MCQ",
-                    "SHORT_ANSWER",
-                    "ESSAY"
-                  ],
-                  "type": "string"
+                  "items": {
+                    "enum": [
+                      "MCQ",
+                      "SHORT_ANSWER",
+                      "ESSAY"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 3,
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Repeatable.",
               "title": "Type"
             }
           },

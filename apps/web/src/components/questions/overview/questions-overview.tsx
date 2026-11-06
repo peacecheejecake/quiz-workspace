@@ -17,7 +17,7 @@
 // / 수정 이력·출처: the 문제 상세 dialog over the panel; the practice session stays answer-free), and
 // editors archive the open question (보관, after a confirmation; the panel closes and the dot
 // leaves; it comes back from the home's 보관·초안 문제 dialog).
-// QVIEW-W: the practice panel is QuestionViewer `practice`; the home's 문제 › 문제 풀기 run
+// QVIEW-W: the practice panel is QuestionViewer `practice`; the home's 모의고사 range run
 // (`?practice=`, QVIEW-01) is QuestionViewer `sequence`, rendered here so it shares the panel's
 // 문제 관리 / 문제 정보 menu, its dialogs and the Heatmap refresh after studying.
 import {
@@ -117,8 +117,9 @@ export interface QuestionsOverviewProps {
   /** Controls at the end of each chapter group header (CHNOTE-01 정리 노트). */
   readonly chapterActions?: (chapter: HeatmapChapter) => ReactNode;
   /**
-   * Where focus goes when the practice panel closes, when set by whoever opened it (a 정리 노트
-   * footnote: the note's disclosure). Cleared on close; otherwise focus returns to the dot.
+   * Where focus goes when the practice or run panel closes, when set by whoever opened it (a 정리
+   * 노트 footnote: the note's disclosure; a chapter's 풀기). Cleared on close; otherwise focus
+   * returns to the dot.
    */
   readonly practiceReturnFocusRef?: RefObject<HTMLElement | null>;
   /**
@@ -888,6 +889,7 @@ export function QuestionsOverview({
           });
         }}
         onFlagsChange={changeFlags}
+        flagsSettled={(questionId) => flagSync.settled(questionId)}
         onViewed={markViewed}
         invalidated={invalidated}
         headerExtra={({ onShowSource }) =>
@@ -959,6 +961,15 @@ export function QuestionsOverview({
           }}
           onFlagsFailed={(message) => toast({ tone: 'error', title: message })}
           invalidated={invalidated}
+          onCloseAutoFocus={(event) => {
+            // A chapter's 풀기 asks focus back on its button (UX12-CHAPTERRUN-AC04).
+            const requestedFocus = practiceReturnFocusRef?.current ?? null;
+            if (practiceReturnFocusRef) practiceReturnFocusRef.current = null;
+            if (requestedFocus?.isConnected) {
+              requestedFocus.focus();
+              event.preventDefault();
+            }
+          }}
           headerExtra={(q, { onShowSource }) => (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}

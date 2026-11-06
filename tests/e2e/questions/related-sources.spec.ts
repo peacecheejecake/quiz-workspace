@@ -824,7 +824,7 @@ test(
     const a = await viewer(workspaceFactory, s, 'relsrc01-ac06-a');
     const b = await viewer(workspaceFactory, s, 'relsrc01-ac06-b');
 
-    // A: `문제` › `문제 풀기` (sequence(bank)) → submit → 관련 본문 under the result.
+    // A: a bank range run (sequence(bank)) → submit → 관련 본문 under the result.
     await openHome(page, a, s.workspaceId);
     let runPanel = await openRangePicker(page);
     await runUi.selectAll(runPanel).check();
