@@ -192,6 +192,18 @@ describe('ChapterPicker', () => {
     expect(names()).toEqual(['챕터 없음', '1장 물의 순환', '2장 정수']);
   });
 
+  it('Enter in the filter chooses the first row that matches, not its parent', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    await user.click(trigger());
+    await user.type(await screen.findByRole('searchbox', { name: '챕터 찾기' }), '세부');
+    expect(names()).toEqual(['2장 정수', '2.1 응집', '2.1.1 세부']);
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('x');
+    expect(trigger()).toHaveTextContent('2.1.1 세부');
+  });
+
   it('never chooses a group, which starts open and toggles', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

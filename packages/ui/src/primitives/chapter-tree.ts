@@ -32,6 +32,8 @@ export interface VisibleRow {
   readonly row: TreeRow;
   readonly position: number;
   readonly setSize: number;
+  /** The filter matched this row's own title; an ancestor is only on screen for its child. */
+  readonly matched: boolean;
   /** Has children on screen or to expand to. */
   readonly parent: boolean;
   readonly expanded: boolean;
@@ -98,10 +100,12 @@ export function visibleRows(
 ): VisibleRow[] {
   const filtering = isFiltering(query);
   const shown = new Array<boolean>(rows.length).fill(false);
+  const matched = new Set<number>();
   if (filtering) {
     const matches = matcher(query);
     rows.forEach((row, index) => {
       if (row.node.group || !matches(row.node.label)) return;
+      matched.add(index);
       for (let at = index; at >= 0 && !shown[at]; at = (rows[at] as TreeRow).parent) {
         shown[at] = true;
       }
@@ -130,6 +134,7 @@ export function visibleRows(
       row,
       position,
       setSize: shownChildren.get(row.parent) ?? 1,
+      matched: matched.has(index),
       parent,
       expanded: parent && (filtering || expanded.has(row.node.value)),
     });

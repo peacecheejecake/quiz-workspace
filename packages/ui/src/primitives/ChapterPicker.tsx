@@ -173,8 +173,8 @@ function ChapterTree({
       treeRef.current?.querySelector<HTMLElement>(`${TREE_ROW}[tabindex="0"]`)?.focus();
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      const first = shown.find((item) => !item.row.node.group);
-      if (filtering && first) onChoose(first.row.node.value);
+      const first = shown.find((item) => item.matched);
+      if (first) onChoose(first.row.node.value);
     }
   }
 

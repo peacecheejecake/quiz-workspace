@@ -145,7 +145,7 @@ test(
     await filter.fill('여과');
     await filter.press('Enter');
     await expect(page.getByRole('tree')).toHaveCount(0);
-    await expect(trigger).toContainText(CH2);
+    await expect(trigger).toContainText(S22);
     await expect(trigger).toBeFocused();
   },
 );
