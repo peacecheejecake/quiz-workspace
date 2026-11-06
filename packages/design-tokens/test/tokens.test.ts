@@ -88,9 +88,9 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
     expect(Object.keys(docLight)).toHaveLength(42);
     expect(Object.keys(docDark)).toHaveLength(42);
-    // 37 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 12 typography
+    // 37 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
     // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
-    expect(Object.keys(docRoot)).toHaveLength(79);
+    expect(Object.keys(docRoot)).toHaveLength(80);
   });
 });
 
@@ -198,6 +198,7 @@ describe('typography scale (design-system.md §4)', () => {
   const num = (name: keyof typeof staticTokens) => Number(staticTokens[name]);
 
   it('sizes fall in the §4 ranges', () => {
+    expect(px('font-size-label-xs')).toBe(11);
     for (const name of ['font-size-label-sm', 'font-size-label'] as const) {
       expect(px(name), name).toBeGreaterThanOrEqual(12);
       expect(px(name), name).toBeLessThanOrEqual(13);
