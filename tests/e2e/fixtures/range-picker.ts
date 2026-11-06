@@ -27,6 +27,11 @@ export const rangePickerUi = {
     scope.getByRole('button', {
       name: new RegExp(`${escape(title)}.*(펼치기|접기|expand|collapse)`, 'i'),
     }),
+  /** A chapter's group: its chapter checkbox and, when expanded, its question rows. */
+  group: (scope: Locator, title: string) =>
+    scope.getByRole('listitem').filter({
+      has: scope.page().getByRole('checkbox', { name: new RegExp(`^${escape(title)}`) }),
+    }),
   question: (scope: Locator, chapter: number, n: number) =>
     scope.getByRole('checkbox', { name: new RegExp(`^${chapter}장 ${n}번 · `) }),
   questions: (scope: Locator) => scope.getByRole('checkbox', { name: /^\d+장 \d+번 · / }),
