@@ -124,6 +124,7 @@ RULES: dict[str, Rule | str] = {
     "listQuestionImportDraftSummaries": READ,
     "publishQuestionImportDrafts": EDIT,
     "retryQuestionImport": EDIT,
+    "reextractQuestionImport": EDIT,
     "registerQuestionImportDrafts": EDIT,
     "getQuestionImportRegistration": READ,
     "deleteQuestion": EDIT,
