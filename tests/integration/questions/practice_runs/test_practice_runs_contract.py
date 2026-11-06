@@ -1985,3 +1985,49 @@ def test_ux12_mockresume_only_the_callers_runs_show(seed: Any) -> None:
         count("select count(*) from public.question_attempts where workspace_id = %s", (ws_id,))
         == 0
     )
+
+
+def test_ux12_mockresume_runs_of_one_exam_never_hide_another_exams_run(seed: Any) -> None:
+    owner, ws_id, quiet, _ = mock_resume_world(seed, "quiet", 1)
+    busy_q = owner.create_question(ws_id, mcq(f"busy-{uuid.uuid4().hex[:6]}", 1, 1, None))
+    busy = create_mock_exam(owner, ws_id, [busy_q["id"]])
+    waiting = created(owner, ws_id, mock(quiet["id"], {"all": True}))
+    assert exam_row(owner, ws_id, quiet["id"])["unfinished_run"]["id"] == waiting["id"]
+
+    # 150 newer runs of another mock exam, answerable, all newer than the quiet one's run.
+    template = created(owner, ws_id, mock(busy["id"], {"all": True}))
+    admin(
+        "insert into public.practice_runs (workspace_id, user_id, source, mock_exam_id, "
+        "mock_exam_generation_id, range, random_order, seed, item_ids) "
+        "select workspace_id, user_id, source, mock_exam_id, mock_exam_generation_id, range, "
+        "random_order, seed, item_ids from public.practice_runs, generate_series(1, 150) "
+        "where id = %s",
+        (template["id"],),
+    )
+    items = owner.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"]
+    found = {e["id"]: e["unfinished_run"] for e in items}
+    assert found[quiet["id"]]["id"] == waiting["id"]
+    assert found[busy["id"]] is not None
+
+
+def test_ux12_mockresume_fully_answered_runs_never_hide_an_older_one(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "answered", 1)
+    waiting = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    done = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], done["id"], 1)
+    admin(
+        "with extra as ("
+        "  insert into public.practice_runs (workspace_id, user_id, source, mock_exam_id, "
+        "  mock_exam_generation_id, range, random_order, seed, item_ids) "
+        "  select workspace_id, user_id, source, mock_exam_id, mock_exam_generation_id, range, "
+        "  random_order, seed, item_ids from public.practice_runs, generate_series(1, 150) "
+        "  where id = %s returning id) "
+        "insert into public.mock_exam_practice_sessions (workspace_id, mock_exam_question_id, "
+        "mock_exam_question_revision_id, user_id, practice_run_id, run_position, "
+        "displayed_option_ids, state, submitted_at, graded_at) "
+        "select s.workspace_id, s.mock_exam_question_id, s.mock_exam_question_revision_id, "
+        "s.user_id, extra.id, 1, s.displayed_option_ids, s.state, s.submitted_at, s.graded_at "
+        "from extra, public.mock_exam_practice_sessions s where s.practice_run_id = %s",
+        (done["id"], done["id"]),
+    )
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == waiting["id"]
