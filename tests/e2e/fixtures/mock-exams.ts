@@ -99,7 +99,7 @@
 //   "<이름> 메뉴" (editors) with menuitems 이름 바꾸기 / 설정 바꾸기 / 삭제; progressbar "문제 생성
 //   진행률" (value text "n개 중 k개") while generating. Empty: "아직 모의고사가 없습니다." (+ the hint
 //   for editors). Rename: inline textbox "모의고사 이름" (Enter saves, Escape cancels).
-//   Create / 설정 바꾸기: step list "풀기 단계" with 옵션 → 범위; step 1 textbox "이름",
+//   Create / 설정 바꾸기: step list "풀기 단계" with 옵션 → 범위; step 1 textbox "이름" (once a type is chosen),
 //   group "변형 유형" with four checkboxes (an unavailable one is disabled and described by
 //   "이 환경에서는 AI 변형을 쓸 수 없습니다."), spinbutton "문항 수", combobox "난이도", button "다음";
 //   step 2 QuestionRangePicker (shared with QVIEW-01; labels in fixtures/range-picker.ts: "전체

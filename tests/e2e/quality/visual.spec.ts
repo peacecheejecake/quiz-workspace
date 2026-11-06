@@ -476,12 +476,12 @@ test(
     // 만들기: options (default name, 문구 변형 checked) and the range (1장 open, 1장 1번 off).
     await mockUi.add(dialog).click();
     await expect(mockUi.variations(dialog)).toHaveCount(4);
-    await mockUi.title(dialog).fill('기말 대비');
     for (const type of ['OPTION_SHUFFLE', 'INVERT_POLARITY', 'ANALOGOUS_CONCEPT'] as const) {
       const box = mockUi.variation(dialog, type);
       if (await box.isChecked()) await box.uncheck();
     }
     await mockUi.variation(dialog, 'PARAPHRASE').check();
+    await mockUi.title(dialog).fill('기말 대비');
     await mockUi.questionCount(dialog).fill('4');
     await snapEvery(page, 'mock-exams-create-options');
     await mockUi.next(dialog).click();

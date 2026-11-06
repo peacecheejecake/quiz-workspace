@@ -1,8 +1,9 @@
 'use client';
 
 // MOCK-01 만들기 / 설정 바꾸기 (docs/screens/mock-exams.md "만들기 화면"): two steps `옵션 → 범위`
-// (a plain step list). 옵션: 이름, the four 변형 유형 (each described in a Tooltip; the AI ones disabled
-// with the reason where the environment has no LLM), 문항 수 (1–100 with an AI type; 보기 섞기 only
+// (a plain step list). 옵션: 이름 (with a type chosen: a bank run stores no name), the four 변형
+// 유형 (each described in a Tooltip; the AI ones disabled with the reason where the environment
+// has no LLM), 문항 수 (1–100 with an AI type; 보기 섞기 only
 // up to the range, or 범위 전체) and 난이도. 범위: the shared QuestionRangePicker over this
 // workspace's confirmed questions with its filters, "선택 n문제 중 m문항을 만듭니다", the AI notice
 // and `만들기` (설정 바꾸기: `다시 만들기`), disabled with "출제 범위를 고르세요" while nothing is
@@ -162,18 +163,20 @@ export function MockExamForm({
           <h3 ref={stepHeading} tabIndex={-1} className="qz-visually-hidden">
             옵션
           </h3>
-          <Input
-            id={`${formId}-title`}
-            label="이름"
-            value={values.title}
-            maxLength={100}
-            required
-            error={optionError?.field === 'title' ? optionError.message : undefined}
-            onChange={(e) => {
-              setValues({ ...values, title: e.target.value });
-              if (optionError?.field === 'title') setOptionError(null);
-            }}
-          />
+          {values.types.length > 0 ? (
+            <Input
+              id={`${formId}-title`}
+              label="이름"
+              value={values.title}
+              maxLength={100}
+              required
+              error={optionError?.field === 'title' ? optionError.message : undefined}
+              onChange={(e) => {
+                setValues({ ...values, title: e.target.value });
+                if (optionError?.field === 'title') setOptionError(null);
+              }}
+            />
+          ) : null}
           <fieldset
             className={styles.fieldset}
             aria-describedby={optionError?.field === 'types' ? `${formId}-types` : undefined}
@@ -193,7 +196,7 @@ export function MockExamForm({
                       ? [...values.types.filter((t) => t !== type), type]
                       : values.types.filter((t) => t !== type),
                   });
-                  if (optionError?.field === 'types') setOptionError(null);
+                  if (optionError?.field !== 'count') setOptionError(null);
                 }}
               />
             ))}
