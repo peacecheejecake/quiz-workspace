@@ -127,7 +127,7 @@ export function ManageViewer({
               <span>버전 {question.revision.version}</span>
             </div>
             <QuestionSourceButton source={source} />
-            <QuestionSourceDialog source={source} aboveModals />
+            <QuestionSourceDialog source={source} aboveModals wholeDocument />
             <QuestionBody
               kind="revision"
               revision={question.revision}
@@ -226,6 +226,8 @@ function Sources({
           const title = documentTitle(documents, source.document_id);
           const text = `${title} ${pageText(source) ?? ''}`.trim();
           const documentId = source.document_id;
+          const blockId = source.block_ids?.[0];
+          const revisionId = source.document_revision_id;
           return (
             <li key={`${documentId ?? 'none'}-${i}`}>
               {href && documentId ? (
@@ -239,6 +241,7 @@ function Sources({
                       page: source.page_start ?? 1,
                       documentHref: href,
                       documentTitle: title,
+                      ...(blockId && revisionId ? { block: { id: blockId, revisionId } } : {}),
                     })
                   }
                 >

@@ -32,7 +32,7 @@ linked_tests: [UX10-DOC-AC01, UX10-DOC-AC02, UX10-DOC-AC03, UX10-DOC-AC04, UX10-
 
 ### UX10-DOC-AC04
 
-3초 후 도구가 숨고 pointer·touch·keyboard로 복원한다. focus·menu·교정·중요 경고가 있으면 숨지 않는다.
+3초 후 도구가 숨고 pointer·touch·keyboard로 복원한다. focus·menu·교정·중요 경고가 있으면 숨지 않는다. 터치 탭과 glass 표면은 [UX12-PDFPREVIEW](ux12-pdf-preview.md)가 정한다.
 
 ### UX10-DOC-AC05
 

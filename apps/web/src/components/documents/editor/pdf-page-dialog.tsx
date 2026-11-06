@@ -1,16 +1,18 @@
 'use client';
 
-// UX12-SOURCE: one page of a document's original PDF in a floating dialog, so a source link keeps
-// the reader on the screen they came from (the URL does not change, focus returns to the link).
-// Paired with the panel it was opened from, like QSRC-01's 문제 원문 dialog. The whole PDF is
-// reachable here, so a practice surface may only mount this once the position was submitted
-// (QSRC-01: the PDF can hold the answers). The PDF comes through the source-url relay; a signed URL
-// is never logged or put into a page URL.
+// UX12-SOURCE: a document's original PDF in a floating dialog, opened at a page, so a source link
+// keeps the reader on the screen they came from (the URL does not change, focus returns to the
+// link). UX12-PDFPREVIEW: the cited block's box is marked and the neighbouring pages are a scroll
+// away, drawn lazily by PdfViewer. Paired with the panel it was opened from, like QSRC-01's 문제 원문
+// dialog. The whole PDF is reachable here, so a practice surface may only mount this once the
+// position was submitted (QSRC-01: the PDF can hold the answers). The PDF comes through the
+// source-url relay; a signed URL is never logged or put into a page URL.
 import { Button, FloatingSidePanel, usePairedSheet } from '@quiz/ui';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createEditorClient } from '@/lib/documents/editor-api';
+import { createEditorClient, type ContentBlock } from '@/lib/documents/editor-api';
 import { loadPdfBytes, SignedUrlCache, type PdfBytesSource } from '@/lib/documents/pdf-source';
+import { createSearchClient } from '@/lib/search/client';
 import styles from './editor.module.css';
 import { FULL_DOCUMENT_LABEL } from './pdf-page-label';
 import { PdfViewer } from './pdf-viewer';
@@ -21,6 +23,8 @@ export interface PdfPageTarget {
   /** DOC-02 at this place: the `전체 문서 보기` link. */
   readonly documentHref: string;
   readonly documentTitle?: string;
+  /** The cited block, when there is one: its box is marked. A failed read leaves the page. */
+  readonly block?: { readonly id: string; readonly revisionId: string };
 }
 
 export interface PdfPageDialogProps {
@@ -92,22 +96,60 @@ export function PdfPageDialog({ target, onClose }: PdfPageDialogProps) {
       }
     >
       {target ? (
-        <PdfPage
-          key={`${target.documentId}:${target.page}`}
+        <PdfPreview
+          key={`${target.documentId}:${target.page}:${target.block?.id ?? ''}`}
           documentId={target.documentId}
           initialPage={target.page}
+          block={target.block}
         />
       ) : null}
     </FloatingSidePanel>
   );
 }
 
-function PdfPage({ documentId, initialPage }: { documentId: string; initialPage: number }) {
+const NO_HIGHLIGHTS: ContentBlock['locations'] = [];
+
+/** The PDF from `initialPage`, marking `highlights` or the box of `block`. */
+export function PdfPreview({
+  documentId,
+  initialPage,
+  highlights,
+  block,
+}: {
+  readonly documentId: string;
+  readonly initialPage: number;
+  readonly highlights?: ContentBlock['locations'];
+  readonly block?: PdfPageTarget['block'];
+}) {
   const source = useDocumentPdfSource(documentId);
   const [page, setPage] = useState(initialPage);
+  const [cited, setCited] = useState<ContentBlock['locations']>(NO_HIGHLIGHTS);
+  const blockId = block?.id;
+  const revisionId = block?.revisionId;
+  useEffect(() => {
+    if (!blockId || !revisionId) return undefined;
+    const controller = new AbortController();
+    createSearchClient()
+      .block(documentId, blockId, revisionId, controller.signal)
+      .then(
+        (found) => {
+          if (controller.signal.aborted) return;
+          setCited(found.locations.filter((location) => location.bbox !== null));
+        },
+        () => undefined,
+      );
+    return () => controller.abort();
+  }, [documentId, blockId, revisionId]);
+  const marked = highlights ?? cited;
   return (
     <div className={styles.pageDialogBody}>
-      <PdfViewer source={source} page={page} onPageChange={setPage} highlights={[]} />
+      <PdfViewer
+        source={source}
+        page={page}
+        onPageChange={setPage}
+        highlights={marked}
+        highlightKey={marked.length > 0 ? 'cited' : null}
+      />
     </div>
   );
 }

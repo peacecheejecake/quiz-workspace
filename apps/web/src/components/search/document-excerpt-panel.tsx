@@ -24,8 +24,8 @@ export interface DocumentExcerptPanelProps {
   /** Member view: "PDF에서 보기" opens the 원본 PDF dialog, which links to DOC-02. */
   readonly workspaceId?: string;
   /**
-   * "PDF에서 보기" stays a plain DOC-02 link: the AI 질문 panel, which can be open over a mock exam
-   * question before its submission, where no whole-PDF dialog may open (QSRC-01).
+   * "PDF에서 보기" stays a plain DOC-02 link: the AI 질문 panel over an unsubmitted question,
+   * where no whole-PDF dialog may open (QSRC-01, UX12-PDFPREVIEW).
    */
   readonly linkOnly?: boolean;
   /** Shared view (WS-VIEW-01): opens the hit in place instead of linking to DOC-02. */
@@ -116,6 +116,7 @@ export function DocumentExcerptPanel({
             page: to.page,
             documentHref: linkFor(workspaceId, hit, to),
             documentTitle: hit.document_title,
+            block: { id: to.blockId, revisionId: hit.revision_id },
           })
       : undefined;
   const jump = jumpInPlace ?? openPdfPage;

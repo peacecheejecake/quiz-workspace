@@ -46,6 +46,7 @@ import {
 import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
+import { useHoldAnswerGuard } from '@/lib/questions/answer-guard';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
 import { openQuestionPractice } from '@/lib/questions/practice-open-client';
 import {
@@ -397,6 +398,7 @@ export function PracticeViewer({
   const formId = useId();
   const resultRef = useRef<HTMLElement>(null);
   const outcomeId = work.outcome?.attempt_id ?? null;
+  useHoldAnswerGuard(questionId !== null && work.outcome === null);
   const submittedHere = useRef<string | null>(null);
   useEffect(() => {
     // The submit button leaves with the answer form: keep focus in the panel on the result. A
@@ -596,7 +598,8 @@ export function PracticeViewer({
         <div className={styles.body} data-screen-id={screenId}>
           {/* QSRC-01: requested as soon as the panel shows the question, in every state. */}
           <QuestionSourceButton source={source} />
-          <QuestionSourceDialog source={source} />
+          {/* The cropped region until this question was submitted (UX12-PDFPREVIEW). */}
+          <QuestionSourceDialog source={source} wholeDocument={work.outcome !== null} />
           {readOnly ? (
             <>
               <p className={styles.notice}>

@@ -174,7 +174,7 @@ export function MockQuestionDialog({
                   </p>
                 ) : null}
                 <QuestionSourceButton source={source} />
-                <QuestionSourceDialog source={source} aboveModals />
+                <QuestionSourceDialog source={source} aboveModals wholeDocument />
                 <QuestionBody
                   kind="revision"
                   type={question.question_type}
