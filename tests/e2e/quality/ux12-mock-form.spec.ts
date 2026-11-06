@@ -184,6 +184,8 @@ test('UX12-MOCKFORM-AC04 유형 is a multi-select checkbox group and none means 
   const types = picker.typeFilters(dialog);
   await expect(types.getByRole('checkbox')).toHaveCount(3);
   await types.getByRole('checkbox', { name: /^(객관식|multiple choice)$/i }).check();
+  // The narrow list has to arrive first: widening before it does never drops the two others.
+  await expect(picker.selected(dialog, 2)).toBeVisible();
   await types.getByRole('checkbox', { name: /^(서술형|essay)$/i }).check();
   await picker.expand(dialog, '챕터 없음').click();
   await expect(picker.questions(dialog)).toHaveCount(3);

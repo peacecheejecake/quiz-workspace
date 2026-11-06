@@ -65,9 +65,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Narrow screens: AI 질문 keeps its name but shows only its icon, so the line fits one row at 375px
-   with a three-digit count (UX12-HEADER-AC05). */
+/* Narrow screens: AI 질문 keeps its name but shows only its icon and the groups sit closer, so the
+   line fits one row at 375px with a three-digit count (UX12-HEADER-AC05). */
 @media (max-width: 479px) {
+  .toolbar {
+    column-gap: var(--space-1);
+  }
+
   .toolbar .askButton {
     width: var(--control-height-md);
     padding-inline: 0;

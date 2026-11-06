@@ -172,10 +172,17 @@ test(
 
     const opened = await openPanel(page);
     await expect(panelUi.submit(opened)).toBeVisible();
-    // In the page, so the two clicks fall inside the pause however busy the machine is.
+    // In the page, so the two clicks fall inside the pause however busy the machine is. The second
+    // waits for question 2 on screen: until that commit, 다음 문제 still points at question 2.
     await opened.getByRole('button', { name: NEXT }).evaluate(async (button: HTMLElement) => {
+      const title = () => {
+        const id = button.closest('[role="dialog"]')?.getAttribute('aria-labelledby');
+        return id ? document.getElementById(id)?.textContent : null;
+      };
       button.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      while (!title()?.includes('2번')) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
       button.click();
     });
 

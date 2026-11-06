@@ -34,7 +34,7 @@ Heatmap에 보이는 챕터의 header마다 `정리 노트` 옆에 `풀기`(`siz
 
 ### UX12-CHAPTERRUN-AC04
 
-시작하면 dialog가 닫히고 범위 풀이 panel이 `?practice=<run>&i=1`로 열린다. 닫기와 뒤로 가기는 홈으로 돌아오고 focus는 그 챕터의 `풀기`로 간다. 보기 권한 멤버도 시작하고 제출한다. 시도와 이력은 Heatmap 범위 풀이와 같다. 보관된 Workspace에서는 시작하고 볼 수 있지만 제출이 없다.
+시작하면 dialog가 닫히고 범위 풀이 panel이 `?practice=<run>&i=1`로 열린다. 닫기와 뒤로 가기는 홈으로 돌아오고 focus는 그 챕터의 `풀기`로 간다. 보기 권한 멤버도 시작하고 제출한다. 시도와 이력은 Heatmap 범위 풀이와 같다. 보관된 Workspace에서는 시작하고 볼 수 있지만 `제출`이 비활성이다(QVIEW-01-AC07).
 
 ### UX12-CHAPTERRUN-AC05
 

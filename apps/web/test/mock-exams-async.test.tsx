@@ -101,6 +101,22 @@ describe('mock run session routing', () => {
       true,
     );
   });
+
+  it('UX12-CHAPTERRUN-AC07 the home client passes 보기 섞기 on to a bank run', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return json({ id: RUN, workspace_id: WS, source: 'bank', mock_exam_id: null }, 201);
+      }),
+    );
+    const created = await homeRunClient(WS, null).create({ all: true }, true, 'key', true);
+    expect(created.ok).toBe(true);
+    expect(bodies).toEqual([
+      expect.objectContaining({ random_order: true, shuffle_options: true }),
+    ]);
+  });
 });
 
 const C1 = '11111111-1111-4111-8111-000000000001';
