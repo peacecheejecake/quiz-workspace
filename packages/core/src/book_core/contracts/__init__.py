@@ -24,6 +24,7 @@ from book_core.contracts.document import (
     RevisionStatus,
     Section,
     TableContent,
+    TableSpan,
     revision_content_hash,
 )
 from book_core.contracts.question import (
@@ -79,6 +80,7 @@ __all__ = [
     "SourceEvidence",
     "SourceLocation",
     "TableContent",
+    "TableSpan",
     "TextSpan",
     "ValidationIssue",
     "ValidationSeverity",

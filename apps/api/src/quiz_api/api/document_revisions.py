@@ -161,9 +161,19 @@ class BlockLocation(BaseModel):
     bbox: BoundingBox | None = Field(description="PDF points, origin top-left.")
 
 
+class TableCellSpan(BaseModel):
+    row: int
+    col: int
+    row_span: int
+    col_span: int
+
+
 class TableCells(BaseModel):
-    rows: list[list[str]]
+    rows: list[list[str]] = Field(description="Rectangular grid: merged cells repeat their text.")
     header_rows: int
+    spans: list[TableCellSpan] | None = Field(
+        default=None, description="Merged cells; null when none are known."
+    )
 
 
 class ContentBlock(BaseModel):
@@ -333,7 +343,9 @@ def _block(row: RowMapping) -> ContentBlock:
             for loc in row["provenance"]["locations"]
         ],
         heading_level=attributes.get("heading_level"),
-        table=TableCells(rows=table["rows"], header_rows=table.get("header_rows", 0))
+        table=TableCells(
+            rows=table["rows"], header_rows=table.get("header_rows", 0), spans=table.get("spans")
+        )
         if table is not None
         else None,
         caption_block_id=attributes.get("caption_block_id"),

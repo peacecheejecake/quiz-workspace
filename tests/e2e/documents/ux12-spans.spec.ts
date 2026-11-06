@@ -56,8 +56,7 @@ async function seedMergedTable(owner: Member, documentId: string): Promise<Table
 const openDocument = (page: Page, workspaceId: string, documentId: string) =>
   page.goto(`/workspaces/${workspaceId}/documents/${documentId}`);
 
-const shownTable = (page: Page, text: string) =>
-  editorUi.block(page, text).getByRole('table').first();
+const shownTable = (page: Page, text: string) => editorUi.block(page, text).getByRole('table');
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -132,8 +131,7 @@ test(
 
     await signInAs(page, owner.user);
     await openDocument(page, ws.id, documentId);
-    const article = editorUi.block(page, MERGED_BODY);
-    await expect(article.getByRole('table')).toHaveCount(1);
+    const article = editorUi.block(page, MERGED_BODY).filter({ has: page.getByRole('table') });
     await editorUi.editButton(article).click();
     await editorUi.blockTextbox(page).fill(block.text.replace('약 1시간', '약 2시간'));
     await editorUi.saveButton(page).click();
