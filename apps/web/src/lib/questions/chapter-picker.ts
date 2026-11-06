@@ -1,5 +1,13 @@
 import type { ChapterPickerNode } from '@quiz/ui';
 
+/** `documentId` of the Workspace chapters (UX12-CHAPTERADD): one more group, without a document. */
+export const WORKSPACE_CHAPTERS = 'workspace';
+
+/** An API `document_id`, where null is a Workspace chapter. */
+export function chapterGroupId(documentId: string | null): string {
+  return documentId ?? WORKSPACE_CHAPTERS;
+}
+
 export interface PickableChapter {
   readonly id: string;
   readonly title: string;

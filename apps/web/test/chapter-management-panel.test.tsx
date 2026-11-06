@@ -40,6 +40,7 @@ const TREE = {
       ],
     },
   ],
+  workspace: { title: 'Workspace 챕터', version: 0, chapters: [] },
 };
 const LIST = { items: [], chapters: [], targets: [] };
 
@@ -197,12 +198,15 @@ describe('ChapterManagementPanel', () => {
 });
 
 describe('without a book', () => {
-  it('explains that chapters need a book', async () => {
+  it('offers the Workspace chapters without a book', async () => {
+    const tree = { documents: [], workspace: TREE.workspace };
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => json(url.endsWith('/chapter-tree') ? { documents: [] } : LIST)),
+      vi.fn(async (url: string) => json(url.endsWith('/chapter-tree') ? tree : LIST)),
     );
     mount();
-    expect(await screen.findByText(/챕터를 관리할 교재가 없습니다/)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Workspace 챕터' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '챕터 추가' })).toBeTruthy();
+    expect(screen.queryByText(/교재 PDF를 먼저/)).toBeNull();
   });
 });

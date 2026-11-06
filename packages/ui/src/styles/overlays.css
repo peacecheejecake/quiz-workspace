@@ -845,6 +845,31 @@ html body[data-scroll-locked] {
     color: var(--color-text-secondary);
   }
 
+  /* 새 챕터 stays under the list: only the list scrolls. */
+  > .create {
+    flex: none;
+    width: 100%;
+  }
+
+  > .createForm {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-2);
+
+    > .createActions {
+      display: flex;
+      gap: var(--space-2);
+      justify-content: flex-end;
+    }
+
+    > .createError {
+      margin: 0;
+      color: var(--color-danger);
+      font-size: var(--font-size-label);
+    }
+  }
+
   > .tree > .row {
     display: flex;
     align-items: center;

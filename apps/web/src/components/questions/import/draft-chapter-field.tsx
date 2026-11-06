@@ -9,7 +9,7 @@
 // Every draft has one, and a real import has hundreds of drafts over a book outline of hundreds
 // of chapters: `ChapterPicker` renders the tree only while open, and all drafts share one `nodes`
 // array (QIMP-REVIEW-SCALE: a closed Radix Select with every option took the review page to >3 GB).
-import { ChapterPicker, type ChapterPickerNode } from '@quiz/ui';
+import { ChapterPicker, type ChapterCreateResult, type ChapterPickerNode } from '@quiz/ui';
 import {
   chapterHint,
   NO_DRAFT_CHAPTER,
@@ -28,6 +28,8 @@ export interface DraftChapterFieldProps {
   readonly readOnly: boolean;
   readonly disabled?: boolean;
   readonly onChange: (chapterId: string | null) => void;
+  /** `새 챕터`, near the chapter chosen now (editors only: `readOnly` hides the picker). */
+  readonly onCreate: (title: string, nearChapterId: string | null) => Promise<ChapterCreateResult>;
 }
 
 export function DraftChapterField({
@@ -38,6 +40,7 @@ export function DraftChapterField({
   readOnly,
   disabled = false,
   onChange,
+  onCreate,
 }: DraftChapterFieldProps) {
   const hint = chapterHint(info, options.length);
   if (readOnly) {
@@ -61,6 +64,7 @@ export function DraftChapterField({
         value={info.chapter?.id ?? NO_DRAFT_CHAPTER}
         disabled={disabled}
         onValueChange={(value) => onChange(value === NO_DRAFT_CHAPTER ? null : value)}
+        onCreate={(title) => onCreate(title, info.chapter?.id ?? null)}
         {...(hint ? { description: hint } : {})}
       />
     </div>

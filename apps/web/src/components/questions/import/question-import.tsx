@@ -68,7 +68,12 @@ import {
   type SelectedImportDraft,
   type ReviewDraft,
 } from '@/lib/questions/drafts';
-import { chapterPickerNodes } from '@/lib/questions/chapter-picker';
+import { useChapterCreator, type CreatedChapter } from '@/lib/chapters/use-chapter-creator';
+import {
+  chapterGroupId,
+  chapterPickerNodes,
+  WORKSPACE_CHAPTERS,
+} from '@/lib/questions/chapter-picker';
 import { abortableSleep } from '@/lib/documents/job-events';
 import type { QuestionFormValues } from '@/lib/questions/form';
 import {
@@ -217,12 +222,25 @@ export function QuestionImport({
           id: o.id,
           title: o.title,
           level: o.level,
-          documentId: o.document_id,
+          documentId: chapterGroupId(o.document_id),
           documentTitle: o.document_title,
         })),
       ),
     [chapterOptions],
   );
+  const addChapterOption = useCallback((chapter: CreatedChapter) => {
+    setChapterOptions((current) => [
+      ...current,
+      {
+        id: chapter.id,
+        title: chapter.title,
+        level: chapter.level,
+        document_id: chapter.documentId === WORKSPACE_CHAPTERS ? null : chapter.documentId,
+        document_title: chapter.documentTitle,
+      },
+    ]);
+  }, []);
+  const createChapter = useChapterCreator(workspaceId, addChapterOption);
   const [missingPrevious, setMissingPrevious] = useState(initialMissingPrevious);
   const [confirmingReextract, setConfirmingReextract] = useState(false);
   const [archiving, setArchiving] = useState<DraftPrevious | null>(null);
@@ -670,6 +688,7 @@ export function QuestionImport({
               readOnly={!canEdit || draft.publishedQuestionId !== null}
               disabled={publishing || savingChapter.has(draft.id)}
               onChange={(chapterId) => void changeChapter(draft, chapterId)}
+              onCreate={createChapter}
             />
           ) : null}
         </>
@@ -679,6 +698,7 @@ export function QuestionImport({
       canEdit,
       changeChapter,
       chapterNodes,
+      createChapter,
       chapterOptions,
       publishing,
       reextracted,
