@@ -122,7 +122,7 @@ workspace
  │                                                              ├── mock_exam_practice_session
  │                                                              └── mock_exam_attempt (모의고사 풀이, Heatmap과 무관)
  ├── practice_run (사용자별 범위 풀이 묶음, bank|mock; QVIEW)
- ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, 공유·Fork 제외)
+ ├── user_highlight (사용자별 하이라이트: 노트 버전·문제 해설·AI 해설; UX9, Fork 제외, 공유는 Owner가 켠 링크의 Owner 것만 읽기, UX12-SHARE)
  ├── ask_conversation ── ask_message ── ask_message_source (사용자별, ASK)
  ├── llm_feature_usage (ASK·AIEXPL 호출 usage, 내용 없음)
  ├── activity_event

@@ -9,8 +9,9 @@
 | 링크 공유 | OFF; Workspace Owner만 발급·회수·만료·재발급 가능 |
 | 링크 열람 | 유효 링크를 받은 비로그인 사용자도 조회 허용; 로그인 불필요 |
 | Fork | OFF; 링크 단위 `allow_fork` 설정을 Owner만 켤 수 있음 |
-| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌, 현재 발행 revision의 문서 요약과 장별 최신 정리 노트(DOCSUM-SPEC 2026-10-29, §8), 발행 문제의 이미 만든 최신 AI 해설(ASK-SPEC 사용자 결정 2026-11-01, §10)과 이미 저장된 관련 본문(사용자 결정 2026-11-01, §10) |
-| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기, owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록, 전문 텍스트 내보내기 파일, 이전 revision 요약·이전 버전 노트·요약/노트 생성 상태·오류·비용, 모의고사·범위 풀이 묶음(MOCK-SPEC 2026-11-01, §9), 구성원의 AI 질문 대화, AI 해설 생성 상태·이전 버전·비용(ASK-SPEC, §10) |
+| 열람 범위 | Workspace 명세, 발행된(PUBLISHED) PDF/교정 텍스트/목차, 발행된 문제·정답·해설, 범위가 제한된 검색/발췌, 현재 발행 revision의 문서 요약과 장별 최신 정리 노트(DOCSUM-SPEC 2026-10-29, §8), 발행 문제의 이미 만든 최신 AI 해설(ASK-SPEC 사용자 결정 2026-11-01, §10)과 이미 저장된 관련 본문(사용자 결정 2026-11-01, §10). 요약·정리 노트·AI 해설은 링크마다 뺄 수 있다(§12) |
+| 선택 공개 | 링크 옵션 `include_owner_records`를 켠 링크에 한해 Owner 본인의 풀이 이력과 하이라이트를 읽기 전용으로 공개(기본 꺼짐, 사용자 결정 2026-11-06, §12) |
+| 비공개 범위 | 초안, 미발행 revision, 개인 풀이·즐겨찾기·다시 풀기(§12 옵션을 켠 링크의 Owner 풀이 이력은 예외, 즐겨찾기·다시 풀기와 다른 구성원의 기록은 항상 비공개), owner 프로필, 공유 링크 비밀값, API 키, 관리·작업·활동 기록, 전문 텍스트 내보내기 파일, 이전 revision 요약·이전 버전 노트·요약/노트 생성 상태·오류·비용, 모의고사·범위 풀이 묶음(MOCK-SPEC 2026-11-01, §9), 구성원의 AI 질문 대화, AI 해설 생성 상태·이전 버전·비용(ASK-SPEC, §10) |
 | 편집 | 링크만 가진 viewer는 업로드·편집·문제 생성·답안 제출·즐겨찾기·삭제·공유 관리 전부 불가 |
 | 삭제·보관 | Archive 후 공유 read 유지(Owner revoke 가능); 삭제 요청 이후 공유와 Fork 즉시 거부 |
 | Fork 결과 | 현재 published snapshot의 독립 복제; 원본과 자동 동기화 없음; 각 문서·문제 식별자는 새로 발급 |
@@ -34,7 +35,7 @@
 | Published 문서·문제·원문 검색 읽기 | ✅ | ✅ | ✅ | ✅ |
 | 원본 수정/문제 풀이 저장 | ✅ | ❌ | ❌ | ❌ |
 | 공유 링크 설정·철회 | ✅ | ❌ | ❌ | ❌ |
-| 개인 상태·이력 조회 | 본인 데이터 | ❌ | ❌ | ❌ |
+| 개인 상태·이력 조회 | 본인 데이터 | ❌ (§12 옵션을 켠 링크는 Owner의 풀이 이력·하이라이트만 읽기) | ❌ (같음) | ❌ (같음) |
 | 독립 Fork 요청 | Owner 별도 선택 | ❌ | ❌ | ✅ |
 | Fork 결과 편집 | — | — | — | 본인 새 Workspace만 |
 
@@ -47,6 +48,10 @@ workspace_share_links(
   created_by uuid not null references auth.users(id),
   token_digest bytea not null,
   allow_fork boolean not null default false,
+  include_notes boolean not null default true,
+  include_ai_explanations boolean not null default true,
+  include_summary boolean not null default true,
+  include_owner_records boolean not null default false,
   expires_at timestamptz,
   revoked_at timestamptz,
   created_at timestamptz not null,
@@ -76,13 +81,13 @@ workspace_forks(
 Owner 전용:
 - `POST /api/v1/workspaces/{id}/share-links`: 비밀 링크 발급(`secret` + `share_url` 반환; `idempotency_keys` 재실행 응답에는 `secret: null`, `share_url: null`); 기본 Fork OFF
 - `GET /api/v1/workspaces/{id}/share-links`: 링크 목록 조회(원시 `secret`·`token_digest` 미포함; 철회되지 않은 링크는 서버 키로 검증된 `share_url` 포함, 철회·복원 불가 시 `null`)
-- `PATCH /api/v1/workspaces/{id}/share-links/{linkId}`: Fork 허용·만료 수정(철회되지 않은 링크의 `share_url` 포함)
+- `PATCH /api/v1/workspaces/{id}/share-links/{linkId}`: Fork 허용·만료·공개 범위(§12) 수정(철회되지 않은 링크의 `share_url` 포함)
 - `POST /api/v1/workspaces/{id}/share-links/{linkId}/revoke`: 접근 즉시 철회(`share_url: null`)
-- `POST /api/v1/workspaces/{id}/share-links/{linkId}/rotate`: 기존 철회 후 새 비밀 링크 발급
+- `POST /api/v1/workspaces/{id}/share-links/{linkId}/rotate`: 기존 철회 후 새 비밀 링크 발급(Fork·만료·공개 범위 옵션을 옮김)
 
 Shared viewer (공유 session에만 허용):
 - `POST /api/v1/shared/{shareId}/sessions`: fragment 비밀값을 읽기 전용 세션으로 교환
-- `GET /api/v1/shared/{shareId}`: 발행 상태 Workspace·목차·Fork 정책
+- `GET /api/v1/shared/{shareId}`: 발행 상태 Workspace·목차·Fork 정책·공개 범위 옵션(§12)
 - `GET /api/v1/shared/{shareId}/documents/{docId}`: 발행 문서
 - `GET /api/v1/shared/{shareId}/documents/{docId}/pdf`: private PDF 인증 접근
 - `POST /api/v1/shared/{shareId}/search`: 공개 문서 범위의 제한된 검색
@@ -94,6 +99,8 @@ Shared viewer (공유 session에만 허용):
 
 - `GET /api/v1/shared/{shareId}/questions/{questionId}/ai-explanation`: 발행 문제 active revision의 최신 성공 AI 해설(없으면 404, §10)
 - `GET /api/v1/shared/{shareId}/questions/{questionId}/related-sources`: 발행 문제 active revision·현재 교재 fingerprint의 저장된 관련 본문(없으면 404, 계산하지 않음, §10; 사용자 결정 2026-11-01)
+- `GET /api/v1/shared/{shareId}/owner-attempts`: Owner의 풀이 이력(`include_owner_records`가 꺼지면 404, §12)
+- `GET /api/v1/shared/{shareId}/owner-highlights`: Owner의 하이라이트(`include_owner_records`가 꺼지면 404, §12)
 
 Fork (공유 session + **Supabase 사용자 JWT** 동시 필요):
 - `POST /api/v1/shared/{shareId}/forks`: 이름·멱등 키; 202 Accepted + job id
@@ -102,10 +109,10 @@ Fork (공유 session + **Supabase 사용자 JWT** 동시 필요):
 ## 6. 비동기 Fork 처리
 
 1. 수신자는 유효한 공유 페이지에서 Fork ON 정책을 확인하고 로그인한다. 로그인 후에도 share session과 `allow_fork`를 서버에서 다시 검증한다.
-2. 서버는 복제 권한·용량·쿼터·멱등성을 확인하고 원본의 현재 **published revision IDs**를 immutable snapshot manifest에 고정한다.
+2. 서버는 복제 권한·용량·쿼터·멱등성을 확인하고 원본의 현재 **published revision IDs**와 링크의 포함 옵션(§12, `include`)을 immutable snapshot manifest에 고정한다.
 3. `workspace_forks(PENDING)`과 Celery job을 생성한다. Worker는 새 Workspace를 비공개 상태로 만들고 PDF·문서·목차·정답·해설·문제들을 별도 storage prefix와 새로운 ID로 복제한다.
-4. 개인별 풀이, Favorite/Retry, Owner 활동 로그, 공유 설정, draft는 제외한다. 문제 lineage와 source references는 새 ID로 매핑한다.
-5. 커밋 직전 링크 revoke/expire 및 allow_fork OFF 여부를 다시 검사한다. 도중 철회되면 Fork는 CANCELLED하고 임시 DB·Storage 복제물을 청소한다.
+4. 개인별 풀이, Favorite/Retry, 하이라이트, Owner 활동 로그, 공유 설정, draft는 제외한다(§12 `include_owner_records`를 켠 링크도 같다). 문제 lineage와 source references는 새 ID로 매핑한다.
+5. 커밋 직전 링크 revoke/expire 및 allow_fork OFF 여부를 다시 검사한다. 도중 철회되면 Fork는 CANCELLED하고 임시 DB·Storage 복제물을 청소한다. 포함 옵션도 다시 읽어, 고정한 값과 지금 값이 모두 켜진 항목만 복사한다(§12; 옵션 변경은 취소 사유가 아니다).
 6. 성공 시에만 target Workspace를 ACTIVE로 공개하며 `COMPLETED` 기록. 완료된 복제본은 원본 링크 철회/삭제의 영향을 받지 않는다.
 
 ## 7. Screen-first E2E 및 릴리스
@@ -172,8 +179,27 @@ AC 5+6+6=17개를 각각 Playwright로 먼저 RED 테스트로 작성한다. 검
 
 | 기능 | 구성원 | 공유 링크 게스트 | Fork |
 |---|---|---|---|
-| 하이라이트·`내 하이라이트` ([HILITE-01](screens/highlights.md)) | 자기 것만(다른 구성원 것은 보이지 않음) | ❌ — 공유 API 응답에 하이라이트 필드 없음, 선택 메뉴 없음 | ❌ — `user_highlights`를 복제하지 않음(개인 기록, `question_user_states`와 같은 범위) |
+| 하이라이트·`내 하이라이트` ([HILITE-01](screens/highlights.md)) | 자기 것만(다른 구성원 것은 보이지 않음) | ❌ — 공유 API 응답에 하이라이트 필드 없음, 선택 메뉴 없음. 예외: `include_owner_records`를 켠 링크는 Owner의 하이라이트만 `/owner-highlights`로 읽기(§12) | ❌ — `user_highlights`를 복제하지 않음(개인 기록, `question_user_states`와 같은 범위) |
 | 챕터 재분배 ([CHREDIST-01](screens/chapter-redistribution.md)) | 편집 권한 | ❌ (공유 router에 없음, 404) | 사본의 문제는 `chapter_id`·`chapter_source`를 그대로(재매핑) 가짐, 이력 행(`question_chapter_changes`)은 복제하지 않음 |
 | 정리 노트 검색·각주 미리보기 ([CHNOTE-02](screens/chapter-note-tools.md)) | ✅ | ✅ — 미리보기는 `GET /shared/{shareId}/questions/{questionId}/preview`(발문·보기만, 발행 범위 문제만) | 사본 노트에 같은 도구 |
 
 - 챕터를 옮겨도 공유 정리 노트의 출처 일치 판정(§8)은 바뀌지 않는다(인용 문제의 상태·revision이 그대로).
+
+## 12. 공유 범위 선택·Owner 기록 읽기 전용 (UX12-SHARE, 사용자 결정 2026-11-06)
+
+화면 AC는 [UX12-SHARE](screens/ux12-share-scope.md)에 있다. 2026-11-02 결정(하이라이트·풀이는 게스트에게 없음, §1·§3·§11)을 옵션을 켠 링크에 한해 개정한다. 옵션을 끈 링크는 이전 결정 그대로다.
+
+| 옵션 | 기본값 | 게스트 | Fork |
+|---|:---:|---|---|
+| `include_notes` | 켜짐 | 끄면 노트 route 404, 카드 없음 | 끄면 노트 복사 없음 |
+| `include_ai_explanations` | 켜짐 | 끄면 AI 해설 route 404, 영역 없음 | 끄면 AI 해설 복사 없음 |
+| `include_summary` | 켜짐 | 끄면 요약 route 404, 버튼 없음 | 끄면 요약과 자동 갱신 설정(`summary_enabled_at`) 복사 없음 |
+| `include_owner_records` | 꺼짐 | 켜면 Owner의 풀이 이력·하이라이트 읽기. 끄면 404, 카드 없음 | 항상 복사 없음 |
+
+- **권한:** 옵션은 Owner만 바꾼다(PATCH `workspace.share.manage`). 보관 Workspace에서도 정책 수정으로 허용한다. 재발급은 네 옵션을 옮긴다. 기존 링크는 기본값으로 지금과 같게 동작한다.
+- **검사 위치:** 모든 해당 공유 route가 요청마다 DB의 링크 값을 읽고, 꺼지면 없는 id와 같은 본문의 404를 준다. 화면에서 숨기는 것은 편의일 뿐 API 검사가 경계다. 관련 본문(`related-sources`)과 문제 미리보기(`preview`)는 옵션 대상이 아니다. 둘 다 원문과 발행 문제에서 나오고 AI 생성물이 아니기 때문이다.
+- **Fork:** `POST /shared/{id}/forks`가 세 옵션을 manifest `include`(`notes`, `ai_explanations`, `summary`)에 고정하고, `worker_fork_commit`과 복사 trigger가 잠근 링크의 현재 값과 AND 한다. 옵션 키가 없는 이전 manifest는 고정값을 켜짐으로 읽는다(그래도 현재 값은 검사한다). 진행 중 Fork에서 옵션을 꺼도 취소되지 않고 그 항목만 빠지며, 도중에 켜도 고정값이 꺼져 있으면 복사되지 않는다.
+- **Owner 기록의 Owner:** `workspaces.owner_id`다. 링크를 만든 사람이나 다른 구성원의 기록은 읽지 않는다. 클라이언트가 사용자를 고를 수 없다.
+- **풀이 이력(`/owner-attempts`):** 확정되어 게스트가 지금 읽을 수 있는 문제의 풀이만, 최신순. 문제 id·번호·발문 앞 40자·유형·결과(`correct`/`incorrect`/`pending`)·제출 시각만 준다. 제출 답안, 표시 순서, 풀이 묶음 id, revision id는 주지 않는다. 이전 revision의 보기 내용이나 Owner가 쓴 답을 공개 범위로 끌어오지 않기 위해서다. 모의고사 풀이(`mock_exam_attempts`)는 없다(§9).
+- **하이라이트(`/owner-highlights`):** 살아 있는 행만, 최신순. 인용문·색·만든 시각과 대상(문제 번호·발문 앞 40자, 또는 장 이름)만 준다. 해설 하이라이트는 확정 문제의 현재 해설에서 다시 찾은 것(`exact`·`relocated`)만, 노트 하이라이트는 `include_notes`가 켜져 있고 그 장에서 게스트가 지금 읽는 노트 버전의 것만 준다. 이전 내용의 인용문은 공개 범위 밖이다(§8과 같은 이유).
+- **읽기 전용:** 공유 세션에는 쓰기 route가 없다. 게스트 요청은 Owner 기록을 만들거나 바꾸지 않는다. 응답에 Owner의 id·이름·이메일이 없고, 화면은 `공유자`로만 부른다.
