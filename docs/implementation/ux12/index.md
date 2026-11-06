@@ -280,7 +280,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HILITE-1 | 1 | 완료 | 652666a9 · Codex 지적 없음, E2E 34·Vitest web 1367·ui 452 GREEN |
 | DOCS-1 | 1 | 완료 | b7cc79fb · Codex 지적 없음, Vitest web 1375·ui 446·tokens 186, E2E 14 GREEN |
 | PLAY-1 | 1 | 완료 | d9be06c1 · Codex 지적 없음, Vitest 20·E2E 44 GREEN |
-| CHAPTER-2 | 1 | 대기 | HOME-1 뒤(`packages/ui/src/questions` 공유) |
 | DESIGN-1 | 2 | 완료 | ee5864fa · Codex P2(CI phase)는 merge에서 반영, 경계 규칙·hover·--control-gap, E2E 22·Vitest GREEN |
 | VIEW-1 | 2 | 완료 | c1f6235f · Codex P2(CI phase)는 merge에서 반영, 탭 시 비활성 이유 토스트, E2E 14·Vitest 138 GREEN |
 | VIEW-2 | 2 | 완료 | 645934b7 · Codex P2(CI phase)는 merge에서 반영, 제출 후 focus 표시 추가, E2E 78·Vitest GREEN |
