@@ -17,6 +17,7 @@ Not auto-gradable → `pending`: the user grades it themself (`self-grade`).
 
 from __future__ import annotations
 
+import hashlib
 import random
 import re
 import secrets
@@ -34,6 +35,13 @@ _WHITESPACE = re.compile(r"\s+")
 
 def new_shuffle_seed() -> int:
     return secrets.randbits(_SEED_BITS)
+
+
+def run_option_seed(run_seed: int, position: int) -> int:
+    """The option shuffle seed of a run position: fixed by the run, so a position shows one order
+    before and after its session opens (UX12-CHAPTERRUN-C03). Fits `shuffle_seed`."""
+    digest = hashlib.sha256(f"{run_seed}:{position}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") >> (64 - _SEED_BITS)
 
 
 def shuffled_option_ids(option_ids: Sequence[str], seed: int) -> list[str]:

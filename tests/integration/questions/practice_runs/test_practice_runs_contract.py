@@ -29,6 +29,7 @@ from typing import Any
 
 import psycopg
 import pytest
+from quiz_api.practice_grading import run_option_seed, shuffled_option_ids
 from quiz_api.settings import LOCAL_CORS_ORIGINS
 
 pytestmark = pytest.mark.infra
@@ -463,6 +464,49 @@ def test_c02_order_is_heatmap_or_the_stored_seed_shuffle_and_never_changes(seed:
     run = owner.ok("GET", f"/practice-runs/{ordered['id']}")
     assert not (_keys(run) & ({"item_ids", "items", "stem", "options"} | ANSWER_KEYS))
     assert set(run["summary"]) >= {"correct", "incorrect", "pending", "skipped"}
+
+
+def test_ux12_chapterrun_c03_a_shuffled_run_fixes_each_positions_options(seed: Any) -> None:
+    r = Range(seed, "shuffle")
+    owner = r.owner
+    plain = created(owner, r.ws_id, bank({"chapter_ids": [r.ch1]}))
+    assert plain["shuffle_options"] is False
+    run = created(owner, r.ws_id, bank({"chapter_ids": [r.ch1]}, shuffle_options=True, seed=7))
+    assert run["shuffle_options"] is True
+    assert owner.ok("GET", f"/practice-runs/{run['id']}")["shuffle_options"] is True
+
+    before = item(owner, run["id"], 1)
+    shown = [o["id"] for o in before["options"]]
+    canonical = [o["id"] for o in item(owner, plain["id"], 1)["options"]]
+    assert shown == shuffled_option_ids(canonical, run_option_seed(7, 1))
+
+    # The session stores the order the item promised, and a resumed one keeps it.
+    res = run_session(owner, before["question_id"], run["id"], 1)
+    session = owner.ok_response(res, "POST", "run session", (201,))
+    assert session["displayed_option_ids"] == shown
+    assert [o["id"] for o in item(owner, run["id"], 1)["options"]] == shown
+    res = run_session(owner, before["question_id"], run["id"], 1)
+    resumed = owner.ok_response(res, "POST", "run session", (201,))
+    assert resumed["displayed_option_ids"] == shown
+
+    # Grading stays on stable ids, wherever the correct option is shown.
+    question = next(q for q in r.confirmed if q["id"] == before["question_id"])
+    owner.ok(
+        "POST",
+        f"/practice-sessions/{session['id']}/submit",
+        {"selected_option_ids": question["revision"]["correct_option_ids"]},
+    )
+    done = item(owner, run["id"], 1)
+    assert done["attempt"]["result"] == "correct"
+    assert [o["id"] for o in done["options"]] == shown
+    assert admin(
+        "select displayed_option_ids from public.question_attempts where practice_session_id = %s",
+        (session["id"],),
+    ) == [(shown,)]
+
+    # A mock run has its own question copies and refuses the setting.
+    body = {"source": "mock", "mock_exam_id": RANDOM_ID, "range": {"all": True}}
+    assert start(owner, r.ws_id, {**body, "shuffle_options": True}).status_code == 422
 
 
 # ---------------------------------------------------------------------------------------------

@@ -7936,6 +7936,10 @@
             "title": "Seed",
             "type": "integer"
           },
+          "shuffle_options": {
+            "title": "Shuffle Options",
+            "type": "boolean"
+          },
           "source": {
             "enum": [
               "bank",
@@ -7964,6 +7968,7 @@
           "source",
           "mock_exam_id",
           "random_order",
+          "shuffle_options",
           "seed",
           "total",
           "answered",
@@ -8024,6 +8029,12 @@
             ],
             "description": "Shuffle seed; the server picks one if absent.",
             "title": "Seed"
+          },
+          "shuffle_options": {
+            "default": false,
+            "description": "Shuffle each MCQ's options for this run (bank only).",
+            "title": "Shuffle Options",
+            "type": "boolean"
           },
           "source": {
             "enum": [
