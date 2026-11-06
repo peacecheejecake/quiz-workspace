@@ -69,7 +69,7 @@ import { homeBackgroundUi, homeDialogUi, isBlocked } from '../fixtures/ux9-pages
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-const HOVER_SCALE = 1.18;
+const HOVER_SCALE = 1.3;
 const BOOK = book('book-ko');
 const CH1 = section(BOOK, 'ch1'); // "1장 물의 순환"
 
@@ -253,7 +253,7 @@ test(
 );
 
 test(
-  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.18x with a preview and no grid shift',
+  'QOV-01-AC04 hover and keyboard focus scale only the marker 1.3x with a preview and no grid shift',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const s = await seed(workspaceFactory, 'qov01-ac04', 3);
@@ -521,6 +521,8 @@ test(
     // Space opens it too.
     await page.keyboard.press('Space');
     await expect(thirdPanel).toBeVisible();
+    // Closing before the session opens cancels it, and only an opened session marks the view.
+    await expect(panelUi.submit(thirdPanel)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(third).toBeFocused();
     expect((await overviewItem(s.owner, s.workspaceId, q(s, 3).id)).status).toBe('viewed');

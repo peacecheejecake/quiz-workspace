@@ -28,6 +28,7 @@ import {
   QUESTION_DOT_STATUSES,
   questionStatusLabels,
   questionTypeLabels,
+  focusQuestionDotQuietly,
   useToast,
   type HeatmapChapter,
   type QuestionDotStatus,
@@ -174,7 +175,8 @@ function dotOf(root: ParentNode, questionId: string): HTMLElement | null {
  * Focus after the practice panel closes: the dot that opened it; if that dot left the heatmap
  * (filtered out meanwhile, or a deep link outside the filters), the nearest surviving dot in the
  * heatmap order the panel was opened on, else the heatmap's tab stop, else `fallback` (a stable
- * control, e.g. the search box, for an empty heatmap). Returns the focused element.
+ * control, e.g. the search box, for an empty heatmap). Never opens the dot's preview. Returns the
+ * focused element.
  */
 export function focusAfterPanel(
   root: ParentNode,
@@ -205,7 +207,7 @@ export function focusAfterPanel(
     root.querySelector<HTMLElement>('[data-question-id][tabindex="0"]') ??
     root.querySelector<HTMLElement>('[data-question-id]') ??
     fallback;
-  target?.focus();
+  if (target) focusQuestionDotQuietly(target);
   return target;
 }
 
