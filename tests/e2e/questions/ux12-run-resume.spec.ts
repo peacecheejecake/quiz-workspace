@@ -106,8 +106,8 @@ test(
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id, 'panel=mock-exams&mock=new'));
     const form = mockUi.dialog(page);
-    await mockUi.next(form).click();
     await rangePickerUi.selectAll(form).check();
+    await mockUi.next(form).click();
     await form.getByRole('button', { name: /^(시작|start)$/i }).click();
     const panel = runUi.panel(page);
     await expect(runUi.progress(panel)).toBeVisible();

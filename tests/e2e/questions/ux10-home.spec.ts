@@ -141,6 +141,7 @@ test(
     }
     await expect(dialog.getByText(/조건에 맞는 문제가 없습니다/)).toBeVisible();
     await expect(dialog.getByRole('checkbox', { name: /^전체 선택|select all/i })).toHaveCount(0);
-    await expect(dialog.getByRole('button', { name: /^(시작|start)$/i })).toBeDisabled();
+    // The range is the first step since MOCKUX-8: an empty one never reaches 시작.
+    await expect(dialog.getByRole('button', { name: /^(다음|next)$/i })).toBeDisabled();
   },
 );
