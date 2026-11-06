@@ -15,6 +15,7 @@
 | UX12-MOCKFORM | 모의고사 만들기·설정 바꾸기 화면 | 모의고사 dialog | [ux12-mock-form.md](ux12-mock-form.md) |
 | UX12-MOCKFORM2 | 모의고사 만들기 단계 순서와 문구 | 모의고사 dialog | [ux12-mock-form-order.md](ux12-mock-form-order.md) |
 | UX12-MOCKSHUFFLE | 모의고사 보기 섞기 실행 시점 | 모의고사 dialog, 풀이 패널 | [ux12-mock-shuffle.md](ux12-mock-shuffle.md) |
+| UX12-RESULTTABLE | 풀이 결과 표 | 풀이 패널 결과 단계 | [ux12-result-table.md](ux12-result-table.md) |
 | UX12-CONTROLS | 버튼 경계·hover·간격 | 공통 UI | [ux12-controls.md](ux12-controls.md) |
 | UX12-ASK | AI 질문 목록·대화 화면 재구성 | AI 질문 panel | [ux12-ask.md](ux12-ask.md) |
 | UX12-ASKMD | AI 답변 본문의 표와 Markdown | AI 질문 panel | [ux12-ask-markdown.md](ux12-ask-markdown.md) |

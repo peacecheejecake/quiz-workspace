@@ -672,11 +672,12 @@ test(
     ).toBeVisible();
     const rows = runUi.resultRows(panel);
     await expect(rows).toHaveCount(5);
-    await expect(nth(await rows.all(), 0).getByLabel(/정답|correct/i)).toHaveText('O');
-    await expect(nth(await rows.all(), 1).getByLabel(/오답|incorrect/i)).toHaveText('X');
-    await expect(nth(await rows.all(), 2)).toContainText(/건너뜀|skipped/i);
-    await expect(nth(await rows.all(), 3)).toContainText(RESULT_TEXT.pending);
-    await expect(nth(await rows.all(), 4)).toContainText(RESULT_TEXT.pending);
+    const mark = (i: number, name: RegExp) => rows.nth(i).getByRole('cell', { name });
+    await expect(mark(0, /맞음|correct/i)).toHaveText('O');
+    await expect(mark(1, /틀림|incorrect/i)).toHaveText('X');
+    await expect(mark(2, /건너뜀|skipped/i)).toHaveText('–');
+    await expect(mark(3, RESULT_TEXT.pending)).toHaveText('대기');
+    await expect(mark(4, RESULT_TEXT.pending)).toHaveText('대기');
 
     // A result row reopens that position read-only.
     await rows.nth(1).getByRole('button').first().click();

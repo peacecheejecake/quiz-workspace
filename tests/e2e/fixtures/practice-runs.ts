@@ -564,7 +564,8 @@ export const runUi = {
     ),
   resultList: (panel: Locator) =>
     panel.getByRole('list', { name: /문제별 결과|results by question|results/i }),
-  resultRows: (panel: Locator) => runUi.resultList(panel).locator('section > ul > li'),
+  /** One position of the 결과 표: drawn as a column, exposed as a row (UX12-RESULTTABLE). */
+  resultRows: (panel: Locator) => runUi.resultList(panel).getByRole('row'),
   restart: (panel: Locator) =>
     panel.getByRole('button', { name: /^(처음부터 다시|start over|restart)$/i }),
 };

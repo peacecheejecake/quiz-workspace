@@ -198,7 +198,7 @@ test('UX10-PLAY-AC05 groups results and returns to the same run position', async
   const panel = page.getByRole('dialog', { name: /풀이 결과|results/i });
   const group = panel.getByRole('list', { name: /문제별 결과/ });
   await expect(group.getByRole('heading', { name: /장 없음/ })).toBeVisible();
-  await expect(group.getByText(/건너뜀/).first()).toBeVisible();
+  await expect(group.getByRole('cell', { name: /건너뜀/ }).first()).toBeVisible();
   await group.getByRole('button', { name: /2번/ }).click();
   await expect(page).toHaveURL(new RegExp(`practice=${run.id}.*i=2`));
   await expect(page.getByText(/results-2 문제/)).toBeVisible();

@@ -200,6 +200,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-MOCKFORM2.0': ['UX12-MOCKFORM2'],
   // UX12 MOCKUX-9: 보기 섞기 is drawn per run; 보기 섞기 only saves at once, without a job.
   'UX12-MOCKSHUFFLE.0': ['UX12-MOCKSHUFFLE'],
+  // UX12 MOCKUX-14: the results step's table of numbers and O/X marks.
+  'UX12-RESULTTABLE.0': ['UX12-RESULTTABLE'],
   // UX12 MOCKUX-4: a Heatmap chapter's 풀기, a bank run of the whole chapter with two options.
   'UX12-CHAPTERRUN.0': ['UX12-CHAPTERRUN'],
   // UX12 MOCKUX-7: the viewer's unfinished bank runs in the mock exam list.
