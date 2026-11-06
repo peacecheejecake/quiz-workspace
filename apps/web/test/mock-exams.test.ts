@@ -11,6 +11,8 @@ import {
 } from '../src/components/questions/mock-exams/mock-exam-client';
 import {
   canPractise,
+  cappedCount,
+  chapterDefaultTitle,
   checkOptions,
   configFrom,
   failureText,
@@ -367,5 +369,64 @@ describe('mock exam API and run', () => {
         rubric: null,
       }),
     ).toMatchObject({ question_revision_id: 'r', result: 'correct', explanation: '해설' });
+  });
+});
+
+describe('UX12-MOCKFORM2 defaults taken from the chosen range', () => {
+  const question = (id: string) => ({ id, number: id, preview: id, type: 'MCQ' as const });
+  const group = (key: string, title: string, ...ids: string[]): RangeGroup => ({
+    key,
+    title,
+    questions: ids.map(question),
+  });
+  const groups = [
+    group('c1', '1장 물의 순환', 'a', 'b'),
+    group('c2', '2장 정수 처리', 'c'),
+    group('c3', '3장 수질', 'd'),
+    group('none', '챕터 없음', 'e'),
+  ];
+  const fallback = '모의고사 3';
+  const title = (...ids: string[]) => chapterDefaultTitle(groups, new Set(ids), fallback);
+
+  it('names one chapter by its title, also when only part of it is chosen', () => {
+    expect(title('a', 'b')).toBe('1장 물의 순환');
+    expect(title('b')).toBe('1장 물의 순환');
+  });
+
+  it('names several chapters by the first in Heatmap order plus the others', () => {
+    expect(title('c', 'a')).toBe('1장 물의 순환 외 1개');
+    expect(title('a', 'c', 'd')).toBe('1장 물의 순환 외 2개');
+  });
+
+  it('keeps the fallback for 전체 선택, nothing chosen and questions without a chapter', () => {
+    expect(title('a', 'b', 'c', 'd', 'e')).toBe(fallback);
+    expect(title()).toBe(fallback);
+    expect(title('e')).toBe(fallback);
+  });
+
+  it('counts only real chapters when questions without a chapter are mixed in', () => {
+    expect(title('c', 'e')).toBe('2장 정수 처리');
+    expect(title('a', 'c', 'e')).toBe('1장 물의 순환 외 1개');
+  });
+
+  it('ignores questions a filter hid', () => {
+    expect(title('c', 'hidden')).toBe('2장 정수 처리');
+  });
+
+  it('fits the name limit', () => {
+    const long = [
+      group('c1', '가'.repeat(100), 'a'),
+      group('c2', '둘째', 'b'),
+      group('c3', 'x', 'c'),
+    ];
+    const named = chapterDefaultTitle(long, new Set(['a', 'b']), fallback);
+    expect(named).toHaveLength(100);
+    expect(named.endsWith(' 외 1개')).toBe(true);
+  });
+
+  it('caps 문항 수 at the selection', () => {
+    expect(cappedCount('20', 3)).toBe('3');
+    expect(cappedCount('20', 20)).toBe('20');
+    expect(cappedCount('20', 300)).toBe('20');
   });
 });

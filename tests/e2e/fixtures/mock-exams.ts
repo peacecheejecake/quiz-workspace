@@ -623,6 +623,13 @@ export const mockUi = {
   next: (dialog: Locator) => dialog.getByRole('button', { name: /^(다음|next)$/i }),
   backToOptions: (dialog: Locator) =>
     dialog.getByRole('button', { name: /^(옵션 단계로 돌아가기|back to options)$/i }),
+  backToRange: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(범위 단계로 돌아가기|back to range)$/i }),
+  /** The one `?` beside 변형 유형, and the Popover it opens (portalled out of the dialog). */
+  variationHelp: (dialog: Locator) =>
+    dialog.getByRole('button', { name: /^(변형 유형 설명|variation types? help)$/i }),
+  variationHelpPanel: (page: Page) =>
+    page.getByRole('dialog', { name: /^(변형 유형 설명|variation types? help)$/i }),
   make: (dialog: Locator) => dialog.getByRole('button', { name: /^(만들기|create)$/i }),
   remake: (scope: Locator) => scope.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
   retry: (scope: Locator) => scope.getByRole('button', { name: /^(다시 시도|try again)$/i }),
