@@ -163,7 +163,7 @@ export interface DragDismissOptions {
   /** Dismiss directions, resolved when the gesture starts. With several, the drag picks one. */
   edges: readonly DragEdge[] | (() => readonly DragEdge[]);
   /** Runs when the surface has left the screen. Returning `false` refuses: it springs back. */
-  close: () => void | false;
+  close: () => unknown;
   /** Floating layer rank: only the top layer responds. Omit for a surface outside the layers. */
   rank?: number;
   enabled?: boolean;
