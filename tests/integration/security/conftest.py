@@ -19,6 +19,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import os
 import re
 import sys
 import uuid
@@ -30,6 +31,7 @@ from typing import Any
 import httpx
 import pytest
 from book_core.contracts import DraftOrigin, QuestionDraft, QuestionType
+from book_core.explain import FAKE_MODEL, PROMPT_VERSION
 
 _SHARING = Path(__file__).resolve().parents[1] / "sharing" / "conftest.py"
 _spec = importlib.util.spec_from_file_location("_s4_sharing_conftest", _SHARING)
@@ -292,21 +294,23 @@ def build_world(seed: Any, label: str) -> World:
     # EXPL-B: a finished AI explanation of the question and of the mock exam question (direct
     # seed: making one needs the feature on, which this stack leaves off).
     explanation_id, mock_explanation_id = (str(uuid.uuid4()) for _ in range(2))
+    # The current cache key: the routes refuse a row of any other (Settings.ai_explanation_model).
+    model = os.environ.get("LLM_MODEL", "").strip() or FAKE_MODEL
     body = json.dumps(
         {"correct_option_ids": [], "summary_md": "S4 AI 해설", "options": [], "concepts_md": ""}
     )
     seed._admin(
         "insert into public.question_ai_explanations (id, workspace_id, question_id, "
         "question_revision_id, status, prompt_version, model, body, finished_at) values "
-        "(%s, %s, %s, %s, 'succeeded', 's4/v1', 's4', %s::jsonb, now())",
-        (explanation_id, wid, qid, question["revision"]["id"], body),
+        "(%s, %s, %s, %s, 'succeeded', %s, %s, %s::jsonb, now())",
+        (explanation_id, wid, qid, question["revision"]["id"], PROMPT_VERSION, model, body),
     )
     seed._admin(
         "insert into public.mock_exam_question_ai_explanations (id, workspace_id, "
         "mock_exam_question_id, mock_exam_question_revision_id, status, prompt_version, model, "
         "body, finished_at) select %s, workspace_id, id, active_revision_id, 'succeeded', "
-        "'s4/v1', 's4', %s::jsonb, now() from public.mock_exam_questions where id = %s",
-        (mock_explanation_id, body, mock_question_id),
+        "%s, %s, %s::jsonb, now() from public.mock_exam_questions where id = %s",
+        (mock_explanation_id, PROMPT_VERSION, model, body, mock_question_id),
     )
 
     # A second workspace of the same owner, for requests that mix ids of two workspaces.
