@@ -1366,6 +1366,7 @@ function useAskPanel({
     <>
       <DocumentExcerptPanel
         workspaceId={workspaceId}
+        linkOnly
         client={search}
         item={excerpt?.item ?? null}
         open={excerptOpen}

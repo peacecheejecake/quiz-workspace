@@ -14,7 +14,7 @@ linked_tests: [UX12-SOURCE-AC01 … UX12-SOURCE-AC06]
 
 ## 규칙
 
-- **자리에서 연다:** 아래 원본 쪽 링크는 페이지를 떠나지 않고 `FloatingSidePanel` "원본 PDF"에서 그 쪽을 연다. URL과 history는 바뀌지 않고, 닫으면 focus가 누른 링크로 돌아오며 밑의 화면(스크롤, 고른 답, 선택)은 그대로다.
+- **자리에서 연다:** 아래 원본 쪽 링크는 페이지를 떠나지 않고 `FloatingSidePanel` "원본 PDF"에서 그 쪽을 연다. URL은 바뀌지 않고, 닫으면 focus가 누른 링크로 돌아오며 밑의 화면(스크롤, 고른 답, 선택)은 그대로다.
 
   | 화면 | 링크 | 여는 것 |
   |---|---|---|
@@ -24,7 +24,7 @@ linked_tests: [UX12-SOURCE-AC01 … UX12-SOURCE-AC06]
   | 본문 발췌 panel (본문 검색, 관련 본문, AI 해설) | `PDF에서 보기` | `PdfPageDialog` |
   | 문서 요약 핵심 항목 | `p.12–14` | `PdfPageDialog`, 범위의 첫 쪽 |
 
-- **배치:** `PdfPageDialog`는 QSRC-01과 같은 paired 배치다. viewport 868px 이상에서는 연 panel의 왼쪽에 놓이고, 그보다 좁으면 전체 화면 sheet다. PDF는 기존 `GET /documents/:id/source-url` 중계와 `PdfViewer`로 보이며 쪽 이동과 확대가 된다.
+- **배치:** `PdfPageDialog`는 QSRC-01과 같은 paired 배치다. viewport 868px 이상에서는 연 panel의 왼쪽에 놓이고, 그보다 좁으면 전체 화면 sheet이고 브라우저 Back은 sheet만 닫는다(design-system §5.6). PDF는 기존 `GET /documents/:id/source-url` 중계와 `PdfViewer`로 보이며 쪽 이동과 확대가 된다.
 - **전체 문서로 가기:** 두 panel 모두 `전체 문서 보기` 링크가 있다. 지금까지 원본 링크가 열던 DOC-02 주소이고 같은 탭에서 이동한다(발췌는 `?page=&block=&revision=`, 나머지는 `?page=`).
 - **공유 화면은 그대로:** 게스트의 요약 쪽 링크, 본문 발췌, 관련 본문은 공유 문서 화면으로 이동한다. 게스트 PDF는 다른 경로로 받기 때문이다.
 - **AI 질문 panel은 그대로:** AI 질문 대화의 발췌는 `PDF에서 보기`가 지금처럼 DOC-02 링크다. `sequence(mock)`의 `질문하기`로 제출 전에도 열리므로, 풀이 화면 위에 PDF 전체가 뜨면 안 된다(아래 규칙).
@@ -47,7 +47,7 @@ linked_tests: [UX12-SOURCE-AC01 … UX12-SOURCE-AC06]
 
 ### UX12-SOURCE-AC04
 
-본문 검색의 발췌 panel에서 `PDF에서 보기`를 누르면 "원본 PDF" dialog가 그 쪽을 연다. URL은 같고, 닫으면 focus가 `PDF에서 보기`로 돌아오며 검색 결과는 그대로다. 휴대폰 폭에서는 전체 화면 sheet이고 가로 스크롤이 없다.
+본문 검색의 발췌 panel에서 `PDF에서 보기`를 누르면 "원본 PDF" dialog가 그 쪽을 연다. URL은 같고, 닫으면 focus가 `PDF에서 보기`로 돌아오며 검색 결과는 그대로다. 휴대폰 폭에서는 전체 화면 sheet이고 가로 스크롤이 없으며, 브라우저 Back은 sheet만 닫는다.
 
 ### UX12-SOURCE-AC05
 

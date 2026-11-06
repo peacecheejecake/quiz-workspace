@@ -448,7 +448,13 @@
 }
 
 .sourceLink {
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--color-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }

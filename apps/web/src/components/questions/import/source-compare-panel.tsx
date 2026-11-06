@@ -7,12 +7,14 @@
 // answers or rubric, explanation) and moves along the page's drafts with `이전 초안`/`다음 초안`
 // (Alt+↑/Alt+↓); to edit, close it (focus returns to the draft last shown). The PDF comes through
 // the source-url relay (short-lived signed URL, never logged or put into a page URL) and the
-// extracted question area is highlighted from the draft's evidence bbox.
-import { CheckIcon, FloatingSidePanel } from '@quiz/ui';
-import { useMemo, useState } from 'react';
+// extracted question area is highlighted from the draft's evidence bbox. UX12-SOURCE: a draft's
+// page link opens it at that page (focus returns to the link), and `전체 문서 보기` leaves for DOC-02.
+import { Button, CheckIcon, FloatingSidePanel } from '@quiz/ui';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useDocumentPdfSource } from '@/components/documents/editor/pdf-page-dialog';
+import { FULL_DOCUMENT_LABEL } from '@/components/documents/editor/pdf-page-label';
 import { PdfViewer } from '@/components/documents/editor/pdf-viewer';
-import { createEditorClient } from '@/lib/documents/editor-api';
-import { loadPdfBytes, SignedUrlCache } from '@/lib/documents/pdf-source';
 import { draftNumber, type ReviewDraft } from '@/lib/questions/drafts';
 import styles from './question-import.module.css';
 import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
@@ -22,6 +24,11 @@ import { optionGrid } from '@/lib/questions/stem-table';
 export interface SourceComparePanelProps {
   /** Null while closed. */
   readonly draft: ReviewDraft | null;
+  /** The page a page link asked for; without it the draft's first page. */
+  readonly initialPage?: number | undefined;
+  /** The document of a draft without its own, from the import run. */
+  readonly sourceDocumentId?: string | null;
+  readonly workspaceId: string;
   /** The drafts of the page in list order; those with source pages are stepped through. */
   readonly drafts?: readonly ReviewDraft[];
   /** Shows another draft (이전 초안 / 다음 초안). */
@@ -31,16 +38,30 @@ export interface SourceComparePanelProps {
 
 /** `data-compare-draft` on a draft's `원본 비교` button: focus returns there on close. */
 const COMPARE_DRAFT_ATTRIBUTE = 'data-compare-draft';
+/** `data-compare-page` (`<draft>:<page>`) on a draft's page link, when it opened the panel. */
+const COMPARE_PAGE_ATTRIBUTE = 'data-compare-page';
+
+interface Shown {
+  readonly draftId: string;
+  readonly page: number | undefined;
+}
 
 export function SourceComparePanel({
   draft,
+  initialPage,
+  sourceDocumentId,
+  workspaceId,
   drafts = [],
   onSelect,
   onClose,
 }: SourceComparePanelProps) {
-  // The draft last shown: focus returns to its button once the panel has closed.
-  const [shown, setShown] = useState<string | null>(null);
-  if (draft && draft.id !== shown) setShown(draft.id);
+  // What was shown last: focus returns to the control that opened it once the panel has closed.
+  const [shown, setShown] = useState<Shown | null>(null);
+  if (draft && (draft.id !== shown?.draftId || initialPage !== shown.page)) {
+    setShown({ draftId: draft.id, page: initialPage });
+  }
+  const documentId = draft ? (draft.sourceDocumentId ?? sourceDocumentId) : null;
+  const firstPage = initialPage ?? draft?.pages[0] ?? 1;
   const comparable = drafts.filter((d) => d.pages.length > 0);
   const at = draft ? comparable.findIndex((d) => d.id === draft.id) : -1;
   const previous = at > 0 ? comparable[at - 1] : undefined;
@@ -57,6 +78,15 @@ export function SourceComparePanel({
       title="원본 PDF"
       description={draft ? `${draftNumber(draft)}번 문제와 원본 페이지를 비교합니다.` : undefined}
       closeLabel="원본 닫기"
+      footer={
+        documentId ? (
+          <Button asChild>
+            <Link href={`/workspaces/${workspaceId}/documents/${documentId}?page=${firstPage}`}>
+              {FULL_DOCUMENT_LABEL}
+            </Link>
+          </Button>
+        ) : undefined
+      }
       steps={
         onSelect
           ? {
@@ -69,16 +99,24 @@ export function SourceComparePanel({
       }
       onCloseAutoFocus={(event) => {
         if (!shown) return;
-        const button = document.querySelector<HTMLElement>(
-          `button[${COMPARE_DRAFT_ATTRIBUTE}="${CSS.escape(shown)}"]`,
-        );
+        const pageLink = `button[${COMPARE_PAGE_ATTRIBUTE}="${CSS.escape(`${shown.draftId}:${shown.page}`)}"]`;
+        const button =
+          (shown.page !== undefined ? document.querySelector<HTMLElement>(pageLink) : null) ??
+          document.querySelector<HTMLElement>(
+            `button[${COMPARE_DRAFT_ATTRIBUTE}="${CSS.escape(shown.draftId)}"]`,
+          );
         if (!button) return;
         event.preventDefault();
         button.focus();
       }}
     >
-      {draft?.sourceDocumentId ? (
-        <ComparePages key={draft.id} draft={draft} documentId={draft.sourceDocumentId} />
+      {draft && documentId ? (
+        <ComparePages
+          key={`${draft.id}:${initialPage ?? ''}`}
+          draft={draft}
+          documentId={documentId}
+          firstPage={firstPage}
+        />
       ) : draft ? (
         <>
           <DraftContent draft={draft} />
@@ -89,13 +127,17 @@ export function SourceComparePanel({
   );
 }
 
-function ComparePages({ draft, documentId }: { draft: ReviewDraft; documentId: string }) {
-  const pdfSource = useMemo(() => {
-    const client = createEditorClient();
-    const urls = new SignedUrlCache((signal) => client.getSourceUrl(documentId, signal));
-    return (signal: AbortSignal) => loadPdfBytes(urls, { signal });
-  }, [documentId]);
-  const [page, setPage] = useState(draft.pages[0] ?? 1);
+function ComparePages({
+  draft,
+  documentId,
+  firstPage,
+}: {
+  draft: ReviewDraft;
+  documentId: string;
+  firstPage: number;
+}) {
+  const pdfSource = useDocumentPdfSource(documentId);
+  const [page, setPage] = useState(firstPage);
   const highlights = draft.locations.filter((l) => l.page === page);
 
   return (

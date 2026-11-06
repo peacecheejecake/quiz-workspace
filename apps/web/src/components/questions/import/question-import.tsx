@@ -219,6 +219,12 @@ export function QuestionImport({
   const [editing, setEditing] = useState<ReviewDraft | null>(null);
   const [editorSession, setEditorSession] = useState(0);
   const [comparing, setComparing] = useState<ReviewDraft | null>(null);
+  // The page a draft's page link asked for (UX12-SOURCE); 원본 비교 starts at the first page.
+  const [comparePage, setComparePage] = useState<number | undefined>(undefined);
+  const compareDraft = useCallback((draft: ReviewDraft | null) => {
+    setComparing(draft);
+    setComparePage(undefined);
+  }, []);
   /** The page of the draft list on screen (0-based; kept within the pages when drafts change). */
   const [page, setPage] = useState(0);
   const draftsHeading = useRef<HTMLHeadingElement | null>(null);
@@ -524,13 +530,10 @@ export function QuestionImport({
     setEditing(draft);
   }, []);
   const sourceDocumentId = run?.source_document_id ?? null;
-  const draftPageHref = useCallback(
-    (draft: ReviewDraft, page: number) =>
-      (draft.sourceDocumentId ?? sourceDocumentId)
-        ? `/workspaces/${workspaceId}/documents/${draft.sourceDocumentId ?? sourceDocumentId}?page=${page}`
-        : null,
-    [sourceDocumentId, workspaceId],
-  );
+  const openDraftPage = useCallback((draft: ReviewDraft, page: number) => {
+    setComparing(draft);
+    setComparePage(page);
+  }, []);
   const renderChapter = useCallback(
     (draft: ReviewDraft) => {
       // UX7-DEDUP (QIMPORT-01-AC10): the same question exists; a hint, not a block.
@@ -926,9 +929,9 @@ export function QuestionImport({
               selectionDisabled={publishing}
               onSelectChange={selectDraft}
               onEdit={editDraft}
-              onCompare={setComparing}
+              onCompare={compareDraft}
               renderExtra={renderChapter}
-              pageHref={draftPageHref}
+              onOpenPage={openDraftPage}
             />
           ) : pageFailed ? (
             <div role="alert" className={styles.failure}>
@@ -967,9 +970,12 @@ export function QuestionImport({
       />
       <SourceComparePanel
         draft={comparing}
+        initialPage={comparePage}
+        sourceDocumentId={sourceDocumentId}
+        workspaceId={workspaceId}
         drafts={pageDrafts ?? []}
-        onSelect={setComparing}
-        onClose={() => setComparing(null)}
+        onSelect={compareDraft}
+        onClose={() => compareDraft(null)}
       />
     </div>
   );
