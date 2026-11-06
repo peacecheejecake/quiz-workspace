@@ -1,8 +1,8 @@
 // UX12-EXTRACT (docs/screens/ux12-extract.md): a draft question's source blocks are highlighted
 // as the whole question in the document viewer, from ids only.
-import { expect, test } from '../fixtures/test';
-import { draftFor, importPaperDrafts, questionPaper, truthQuestion } from '../fixtures/questions';
-import { editorUi, signInAs } from '../fixtures/workspace-ui';
+import { expect, test } from '../fixtures/test.ts';
+import { draftFor, importPaperDrafts, questionPaper, truthQuestion } from '../fixtures/questions.ts';
+import { editorUi, signInAs } from '../fixtures/workspace-ui.ts';
 
 const documentPath = (workspaceId: string, documentId: string) =>
   `/workspaces/${workspaceId}/documents/${documentId}`;
