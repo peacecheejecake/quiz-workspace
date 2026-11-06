@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { ToastProvider } from '@quiz/ui';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ClientModule from '../src/lib/highlights/client';
 import type { MyHighlight } from '../src/lib/notes/model';
 
 const client = vi.hoisted(() => ({
@@ -14,7 +15,7 @@ const client = vi.hoisted(() => ({
   recolorHighlight: vi.fn(),
 }));
 vi.mock('@/lib/highlights/client', async (actual) => ({
-  ...(await actual<typeof import('../src/lib/highlights/client')>()),
+  ...(await actual<typeof ClientModule>()),
   ...client,
 }));
 

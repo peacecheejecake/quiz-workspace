@@ -5,6 +5,7 @@
 // §5), with the position's submitted session as the gate.
 import './dom-setup';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { renderWithToasts } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RunClient } from '../src/components/questions/viewer/question-viewer';
@@ -578,7 +579,7 @@ describe('AIEXPL-01 in QuestionViewer sequence', () => {
       finish: vi.fn(),
       results: vi.fn(),
     } as unknown as RunClient;
-    render(
+    renderWithToasts(
       <QuestionViewer
         mode="sequence"
         workspaceId={WS}

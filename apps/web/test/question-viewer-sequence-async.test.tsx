@@ -5,7 +5,8 @@
 // retry recovers the same run; a failed session opening and a submission whose response was lost
 // both have a way back.
 import './dom-setup';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';
