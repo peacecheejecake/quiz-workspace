@@ -963,8 +963,25 @@ export async function openAskPanel(page: Page): Promise<Locator> {
   return panel;
 }
 
+/** On the conversation list, opens a new conversation with the FAB; returns the question input. */
+export async function openComposer(panel: Locator): Promise<Locator> {
+  const input = askUi.input(panel);
+  await expect(input.or(askUi.newButton(panel)).first()).toBeVisible();
+  if (!(await input.isVisible())) await askUi.newButton(panel).click();
+  await expect(input).toBeVisible();
+  return input;
+}
+
+/** From a conversation: back to the list, then the FAB (the screen has no `새 대화`, D-10). */
+export async function startNewConversation(panel: Locator): Promise<void> {
+  await askUi.listButton(panel).click();
+  await askUi.newButton(panel).click();
+  await expect(askUi.input(panel)).toBeVisible();
+}
+
 /** Types `question` into the panel and presses Enter; returns the newest answer article. */
 export async function ask(panel: Locator, question: string): Promise<Locator> {
+  await openComposer(panel);
   const before = await askUi.answers(panel).count();
   await askUi.input(panel).fill(question);
   await askUi.input(panel).press('Enter');
