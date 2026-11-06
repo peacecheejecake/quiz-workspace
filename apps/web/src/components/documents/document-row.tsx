@@ -258,7 +258,7 @@ function RowProgress({ row }: { row: DocumentRow }) {
         value={value}
         currentText={text}
       />
-      {value !== undefined ? <span className={styles.statusText}>{value}%</span> : null}
+      <span className={styles.statusText}>{value !== undefined ? `${value}%` : null}</span>
       {elapsed ? (
         <p className={styles.hint}>
           {elapsed} · {SLOW_PROCESSING_HINT}
