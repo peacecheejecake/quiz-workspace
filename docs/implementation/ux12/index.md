@@ -267,7 +267,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 |---|---|---|---|
 | EXTRACT-1 | 1 | 진행 | |
 | EXTRACT-2 | 1 | 대기 | EXTRACT-1 뒤 |
-| SHELL-1 | 1 | 진행 | |
+| SHELL-1 | 1 | 완료 | 12cb1e79 · Codex P2 1건 수정(9e71118c), 재리뷰 지적 없음, E2E 22·Vitest 38 GREEN |
 | DESIGN-2 | 1 | 진행 | |
 | HOME-1 | 1 | 진행 | |
 | HILITE-1 | 1 | 진행 | |
