@@ -18,8 +18,8 @@
 - **구현 subagent:** Task마다 **Opus 5.5 subagent 1개**(`model: "opus"`, `effort` 생략 = default)를 배정한다. 이 프로젝트의 UX12 작업에 적용하며 기존 "구현은 Sonnet" 규칙보다 우선한다. 리뷰 수정도 같은 모델로 한다.
 - **Task 수명주기:** AGENTS.md §3을 따른다. 명세 수정 → 해당 Task 직전에 RED → GREEN → 커밋 → Codex 리뷰(`HERDR_ENV=0`, 불가 시 Opus 리뷰 subagent) → main thread 재검증·merge.
 - **브랜치:** Epic 묶음마다 `feature/ux12-<topic>`, Task마다 `task/UX12-<ID>-<slug>`. 파일 범위가 겹치지 않는 Task만 병렬로, 각자 worktree에서 실행한다.
-- **점검(사용자 지시 2026-11-06):** CI가 하는 점검은 로컬에서 돌리지 않고 PR에서 확인한다. 구현 subagent는 자기 Task의 새 test만 RED → GREEN으로 확인하고 커밋한다. Lint, typecheck, 전체 unit, 전체 E2E, visual은 PR CI가 맡는다. PR에서 실패하면 main thread가 고치지 않고 해당 Task의 구현 subagent가 고친다.
-- **PR 단위:** UX10처럼 전체를 PR 하나로 모으지 않는다. §5의 Wave 묶음마다 PR을 낸다. 사용자가 시각적 변경을 확인하기 쉽고, CI 실패 범위도 좁아진다.
+- **점검(사용자 지시 2026-11-06, 개정):** Task가 끝나면 구현 subagent가 로컬에서 `make lint`, `make typecheck`, unit test만 돌린다. E2E와 visual은 자기 Task의 새 test만 RED → GREEN으로 확인하고, 전체 실행은 PR CI가 맡는다. PR에서 실패하면 해당 Task의 구현 subagent가 고친다.
+- **Wave PR(사용자 지시 2026-11-06):** 앞 Wave PR이 없으면 Wave PR을 바로 올린다. 앞 Wave가 대기 중이면 통합 브랜치에 모으고, 앞 PR이 `develop`에 병합되면 통합 브랜치를 PR 하나로 올린다. 그다음 Wave는 새 통합 브랜치에 모으거나 바로 Wave PR이 되며, 이를 반복한다. 현재 통합 브랜치는 `feature/ux12-integration`이다.
 - **AC 등록:** 새 AC는 `docs/screens/ux12-*.md`와 새 phase(`UX12-<EPIC>.0`)에 둔다. 이미 GREEN인 phase에 새 AC를 넣지 않는다(§7 UX9-SPEC 해석).
 - **Visual baseline:** Task마다 재생성하지 않는다. 묶음의 마지막 QA Task에서 고정 Linux Playwright 이미지로 한 번만 재생성한다. 테두리·glass 변경은 baseline 170장 대부분을 바꾼다.
 - **Migration:** timestamp는 production 적용분(`20261106110000`) 뒤여야 한다. 공유 DB 적용은 main thread만 한다.
