@@ -23,7 +23,8 @@ select columns_are('public', 'document_revisions',
         'published_at', 'created_by', 'created_at', 'updated_at']);
 select columns_are('public', 'chapters',
   array['id', 'workspace_id', 'document_id', 'document_revision_id', 'parent_id', 'section_key',
-        'level', 'sort_order', 'title', 'page', 'heading_block_id', 'created_at']);
+        'level', 'sort_order', 'title', 'page', 'heading_block_id', 'created_at',
+        'workspace_level_of']);
 select columns_are('public', 'content_blocks',
   array['id', 'workspace_id', 'document_id', 'document_revision_id', 'block_id', 'ordinal',
         'chapter_id', 'block_type', 'text', 'page', 'provenance', 'attributes', 'edited',
