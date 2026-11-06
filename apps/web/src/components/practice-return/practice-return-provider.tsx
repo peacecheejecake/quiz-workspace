@@ -19,8 +19,6 @@ import { createPortal } from 'react-dom';
 import { navigateForIdentity } from '@/lib/auth/identity-navigation';
 import { isProtectedPath, isSignedOutOnlyPath } from '@/lib/auth/routes';
 import { publishVerifiedUser, suspendVerifiedUser } from '@/lib/auth/verified-user-events';
-import { lookupOverviewQuestionAction } from '@/lib/questions/practice-actions';
-import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import {
   initialReturnState,
   makeReturnTarget,
@@ -35,11 +33,12 @@ interface ReturnContextValue {
   recordActivity: (target: ReturnTarget) => void;
   clearTarget: () => void;
   setVerifiedUser: (id: string) => void;
+  /** The destination could not read this target: clears it when it is the current one. */
+  releaseTarget: (target: ReturnTarget) => boolean;
 }
 const ReturnContext = createContext<ReturnContextValue | null>(null);
 const IDENTITY_RETRY_MS = 5000;
 const IDENTITY_NOTICE_DELAY_MS = 10_000;
-const TEMPORARY_FAILURE = '일시적인 오류로 문제를 확인하지 못했습니다. 다시 시도해 주세요.';
 const subscribeHydration = () => () => undefined;
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
@@ -52,28 +51,6 @@ export function usePracticeReturn(): ReturnContextValue {
   const value = useContext(ReturnContext);
   if (!value) throw new Error('usePracticeReturn requires PracticeReturnProvider');
   return value;
-}
-
-/** Server validity check of a return target; a transport error rejects. Read-only. */
-async function checkTarget(target: ReturnTarget): Promise<{ valid: boolean; temporary: boolean }> {
-  if (target.kind === 'question') {
-    const result = await lookupOverviewQuestionAction(target.workspaceId, target.questionId);
-    return {
-      valid: result.ok && result.data !== null,
-      temporary: !result.ok && result.kind === 'unavailable',
-    };
-  }
-  const api = createPracticeRunApi(target.workspaceId);
-  // Both reads are GETs; the item's outcome only counts when the run itself is readable.
-  const [run, item] = await Promise.all([
-    api.getRun(target.runId),
-    api.getItem(target.runId, target.position),
-  ]);
-  if (!run.ok) return { valid: false, temporary: run.kind === 'unavailable' };
-  return {
-    valid: item.ok && item.data.available,
-    temporary: !item.ok && item.kind === 'unavailable',
-  };
 }
 
 export function PracticeReturnProvider({
@@ -89,7 +66,6 @@ export function PracticeReturnProvider({
   const identityReady = useRef(!!userId);
   const pendingActivity = useRef<ReturnTarget | null>(null);
   const acceptPendingActivity = useRef(false);
-  const generation = useRef(0);
   const verification = useRef(0);
   const verificationPending = useRef(false);
   const verificationSilent = useRef(false);
@@ -112,12 +88,9 @@ export function PracticeReturnProvider({
     setUser(id);
     if (identity.current !== id) {
       identity.current = id;
-      generation.current++;
       dispatch({ type: 'clear' });
     }
   }, []);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
   const portalReady = useSyncExternalStore(subscribeHydration, clientSnapshot, serverSnapshot);
   const modalOpen = useModalLayerOpen();
   const pathname = usePathname();
@@ -128,11 +101,19 @@ export function PracticeReturnProvider({
       if (acceptPendingActivity.current) pendingActivity.current = makeReturnTarget(target);
       return;
     }
-    generation.current++;
     dispatch({ type: 'activity', target });
   }, []);
+  const targetRef = useRef<ReturnTarget | null>(null);
+  targetRef.current = state.target;
+  const releaseTarget = useCallback((target: ReturnTarget) => {
+    const current = targetRef.current;
+    const wanted = makeReturnTarget(target);
+    if (!current || !wanted || returnHref(current) !== returnHref(wanted)) return false;
+    dispatch({ type: 'clear' });
+    targetRef.current = null;
+    return true;
+  }, []);
   const clearTarget = useCallback(() => {
-    generation.current++;
     dispatch({ type: 'clear' });
   }, []);
 
@@ -217,7 +198,6 @@ export function PracticeReturnProvider({
         stopIdentityNotice();
         confirmedOwner.current = id;
         if (id !== identity.current) {
-          generation.current++;
           identity.current = id;
           acceptPendingActivity.current = false;
           pendingActivity.current = null;
@@ -242,7 +222,6 @@ export function PracticeReturnProvider({
         identityReady.current = id !== null;
         acceptPendingActivity.current = false;
         if (identityReady.current && pendingActivity.current) {
-          generation.current++;
           dispatch({ type: 'activity', target: pendingActivity.current });
           pendingActivity.current = null;
         }
@@ -290,42 +269,12 @@ export function PracticeReturnProvider({
     };
   }, [verifyIdentity]);
 
-  async function returnToTarget() {
-    const target = state.target;
-    if (!target || busy) return;
-    const requestGeneration = generation.current;
-    setBusy(true);
-    setMessage('');
-    try {
-      // The validity lookup only needs the session cookie, so it starts together with the identity
-      // check. Its outcome is read only after the server verified the identity: nothing navigates,
-      // clears or shows a message before that, and a late identity failure discards it.
-      const verifying = verifyIdentity({ silent: true });
-      const checking = checkTarget(target);
-      checking.catch(() => undefined);
-      const verified = await verifying;
-      if (requestGeneration !== generation.current) return;
-      if (!verified) {
-        if (verificationPending.current) setMessage(TEMPORARY_FAILURE);
-        return;
-      }
-      const { valid, temporary } = await checking;
-      if (requestGeneration !== generation.current) return;
-      if (valid) router.push(returnHref(target));
-      else if (temporary) setMessage(TEMPORARY_FAILURE);
-      else {
-        dispatch({ type: 'clear' });
-        setMessage('보던 문제를 더 이상 열 수 없습니다.');
-      }
-    } catch {
-      if (requestGeneration !== generation.current) return;
-      setMessage(TEMPORARY_FAILURE);
-    } finally {
-      setBusy(false);
-    }
+  // No pre-check: FastAPI authorises every read of the destination, which renders under the
+  // current session. An unreadable target is reported by the destination (releaseTarget).
+  function returnToTarget() {
+    if (state.target) router.push(returnHref(state.target));
   }
   const dismiss = () => {
-    generation.current++;
     dispatch({ type: 'dismiss' });
   };
   const controlRef = useRef<HTMLDivElement>(null);
@@ -356,7 +305,7 @@ export function PracticeReturnProvider({
     if (prefetchHref) routerRef.current.prefetch(prefetchHref);
   }, [prefetchHref]);
   return (
-    <ReturnContext.Provider value={{ recordActivity, clearTarget, setVerifiedUser }}>
+    <ReturnContext.Provider value={{ recordActivity, clearTarget, setVerifiedUser, releaseTarget }}>
       {children}
       {portalReady && (!modalOpen || identityPending || identityNotice) && protectedRoute
         ? createPortal(
@@ -369,11 +318,6 @@ export function PracticeReturnProvider({
               ) : null}
               <Suspense fallback={null}>
                 <PracticeRouteGate>
-                  {message && !identityPending && !identityNotice && !modalOpen ? (
-                    <p className={`${styles.message} glass-surface`} role="status">
-                      {message}
-                    </p>
-                  ) : null}
                   {visible ? (
                     <div
                       ref={controlRef}
@@ -385,9 +329,6 @@ export function PracticeReturnProvider({
                         icon={<ArrowLeftIcon />}
                         className={styles.target}
                         onClick={returnToTarget}
-                        disabled={busy}
-                        aria-busy={busy}
-                        data-busy={busy ? 'true' : undefined}
                       />
                       <IconButton
                         label="복귀 버튼 닫기"

@@ -1,5 +1,4 @@
 .control,
-.message,
 .notice {
   position: fixed;
   z-index: calc(var(--z-side-panel) - 1);
@@ -8,7 +7,6 @@
   transform: translateX(-50%);
 }
 /* Sit above the return bar (44px target + padding) instead of behind it. */
-.message,
 .notice {
   bottom: calc(
     var(--space-4) + env(safe-area-inset-bottom) + var(--qz-keyboard-inset) + 44px + 2 *
@@ -16,10 +14,6 @@
   );
   max-width: calc(100vw - 2 * var(--space-4));
   padding: var(--space-1) var(--space-2);
-}
-.message {
-  padding-inline: var(--space-3);
-  border-radius: var(--radius-xl);
 }
 /* Outage notices can appear while a modal is open, so they use the layer above it. */
 .notice {
@@ -40,19 +34,4 @@
 .control .target {
   min-width: 44px;
   min-height: 44px;
-}
-/* Immediate click feedback: the icon pulses in place, so the target size never changes. */
-.control .target[data-busy='true'] > :global(.icon) {
-  animation: busy-pulse 0.9s ease-in-out infinite;
-}
-@keyframes busy-pulse {
-  50% {
-    opacity: 0.35;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .control .target[data-busy='true'] > :global(.icon) {
-    animation: none;
-    opacity: 0.5;
-  }
 }

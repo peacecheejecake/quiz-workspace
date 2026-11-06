@@ -391,3 +391,29 @@ test(
     expect(await identityPendingSeen(page)).toBe(false);
   },
 );
+
+test(
+  'UX11-RETURN-AC04 a target deleted meanwhile is reported once at the destination and the control is removed',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-gone-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    const question = await createQuestion(owner, ws.id, numberedMcq('return-gone', 1, 1));
+    await createQuestion(owner, ws.id, numberedMcq('return-gone', 2, 2));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    await owner.api.ok('DELETE', `/questions/${question.id}`, undefined, [204]);
+    await control.click();
+    await expect(page.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(1);
+    await expect(control).toBeHidden();
+    // The panel keeps its own error; no answer form opens for the deleted question.
+    await expect(panelUi.options(panelUi.numbered(page, 1))).toHaveCount(0);
+  },
+);

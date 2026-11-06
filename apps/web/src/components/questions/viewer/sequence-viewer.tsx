@@ -29,6 +29,7 @@ import {
   FloatingSidePanel,
   ProgressBar,
   questionTypeLabels,
+  useToast,
 } from '@quiz/ui';
 import {
   useEffect,
@@ -40,6 +41,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { RETURN_TARGET_GONE } from '@/lib/questions/practice-return';
 import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
 import { QuestionSkeleton } from '@/components/questions/question-skeleton';
@@ -786,7 +788,10 @@ function useSolveStep({
   const position = view?.position ?? 1;
   const [runSeq, setRunSeq] = useState(0);
   const [itemSeq, setItemSeq] = useState(0);
-  const recordReturn = useOptionalPracticeReturn()?.recordActivity;
+  const returnControl = useOptionalPracticeReturn();
+  const recordReturn = returnControl?.recordActivity;
+  const releaseReturn = returnControl?.releaseTarget;
+  const { toast } = useToast();
 
   // An edited / archived / deleted question on screen is read again.
   const [seenInvalidation, setSeenInvalidation] = useState(invalidated);
@@ -826,6 +831,16 @@ function useSolveStep({
     if (active && runId && returnable)
       recordReturn?.({ kind: 'run', workspaceId, runId, position });
   }, [active, runId, position, workspaceId, returnable, recordReturn]);
+  // The destination of the return control: a run or position that is gone (deleted, access lost)
+  // releases the target, once. A temporary failure keeps it.
+  const gone =
+    (runLoad?.status === 'error' && runLoad.kind === 'notFound') ||
+    (itemLoad?.status === 'error' && itemLoad.kind === 'notFound') ||
+    (!!item && !item.available);
+  useEffect(() => {
+    if (active && runId && gone && releaseReturn?.({ kind: 'run', workspaceId, runId, position }))
+      toast({ tone: 'error', title: RETURN_TARGET_GONE });
+  }, [active, runId, position, workspaceId, gone, releaseReturn, toast]);
   useLayoutEffect(() => {
     if (source === 'bank' && item?.question_id && item.reset_epoch != null) {
       rememberPracticeEpoch(workspaceId, item.question_id, item.reset_epoch);
