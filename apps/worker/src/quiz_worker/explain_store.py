@@ -222,7 +222,7 @@ class PostgresExplainStore:
                 found = conn.execute(
                     text(
                         "select q.question_type, r.stem, r.options, r.correct_option_ids, "
-                        "r.accepted_answers, r.explanation, r.rubric "
+                        "r.accepted_answers, r.rubric "
                         "from public.question_revisions r "
                         "join public.questions q on q.id = r.question_id "
                         "where r.id = :r and q.id = :q and q.workspace_id = :w "
@@ -234,7 +234,7 @@ class PostgresExplainStore:
                 found = conn.execute(
                     text(
                         "select q.question_type, r.stem, r.options, r.correct_option_ids, "
-                        "r.accepted_answers, r.explanation, r.rubric "
+                        "r.accepted_answers, r.rubric "
                         "from public.mock_exam_question_revisions r "
                         "join public.mock_exam_questions q on q.id = r.mock_exam_question_id "
                         "join public.mock_exams e on e.id = q.mock_exam_id "
@@ -253,7 +253,6 @@ class PostgresExplainStore:
             correct_option_ids=found.correct_option_ids,
             accepted_answers=found.accepted_answers,
             rubric=found.rubric,
-            explanation=found.explanation,
         )
 
     def documents(

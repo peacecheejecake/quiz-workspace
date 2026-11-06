@@ -15,7 +15,7 @@ export const EXPL_TEXT = {
   started: 'AI 해설을 만드는 중입니다',
   ready: 'AI 해설이 준비되었습니다',
   badge: 'AI 생성',
-  notice: 'AI가 만든 해설입니다. 정답과 기존 해설이 기준이며, 틀릴 수 있습니다.',
+  notice: 'AI가 만든 해설입니다. 정답이 기준이며, 틀릴 수 있습니다.',
   disabled: '이 환경에서는 AI 해설을 사용할 수 없습니다.',
   archived: '보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.',
   regenerate: '다시 만들기',

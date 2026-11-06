@@ -76,7 +76,7 @@ book_core/
 - `mock_exam`(MOCK-SPEC 2026-11-01, [MOCK-01](screens/mock-exams.md)): 범위 후보(Heatmap 순서의 확정 문제) + 문항 수 + 변형 유형 + seed → `MockExamPlan[{source_question_id, variation_type}]`(결정적 원본 선택·유형 배정), `OPTION_SHUFFLE` 복사본(원본 revision 내용 + seed 보기 순서). LLM 유형은 묶음 생성: `pack_batches(plan, passages, budget)`(token 예산·`sources_per_call` 상한·passage 공유 원본끼리, 결정적) → 묶음 prompt `mock_exam.generate/v1`(원본 `S1…`, 묶음 안에서 한 번만 실린 passage `P1…`, 항목마다 변형 유형 지시) → 항목별로 `generation.validation`의 승인 차단 검증(`accept_for_mock_exam`), 실패 항목 모아 재요청 1회, 해석 불가 묶음은 반으로 나눔. 결정적 fake LLM은 묶음 응답·항목 하나 실패·깨진 묶음·잘린 응답 시나리오와 호출 수 기록을 지원한다.
 
 - `ask`: 질문 + 근거(`S1…Sn`: 고정된 발행 블록 발췌) + 첨부 문제(공개 수준 `none|hint|full`에 맞는 필드만 받는 타입) + 직전 턴 → `LLMRequest`(지시: 근거만, `[S#]` 인용, `[NO_ANSWER]`, `hint`면 정답 비공개 지시); 끝난 답의 인용 검증(모르는 tag 제거·번호 다시 매김·`uncited`), 테스트용 결정적 streaming fake와 marker(ASK-01).
-- `explain`: 고정된 문제 revision(발문·보기·정답·허용 답안·채점 기준·사람 해설·출처 블록) + 근거 → `AIExplanation{correct_option_ids, summary_md, options[{option_id, why_md}], concepts_md}`; 정답 불일치 거절, 모든 보기 한 번씩 확인(1회 재요청), 인용 검증은 `ask`와 공용(AIEXPL-01).
+- `explain`: 고정된 문제 revision(발문·보기·정답·허용 답안·채점 기준·출처 블록) + 근거 → `AIExplanation{correct_option_ids, summary_md, options[{option_id, why_md}], concepts_md}`; 정답 불일치 거절, 모든 보기 한 번씩 확인(1회 재요청), 인용 검증은 `ask`와 공용(AIEXPL-01).
 - `llm`: 기존 `complete`(structured output)에 더해 text streaming(`stream_text` — delta iterator + 끝난 뒤 usage·stop reason; Anthropic Messages streaming과 fake). 메시지 원문은 예외·로그에 넣지 않는 기존 규칙 그대로.
 
 CLI: `core parse`, `core chunk`, `core index`, `core search`, `core excerpt`, `core questions extract`, `core questions generate`, `core eval`.

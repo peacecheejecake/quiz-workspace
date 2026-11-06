@@ -10,9 +10,9 @@ Payload (written by apps/api `POST …/ai-explanation`, `…/regenerate`, bank a
 2. Re-check: the creator is still a member of the active workspace (`workspace_unavailable`), the
    question is still there (`question_unavailable`), every pinned passage revision is still its
    document's published one (`sources_unavailable`).
-3. Read the keyed revision (stem, options, the answer, rubric, human explanation; never a user's
-   answer) and the pinned passages from Postgres (never copied from the API); a `mixed` book's
-   question-part blocks stay out (the API's retrieval rule, re-checked).
+3. Read the keyed revision (stem, options, the answer, rubric; never a user's answer or the human
+   explanation) and the pinned passages from Postgres (never copied from the API); a `mixed`
+   book's question-part blocks stay out (the API's retrieval rule, re-checked).
 4. Stream the explanation (`book_core.explain.build_request`) through `ExplanationStream`: whole
    display lines go to the Redis Stream `explain:<id>` as they complete; for a multiple-choice
    question nothing is published before the answer line matched the server's correct option ids

@@ -31,6 +31,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 import pytest
+from book_core.explain import PROMPT_VERSION
 
 pytestmark = pytest.mark.infra
 
@@ -595,6 +596,74 @@ def test_c03_a_failed_regeneration_never_hides_the_current_success(seed: Any, db
     assert hit["explanation"]["id"] == good["id"]
 
 
+def test_c03_an_older_prompt_version_stays_stored_and_the_question_can_be_made_again(
+    seed: Any, db: Any, off_app: Any
+) -> None:
+    """UX12 D-14: a prompt version bump leaves the rows alone and takes them out of every read."""
+    owner = seed.client("expl-c03v-owner")
+    book = Book(owner)
+    q = book.mcq()
+    old = make(owner, q["id"], view="detail")
+    assert old["status"] == "succeeded"
+    older = "question.ai_explain/v1"
+    db(
+        "update public.question_ai_explanations set prompt_version = %s where id = %s",
+        (older, old["id"]),
+    )
+    link = owner.create_link(book.ws)
+    guest = seed.guest()
+    cookie = guest.session(link["id"], link["secret"])
+    url = f"/questions/{q['id']}/ai-explanation"
+
+    now = state(get(owner, q["id"], view="detail"), (200,))
+    assert now["explanation"] is None
+    assert now["can_create"] is True
+    assert now["can_regenerate"] is False
+    assert guest.read(link["id"], cookie, url).status_code == 404
+    # A client still holding the old id reconnects: the row is gone from the stream as well.
+    res = owner.call("GET", f"/ai-explanations/{old['id']}/stream?view=detail")
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
+    off = type(owner)(off_app, owner.user)
+    disabled = state(off.call("GET", f"{base('question', q['id'])}?view=detail"), (200,))
+    assert disabled["explanation"] is None
+    assert disabled["can_create"] is False
+
+    fresh = make(owner, q["id"], view="detail")
+    assert fresh["status"] == "succeeded"
+    assert fresh["id"] != old["id"]
+    assert fresh["version"] == 1  # a first explanation of the new key, not a regeneration
+    stored = db(
+        "select id::text, prompt_version, status, superseded_at is not null "
+        "from public.question_ai_explanations where question_id = %s order by created_at",
+        (q["id"],),
+    )
+    assert stored == [
+        (old["id"], older, "succeeded", False),
+        (fresh["id"], PROMPT_VERSION, "succeeded", False),
+    ]
+    assert state(guest.read(link["id"], cookie, url), (200,))["body"] == fresh["body"]
+
+
+def test_c03_an_older_prompt_version_of_a_mock_question_is_gone_from_its_stream(
+    seed: Any, db: Any
+) -> None:
+    owner = seed.client("expl-c03m-owner")
+    book = Book(owner)
+    items = shuffle_exam(owner, book.ws, [book.mcq()["id"], book.mcq()["id"]])
+    item = items[0]
+    old = make(owner, item["id"], "mock", view="manage")
+    stream = f"/mock-ai-explanations/{old['id']}/stream?view=manage"
+    assert owner.call("GET", stream).status_code == 200
+    db(
+        "update public.mock_exam_question_ai_explanations set prompt_version = %s where id = %s",
+        ("question.ai_explain/v1", old["id"]),
+    )
+    res = owner.call("GET", stream)
+    assert res.status_code == 404
+    assert old["body"]["summary_md"] not in res.text
+
+
 def test_c03_the_daily_limit_holds_under_concurrent_posts_across_questions(
     seed: Any, db: Any, daily_app: Any
 ) -> None:
@@ -658,7 +727,7 @@ def test_c04_input_has_the_answer_and_sources_but_no_user_answer_or_paper(
     prompt = sent[0]
     assert short["revision"]["stem"] in prompt
     assert "증발" in prompt
-    assert f"{book.label} 단답 사람 해설" in prompt
+    assert f"{book.label} 단답 사람 해설" not in prompt  # UX12 EXPL-2: not an input
     assert "햇빛이 바다와 호수의 표면을 데우면" in prompt  # the published source block
     assert user_answer not in prompt
     for paper_question in PAPER_TRUTH["questions"]:
@@ -926,7 +995,11 @@ def test_c08_the_fake_explainer_is_deterministic_and_logs_its_calls(
 
 
 def test_c09_mock_questions_have_their_own_rows_gate_and_manage_view(
-    seed: Any, db: Any, calls: Callable[[str], int]
+    seed: Any,
+    db: Any,
+    calls: Callable[[str], int],
+    job_worker: Any,
+    prompts: Callable[[Any], list[str]],
 ) -> None:
     owner = seed.client("expl-c09-owner")
     book = Book(owner)
@@ -962,6 +1035,14 @@ def test_c09_mock_questions_have_their_own_rows_gate_and_manage_view(
     assert made["status"] == "succeeded"
     assert made["id"] != bank_expl["id"]  # never the source question's row
     assert calls(item["id"]) == 1
+    # UX12 EXPL-2: the mock revision's human explanation is not an input either.
+    [(human,)] = db(
+        "select r.explanation from public.mock_exam_question_revisions r "
+        "where r.mock_exam_question_id = %s",
+        (item["id"],),
+    )
+    assert human
+    assert human not in prompts(job_worker)[-1]
     mock_rows = db(
         "select id::text from public.mock_exam_question_ai_explanations "
         "where mock_exam_question_id = %s",
