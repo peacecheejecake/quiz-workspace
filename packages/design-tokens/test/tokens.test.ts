@@ -230,6 +230,11 @@ describe('density (design-system.md §4, v1.2.2)', () => {
     expect(px('app-header-height')).toBeGreaterThan(px('control-height-md'));
   });
 
+  it('button rows are compact (UX12-CONTROLS)', () => {
+    expect(staticTokens['control-gap']).toBe('var(--space-1)');
+    expect(px('space-1')).toBe(4);
+  });
+
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
     expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
     expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)

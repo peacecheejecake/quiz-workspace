@@ -205,7 +205,7 @@
 
 .actions {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--control-gap);
   justify-items: start;
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);

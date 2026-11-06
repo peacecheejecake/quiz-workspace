@@ -120,6 +120,7 @@ export const staticTokens = {
   'shadow-floating': '0 18px 56px rgba(30, 39, 59, 0.15)',
   'control-height-sm': '28px',
   'control-height-md': '36px',
+  'control-gap': 'var(--space-1)',
   'app-header-height': '56px',
   'app-sidebar-width': '232px',
   'content-max-width': '1440px',

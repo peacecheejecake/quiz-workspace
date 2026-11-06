@@ -146,7 +146,7 @@ a.title:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 /* `종류 변경` (UX6-UPLOAD): the check mark keeps its space so the labels line up. */

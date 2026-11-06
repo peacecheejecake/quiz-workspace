@@ -72,7 +72,7 @@
 .publishActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .history {
@@ -492,7 +492,7 @@
 
 .editActions {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--control-gap);
 }
 
 .linkButton {
