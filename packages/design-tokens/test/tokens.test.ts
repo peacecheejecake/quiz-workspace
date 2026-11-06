@@ -177,13 +177,6 @@ describe('glass-surface base styles', () => {
     expect(block).toContain('--color-accent: var(--color-accent-on-glass);');
   });
 
-  it('turns glass off while a PDF viewer is on the page', () => {
-    const rule = base.slice(base.indexOf(':root:has([data-pdf-reading]) .glass-surface {'));
-    const block = rule.slice(0, rule.indexOf('}'));
-    expect(block).toContain('background: var(--color-glass-solid);');
-    expect(block).toContain('backdrop-filter: none;');
-  });
-
   it.each(['@media (prefers-reduced-transparency: reduce)', '@supports not'])(
     '%s falls back to the flat solid color (the shorthand drops the gradient)',
     (rule) => {

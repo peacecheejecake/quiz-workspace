@@ -1,6 +1,5 @@
 /* DOCVIEW-01 document viewer layout: the "보기 설정" bar, the split area with its docked outline
- * panel, and the 원본 / 변환본 panes. Semantic tokens only; the reading panes are opaque surfaces
- * (no glass over the PDF or the text, design-system §1). */
+ * panel, and the 원본 / 변환본 panes. Semantic tokens only; the reading panes are opaque surfaces. */
 
 .viewer {
   display: grid;
@@ -274,8 +273,8 @@ button.segment:focus-visible {
 
 /* --- outline panel ------------------------------------------------------------------------- */
 
-/* Tablets: the panel floats over the PDF and the text, so it is opaque there (no glass over the
-   reading area, design-system §1 checklist). Desktop docks it beside the panes (inset). */
+/* Tablets: the panel stays open over the PDF and the text while reading, so its long tree is opaque
+   there. Desktop docks it beside the panes (inset). */
 .outlinePanel:global(.qz-panel)[data-dock-mode='overlay'] {
   background: var(--color-glass-solid);
   -webkit-backdrop-filter: none;

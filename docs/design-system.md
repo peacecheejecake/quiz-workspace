@@ -127,6 +127,8 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **v1.3.3 (UX12 DESIGN-5, 2026-11-06 사용자 피드백 "투명도가 너무 낮음"):** Chromium에서 blur가 한 번도 적용된 적이 없었다. Lightning CSS가 값에 `var()`가 있는 `backdrop-filter`와 `-webkit-backdrop-filter`를 한 속성으로 보고 마지막만 남겨서, 표준 선언이 배포 CSS에서 사라졌다. 이제 `-webkit-`을 먼저 쓴다(`base-css.test.ts`가 검사). blur가 실제로 적용되므로 `--color-glass`를 light `.97`→`.7`, dark `.97`→`.65`로, `--glass-gradient` light alpha를 `.35`→`.2`로 낮추고 `--glass-blur`를 16→24px로, 새 `--glass-brightness`(light 1.3, dark .7)를 더했다. `.glass-surface` 안에서 `--color-surface-muted`는 `--color-surface-raised`, `--color-accent`는 `--color-accent-on-glass`, `--color-accent-hover`는 `--color-accent-pressed`가 된다. 대비는 Chromium에서 빽빽한 배경 위 가장 나쁜 픽셀로 쟀다. 표와 한계는 [UX12-GLASSBTN](screens/ux12-glass-buttons.md)에 있다. `contrast.test.ts`는 그 측정값을 `BUSY_BACKDROP_INK`로 고정한다. 순흑·순백 위 AA는 이제 text-primary만 보장한다.
 
+**v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
+
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`, 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(사용자 결정: 정답 보기를 빨간 테두리로). 셋 모두 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(PALETTE-UNIFY 이후 light/dark 최저는 `contrast.test.ts` 참고; success 4.81+, danger 5.16+, border-strong 3.25/3.61 — muted 위; `contrast.test.ts`). 테두리 색은 의미를 보강할 뿐이고 각 행의 체크/X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 의미를 전달한다(UX12 VIEW-2).
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
@@ -596,7 +598,7 @@ packages/
 - [ ] 모달 focus trap 및 닫힌 뒤 focus 원위치 복구
 - [ ] light/dark contrast, forced-colors, reduced-motion 확인
 - [ ] CSS blur 미지원 시 불투명한 fallback surface 유지
-- [ ] PDF 읽기 영역을 glass blur로 가리지 않음(PDF viewer가 있는 동안 `.glass-surface`는 단색이다, UX12 DESIGN-5)
+- [ ] PDF 읽기 영역 자체는 불투명 표면이다. floating glass는 그 위를 blur로 덮어도 된다(사용자 결정 2026-11-06)
 - [ ] Storybook 상태 예제와 스크린샷 회귀 테스트 포함
 - [ ] pointer target WCAG 2.2 최소 기준 확인
 
