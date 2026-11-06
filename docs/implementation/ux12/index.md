@@ -402,7 +402,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | VIEW-8 | 10 | 진행 | |
 | MOCKUX-12 | 10 | 완료 | 이어 풀기 n/m을 주 버튼으로, 이어 풀기 지우기, Codex P2 수정 후 재리뷰 통과, 첫 머지는 리뷰를 읽기 전에 함, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-13 | 10 | 진행 | |
-| MOCKUX-14 | 10 | 진행 | |
+| MOCKUX-14 | 10 | 완료 | 번호·O/X 표, 열 전체가 버튼, Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-15 | 10 | 진행 | |
 | DESIGN-6 | 10 | 완료 | 마커 실제 21px·18px였던 것을 28px로, hover 1.5배, 간격 0→7px, Codex P2(기존 테스트 값) 수정, Chromium Storybook 측정, E2E는 PR CI에서 확인 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
