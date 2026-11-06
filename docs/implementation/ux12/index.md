@@ -382,7 +382,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-8 | 10 | 완료 | Codex P2(CI phase)는 merge에서 반영, 범위 먼저, 물음표는 Popover, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | DESIGN-5 | 10 | 완료 | Codex P2 수정, 블러 원인(Lightning CSS의 -webkit 순서) 수정, PDF 위 유리는 불투명, Heatmap 1.3은 기존값, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | HOME-6 | 10 | 완료 | Codex P2(비활성 칩 클릭)는 수정, CI phase는 merge에서 반영, D-7의 chip 위치를 대체, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
-| MOCKUX-9 | 10 | 진행 | |
+| MOCKUX-9 | 10 | 완료 | 실행마다 섞기, 보기 섞기만이면 작업 없이 준비됨(문제 행은 저장), migration 20261106190000, Codex P2(CI phase)는 merge에서 반영, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-10 | 10 | 완료 | 원인은 추출과 같은 큐(코드·재현으로 입증, production 수치는 미확인), quiz.ondemand 큐와 대기 중 표시, Codex 지적 없음, lint·typecheck·unit GREEN |
 | HOME-7 | 10 | 완료 | 문서 관리 행 수로 변경, UX6-UPLOAD 결정 대체, Codex P2(CI phase)는 merge에서 반영 |
 | CHAPTER-7 | 10 | 완료 | overscroll guard 수정, Chromium·jsdom 확인, 실제 iPad는 미확인 |
