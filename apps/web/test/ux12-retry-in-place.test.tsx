@@ -213,4 +213,35 @@ describe('UX12-RETRYINPLACE', () => {
     expect(given.submit).toHaveBeenCalledWith(SESSION.id, { selected_option_ids: ['o2'] });
     expect(given.getRun).toHaveBeenCalledTimes(1);
   });
+
+  it('UX12-RETRYINPLACE-AC06 a failed submission keeps the retry, the answer and the error', async () => {
+    const user = userEvent.setup();
+    const given = client({
+      getRun: vi.fn(async () => ({
+        ok: true as const,
+        data: run({ finished_at: '2026-11-02T01:00:00Z' }),
+      })),
+      submit: vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          kind: 'alreadySubmitted',
+          message: '제출이 거절되었습니다',
+        })
+        .mockResolvedValueOnce({ ok: true, data: RESULT }),
+    });
+    show(given);
+    await user.click(await screen.findByRole('button', AGAIN));
+    await user.click(await screen.findByRole('radio', { name: /응결/ }));
+    await user.click(screen.getByRole('button', { name: /제출/ }));
+
+    expect(await screen.findByText('제출이 거절되었습니다')).toBeTruthy();
+    expect(given.getItem).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(screen.getByRole('radio', { name: /응결/, checked: true })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /제출/ }));
+    await screen.findAllByText('새 해설');
+    expect(given.submit).toHaveBeenLastCalledWith(SESSION.id, { selected_option_ids: ['o2'] });
+  });
 });

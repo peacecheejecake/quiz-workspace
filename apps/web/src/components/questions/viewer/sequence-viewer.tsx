@@ -1046,9 +1046,10 @@ function useSolveStep({
       if (result.data.result === 'pending') pendingHere(qid);
       else gradedHere(qid, result.data.result);
       onGraded?.(qid, result.data.result);
-    } else if (runId) {
+    } else if (runId && !localRetry) {
       // The answer may have been recorded and only the response lost (or another tab submitted
-      // it): when the position now has an attempt, show what the server kept.
+      // it): when the position now has an attempt, show what the server kept. Not for a retry in
+      // a finished run: that attempt is the record's, and this session is outside the run.
       const again = await client.getItem(runId, position).catch(() => null);
       if (liveWork.current === workId && again?.ok && again.data.attempt) {
         setItemSeq((n) => n + 1);
