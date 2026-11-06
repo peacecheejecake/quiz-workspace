@@ -227,6 +227,12 @@ def test_a_mock_range_keeps_mock_exam_order_and_applies_exclusions_and_type() ->
         c.id,
     ]
     assert select_mock_range(rows, _range(all=True, filters={"type": "ESSAY"})) == [b.id]
+    assert select_mock_range(rows, _range(all=True, filters={"types": ["ESSAY"]})) == [b.id]
+    assert select_mock_range(rows, _range(all=True, filters={"types": ["MCQ", "ESSAY"]})) == [
+        a.id,
+        b.id,
+        c.id,
+    ]
     assert select_mock_range(rows, _range()) == []
 
 

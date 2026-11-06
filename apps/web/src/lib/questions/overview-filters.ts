@@ -135,14 +135,14 @@ export function isOverviewFiltered(filters: OverviewFilters): boolean {
 /** Overview API query (`GET /workspaces/{id}/questions/overview`) for `filters`. */
 export function overviewApiQuery(filters: OverviewFilters): {
   chapter?: string;
-  type?: QuestionType;
+  type?: QuestionType[];
   q?: string;
   status?: (QuestionDotStatus | 'none')[];
   favorite?: boolean;
 } {
   return {
     ...(filters.chapter ? { chapter: filters.chapter } : {}),
-    ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.type ? { type: [filters.type] } : {}),
     ...(filters.q ? { q: filters.q } : {}),
     ...(filters.status.length === 0
       ? { status: ['none' as const] }
