@@ -59,6 +59,7 @@ def content_of(
     return QuestionContent(
         question_type=draft.question_type.value,
         stem=draft.stem,
+        stem_tables=draft.stem_tables,
         options=tuple((o.id, o.text) for o in draft.options),
         correct_option_ids=draft.correct_option_ids,
         is_multi_answer=is_multi_answer,
@@ -108,6 +109,7 @@ def with_review(
             **draft.model_dump(),
             "question_type": content.question_type,
             "stem": content.stem,
+            "stem_tables": content.stem_tables,
             "options": [{"id": oid, "text": text} for oid, text in content.options],
             "correct_option_ids": content.correct_option_ids,
             "accepted_answers": content.accepted_answers,

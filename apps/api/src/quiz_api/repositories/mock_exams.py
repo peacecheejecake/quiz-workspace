@@ -87,6 +87,7 @@ class QuestionRecord:
     source_deleted: bool
     source_chapter_id: uuid.UUID | None
     source_number: int | None
+    stem_tables: list[Any] | None = None
 
 
 _GENERATION_COLUMNS = """
@@ -110,7 +111,7 @@ _QUESTIONS = """
     select q.id, q.mock_exam_id, q.generation_id, q.position, q.question_type, q.variation_type,
            r.id as revision_id, r.version as revision_version, r.stem, r.options,
            r.correct_option_ids, r.accepted_answers, r.is_multi_answer, r.explanation, r.rubric,
-           r.validation_issues, r.evidence,
+           r.validation_issues, r.evidence, r.stem_tables,
            s.id as source_question_id, s.deleted_at is not null as source_deleted,
            s.chapter_id as source_chapter_id, s.question_number as source_number
       from public.mock_exam_questions q
@@ -177,6 +178,7 @@ def _question(row: Any) -> QuestionRecord:
         rubric=row.rubric,
         validation_issues=list(row.validation_issues or []),
         evidence=list(row.evidence or []),
+        stem_tables=row.stem_tables,
         source_question_id=row.source_question_id,
         source_deleted=bool(row.source_deleted) if row.source_question_id else True,
         source_chapter_id=row.source_chapter_id,
@@ -544,9 +546,11 @@ class MockExamRepository:
                 "insert into public.mock_exam_question_revisions (id, workspace_id, "
                 "mock_exam_question_id, version, stem, options, correct_option_ids, "
                 "accepted_answers, is_multi_answer, explanation, rubric, evidence, "
-                "validation_issues, origin, edited_by) values (:id, :w, :q, :v, :stem, "
+                "validation_issues, origin, edited_by, stem_tables) "
+                "values (:id, :w, :q, :v, :stem, "
                 "cast(:options as jsonb), :correct, :accepted, :multi, :explanation, :rubric, "
-                "cast(:evidence as jsonb), '[]'::jsonb, 'edited', :a)"
+                "cast(:evidence as jsonb), '[]'::jsonb, 'edited', :a, "
+                "cast(:stem_tables as jsonb))"
             ),
             {
                 "id": revision_id,
@@ -562,6 +566,9 @@ class MockExamRepository:
                 "rubric": content["rubric"],
                 "evidence": _json(question.evidence),
                 "a": actor_id,
+                "stem_tables": _json(content["stem_tables"])
+                if content["stem_tables"] is not None
+                else None,
             },
         )
         self._session.execute(

@@ -18,6 +18,7 @@ PREVIEW_FIELDS = {
     "chapter_title",
     "question_type",
     "stem",
+    "stem_tables",
     "options",
 }
 OPTION_FIELDS = {"id", "text"}

@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
+from book_core.question import StemTables, stem_table_spans
+
 from quiz_api.question_fingerprint import (
     answer_key,
     model_answer_of,
@@ -19,7 +21,7 @@ from quiz_api.question_fingerprint import (
 )
 from quiz_api.question_rules import QuestionContent
 
-ChangedField = Literal["type", "stem", "options", "answer"]
+ChangedField = Literal["type", "stem", "table", "options", "answer"]
 
 
 def changed_fields(
@@ -30,6 +32,7 @@ def changed_fields(
     correct_option_ids: Sequence[str] | None,
     accepted_answers: Sequence[str] | None,
     rubric: str | None,
+    stem_tables: StemTables | None = None,
 ) -> list[ChangedField]:
     """The fields of `new` that differ from the earlier content, in display order."""
     changed: list[ChangedField] = []
@@ -37,6 +40,9 @@ def changed_fields(
         changed.append("type")
     if normalize_stem(new.stem) != normalize_stem(stem):
         changed.append("stem")
+    elif stem_table_spans(new.stem_tables) != stem_table_spans(stem_tables):
+        # The same letters with other merged cells: only a new revision can bring them in.
+        changed.append("table")
     new_options = sorted(normalize_option(text) for _, text in new.options)
     if new_options != sorted(normalize_option(text) for _, text in options):
         changed.append("options")

@@ -1228,3 +1228,47 @@ def test_ux10_qview_ac01_mock_options_default_to_revision_order(seed: Any, db: A
         {"selected_option_ids": question["correct_option_ids"]},
     )
     assert graded["result"] == "correct"
+
+
+STEM_TABLE_GFM = "| 구분 | 구분 |\n| --- | --- |\n| 1 | 2 |"
+STEM_TABLE = {
+    "rows": [["구분", "구분"], ["1", "2"]],
+    "header_rows": 1,
+    "spans": [{"row": 0, "col": 0, "row_span": 1, "col_span": 2}],
+}
+
+
+def test_ux12_stemtable_c03_a_shuffle_keeps_the_cells_and_a_rewritten_stem_drops_them(
+    seed: Any,
+) -> None:
+    owner = seed.client("mock-stemtable")
+    book = Book(owner)
+    source = book.source("evaporation")
+    stem = f"{source['revision']['stem']}\n\n{STEM_TABLE_GFM}"
+    owner.ok(
+        "PATCH",
+        f"/questions/{source['id']}",
+        {
+            "base_revision_id": source["revision"]["id"],
+            "stem": stem,
+            "stem_tables": [STEM_TABLE],
+        },
+    )
+
+    shuffled = make(owner, book.ws, config(("OPTION_SHUFFLE",), 1), picked(source["id"]))
+    (copy,) = questions(owner, shuffled["id"])
+    assert copy["stem"] == stem
+    assert copy["stem_tables"] == [STEM_TABLE]
+
+    # An editor's edit goes through the same rule as the bank.
+    edited = owner.ok(
+        "PATCH",
+        f"/mock-exam-questions/{copy['id']}",
+        {"base_revision_id": copy["revision"]["id"], "stem": f"앞 문장\n\n{STEM_TABLE_GFM}"},
+    )
+    assert edited["stem_tables"] == [STEM_TABLE]
+
+    rewritten = make(owner, book.ws, config(("PARAPHRASE",), 1), picked(source["id"]))
+    (variant,) = questions(owner, rewritten["id"])
+    assert variant["stem"] != stem
+    assert variant["stem_tables"] is None

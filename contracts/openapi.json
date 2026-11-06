@@ -2515,6 +2515,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "validations": {
             "items": {
               "$ref": "#/components/schemas/DraftValidation"
@@ -2565,6 +2587,7 @@
               "enum": [
                 "type",
                 "stem",
+                "table",
                 "options",
                 "answer"
               ],
@@ -5914,6 +5937,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "validation_issues": {
             "anyOf": [
               {
@@ -6053,6 +6098,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -6529,6 +6597,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "workspace_id": {
             "format": "uuid",
@@ -8065,6 +8155,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -8274,6 +8386,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "submitted_at": {
             "anyOf": [
@@ -8749,6 +8883,29 @@
             "maxLength": 20000,
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -9058,6 +9215,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -9233,6 +9413,28 @@
             "description": "The active revision's stem, unaltered.",
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -9377,6 +9579,28 @@
           "stem": {
             "title": "Stem",
             "type": "string"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "version": {
             "title": "Version",
@@ -9719,6 +9943,29 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTableInput"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM. Omitted: the stored cells, while they fit the stem.",
+            "title": "Stem Tables"
           }
         },
         "required": [
@@ -10566,6 +10813,28 @@
             "title": "Stem",
             "type": "string"
           },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -11077,6 +11346,28 @@
               }
             ],
             "title": "Stem"
+          },
+          "stem_tables": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StemTable"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cells of the stem's pipe blocks, in order; a null entry shows that block as GFM. Null when every block shows as GFM.",
+            "title": "Stem Tables"
           },
           "total": {
             "title": "Total",
@@ -12959,6 +13250,120 @@
           "bbox"
         ],
         "title": "SourceRegionItem",
+        "type": "object"
+      },
+      "StemTable": {
+        "description": "The cells of one pipe block of the stem, in the shape of a document table.",
+        "properties": {
+          "header_rows": {
+            "title": "Header Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rectangular grid: merged cells repeat their text.",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StemTableSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Merged cells; null when there are none.",
+            "title": "Spans"
+          }
+        },
+        "required": [
+          "rows",
+          "header_rows"
+        ],
+        "title": "StemTable",
+        "type": "object"
+      },
+      "StemTableInput": {
+        "additionalProperties": false,
+        "properties": {
+          "header_rows": {
+            "title": "Header Rows",
+            "type": "integer"
+          },
+          "rows": {
+            "description": "Rectangular grid: merged cells repeat their text.",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StemTableSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Merged cells; null when there are none.",
+            "title": "Spans"
+          }
+        },
+        "required": [
+          "rows",
+          "header_rows"
+        ],
+        "title": "StemTableInput",
+        "type": "object"
+      },
+      "StemTableSpan": {
+        "properties": {
+          "col": {
+            "minimum": 0.0,
+            "title": "Col",
+            "type": "integer"
+          },
+          "col_span": {
+            "minimum": 1.0,
+            "title": "Col Span",
+            "type": "integer"
+          },
+          "row": {
+            "minimum": 0.0,
+            "title": "Row",
+            "type": "integer"
+          },
+          "row_span": {
+            "minimum": 1.0,
+            "title": "Row Span",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "col",
+          "row_span",
+          "col_span"
+        ],
+        "title": "StemTableSpan",
         "type": "object"
       },
       "SubmitBody": {

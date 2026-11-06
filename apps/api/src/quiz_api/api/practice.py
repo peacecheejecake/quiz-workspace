@@ -110,6 +110,7 @@ from quiz_api.repositories.practice import (
 )
 from quiz_api.repositories.practice_runs import PracticeRunRepository
 from quiz_api.repositories.questions import QuestionRecord, QuestionRepository
+from quiz_api.stem_tables import STEM_TABLES_DESCRIPTION, StemTable, stem_tables_out
 
 router = APIRouter(tags=["practice"], responses=problem_responses(503))
 
@@ -144,6 +145,9 @@ class PracticeSession(BaseModel):
     chapter_id: uuid.UUID | None
     question_number: int | None
     stem: str
+    stem_tables: list[StemTable | None] | None = Field(
+        default=None, description=STEM_TABLES_DESCRIPTION
+    )
     is_multi_answer: bool
     options: list[PracticeOption] = Field(description="MCQ options in displayed order.")
     displayed_option_ids: list[str] = Field(description="The displayed order (MCQ), as ids.")
@@ -393,6 +397,7 @@ def _session_out(s: SessionRecord) -> PracticeSession:
         chapter_id=s.chapter_id,
         question_number=s.question_number,
         stem=s.revision.stem,
+        stem_tables=stem_tables_out(s.revision.stem_tables),
         is_multi_answer=s.revision.is_multi_answer,
         options=[PracticeOption(id=oid, text=texts[oid]) for oid in s.displayed_option_ids],
         displayed_option_ids=s.displayed_option_ids,

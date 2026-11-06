@@ -52,6 +52,7 @@ class CandidateRecord:
     correct_option_ids: list[str] | None
     accepted_answers: list[str] | None
     rubric: str | None
+    stem_tables: list[Any] | None = None
 
     @property
     def fingerprint(self) -> str:
@@ -93,6 +94,7 @@ _COLUMNS = (
     question_revisions.c.correct_option_ids,
     question_revisions.c.accepted_answers,
     question_revisions.c.rubric,
+    question_revisions.c.stem_tables,
 )
 
 
@@ -140,6 +142,7 @@ def _candidate(row: Any) -> CandidateRecord:
         else None,
         accepted_answers=list(row.accepted_answers) if row.accepted_answers is not None else None,
         rubric=row.rubric,
+        stem_tables=row.stem_tables,
     )
 
 

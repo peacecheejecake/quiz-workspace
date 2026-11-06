@@ -72,6 +72,7 @@ from book_core.mock_exam import (
     source_tag,
 )
 from book_core.mock_exam.prompts import passage_block
+from book_core.question import stem_tables_json, variant_stem_tables
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from quiz_worker.adapters import WorkerNotConfiguredError
@@ -309,6 +310,9 @@ class _Pipeline:
                     source_question_id=row.question_id,
                     source_question_revision_id=row.revision_id,
                     stem=row.stem,
+                    stem_tables=stem_tables_json(
+                        variant_stem_tables(row.stem, row.stem, pinned.stem_tables)
+                    ),
                     options=shuffled_options(row.options, self.generation.seed, position),
                     correct_option_ids=row.correct_option_ids,
                     accepted_answers=row.accepted_answers,
@@ -535,6 +539,7 @@ class _Pipeline:
         multi = content.question_type is QuestionType.MCQ and (
             len(content.correct_option_ids or ()) > 1
         )
+        pinned = self.pinned.get(uuid.UUID(source.revision_id))
         return MadeQuestion(
             position=outcome.position,
             question_type=content.question_type.value,
@@ -542,6 +547,12 @@ class _Pipeline:
             source_question_id=uuid.UUID(source.question_id),
             source_question_revision_id=uuid.UUID(source.revision_id),
             stem=content.stem,
+            # A rewritten stem keeps no cells: they would say something else than its text.
+            stem_tables=stem_tables_json(
+                variant_stem_tables(content.stem, pinned.row.stem, pinned.stem_tables)
+                if pinned is not None
+                else None
+            ),
             options=[{"id": o.id, "text": o.text} for o in content.options],
             correct_option_ids=list(content.correct_option_ids)
             if content.correct_option_ids is not None

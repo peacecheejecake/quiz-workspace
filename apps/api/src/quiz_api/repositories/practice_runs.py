@@ -95,6 +95,7 @@ class LiveQuestion:
     stem: str
     options: list[dict[str, str]]
     is_multi_answer: bool
+    stem_tables: list[Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -306,6 +307,7 @@ class PracticeRunRepository:
                 question_revisions.c.stem,
                 question_revisions.c.options,
                 question_revisions.c.is_multi_answer,
+                question_revisions.c.stem_tables,
             )
             .select_from(
                 questions.join(
@@ -335,6 +337,7 @@ class PracticeRunRepository:
             stem=row.stem,
             options=list(row.options),
             is_multi_answer=row.is_multi_answer,
+            stem_tables=row.stem_tables,
         )
 
     def results(self, run: RunRecord, offset: int, limit: int) -> list[ResultRow]:
