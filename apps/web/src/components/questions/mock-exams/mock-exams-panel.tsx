@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   EmptyState,
+  FloatingPanelPinned,
   FloatingSidePanel,
   IconButton,
   MoreIcon,
@@ -174,7 +175,7 @@ export function MockExamsPanel({
   }
   useEffect(() => {
     if (focusTick === 0 || !open) return;
-    (view.view === 'list' ? titleRef.current : viewHeading.current)?.focus();
+    (view.view === 'detail' ? viewHeading.current : titleRef.current)?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTick]);
 
@@ -308,7 +309,6 @@ export function MockExamsPanel({
       );
   }
 
-  let heading: ReactNode = null;
   let body: ReactNode;
   if (view.view === 'list') {
     body = (
@@ -342,7 +342,6 @@ export function MockExamsPanel({
       />
     );
   } else if (view.view === 'create') {
-    heading = '문제 풀기';
     body =
       list.status === 'loading' ? (
         <Loading />
@@ -401,7 +400,7 @@ export function MockExamsPanel({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
-      title={view.view === 'create' ? '문제 풀기' : '모의고사'}
+      title="모의고사"
       onOpenerResolved={(opener) => {
         panelOpener.current = opener;
       }}
@@ -420,12 +419,13 @@ export function MockExamsPanel({
     >
       <div className={styles.body} data-screen-id={screenId}>
         {view.view !== 'list' ? (
-          <BackLink label="모의고사 목록" onClick={() => onViewChange({ view: 'list' }, 'push')} />
-        ) : null}
-        {heading ? (
-          <h2 ref={viewHeading} tabIndex={-1} className={styles.heading}>
-            {heading}
-          </h2>
+          // Mounted before the form's steps in the same fixed area, so it stays above them.
+          <FloatingPanelPinned>
+            <BackLink
+              label="모의고사 목록"
+              onClick={() => onViewChange({ view: 'list' }, 'push')}
+            />
+          </FloatingPanelPinned>
         ) : null}
         {body}
       </div>
