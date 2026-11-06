@@ -74,12 +74,6 @@ test(
     expect(moreBox.boxWidth).toBe(moreBox.boxHeight);
 
     await page.goto(homePath(ws.id));
-    const questionMenu = homeUi.questionMenuButton(page);
-    await expectInvisibleBoundary(questionMenu);
-    const menuBox = await boundary(questionMenu);
-    expect(menuBox.width).toBe('1px');
-    expect(menuBox.boxWidth).toBe(menuBox.boxHeight);
-
     const panel = await openAskPanel(page);
     await expectInvisibleBoundary(askUi.close(panel));
   },

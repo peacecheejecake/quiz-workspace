@@ -70,7 +70,7 @@ test(
     await expect(homeUi.header(page)).toBeVisible();
     await expectAccessible(page, 'workspace home', LIGHT);
 
-    await homeUi.documentsButton(page).tap();
+    await homeUi.openDocuments(page, 'tap');
     const documents = homeUi.documentsDialog(page);
     await expect(documents).toBeVisible();
     const chooser = page.waitForEvent('filechooser');

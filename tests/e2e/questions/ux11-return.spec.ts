@@ -286,7 +286,7 @@ test(
     await panelUi.close(panel).click();
     const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
     await expect(control).toBeVisible();
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const docs = homeUi.documentsDialog(page);
     await docs.locator(`a[href="/workspaces/${ws.id}/documents/${documentId}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/documents/${documentId}`));

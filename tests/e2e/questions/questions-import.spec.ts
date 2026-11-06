@@ -549,7 +549,7 @@ test(
         .or(scope.getByRole('button', { name: /^pdf 가져오기$|^import pdf$/i }));
     await expect(importButton(main(page))).toHaveCount(0);
     // UX7-DOCS: the PDFs with questions are reviewed from 문서 관리 (DOC-01-AC09).
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
     const list = dialog.getByRole('list', { name: /문서 목록|documents/i });

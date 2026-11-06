@@ -387,7 +387,9 @@ test(
       main(page).getByRole('button', { name: /^(검색 옵션|search options)$/i }),
     ).toHaveCount(0);
     await expect(searchUi.box(page)).toHaveCount(0);
+    await homeUi.openMenu(page);
     await expect(homeUi.contentSearchLink(page)).toBeVisible();
+    await page.keyboard.press('Escape');
     const questionBox = homeUi.questionSearch(page);
     await expect(questionBox).toBeVisible();
     await expect(questionBox).toBeEnabled();
@@ -868,7 +870,7 @@ test(
     // The 문제 search commits, its BFF read is held, and the 문서 dialog opens meanwhile.
     await homeUi.questionSearch(page).fill('search01-ac12 chlorine');
     await expect.poll(() => held).toBeGreaterThan(0);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     release();
     // UX9: the Heatmap behind the modal dialog is hidden from assistive technology.
@@ -951,7 +953,7 @@ test(
 
     await homeUi.questionSearch(page).fill(QUERY);
     await expect.poll(() => held).toBeGreaterThan(0);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     await expect(homeUi.documentsDialog(page)).toBeVisible();
     await homeUi
       .documentsDialog(page)

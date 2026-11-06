@@ -44,6 +44,14 @@ async function focusInPlace(trigger: Locator): Promise<void> {
   await trigger.evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
 }
 
+/** A kit Tooltip's trigger: 변형 유형's `?` button in the 풀기 form (the home line has none). */
+async function tooltipTrigger(page: Page, workspaceId: string): Promise<Locator> {
+  await page.goto(homePath(workspaceId, 'panel=mock-exams&mock=new'));
+  const trigger = page.getByRole('button', { name: / 설명$/ }).first();
+  await expect(trigger).toBeVisible();
+  return trigger;
+}
+
 async function expectSafeMargin(page: Page, surface: Locator): Promise<void> {
   await expect(surface).toBeVisible();
   const width = page.viewportSize()?.width ?? 0;
@@ -101,11 +109,9 @@ for (const edge of ['left', 'right'] as const) {
       const owner = await workspaceFactory.member('ux12-pop-01');
       const ws = await workspaceFactory.create(owner);
       await signInAs(page, owner.user);
-      await page.goto(homePath(ws.id));
-      const link = homeUi.contentSearchLink(page);
-      await expect(link).toBeVisible();
-      await pinToEdge(link, edge);
-      await focusInPlace(link);
+      const trigger = await tooltipTrigger(page, ws.id);
+      await pinToEdge(trigger, edge);
+      await focusInPlace(trigger);
       await expectSafeMargin(page, page.getByRole('tooltip'));
     },
   );
@@ -141,10 +147,7 @@ test.describe('narrow viewport', () => {
       const owner = await workspaceFactory.member('ux12-pop-02');
       const ws = await workspaceFactory.create(owner);
       await signInAs(page, owner.user);
-      await page.goto(homePath(ws.id));
-      const link = homeUi.contentSearchLink(page);
-      await expect(link).toBeVisible();
-      await focusInPlace(link);
+      await focusInPlace(await tooltipTrigger(page, ws.id));
       const surface = page.getByRole('tooltip');
       await expect(surface).toBeVisible();
       await surface.evaluate((element, text) => {

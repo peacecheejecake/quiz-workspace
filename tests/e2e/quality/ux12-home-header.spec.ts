@@ -212,17 +212,18 @@ test(
     await ownerHome(page, workspaceFactory, 'ux12-hdr-04', 3);
     await stretchHome(page);
     const first = overviewUi.dot(page, 1);
-    const lineBox = await box(stickyLine(page));
+    const line = stickyLine(page);
     const start = await box(first);
-    // The marker sits behind the line, focused without scrolling.
-    await scrollTo(page, Math.round(start.y - lineBox.y));
+    // The marker sits behind the stuck line, focused without scrolling.
+    await scrollTo(page, Math.round(start.y - (await box(line)).y));
+    const stuck = await box(line);
     await first.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
     await page.keyboard.press('ArrowRight');
     const second = overviewUi.dot(page, 2);
     await expect(second).toBeFocused();
     await expect
       .poll(async () => (await box(second)).y)
-      .toBeGreaterThanOrEqual(lineBox.y + lineBox.height);
+      .toBeGreaterThanOrEqual(stuck.y + stuck.height);
   },
 );
 
@@ -242,7 +243,7 @@ test.describe('375px', () => {
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
-      expect(overflow).toBe(0);
+      expect(overflow).toBeLessThanOrEqual(0);
     },
   );
 });

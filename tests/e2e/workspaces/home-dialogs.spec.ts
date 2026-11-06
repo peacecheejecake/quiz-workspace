@@ -108,11 +108,8 @@ const panels = (page: Page) => new URL(page.url()).searchParams.getAll('panel');
 
 /** Opens the header `문제` menu and chooses the item named `item`. */
 async function fromQuestionMenu(page: Page, item: RegExp): Promise<void> {
-  await homeUi.questionMenuButton(page).click();
-  await page
-    .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
-    .getByRole('menuitem', { name: item })
-    .click();
+  await homeUi.openMenu(page);
+  await homeUi.questionMenu(page).getByRole('menuitem', { name: item }).click();
 }
 
 interface HomeDialog {
@@ -129,7 +126,7 @@ const DIALOGS: readonly HomeDialog[] = [
     name: '문서 관리',
     panel: 'documents',
     dialog: homeDialogUi.documents,
-    open: (page) => homeUi.documentsButton(page).click(),
+    open: (page) => homeUi.openDocuments(page),
     opener: homeUi.documentsButton,
   },
   {
@@ -244,9 +241,7 @@ test(
       // on top before each probe): the click may land on the backdrop and close a dialog that
       // has nothing to lose, but never activates what is behind it.
       const marker = await overviewUi.dots(page).first().boundingBox();
-      // The `문서 n` button: the home no longer steps aside (AC03), so at 1280px the `문제` menu
-      // button lies under the 500px dialog itself (a click there lands inside the dialog, not on
-      // its backdrop); `문서 n` stays left of every dialog.
+      // The `문서 N` button: the home no longer steps aside (AC03); it stays left of every dialog.
       const header = await homeUi.documentsButton(page).boundingBox();
       if (!marker || !header) throw new Error('home controls are not visible');
       for (const [what, box] of [
@@ -294,7 +289,7 @@ test(
     await expect(overviewUi.dots(page).first()).toBeVisible();
 
     // 문서 관리 → 요약: the summary stacks on top, 문서 관리 below it is inert.
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const documents = homeDialogUi.documents(page);
     await expectModal(page, documents, '문서 관리');
     const summaryButton = summaryUi.rowButton(documents, s.documentTitle);
@@ -465,7 +460,7 @@ const LAYOUT_DIALOGS: readonly LayoutDialog[] = [
   {
     name: '문서 관리',
     dialog: homeDialogUi.documents,
-    open: (page) => domClick(homeUi.documentsButton(page)),
+    open: (page) => homeUi.openDocuments(page),
   },
   {
     name: '정리 노트',

@@ -20,13 +20,16 @@ export function HomeSkeleton() {
   return (
     <Busy label="Workspace를 불러오는 중입니다.">
       <div className={styles.row}>
-        <Skeleton shape="rect" width="min(36rem, 100%)" height="2.25rem" />
         <div className={styles.actions}>
           <Skeleton shape="rect" width="5rem" height="2.25rem" />
-          <Skeleton shape="rect" width="5rem" height="2.25rem" />
+          <Skeleton shape="rect" width="3.5rem" height="2.25rem" />
+        </div>
+        <div className={styles.actions}>
+          <Skeleton shape="rect" width="2.25rem" height="2.25rem" />
           <Skeleton shape="rect" width="2.25rem" height="2.25rem" />
         </div>
       </div>
+      <Skeleton shape="rect" width="min(36rem, 100%)" height="2.25rem" />
       <Skeleton shape="rect" width="12rem" height="1.75rem" />
       <Skeleton shape="rect" height="8rem" />
       <Skeleton shape="rect" height="8rem" />
