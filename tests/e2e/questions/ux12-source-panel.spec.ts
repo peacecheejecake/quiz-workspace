@@ -265,6 +265,32 @@ test.describe('UX12-SOURCE-AC04 phone', () => {
       expect(page.url()).toBe(before);
     },
   );
+
+  test(
+    'UX12-SOURCE-AC04 on a phone 전체 문서 보기 replaces the sheet entry, so one Back returns and the next leaves',
+    { tag: '@infra' },
+    async ({ page, workspaceFactory }) => {
+      const owner = await workspaceFactory.member('ux12-source-ac04-back');
+      const ws = await workspaceFactory.create(owner);
+      const documentId = await uploadReadyBook(owner, ws.id, 'book-en');
+      await signInAs(page, owner.user);
+      const panel = await openChlorineExcerpt(page, ws.id);
+      const searchUrl = page.url();
+      await searchUi.openInPdf(panel).click();
+      await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
+      await expect(page).toHaveURL(
+        (url) => url.pathname === `/workspaces/${ws.id}/documents/${documentId}`,
+      );
+
+      await page.goBack();
+      await expect(page).toHaveURL(searchUrl);
+      await expect(searchUi.resultItems(page).first()).toBeVisible();
+
+      // Not the same screen a second time: the sheet's history entry is gone.
+      await page.goBack();
+      await expect(page).not.toHaveURL(searchUrl);
+    },
+  );
 });
 
 test(

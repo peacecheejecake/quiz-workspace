@@ -47,7 +47,7 @@ linked_tests: [UX12-SOURCE-AC01 … UX12-SOURCE-AC06]
 
 ### UX12-SOURCE-AC04
 
-본문 검색의 발췌 panel에서 `PDF에서 보기`를 누르면 "원본 PDF" dialog가 그 쪽을 연다. URL은 같고, 닫으면 focus가 `PDF에서 보기`로 돌아오며 검색 결과는 그대로다. 휴대폰 폭에서는 전체 화면 sheet이고 가로 스크롤이 없으며, 브라우저 Back은 sheet만 닫는다.
+본문 검색의 발췌 panel에서 `PDF에서 보기`를 누르면 "원본 PDF" dialog가 그 쪽을 연다. URL은 같고, 닫으면 focus가 `PDF에서 보기`로 돌아오며 검색 결과는 그대로다. 휴대폰 폭에서는 전체 화면 sheet이고 가로 스크롤이 없으며, 브라우저 Back은 sheet만 닫는다. sheet의 `전체 문서 보기`는 sheet의 history 항목을 DOC-02로 바꾸므로, DOC-02의 Back 한 번으로 같은 화면에 돌아오고 다음 Back은 그 화면을 떠난다.
 
 ### UX12-SOURCE-AC05
 

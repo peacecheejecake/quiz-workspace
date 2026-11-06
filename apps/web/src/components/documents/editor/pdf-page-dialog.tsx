@@ -83,7 +83,10 @@ export function PdfPageDialog({ target, onClose }: PdfPageDialogProps) {
       footer={
         target ? (
           <Button asChild>
-            <Link href={target.documentHref}>{FULL_DOCUMENT_LABEL}</Link>
+            {/* In a sheet it takes over the sheet's history entry: one Back returns from DOC-02. */}
+            <Link href={target.documentHref} replace={sheet}>
+              {FULL_DOCUMENT_LABEL}
+            </Link>
           </Button>
         ) : undefined
       }
