@@ -286,7 +286,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-5 | 3 | 완료 | a5278ad9 · Codex P2(CI phase)는 merge에서 반영, 검색·필터 줄 재구성, E2E GREEN |
 | ASK-1 | 3 | 완료 | |
 | ASK-2 | 3 | 완료 | 0d5f7f05 · Codex P2(CI phase)는 merge에서 반영, E2E 88·Vitest 29 GREEN |
-| EXTRACT-3 | 4 | 진행 | |
+| EXTRACT-3 | 4 | 완료 | Codex P2(라벨 열 내용 보존) 수정 후 재리뷰 통과, pytest 271·E2E 20 GREEN |
 | EXTRACT-4 | 4 | 진행 | |
 | EXTRACT-5 | 4 | 진행 | |
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
