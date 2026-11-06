@@ -147,7 +147,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | Task | 항목 | 구현 | 개정·test | 크기·의존 |
 |---|---|---|---|---|
 | ASK-1 명세·RED | 7개 전체 | `docs/screens/ux12-ask.md`, ASK-01 개정. **AI 생성 표시·다시 생성은 2026-11-01 사용자 결정을 뒤집으므로** §7에 기록 | D-10 | S·D-10 |
-| ASK-2 구현 | 목록 테두리, 입력창 삭제, FAB, 범위 위치, 뒤로가기, 범위 popover, 레이블 삭제 | 목록에서 footer 제거. 단 `role=status`는 content로 옮기고, 삭제 실패·보관 상태 안내는 목록에도 표시, 작성 중 draft 유지. FAB 56px 원형 sticky(새 `PlusIcon`), 마지막 행 메뉴가 가리지 않게 여백. 범위는 입력창 아래, `side="top"`. `FloatingSidePanel`에 `headerStart` 추가. RadioGroup 삭제, 768px 미만 전체 폭 | `fixtures/ask.ts`의 `ask()`가 composer를 먼저 열도록. `ask-panel.test.tsx` 18곳, `a11y-ask.spec.ts` | L·ASK-1, DESIGN-1 |
+| ASK-2 구현 | 목록 테두리, 입력창 삭제, FAB, 대화창 재구성, 뒤로가기, 범위 popover, 레이블 삭제 | 목록에서 footer 제거. 단 `role=status`는 content로 옮기고, 삭제 실패·보관 상태 안내는 목록에도 표시, 작성 중 draft 유지. FAB 56px 원형 sticky(새 `PlusIcon`), 마지막 행 메뉴가 가리지 않게 여백. **대화창(사용자 설계 수정 2026-11-06):** 입력창은 대화 화면 하단 floating UI다. 입력창 안 오른쪽에 왼쪽부터 제출, 질문 범위 순으로 둔다. 질문 범위는 필터 아이콘(`FilterIcon`, 이름 `질문 범위`) 버튼이며 범위가 좁혀지면 활성 표시를 한다. popover는 `side="top"`. 답을 기다리는 동안 제출 버튼이 중단 버튼으로 바뀐다. 마지막 메시지가 floating 입력창에 가리지 않게 여백을 둔다. `FloatingSidePanel`에 `headerStart` 추가. RadioGroup 삭제, 768px 미만 전체 폭 | `fixtures/ask.ts`의 `ask()`가 composer를 먼저 열도록. `ask-panel.test.tsx` 18곳, `a11y-ask.spec.ts`. HOME-5와 `FilterIcon` 공유 | L·ASK-1, DESIGN-1 |
 
 ### 4.8 PLAY — 모의고사
 
