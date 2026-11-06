@@ -14,6 +14,7 @@ describe('isProtectedPath', () => {
     '/questions',
     '/settings',
     '/settings/security',
+    '/help',
   ])('protects %s', (path) => expect(isProtectedPath(path)).toBe(true));
   it.each([
     '/',

@@ -101,6 +101,9 @@ export function UserMenu({ email }: { email: string | undefined }) {
         >
           계정 보안 설정
         </Link>
+        <Link href="/help" className="qz-button qz-focus-ring" data-variant="ghost" onClick={close}>
+          도움말
+        </Link>
         <SignOutButton variant="ghost" />
       </PopoverContent>
     </Popover>
