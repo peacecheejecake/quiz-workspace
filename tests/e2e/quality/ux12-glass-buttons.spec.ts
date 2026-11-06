@@ -132,26 +132,34 @@ test.describe('phone sheet', () => {
 });
 
 test(
-  'UX12-GLASSBTN-AC03 secondary buttons on glass have no fill until hover',
+  'UX12-GLASSBTN-AC03 secondary buttons on glass keep a raised fill; the return button and the footer have none',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-03');
     const panel = await openPanel(page);
     await panelUi.option(panel, '가').check();
     await panelUi.submit(panel).click();
+    await expect(panelUi.result(panel)).toBeVisible();
     const again = panel.getByRole('button', { name: /^다시 풀기$|^solve again$/i });
-    await expect(again).toBeVisible();
     await expect(again).toHaveAttribute('data-variant', 'secondary');
-    const footerButton = await surfaceOf(again);
-    expect(footerButton.color).toBe(TRANSPARENT);
-    expect(footerButton.border).not.toBe(TRANSPARENT);
+    // The press left the pointer on the footer: a resting color needs it away, past the transition.
+    await page.mouse.move(0, 0);
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      const raised = await tokenColor(page, '--color-surface-raised');
+      await expect
+        .poll(() => again.evaluate((element) => getComputedStyle(element).backgroundColor))
+        .toBe(raised);
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
     await panelUi.close(panel).click();
 
     const back = page.getByRole('button', { name: RETURN_LABEL });
     await expect(back).toBeVisible();
-    const rest = await surfaceOf(back);
-    expect(rest.color).toBe(TRANSPARENT);
-    expect(rest.border).not.toBe(TRANSPARENT);
+    await expect
+      .poll(() => back.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .toBe(TRANSPARENT);
+    expect((await surfaceOf(back)).border).not.toBe(TRANSPARENT);
 
     const hover = await tokenColor(page, '--color-state-hover');
     await back.hover();
@@ -167,7 +175,7 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC04 the explanation area on glass is the raised surface in both themes',
+  'UX12-GLASSBTN-AC04 the explanation area on glass stays the grey muted surface in both themes',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await openOverview(page, workspaceFactory, 'ux12-gb-04');
@@ -188,8 +196,8 @@ test(
 
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });
-      const raised = await tokenColor(page, '--color-surface-raised');
-      await expect.poll(fill).toEqual({ color: raised, panel: false });
+      const muted = await tokenColor(page, '--color-surface-muted');
+      await expect.poll(fill).toEqual({ color: muted, panel: false });
     }
   },
 );

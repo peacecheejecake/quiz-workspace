@@ -18,7 +18,7 @@ linked_tests: [UX12-VIEW-AC01 … UX12-VIEW-AC06]
 
 ### UX12-VIEW-AC02
 
-풀이 panel footer의 `다시 풀기`는 범위 풀이와 같은 기본(secondary) 버튼이다: 테두리가 있고, 유리 위 secondary 버튼이라 기본 상태에 채움이 없다([UX12-GLASSBTN](ux12-glass-buttons.md)).
+풀이 panel footer의 `다시 풀기`는 범위 풀이와 같은 기본(secondary) 버튼이다: 배경색과 테두리가 있다.
 
 ### UX12-VIEW-AC03
 

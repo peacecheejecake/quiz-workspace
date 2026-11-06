@@ -170,10 +170,10 @@ describe('glass-surface base styles', () => {
     );
   });
 
-  it('re-points muted areas and accent text inside glass (UX12-GLASSBTN)', () => {
+  it('re-points only accent text inside glass; muted areas stay grey (UX12-GLASSBTN)', () => {
     const decls = base.slice(base.indexOf('.glass-surface {'));
     const block = decls.slice(0, decls.indexOf('}'));
-    expect(block).toContain('--color-surface-muted: var(--color-surface-raised);');
+    expect(block).not.toContain('--color-surface-muted');
     expect(block).toContain('--color-accent: var(--color-accent-on-glass);');
   });
 

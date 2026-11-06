@@ -57,7 +57,7 @@
 | `--color-canvas` | `#F7F8FA` | 페이지 배경 |
 | `--color-surface` | `#FFFFFF` | 카드·읽기 화면 |
 | `--color-surface-muted` | `#F0F3F7` | subtle group |
-| `--color-surface-raised` | `#FFFFFF` | 유리 위에서 구분돼야 하는 영역(해설 등). `.glass-surface` 안의 `--color-surface-muted`가 이 값이 된다 |
+| `--color-surface-raised` | `#FFFFFF` | 유리 위 secondary 버튼의 채움(dark에서 `--color-surface`는 glass보다 어둡다) |
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
 | `--color-text-secondary` | `#5F697E` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
@@ -125,7 +125,7 @@
 
 light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라에 alpha `.35`다. light accent 글자가 glass 위에서 4.56:1뿐이라 accent 색을 낮은 alpha로 얹으면 alpha `.06`에서도 4.22~4.28:1로 AA 아래가 되고, hover 대비도 1.05~1.07로 떨어지기 때문이다. 그래서 light tint는 아주 옅다. 더 진한 tint가 필요하면 `--color-accent`를 먼저 어둡게 해야 한다. dark는 여유가 있어 `--color-accent` 계열을 alpha `.05`로 쓴다. 대비: 두 stop 모두 글자 토큰 4.5:1 이상(light accent 최저 4.52:1), text-primary·text-secondary는 순흑·순백 배경 합성에서도 4.5:1 이상, 비텍스트 3:1 이상, hover 배경과 1.1 이상(`contrast.test.ts`).
 
-**v1.3.3 (UX12 DESIGN-5, 2026-11-06 사용자 피드백 "투명도가 너무 낮음"):** Chromium에서 blur가 한 번도 적용된 적이 없었다. Lightning CSS가 값에 `var()`가 있는 `backdrop-filter`와 `-webkit-backdrop-filter`를 한 속성으로 보고 마지막만 남겨서, 표준 선언이 배포 CSS에서 사라졌다. 이제 `-webkit-`을 먼저 쓴다(`base-css.test.ts`가 검사). blur가 실제로 적용되므로 `--color-glass`를 light `.97`→`.7`, dark `.97`→`.65`로, `--glass-gradient` light alpha를 `.35`→`.2`로 낮추고 `--glass-blur`를 16→24px로, 새 `--glass-brightness`(light 1.3, dark .7)를 더했다. `.glass-surface` 안에서 `--color-surface-muted`는 `--color-surface-raised`, `--color-accent`는 `--color-accent-on-glass`, `--color-accent-hover`는 `--color-accent-pressed`가 된다. 대비는 Chromium에서 빽빽한 배경 위 가장 나쁜 픽셀로 쟀다. 표와 한계는 [UX12-GLASSBTN](screens/ux12-glass-buttons.md)에 있다. `contrast.test.ts`는 그 측정값을 `BUSY_BACKDROP_INK`로 고정한다. 순흑·순백 위 AA는 이제 text-primary만 보장한다.
+**v1.3.3 (UX12 DESIGN-5, 2026-11-06 사용자 피드백 "투명도가 너무 낮음"):** Chromium에서 blur가 한 번도 적용된 적이 없었다. Lightning CSS가 값에 `var()`가 있는 `backdrop-filter`와 `-webkit-backdrop-filter`를 한 속성으로 보고 마지막만 남겨서, 표준 선언이 배포 CSS에서 사라졌다. 이제 `-webkit-`을 먼저 쓴다(`base-css.test.ts`가 검사). blur가 실제로 적용되므로 `--color-glass`를 light `.97`→`.7`, dark `.97`→`.65`로, `--glass-gradient` light alpha를 `.35`→`.2`로 낮추고 `--glass-blur`를 16→24px로, 새 `--glass-brightness`(light 1.3, dark .7)를 더했다. 해설처럼 구분돼야 하는 영역은 `--color-surface-muted` 회색 그대로다(사용자 결정 2026-11-06). `.glass-surface` 안에서 `--color-accent`는 `--color-accent-on-glass`, `--color-accent-hover`는 `--color-accent-pressed`가 된다. 대비는 Chromium에서 빽빽한 배경 위 가장 나쁜 픽셀로 쟀다. 표와 한계는 [UX12-GLASSBTN](screens/ux12-glass-buttons.md)에 있다. `contrast.test.ts`는 그 측정값을 `BUSY_BACKDROP_INK`로 고정한다. 순흑·순백 위 AA는 이제 text-primary만 보장한다.
 
 **v1.3.4 (UX12 DOCS-4, 2026-11-06 사용자 피드백):** 문서 화면의 PDF 헤더가 `.glass-surface`다. PDF가 그 뒤에 비친다. 새 토큰은 없다. 기준은 [UX12-PDFPREVIEW](screens/ux12-pdf-preview.md).
 
@@ -296,7 +296,6 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   box-shadow: var(--shadow-floating);
   -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
-  --color-surface-muted: var(--color-surface-raised);
   --color-accent: var(--color-accent-on-glass);
   --color-accent-hover: var(--color-accent-pressed);
 }
@@ -362,7 +361,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | 종류 | 기본 | hover | pressed(`:active`) | 켜짐/선택 |
   |---|---|---|---|---|
   | primary(`Button`·`IconButton`) | `--color-accent` 채움 | `--color-accent-hover` | `--color-accent-pressed` | — |
-  | secondary | `--color-surface` + 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
+  | secondary | `--color-surface` + 1px `--color-border`(`.glass-surface` 안에서는 `--color-surface-raised`, hover는 `--color-state-pressed`, UX12-GLASSBTN) | `--color-state-hover` | `--color-state-pressed` | — |
   | ghost(`IconButton` 기본 포함) | 투명, 아이콘 ghost·`borderless`는 경계 없음, 그 밖의 ghost 텍스트는 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 꺼짐(`aria-pressed="false"`, `data-state="off"`) | 투명, 1px `--color-border` | `--color-state-hover` | `--color-state-pressed` | — |
   | toggle 켜짐(`aria-pressed="true"`, `data-state="on"`) | `--color-state-selected` + 굵기/아이콘 | `--color-state-selected-hover` | `--color-state-pressed` | 기본이 곧 켜짐 |

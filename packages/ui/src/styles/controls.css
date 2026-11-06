@@ -99,8 +99,9 @@
 }
 
 /*
- * On glass a secondary button has no fill (UX12-GLASSBTN): the layer shows through and the border
- * stays. Hover and pressed still fill it; they are more specific.
+ * On glass a secondary button is the raised surface (UX12-GLASSBTN): --color-surface is darker than
+ * glass in the dark theme. The raised dark fill sits too close to the hover token for hover to
+ * read, so hover takes the pressed step here.
  */
 .glass-surface
   :is(.qz-button, .qz-icon-button)[data-variant='secondary']:not(
@@ -108,7 +109,9 @@
     [data-state='on'],
     [data-state='off']
   ) {
-  background: transparent;
+  --color-state-hover: var(--color-state-pressed);
+
+  background: var(--color-surface-raised);
 }
 
 /*
@@ -285,11 +288,6 @@
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   cursor: not-allowed;
-}
-
-/* Glass raises muted areas to the input's own color, so a disabled input drops its fill instead. */
-.glass-surface .qz-control:disabled {
-  background: transparent;
 }
 
 .qz-control[data-multiline] {

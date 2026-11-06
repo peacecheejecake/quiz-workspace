@@ -15,8 +15,9 @@
 - **표면:** `--color-glass` alpha는 light `.7`, dark `.65`, `--glass-gradient` alpha는 light `.2`, dark `.05`, `--glass-blur`는 24px이다. 새 테마별 값 `--glass-brightness`(light 1.3, dark .7)가 blur한 배경을 표면 쪽 밝기로 밀어 글자 대비를 지킨다.
 - **Fallback:** reduced transparency·blur 미지원·모바일 sheet·full-screen paired dialog·태블릿 PDF 위 목차는 지금처럼 불투명 `--color-glass-solid`이고 blur가 없다.
 - **PDF 위:** floating glass는 PDF 읽기 영역을 덮어도 된다(사용자 결정 2026-11-06). 복귀 bar·메뉴·toast와 viewport side panel은 PDF 위에서도 blur와 투명도를 그대로 쓴다. 모바일 sheet·태블릿 목차·reduced transparency의 단색은 그대로다.
-- **유리 안 토큰:** `.glass-surface` 안에서 `--color-surface-muted`는 `--color-surface-raised`(light 흰색, dark `#27313E`)로, `--color-accent`는 `--color-accent-on-glass`로 바뀐다. 회색 영역을 기능별로 고치지 않고 한 줄로 흰색이 된다. primary hover는 `--color-accent-pressed`로 한 단계 내려간다.
-- **유리 위 버튼:** secondary 버튼은 채움이 없고 경계는 유지한다. hover·pressed는 그대로 채운다. 목록 항목(AI 질문 출처·각주, 모의고사 목록·문제 행)도 채움이 없다. 입력·primary·toggle은 그대로다. 비활성 입력은 채움이 없다.
+- **회색 영역:** 해설처럼 구분돼야 하는 영역은 불투명한 `--color-surface-muted` 회색 그대로다(사용자 결정 2026-11-06, 처음의 "회색을 흰색으로"를 되돌림).
+- **유리 안 토큰:** `.glass-surface` 안에서 `--color-accent`는 `--color-accent-on-glass`로 바뀐다. primary hover는 `--color-accent-pressed`로 한 단계 내려간다.
+- **유리 위 버튼:** 배경을 지우는 것은 사용자가 지목한 `보던 문제로 돌아가기`와 목록 항목(AI 질문 출처·각주, 모의고사 목록·문제 행)뿐이다. 복귀 버튼은 경계가 있는 ghost다. secondary 버튼은 채움을 유지한다(사용자 정정 2026-11-06: 지운 것은 footer 영역의 배경이지 버튼의 배경이 아니다). 유리 안에서 그 채움은 `--color-surface-raised`이고(light 흰색, dark `#27313E`), dark의 raised와 `--color-state-hover`가 거의 같아 hover는 `--color-state-pressed`다. 입력·primary·toggle은 그대로다.
 - **하단·상단 고정 영역:** panel `.footer`와 `.pinned`, 풀이 footer에는 채움이 없다. body는 footer 뒤로 지나가지 않고 위에서 잘리므로(같은 flex column) hairline 구분선만 남긴다. AI 질문 composer는 `glass-surface`다. 뒤로 메시지가 지나가므로 blur가 글자를 지운다.
 - **아이콘 전용 버튼:** 모든 variant가 테두리를 투명하게 한다(toggle 제외). 크기는 그대로다.
 - **Hover:** `cursor: pointer`인 모든 버튼·버튼처럼 쓰는 링크는 `@media (hover: hover)`에서 색이 바뀐다. 터치에서 hover가 남지 않는다. 텍스트 링크는 `--color-accent-hover`, 나머지는 `--color-state-hover`다. `packages/ui/test/button-hover.test.ts`가 검사한다.
@@ -29,14 +30,14 @@
 
 | 대상 | 표면 | 분류 | 처리 |
 |---|---|---|---|
-| `보던 문제로 돌아가기` | 복귀 bar | 배경 제거 | secondary 규칙 |
-| panel·dialog footer의 secondary 버튼 | side panel, toast | 배경 제거 | secondary 규칙 |
+| `보던 문제로 돌아가기` | 복귀 bar | 배경 제거 | ghost 버튼 |
+| panel·dialog footer와 본문의 secondary 버튼(`다시 풀기`, `이전 문제`·`다음 문제`, 동작 버튼) | side panel, toast | 채움 유지 | `--color-surface-raised` |
 | AI 질문 출처 버튼, 각주 | side panel | 배경 제거 | `ask.module.css` |
 | 모의고사 목록 항목, 문제 행 | side panel | 배경 제거 | `mock-exams.module.css` |
-| 비활성 입력 | side panel | 배경 제거 | 입력 규칙 |
+| 비활성 입력 | side panel | 회색 유지 | `--color-surface-muted` |
 | 메뉴·select 항목, 닫기(X) | menu, popover, panel | 원래 배경 없음 | 없음 |
 | panel `.footer`, `.pinned`, 풀이 footer, panel 머리글 | side panel | 원래 채움 없음 | hairline 유지 |
-| 해설(`.reveal`), 풀이 안내, 지문·보기 묶음, 첨부 chip, 공유 링크 발급 결과, 요약 오래됨 안내, 표 머리글 | side panel | 회색→흰색 | `--color-surface-muted` 재지정 |
+| 해설(`.reveal`), 풀이 안내, 지문·보기 묶음, 첨부 chip, 공유 링크 발급 결과, 요약 오래됨 안내, 표 머리글 | side panel | 회색 유지 | `--color-surface-muted` |
 | 오류 안내(`.alert`), 요약 챕터, 접기 영역, 그림 | side panel | 원래 흰색, 유지 | 없음(dark는 `--color-surface`) |
 | 입력, 라디오, 체크박스 | side panel | 유지 | 없음 |
 | primary 버튼 | 모든 표면 | 유지 | 없음 |
@@ -50,12 +51,16 @@
 
 Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 픽셀을 쟀다. 배경은 빽빽한 Heatmap 색, primary 버튼, 굵은 글자다. 표는 가장 나쁜 픽셀 기준이다.
 
+유리 위 secondary 버튼 글자(text-primary)는 raised 채움 위에서 light 16.27:1, dark 12.04:1이고, hover·pressed 위에서 light 12.28:1, dark 9.64:1이다. 채움이 불투명하므로 뒤 배경과 무관하다.
+
 | 표면 | primary | secondary | accent(유리) | danger | success | warning |
 |---|---|---|---|---|---|---|
 | light panel | 14.27 | 4.84 | 5.03 | 5.03 | 4.69 | 4.82 |
 | light header(gradient 없음) | 14.15 | 4.80 | 4.99 | 4.99 | 4.65 | 4.78 |
 | dark panel | 10.74 | 5.78 | 4.80 | 4.65 | 5.45 | 8.12 |
 | dark header(gradient 없음) | 11.79 | 6.34 | 5.27 | 5.11 | 5.98 | 8.91 |
+| light 회색 영역 | 14.62 | 4.95 | 5.15 | 5.16 | 4.81 | 4.94 |
+| dark 회색 영역 | 12.04 | 6.48 | 5.38 | 5.21 | 6.11 | 9.10 |
 
 **한계:** 패널 뒤에 큰 단색 면(360×200px의 text-primary 색 면)이 있으면 그 자리의 작은 색 글자는 4.5:1 아래로 떨어진다(light secondary 3.20, dark secondary 3.45). 본문 글자(primary)는 light 9.44, dark 6.41을 유지하고, 순흑·순백 배경에서도 4.5:1 이상이다.
 
@@ -68,10 +73,10 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 **불투명 fallback:** 폭 390px의 side panel은 불투명하고 blur가 없다.
 
 ### UX12-GLASSBTN-AC03
-**유리 위 버튼:** 복귀 bar의 `보던 문제로 돌아가기`와 panel footer의 secondary 버튼은 기본 상태에 채움이 없고 테두리가 보이며, pointer를 올리면 `--color-state-hover` 배경이 생긴다. panel footer에도 채움이 없다.
+**유리 위 버튼:** panel footer의 secondary 버튼(`다시 풀기`)은 light와 dark에서 `--color-surface-raised` 채움이 있다. 복귀 bar의 `보던 문제로 돌아가기`는 기본 상태에 채움이 없고 테두리가 보이며, pointer를 올리면 `--color-state-hover` 배경이 생긴다. panel footer 영역에는 채움이 없다.
 
 ### UX12-GLASSBTN-AC04
-**흰색 영역:** panel의 해설 영역은 `--color-surface-raised` 배경이다. 같은 토큰이 light에서 흰색이고, dark에서는 glass보다 밝은 표면이다.
+**회색 영역:** panel의 해설 영역은 light와 dark에서 불투명한 `--color-surface-muted` 배경이다.
 
 ### UX12-GLASSBTN-AC05
 **아이콘 전용 버튼:** 홈의 secondary 아이콘 버튼(`이력`)은 테두리가 투명한 1px이고 크기는 36px을 유지한다. 즐겨찾기 같은 toggle은 테두리가 보인다.
