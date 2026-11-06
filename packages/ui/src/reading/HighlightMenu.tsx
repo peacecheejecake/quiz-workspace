@@ -13,7 +13,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useLayerStyle } from '../internal/layer';
 import { useOverscrollGuard } from '../internal/overscroll-guard';
-import { CheckIcon } from '../primitives/icons';
+import { CheckIcon, TrashIcon } from '../primitives/icons';
 import {
   HIGHLIGHT_COLORS,
   colorAction,
@@ -29,7 +29,6 @@ import {
 export const HIGHLIGHT_MENU_TEXT = {
   label: '하이라이트',
   remove: '하이라이트 지우기',
-  copy: '복사',
   oneBlock: '한 문단 안에서 고르세요',
 } as const;
 
@@ -42,22 +41,13 @@ export interface HighlightMenuProps {
   onAction?: (action: HighlightAction) => void;
   /** The menu closed (Escape, outside press, after an action): clear `selection`. */
   onClose: () => void;
-  /** Only `복사` (no screen uses this today: archived workspaces can highlight, HILITE-01). */
+  /** No items to offer: the menu stays closed (no screen uses this today, HILITE-01). */
   readOnly?: boolean;
   /** Focus goes back here on Escape and after an action (the `HighlightableText` area). */
   returnFocusTo?: RefObject<HTMLElement | null>;
-  /** Writes the text to the clipboard; default `navigator.clipboard.writeText`. */
-  onCopy?: (text: string) => Promise<boolean>;
-  /** The text was copied and the menu closed; a failed copy keeps the menu open. */
-  onCopied?: () => void;
 }
 
-async function copyToClipboard(text: string): Promise<boolean> {
-  if (!navigator.clipboard?.writeText) return false;
-  await navigator.clipboard.writeText(text);
-  return true;
-}
-
+/** The color and the underline shape of its marks (solid, double, dotted): never color alone. */
 function Swatch({ color }: { color: HighlightColor }) {
   return <span className="swatch" data-highlight-color={color} aria-hidden="true" />;
 }
@@ -65,9 +55,11 @@ function Swatch({ color }: { color: HighlightColor }) {
 /**
  * The menu next to a selection in a `HighlightableText` (design-system §5.2): Radix DropdownMenu
  * (`role="menu"` "하이라이트") anchored to the selection's box — above it, below when there is no
- * room, and below the end of a touch selection so it does not cover the OS selection menu. Items:
- * the three colors (`menuitemradio`, checked when the selection is exactly one highlight of that
- * color) · `하이라이트 지우기` (when the selection touches a highlight) · `복사`. The selection stays
+ * room, and below the end of a touch selection so it does not cover the OS selection menu. One
+ * compact row of icon-only items, each named by `aria-label`: the three colors (`menuitemradio`,
+ * checked when the selection is exactly one highlight of that color, marked by a check) · `하이라이트
+ * 지우기` (a trash icon, when the selection touches a highlight). Left/Right move along the row.
+ * There is no `복사`: the OS menu and Ctrl/Cmd+C copy (2026-11-07). The selection stays
  * painted while the menu is open. Escape closes only the menu, keeps the selection and returns
  * focus to the area.
  */
@@ -78,8 +70,6 @@ export function HighlightMenu({
   onClose,
   readOnly = false,
   returnFocusTo,
-  onCopy = copyToClipboard,
-  onCopied,
 }: HighlightMenuProps) {
   const reasonId = useId();
   const layerStyle = useLayerStyle();
@@ -87,8 +77,7 @@ export function HighlightMenu({
   const [scrolled, setScrolled] = useState(0);
   const closing = useRef<'escape' | 'outside' | 'action' | null>(null);
   const last = useRef<HighlightSelection | null>(null);
-  const current = useRef(selection);
-  const open = selection !== null;
+  const open = selection !== null && !readOnly;
   // Measured while rendering so the anchor is in place when the menu mounts; re-measured after a
   // scroll (the popper re-reads the anchor every frame while open).
   const rect = useMemo(
@@ -114,10 +103,6 @@ export function HighlightMenu({
     };
   }, [selection]);
 
-  useEffect(() => {
-    current.current = selection;
-  });
-
   const range =
     selection && selection.block !== null
       ? { block: selection.block, start: selection.start, end: selection.end }
@@ -131,18 +116,6 @@ export function HighlightMenu({
     closing.current = 'action';
     if (action) onAction?.(action);
     onClose();
-  }
-
-  async function copy() {
-    if (!selection) return;
-    const text = selection.text;
-    const ok = await Promise.resolve()
-      .then(() => onCopy(text))
-      .catch(() => false);
-    if (!ok) return;
-    // The reader may have moved on while the clipboard answered: leave a newer menu alone.
-    if (current.current === selection) act(null);
-    onCopied?.();
   }
 
   const anchorStyle: CSSProperties = {
@@ -205,6 +178,20 @@ export function HighlightMenu({
             if (reason === 'escape') last.current?.restore();
             else window.getSelection()?.removeAllRanges();
           }}
+          onKeyDown={(event) => {
+            // The items sit in a row: Left/Right move along it (Radix's roving focus is vertical).
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            const items = [
+              ...event.currentTarget.querySelectorAll<HTMLElement>(
+                '[role^="menuitem"]:not([data-disabled])',
+              ),
+            ];
+            if (items.length === 0) return;
+            const at = items.indexOf(document.activeElement as HTMLElement);
+            const step = event.key === 'ArrowRight' ? 1 : -1;
+            event.preventDefault();
+            items[(at + step + items.length) % items.length]?.focus();
+          }}
           onFocus={() => {
             // WebKit drops the document selection on every focus move, so the menu (which takes
             // focus, and hands it from item to item) puts it back to keep it painted.
@@ -212,55 +199,49 @@ export function HighlightMenu({
             if (!closing.current) selection?.restore();
           }}
         >
-          {readOnly ? null : (
+          <RadixDropdownMenu.RadioGroup value={exact?.color ?? ''}>
+            {HIGHLIGHT_COLORS.map((color) => (
+              <RadixDropdownMenu.RadioItem
+                key={color}
+                value={color}
+                disabled={crosses}
+                aria-label={highlightColorLabels[color]}
+                textValue={highlightColorLabels[color]}
+                aria-describedby={crosses ? reasonId : undefined}
+                title={highlightColorLabels[color]}
+                className="item"
+                data-color-item={color}
+                onSelect={() => {
+                  if (range) act(colorAction(highlights, range, color));
+                }}
+              >
+                <Swatch color={color} />
+                <RadixDropdownMenu.ItemIndicator className="check">
+                  <CheckIcon width={16} height={16} aria-hidden="true" />
+                </RadixDropdownMenu.ItemIndicator>
+              </RadixDropdownMenu.RadioItem>
+            ))}
+          </RadixDropdownMenu.RadioGroup>
+          {crosses ? (
+            <p id={reasonId} className="qz-visually-hidden">
+              {HIGHLIGHT_MENU_TEXT.oneBlock}
+            </p>
+          ) : null}
+          {touching.length > 0 ? (
             <>
-              <RadixDropdownMenu.RadioGroup value={exact?.color ?? ''}>
-                {HIGHLIGHT_COLORS.map((color) => (
-                  <RadixDropdownMenu.RadioItem
-                    key={color}
-                    value={color}
-                    disabled={crosses}
-                    aria-describedby={crosses ? reasonId : undefined}
-                    className="item"
-                    data-color-item={color}
-                    onSelect={() => {
-                      if (range) act(colorAction(highlights, range, color));
-                    }}
-                  >
-                    <Swatch color={color} />
-                    <span className="text">{highlightColorLabels[color]}</span>
-                    <RadixDropdownMenu.ItemIndicator className="check">
-                      <CheckIcon width={16} height={16} aria-hidden="true" />
-                    </RadixDropdownMenu.ItemIndicator>
-                  </RadixDropdownMenu.RadioItem>
-                ))}
-              </RadixDropdownMenu.RadioGroup>
-              {crosses ? (
-                <p id={reasonId} className="reason">
-                  {HIGHLIGHT_MENU_TEXT.oneBlock}
-                </p>
-              ) : null}
               <RadixDropdownMenu.Separator className="separator" />
-              {touching.length > 0 ? (
-                <RadixDropdownMenu.Item
-                  className="item"
-                  onSelect={() => act({ type: 'remove', ids: touching.map((h) => h.id) })}
-                >
-                  {HIGHLIGHT_MENU_TEXT.remove}
-                </RadixDropdownMenu.Item>
-              ) : null}
+              <RadixDropdownMenu.Item
+                className="item"
+                aria-label={HIGHLIGHT_MENU_TEXT.remove}
+                textValue={HIGHLIGHT_MENU_TEXT.remove}
+                title={HIGHLIGHT_MENU_TEXT.remove}
+                data-remove-item=""
+                onSelect={() => act({ type: 'remove', ids: touching.map((h) => h.id) })}
+              >
+                <TrashIcon width={18} height={18} aria-hidden="true" />
+              </RadixDropdownMenu.Item>
             </>
-          )}
-          <RadixDropdownMenu.Item
-            className="item"
-            onSelect={(event) => {
-              // The menu closes once the copy succeeded; a failed one leaves it open.
-              event.preventDefault();
-              void copy();
-            }}
-          >
-            {HIGHLIGHT_MENU_TEXT.copy}
-          </RadixDropdownMenu.Item>
+          ) : null}
         </RadixDropdownMenu.Content>
       </RadixDropdownMenu.Portal>
     </RadixDropdownMenu.Root>

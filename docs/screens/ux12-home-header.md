@@ -23,7 +23,7 @@
 
 ### UX12-HEADER-AC03
 
-page를 내려도 상단 줄은 문제 검색과 함께 app header 바로 아래(`top: var(--app-header-height)`)에 고정된다. 상단 줄의 배경은 glass이고([UX12-GLASSBTN](ux12-glass-buttons.md)-AC07, 사용자 요청 2026-11-06), Heatmap marker는 그 뒤로 blur되어 지나가며, 상단 줄은 app header 아래 층이다.
+page를 내려도 상단 줄은 문제 검색과 함께 app header 바로 아래(`top: var(--app-header-height)`)에 고정된다. 상단 줄은 page 폭 전체를 차지하고(content padding과 `--content-max-width`를 무시, 가로 scroll 없음), 버튼은 content와 같은 x 위치에 남는다(사용자 요청 2026-11-07). page 맨 위에서는 배경이 완전히 투명하고 blur가 없으며, 고정된(stuck) 뒤에는 glass이고([UX12-GLASSBTN](ux12-glass-buttons.md)-AC07, 사용자 요청 2026-11-06), Heatmap marker는 그 뒤로 blur되어 지나가며, 상단 줄은 app header 아래 층이다.
 
 ### UX12-HEADER-AC04
 

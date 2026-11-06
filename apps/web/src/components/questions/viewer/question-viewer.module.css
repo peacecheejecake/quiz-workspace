@@ -44,12 +44,14 @@
   font-size: var(--font-size-body-lg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  transition: font-weight var(--qz-transition-fast);
 }
 
 /*
  * Unselected control and hovered row (UX12-OPTIONS, design-system §4.1): a lighter control at rest;
- * the whole row, not only the control, darkens it and bolds the text. Disabled rows do not react.
+ * the whole row, not only the control, darkens it and thickens its border to 2px (user feedback
+ * 2026-11-07; the label no longer changes weight). The control is border-box, so the 20px outer
+ * size is kept and nothing shifts; a checked radio keeps its 1px ring and centred dot. Disabled
+ * rows do not react.
  */
 .option:is(:global(.qz-radio), :global(.qz-checkbox))
   > :is(:global(.circle), :global(.box)):not(
@@ -67,31 +69,9 @@
       [data-state='indeterminate'],
       :focus-visible
     ) {
+    border-width: 2px;
     border-color: var(--color-option-control-hover);
   }
-
-  .option:is(:global(.qz-radio), :global(.qz-checkbox)):has(> :enabled):hover
-    > :global(.text)
-    > :global(.label) {
-    font-weight: var(--font-weight-semibold);
-  }
-}
-
-/* The hidden bold copy holds the row at its hovered height, so bolder text cannot move the rows. */
-.optionCopy {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.optionCopy > *,
-.optionCopy::after {
-  grid-area: 1 / 1;
-}
-
-.optionCopy::after {
-  content: attr(data-copy);
-  font-weight: var(--font-weight-semibold);
-  visibility: hidden;
 }
 
 /* QTABLE-01: the label column fills the row, so every row has the same tracks as the header. */
@@ -140,8 +120,10 @@
   border-radius: var(--radius-md);
 }
 
+/* Result borders and marks use the heatmap's green and red (VIEW-RESULT 2026-11-07); the check and
+   X icons carry the state, so the fill's lower contrast is not the only signal. */
 .toneCorrect {
-  border-color: var(--color-success);
+  border-color: var(--color-success-fill);
 }
 
 .toneChosen {
@@ -149,7 +131,7 @@
 }
 
 .toneAnswer {
-  border-color: var(--color-danger);
+  border-color: var(--color-danger-fill);
 }
 
 /* Out of the label column, centered on the 24px first line. */
@@ -165,7 +147,7 @@
 }
 
 .toneCorrect .mark {
-  color: var(--color-success);
+  color: var(--color-success-fill);
 }
 
 .toneChosen .mark {
@@ -173,7 +155,7 @@
 }
 
 .toneAnswer .mark {
-  color: var(--color-danger);
+  color: var(--color-danger-fill);
 }
 
 @media (forced-colors: active) {
@@ -362,7 +344,7 @@
 
 /* Correct options: border + check icon + "정답" text, not color alone. */
 .optionRow[data-correct='true'] {
-  border: 2px solid var(--color-success);
+  border: 2px solid var(--color-success-fill);
 }
 
 .optionLabel {
@@ -389,7 +371,7 @@
 }
 
 .correctMark svg {
-  color: var(--color-success);
+  color: var(--color-success-fill);
 }
 
 @media (forced-colors: active) {
@@ -554,16 +536,6 @@
   border: 0;
 }
 
-.typeLegend {
-  margin-block-end: var(--space-1);
-  padding: 0;
-  font-weight: var(--font-weight-semibold);
-}
-
-.typeGroup > .hint {
-  flex-basis: 100%;
-}
-
 .groups {
   display: grid;
   gap: var(--space-2);
@@ -624,9 +596,22 @@
   min-width: 0;
 }
 
+/* The `전체 선택` row: the selected count sits at its end in the same size. */
+.selectRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
 .selectedCount {
-  margin: 0;
+  margin: 0 0 0 auto;
+  font-size: var(--font-size-body);
+  line-height: 24px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .hint {

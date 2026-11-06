@@ -347,7 +347,52 @@
   }
 }
 
+/*
+ * StepList (UX12-MOCKFORM3): larger labels; the current step's label takes the accent next to its
+ * bold weight and `aria-current`; a done step is neutral (grey marker, regular text, no underline
+ * at rest) and shows it can be pressed by an underline and a fill on hover and focus.
+ */
+.qz-step-progress.qz-step-list {
+  > .steps {
+    font-size: var(--font-size-body);
+  }
+
+  .step[data-state='current'] > .label {
+    color: var(--color-accent);
+  }
+
+  .step[data-state='done'] {
+    .marker {
+      border-color: var(--color-border-strong);
+      background: var(--color-surface-muted);
+      color: var(--color-text-secondary);
+    }
+
+    > .action > .label {
+      text-decoration: none;
+    }
+
+    > .action:focus-visible > .label {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    @media (hover: hover) {
+      > .action:hover:not(:disabled) > .label {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+    }
+  }
+}
+
 @media (forced-colors: active) {
+  .qz-step-progress.qz-step-list .step[data-state='done'] .marker {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
   :is(.qz-progress > .fill, .qz-step-progress .segment > .fill),
   :is(.qz-progress[data-indeterminate], .qz-step-progress .segment[data-indeterminate])::after {
     background: Highlight;

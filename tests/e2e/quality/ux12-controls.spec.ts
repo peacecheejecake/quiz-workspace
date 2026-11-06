@@ -210,7 +210,9 @@ test(
     await page.goto('/workspaces');
     const more = wsUi.moreButton(wsUi.item(wsUi.tabPanel(page), ws.name));
     await expect(more).toBeVisible();
-    // A browser-neutral read of the cascade: a ghost-specific forced-colors rule applies to them.
+    // A browser-neutral read of the cascade: the specific forced-colors rule (the one that restores
+    // the borderless buttons' boundary, recognised by its `:not([aria-pressed]` selector, not the
+    // generic `:is(.qz-button, .qz-icon-button)`) applies to them.
     for (const target of [more, userMenuTrigger(page)]) {
       const restored = await target.evaluate((element) => {
         const hit: string[] = [];
@@ -223,7 +225,7 @@ test(
               if (
                 inner instanceof CSSStyleRule &&
                 inner.style.borderTopColor.toLowerCase() === 'buttontext' &&
-                inner.selectorText.includes('ghost') &&
+                inner.selectorText.includes(':not([aria-pressed]') &&
                 element.matches(inner.selectorText)
               ) {
                 hit.push(inner.selectorText);

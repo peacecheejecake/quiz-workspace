@@ -12,7 +12,7 @@
 - **색 한도:** gradient 두 끝 모두 `contrast.test.ts`가 고정한다. 글자 4.5:1 이상, 비텍스트 3:1 이상, hover 배경과의 차이 1.1 이상(양 테마).
 - **불투명 표면:** 모바일 sheet와 full-screen paired dialog는 blur 없는 `--color-glass-solid` 위에 같은 gradient를 얹는다. 읽기 영역을 가려도 불투명하다.
 - **제외:** PDF·본문 위에 뜨는 태블릿 목차 panel은 gradient 없이 단색 `--color-glass-solid`다. reduced transparency와 blur 미지원 환경도 단색이다.
-- **복귀 bar:** 높이 52px는 그대로다. `.control`은 좌우 padding 24px(폭 360px 미만 12px), 모서리 `--radius-xl`, `glass-surface`다. 버튼 좌우 padding은 8px이고, 터치 대상 44px을 유지한다. `.message`도 같은 표면이다. `.notice`(연결 불안정)는 그대로 둔다.
+- **복귀 bar:** 높이 52px는 그대로다. `.control`은 좌우 padding 12px(HOME-RETURN 2026-11-07: 두 아이콘 버튼이 들어가도록 24px에서 줄였고 폭 360px 미만도 같다), 모서리 `--radius-xl`, `glass-surface`다. 복귀 버튼은 아이콘 버튼(`aria-label` `보던 문제로 돌아가기`)이고 터치 대상 44px을 유지한다. `.message`도 같은 표면이다. `.notice`(연결 불안정)는 그대로 둔다.
 
 ## 수용 기준
 
@@ -26,10 +26,10 @@
 **PDF 위 표면 제외:** 폭 834px에서 PDF와 본문 위에 겹쳐 뜨는 목차 panel은 gradient와 blur 없이 불투명한 단색이다.
 
 ### UX12-GLASS-AC04
-**복귀 bar 모양:** 폭 390px의 복귀 bar는 높이 52px, 좌우 padding 24px, 모서리 20px, glass 표면이고, 복귀 버튼의 좌우 padding은 8px이며 복귀 버튼과 닫기 버튼은 44px 이상이다. 닫기 버튼에는 테두리가 없다. light와 dark 모두 같다.
+**복귀 bar 모양:** 폭 390px의 복귀 bar는 높이 52px, 좌우 padding 12px, 모서리 20px, glass 표면이고, 복귀 버튼은 글자 없는 아이콘 버튼이며 복귀 버튼과 닫기 버튼은 44px 이상이다. 두 버튼 모두 테두리가 없다. light와 dark 모두 같다.
 
 ### UX12-GLASS-AC05
-**320px:** 폭 320px에서 복귀 bar의 좌우 padding은 12px로 줄고, 높이는 52px를 유지하며 화면 안에 들어오고 페이지 가로 스크롤이 생기지 않는다.
+**320px:** 폭 320px에서도 복귀 bar의 좌우 padding은 12px이고, 높이는 52px를 유지하며 화면 안에 들어오고 페이지 가로 스크롤이 생기지 않는다.
 
 ### UX12-GLASS-AC06
 **복귀 안내 문구:** 복귀에 실패해 나타나는 안내 문구는 복귀 bar와 같은 glass 표면과 모서리를 쓰고, 복귀 bar 위에 겹치지 않게 놓인다.

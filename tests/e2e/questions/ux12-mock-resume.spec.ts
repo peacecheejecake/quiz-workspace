@@ -34,8 +34,11 @@ interface Exam {
   readonly title: string;
 }
 
+// The list row's button is a plain 풀기; the detail's keeps `이어 풀기 3/10`.
 const resumeButton = (scope: Locator, progress: string) =>
   scope.getByRole('button', { name: new RegExp(`이어 풀기 ${progress}$`) });
+// The row's title starts or resumes the run: the list has no 풀기 button.
+const rowResume = (row: Locator, title: string) => mockUi.open(row, title);
 const anyResume = (scope: Locator) => scope.getByRole('button', { name: /이어 풀기/ });
 const menuItem = (page: Page, name: RegExp) => mockUi.menuAction(page, name);
 
@@ -103,7 +106,7 @@ async function pickFromRowMenu(page: Page, row: Locator, title: string, name: Re
 }
 
 test(
-  'UX12-MOCKRESUME-AC01 a row leads with 이어 풀기 and keeps 풀기 in its menu',
+  'UX12-MOCKRESUME-AC01 a row has no button but its title and keeps 처음부터 풀기 in its menu',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-mres-01');
@@ -115,12 +118,14 @@ test(
     const dialog = await openList(page, ws.id);
 
     const row = mockUi.row(dialog, exam.title);
-    await expect(resumeButton(row, '3/4')).toBeVisible();
-    await expect(mockUi.practise(row)).toHaveCount(0);
-    await expect(mockUi.practise(mockUi.row(dialog, idle.title))).toBeVisible();
-    await expect(anyResume(mockUi.row(dialog, idle.title))).toHaveCount(0);
+    await expect(rowResume(row, exam.title)).toBeVisible();
+    await expect(row).toContainText('3/4');
+    await expect(row.getByText('모의고사', { exact: true })).toBeVisible();
+    await expect(row.getByRole('button', { name: /풀기|practi[cs]e/i })).toHaveCount(0);
+    await expect(mockUi.rowTitle(mockUi.row(dialog, idle.title))).toBeVisible();
+    await expect(mockUi.row(dialog, idle.title)).toContainText('0/2');
 
-    await pickFromRowMenu(page, row, exam.title, /^(풀기|practi[cs]e)$/i);
+    await pickFromRowMenu(page, row, exam.title, /^(처음부터 풀기|practi[cs]e from the start)$/i);
     const panel = runUi.panel(page);
     await expect(runUi.start(panel)).toBeVisible();
     expect(new URL(page.url()).searchParams.get('practice')).toBe('new');
@@ -166,7 +171,7 @@ test(
 
     // From the list.
     const dialog = await openList(page, ws.id);
-    await resumeButton(mockUi.row(dialog, exam.title), '1/4').click();
+    await rowResume(mockUi.row(dialog, exam.title), exam.title).click();
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     const url = new URL(page.url()).searchParams;
     expect(url.get('practice')).toBe(run.id);
@@ -174,10 +179,10 @@ test(
     expect(url.get('mock')).toBeNull();
     await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
-    await expect(resumeButton(mockUi.row(dialog, exam.title), '1/4')).toBeVisible();
+    await expect(mockUi.row(dialog, exam.title)).toContainText('1/4');
 
     // From the detail: `mock` stays the dialog's view, and the progress follows without a reload.
-    await mockUi.open(mockUi.row(dialog, exam.title), exam.title).click();
+    await mockUi.openDetail(mockUi.row(dialog, exam.title), exam.title);
     await resumeButton(dialog, '1/4').click();
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     expect(new URL(page.url()).searchParams.get('mock')).toBe(exam.id);
@@ -210,14 +215,14 @@ test(
     const panel = runUi.panel(page);
 
     const dialog = await openList(page, ws.id);
-    await resumeButton(mockUi.row(dialog, exam.title), '1/3').click();
+    await rowResume(mockUi.row(dialog, exam.title), exam.title).click();
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     await expect(panel.getByRole('radio').first()).toBeVisible();
     const before = await shown(panel);
     await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
 
-    await resumeButton(mockUi.row(dialog, exam.title), '1/3').click();
+    await rowResume(mockUi.row(dialog, exam.title), exam.title).click();
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     await expect(panel.getByRole('radio').first()).toBeVisible();
     expect(await shown(panel)).toEqual(before);
@@ -242,7 +247,7 @@ test(
 
     await take(2);
     let dialog = await openList(page, ws.id);
-    await resumeButton(mockUi.row(dialog, exam.title), '1/3').click();
+    await rowResume(mockUi.row(dialog, exam.title), exam.title).click();
     await expect(runUi.mockTitle(panel, 3)).toBeVisible();
     await closeUnfinishedRun(panel);
     await expect(panel).toHaveCount(0);
@@ -250,8 +255,8 @@ test(
     // A new round: 풀기 alone, and the old run still opens by its URL.
     await owner.api.ok('POST', `/mock-exams/${exam.id}/generations`, {}, [202]);
     dialog = await openList(page, ws.id);
-    await expect(mockUi.practise(mockUi.row(dialog, exam.title))).toBeVisible();
-    await expect(anyResume(mockUi.row(dialog, exam.title))).toHaveCount(0);
+    await expect(mockUi.rowTitle(mockUi.row(dialog, exam.title))).toBeVisible();
+    await expect(mockUi.row(dialog, exam.title)).toContainText(/\b0\/\d+/);
     await expect(dialog.getByRole('alert')).toHaveCount(0);
     await page.goto(practiceRunPath(ws.id, run.id, 3));
     await expect(runUi.mockTitle(panel, 3)).toBeVisible();
@@ -278,20 +283,20 @@ test(
     await signInAs(page, owner.user);
 
     let dialog = await openList(page, ws.id);
-    await resumeButton(mockUi.row(dialog, exam.title), '1/2').click();
+    await rowResume(mockUi.row(dialog, exam.title), exam.title).click();
     const panel = runUi.panel(page);
     await expect(runUi.mockTitle(panel, 2)).toBeVisible();
     expect(practiceParam(page)).toBe(older.id);
 
     await answer(owner, older, 2, 2);
     dialog = await openList(page, ws.id);
-    await expect(mockUi.practise(mockUi.row(dialog, exam.title))).toBeVisible();
-    await expect(anyResume(mockUi.row(dialog, exam.title))).toHaveCount(0);
+    await expect(mockUi.rowTitle(mockUi.row(dialog, exam.title))).toBeVisible();
+    await expect(mockUi.row(dialog, exam.title)).toContainText(/\b0\/\d+/);
   },
 );
 
 test(
-  'UX12-MOCKRESUME-AC07 이어 풀기 지우기 drops the run from the row only',
+  'UX12-MOCKRESUME-AC07 이어 풀기 지우기 on the detail drops the run and the row no longer offers it',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-mres-07');
@@ -300,14 +305,21 @@ test(
     const run = await startRun(owner, ws.id, exam);
     await answer(owner, run, 1, 1);
     await signInAs(page, owner.user);
-    const dialog = await openList(page, ws.id);
-    const row = mockUi.row(dialog, exam.title);
+    let dialog = await openList(page, ws.id);
+    let row = mockUi.row(dialog, exam.title);
 
-    await pickFromRowMenu(page, row, exam.title, /^이어 풀기 지우기$/);
-    await expect(mockUi.practise(row)).toBeVisible();
-    await page.reload();
-    await expect(mockUi.practise(row)).toBeVisible();
-    await expect(anyResume(row)).toHaveCount(0);
+    await mockUi.rowMenu(row, exam.title).click();
+    await expect(menuItem(page, /^이어 풀기 지우기$/)).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    dialog = await openDetail(page, ws.id, exam);
+    await dialog.getByRole('button', { name: /^(더보기|more)$/i }).click();
+    await menuItem(page, /^이어 풀기 지우기$/).click();
+    await expect(mockUi.practise(dialog)).toBeVisible();
+    dialog = await openList(page, ws.id);
+    row = mockUi.row(dialog, exam.title);
+    await expect(mockUi.rowTitle(row)).toBeVisible();
+    await expect(row).toContainText(/\b0\/\d+/);
     expect(mockAttemptCount(exam.id)).toBe(1);
     expect((await getPracticeRun(owner, run.id)).body?.finished_at).toBeNull();
   },
@@ -333,14 +345,14 @@ test(
 
     await signInAs(page, editor.user);
     let dialog = await openList(page, s.workspaceId);
-    await expect(mockUi.practise(mockUi.row(dialog, exam.title))).toBeVisible();
+    await expect(mockUi.rowTitle(mockUi.row(dialog, exam.title))).toBeVisible();
     await expect(anyResume(dialog)).toHaveCount(0);
 
     await page.context().clearCookies();
     await signInAs(page, s.viewer.user);
     await s.owner.api.ok('POST', `/workspaces/${s.workspaceId}/archive`, undefined, [200]);
     dialog = await openList(page, s.workspaceId);
-    await expect(resumeButton(mockUi.row(dialog, exam.title), '2/3')).toBeVisible();
+    await expect(mockUi.row(dialog, exam.title)).toContainText('2/3');
 
     const list = `/workspaces/${s.workspaceId}/mock-exams`;
     expect((await outsider.api.request('GET', list)).status).toBe(404);

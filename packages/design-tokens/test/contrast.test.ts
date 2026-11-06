@@ -4,6 +4,8 @@ import { themeNames, themedTokens, type ThemeName, type ThemedTokenName } from '
 
 const TEXT_MIN = 4.5;
 const NON_TEXT_MIN = 3;
+// Floor for correct/incorrect result marks that are never the only signal (VIEW-RESULT).
+const RESULT_MARK_MIN = 2.6;
 
 function channel(value: number): number {
   const c = value / 255;
@@ -103,11 +105,19 @@ const REQUIRED: Pair[] = [
   ),
   ['color-on-accent', 'color-switch-track', NON_TEXT_MIN],
   ['color-on-accent', 'color-switch-track-hover', NON_TEXT_MIN],
-  // UX7-QDISPLAY: graded MCQ option borders (QPLAY-01-AC12) — chosen correct success, wrong
-  // choice border-strong, correct option danger — on every surface the practice panel sits on.
-  ...(['color-success', 'color-border-strong', 'color-danger'] as const).flatMap((fg) =>
+  // UX7-QDISPLAY: graded MCQ option borders (QPLAY-01-AC12) — wrong choice border-strong — on
+  // every surface the practice panel sits on. The correct and wrong-answer borders and marks use
+  // the heatmap's green and red (VIEW-RESULT 2026-11-07); see RESULT_MARK_MIN below.
+  ...(['color-border-strong'] as const).flatMap((fg) =>
     (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
       (bg): Pair => [fg, bg, NON_TEXT_MIN],
+    ),
+  ),
+  // Result marks in the heatmap's colors: the light fills measure 2.65 to 2.95:1 on the panel surfaces, and
+  // the check/X icon and the hidden wording carry the state, so colour is never the only signal.
+  ...(['color-success-fill', 'color-danger-fill'] as const).flatMap((fg) =>
+    (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
+      (bg): Pair => [fg, bg, RESULT_MARK_MIN],
     ),
   ),
   // UX9-HL-UI (design-system §5.2): body text stays AA on every highlight color and on the search

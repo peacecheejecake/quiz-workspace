@@ -220,8 +220,23 @@ test(
       };
     });
     expect(style.position).toBe('sticky');
-    expect(style.blur).toMatch(/blur\(/); // glass since UX12-GLASSBTN-AC07, the marker never shows
+    expect(style.blur).toMatch(/blur\(/); // glass once stuck (UX12-GLASSBTN-AC07)
     expect(style.z).toBeLessThan(style.appZ);
+
+    // Full width (HOME-EDGE): the line reaches both page edges, the buttons stay on the content.
+    const viewport = page.viewportSize();
+    const wide = await box(line);
+    expect(wide.x).toBe(0);
+    expect(Math.abs(wide.width - (viewport?.width ?? 0))).toBeLessThanOrEqual(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      ),
+      'no horizontal page scroll',
+    ).toBe(true);
+    const content = await box(overviewUi.heatmap(page));
+    const firstButton = await box(trigger(page));
+    expect(Math.abs(firstButton.x - content.x)).toBeLessThanOrEqual(1);
 
     // Put the first marker right behind the line: the line is what a press there hits.
     await scrollTo(page, 0);

@@ -249,7 +249,7 @@ test.describe('UX12-SETTINGS', () => {
     await expectNothingCopied(page);
   });
 
-  test('UX12-SETTINGS-AC07 reading text copies what the menu copies and the menu still opens', async ({
+  test('UX12-SETTINGS-AC07 reading text auto-copies once and the menu still opens', async ({
     page,
     workspaceFactory,
   }) => {
@@ -270,11 +270,10 @@ test.describe('UX12-SETTINGS', () => {
     await expect(menu).toBeVisible();
     expect(await selectionText(page)).toBe(copied);
 
-    // The menu's own copy writes once; the kept selection does not auto-copy a second time.
-    await menu.getByRole('menuitem', { name: /^(복사|copy)$/i }).click();
-    await expect.poll(() => copiedTexts(page)).toHaveLength(2);
+    // The menu has no 복사 any more (HILITE-MENU 2026-11-07); the kept selection copies only once.
+    await expect(menu.getByRole('menuitem', { name: /^(복사|copy)$/i })).toHaveCount(0);
     await page.waitForTimeout(SETTLE_MS);
-    expect(await copiedTexts(page)).toHaveLength(2);
+    expect(await copiedTexts(page)).toHaveLength(1);
   });
 
   test('UX12-SETTINGS-AC08 touch pointers never auto-copy and the setting says so', async ({

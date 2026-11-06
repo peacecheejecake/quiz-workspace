@@ -182,12 +182,15 @@ test.describe('return bar', () => {
       }
       const shape = await shapeOf(bar);
       expect(shape.height).toBe(52);
-      expect(shape.paddingInline).toEqual(['24px', '24px']);
+      expect(shape.paddingInline).toEqual(['12px', '12px']); // tight for two icons (HOME-RETURN)
       expect(shape.radius).toBe('20px');
 
       const buttonShape = await shapeOf(button);
-      expect(buttonShape.paddingInline).toEqual(['8px', '8px']);
       expect(buttonShape.height).toBeGreaterThanOrEqual(44);
+      expect(buttonShape.width).toBeGreaterThanOrEqual(44);
+      // HOME-RETURN: an icon button with no visible text, and no border like the close button.
+      expect(await button.innerText()).toBe('');
+      expect(buttonShape.borderColor).toBe('rgba(0, 0, 0, 0)');
       const closeShape = await shapeOf(close);
       expect(closeShape.height).toBeGreaterThanOrEqual(44);
       expect(closeShape.width).toBeGreaterThanOrEqual(44);
@@ -228,12 +231,12 @@ test.describe('narrow return bar', () => {
   test.use({ viewport: { width: 320, height: 640 } });
 
   test(
-    'UX12-GLASS-AC05 at 320px the return bar narrows its padding and stays inside the screen',
+    'UX12-GLASS-AC05 at 320px the return bar keeps its tight padding and stays inside the screen',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
       await openOverview(page, workspaceFactory, 'ux12-glass-05');
       const shape = await shapeOf(await showReturnBar(page));
-      expect(shape.paddingInline).toEqual(['12px', '12px']);
+      expect(shape.paddingInline).toEqual(['12px', '12px']); // same as wider screens since HOME-RETURN
       expect(shape.height).toBe(52);
       expect(shape.left).toBeGreaterThanOrEqual(16);
       expect(shape.right).toBeLessThanOrEqual(304);

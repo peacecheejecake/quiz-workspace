@@ -1044,8 +1044,8 @@ test(
     const [a = '', b = '', c = '', d = ''] = texts;
     const [ma = '', mb = '', mc = '', md = ''] = multi.revision.options.map((o) => o.text);
     await openOverview(page, s);
-    const success = await tokenColor(page, 'color-success');
-    const danger = await tokenColor(page, 'color-danger');
+    const success = await tokenColor(page, 'color-success-fill');
+    const danger = await tokenColor(page, 'color-danger-fill');
     const grey = await tokenColor(page, 'color-border-strong');
     expect(new Set([success, danger, grey, TRANSPARENT]).size).toBe(4);
 
@@ -1106,7 +1106,7 @@ test(
     // The same tokens in the dark theme (each theme resolves its own values).
     await page.emulateMedia({ colorScheme: 'dark' });
     const dark = {
-      danger: await tokenColor(page, 'color-danger'),
+      danger: await tokenColor(page, 'color-danger-fill'),
       grey: await tokenColor(page, 'color-border-strong'),
     };
     expect(dark.danger).not.toBe(danger);
@@ -1477,12 +1477,13 @@ test(
     const otherPanel = await openPanel(otherTab, 1);
     await panelUi.reveal(otherPanel).click();
     await expect(panelUi.result(otherPanel)).toContainText(RESULT_TEXT.correct);
-    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    await choosePanelMenu(page, panel, 'reset');
     const confirmation = page.getByRole('alertdialog', { name: /풀이 기록 초기화/ });
     await expect(confirmation).toContainText(/Heatmap/);
     await confirmation.getByRole('button', { name: /취소|cancel/i }).click();
+    await expect(panelUi.manage(panel).or(panelUi.info(panel))).toBeFocused();
     expect(await listAttempts(s.owner, question.id)).toHaveLength(1);
-    await panel.getByRole('button', { name: /^초기화$/ }).click();
+    await choosePanelMenu(page, panel, 'reset');
     await confirmation.getByRole('button', { name: /^초기화$/ }).click();
     await expect(panel).not.toBeVisible();
     await expect(otherPanel).not.toBeVisible();

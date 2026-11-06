@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// UX12-RESUME (docs/screens/ux12-run-resume.md): the 이어 풀기 group of the mock exam list.
+// UX12-RESUME (docs/screens/ux12-run-resume.md): the unfinished-run rows of the merged mock exam list.
 import './dom-setup';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -53,7 +53,7 @@ function panel(api: object, props: object = {}) {
 }
 
 const rows = async () =>
-  within(await screen.findByRole('list', { name: '이어 풀기 목록' })).getAllByRole('listitem');
+  within(await screen.findByRole('list', { name: '모의고사 목록' })).getAllByRole('listitem');
 
 it('UX12-RESUME-AC01 names a run after its chapter, else 원본 풀이', () => {
   expect(unfinishedRunName(RUN)).toBe('원본 풀이');
@@ -67,14 +67,15 @@ it('UX12-RESUME-AC01 shows a row for every viewer without counting it as a mock 
   expect(row).toHaveTextContent('원본 풀이');
   expect(row).toHaveTextContent('3/10');
   expect(screen.getByText('모의고사 0개')).toBeInTheDocument();
-  expect(within(row).getByRole('button', { name: '원본 풀이 이어 풀기' })).toBeEnabled();
+  expect(within(row).getByRole('button', { name: '원본 풀이' })).toBeEnabled();
+  expect(within(row).queryByRole('button', { name: /풀기/ })).toBeNull();
 });
 
-it('UX12-RESUME-AC02 이어 풀기 hands over the run and its next position', async () => {
+it('UX12-RESUME-AC02 the title hands over the run and its next position', async () => {
   const onResume = vi.fn();
   render(panel(fakeApi([RUN]), { onResume }));
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: '원본 풀이 이어 풀기' }));
+  await user.click(await screen.findByRole('button', { name: '원본 풀이' }));
   expect(onResume).toHaveBeenCalledWith('run', 4);
 });
 
@@ -114,28 +115,28 @@ it('UX12-RESUME-AC05 keeps the empty text away while runs load and while there a
 it('UX12-RESUME-AC05 shows the empty text with no runs and no mock exams', async () => {
   render(panel(fakeApi([])));
   expect(await screen.findByText('아직 모의고사가 없습니다.')).toBeInTheDocument();
-  expect(screen.queryByRole('list', { name: '이어 풀기 목록' })).toBeNull();
+  expect(screen.queryByRole('list', { name: '모의고사 목록' })).toBeNull();
 });
 
-it('UX12-RESUME-AC06 지우기 takes the row out, for a viewer too', async () => {
+it('UX12-RESUME-AC06 삭제 takes the row out, for a viewer too', async () => {
   const api = fakeApi([RUN]);
   render(panel(api));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: '원본 풀이 메뉴' }));
-  await user.click(await screen.findByRole('menuitem', { name: '지우기' }));
+  await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
   await waitFor(() => expect(api.dismissRun).toHaveBeenCalledWith('run'));
-  await waitFor(() => expect(screen.queryByRole('list', { name: '이어 풀기 목록' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('list', { name: '모의고사 목록' })).toBeNull());
   expect(await screen.findByText('아직 모의고사가 없습니다.')).toBeInTheDocument();
 });
 
-it('UX12-RESUME-AC06 keeps the row and says so when 지우기 fails', async () => {
+it('UX12-RESUME-AC06 keeps the row and says so when 삭제 fails', async () => {
   const api = fakeApi([RUN], {
     dismissRun: async () => ({ ok: false, kind: 'unavailable', message: '지우지 못했습니다.' }),
   });
   render(panel(api));
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: '원본 풀이 메뉴' }));
-  await user.click(await screen.findByRole('menuitem', { name: '지우기' }));
+  await user.click(await screen.findByRole('menuitem', { name: '삭제' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('지우지 못했습니다.');
   expect(await rows()).toHaveLength(1);
 });
@@ -177,4 +178,15 @@ it('UX12-RESUME-AC03 polling a generating mock exam does not read the runs again
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('UX12-RESUME-AC01 merges runs and mock exams newest first with an id tie-break', async () => {
+  const { mergeListRows } = await import('../src/components/questions/mock-exams/mock-exam-model');
+  const run = (id: string, at: string) => ({ ...RUN, id, last_touched_at: at });
+  const exam = (id: string, at: string) => ({ id, created_at: at }) as never;
+  const rowsOut = mergeListRows(
+    [run('r1', '2026-11-01T00:00:00Z'), run('r2', '2026-11-03T00:00:00Z')],
+    [exam('e1', '2026-11-02T00:00:00Z'), exam('a0', '2026-11-03T00:00:00Z')],
+  );
+  expect(rowsOut.map((r) => r.id)).toEqual(['a0', 'r2', 'e1', 'r1']);
 });

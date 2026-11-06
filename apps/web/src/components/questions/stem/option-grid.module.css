@@ -26,24 +26,10 @@
   overflow-wrap: anywhere;
 }
 
-/* Grid of one track: the hidden bold copy holds the row at its hovered height (UX12-OPTIONS). */
 .cell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
   min-inline-size: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.cell > *,
-.cell::after {
-  grid-area: 1 / 1;
-}
-
-.cell::after {
-  content: attr(data-copy);
-  font-weight: var(--font-weight-semibold);
-  visibility: hidden;
 }
 
 .trailing {

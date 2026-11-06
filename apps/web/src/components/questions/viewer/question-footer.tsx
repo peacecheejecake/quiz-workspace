@@ -93,6 +93,7 @@ export function AnotherTryButton({
     <>
       <Tooltip open={hinted && !available} onOpenChange={setHinted} content={ANOTHER_TRY_REASON}>
         <Button
+          borderless
           aria-disabled={!available || undefined}
           aria-describedby={available ? undefined : reasonId}
           onClick={() => {

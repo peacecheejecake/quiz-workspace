@@ -178,10 +178,10 @@ test(
     await page.goto(homePath(ws.id, 'panel=mock-exams'));
     const row = mockUi
       .dialog(page)
-      .getByRole('list', { name: /^(이어 풀기 목록|unfinished runs)$/i })
+      .getByRole('list', { name: /^(모의고사 목록|mock exams?)$/i })
       .getByRole('listitem');
     await expect(row).toContainText('0/3');
-    await row.getByRole('button', { name: /(이어 풀기|resume)$/i }).click();
+    await row.getByRole('button').first().click();
     await expect(page).toHaveURL(new RegExp(`practice=${run.id}&i=1`));
     await expect(runUi.submit(runUi.panel(page))).toBeVisible();
   },

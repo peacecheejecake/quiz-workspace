@@ -865,11 +865,12 @@ export function QuestionsOverview({
         onFlagsChange={changeFlags}
         onViewed={markViewed}
         invalidated={invalidated}
-        headerExtra={({ onShowSource }) =>
+        headerExtra={({ onShowSource, onReset }) =>
           panelQuestion ? (
             <QuestionManageMenu
               busy={loadingEdit || deleting || archiving}
               onShowSource={onShowSource}
+              onReset={onReset}
               onShowDetail={(focus, trigger) =>
                 setDetail({
                   questionId: panelQuestion.id,

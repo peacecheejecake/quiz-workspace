@@ -92,9 +92,10 @@
 //   FloatingSidePanel inside <main> named "모의고사" (`?panel=mock-exams[&mock=new|<id>]`), close
 //   button "모의고사 닫기"; while loading `[aria-busy="true"]` + status "불러오는 중"; each view's
 //   title is a heading that gets focus (list and create: "모의고사", detail: the mock exam's
-//   name); BackLink "모의고사 목록" on create/detail.
-//   List: text "모의고사 n개", button "추가" (every member; UX12-MOCKNAV-AC05), list "모의고사
-//   목록" with one listitem per mock exam: button named by the title (opens the detail), status
+//   name); BackLink "모의고사 목록" on detail; on create a header icon button before the title ("모의고사 목록" on 범위, "이전 단계" on 옵션).
+//   List: text "모의고사 n개", floating icon button "추가" (every member; UX12-MOCKNAV-AC05,
+//   UX12 MOCKLIST), list "모의고사 목록" with unfinished bank runs and mock exams newest first;
+//   a mock exam listitem has the label "모의고사": button named by the title (opens the detail), status
 //   badge text, meta "문제 n개 · <유형, …> · <시각>", button "풀기" (ready/partial), menu button
 //   "<이름> 메뉴" (editors) with menuitems 이름 바꾸기 / 설정 바꾸기 / 삭제; progressbar "문제 생성
 //   진행률" (value text "n개 중 k개") while generating. Empty: "아직 모의고사가 없습니다." (+ the hint
@@ -590,12 +591,24 @@ export const mockUi = {
   add: (dialog: Locator) => dialog.getByRole('button', { name: /^(추가|add)$/i }),
   list: (dialog: Locator) =>
     dialog.getByRole('list', { name: /^(모의고사 목록|mock exam list|mock exams)$/i }),
-  rows: (dialog: Locator) => mockUi.list(dialog).getByRole('listitem'),
+  // Mock exam rows only: the list also holds unfinished bank runs (no 모의고사 label).
+  rows: (dialog: Locator) =>
+    mockUi
+      .list(dialog)
+      .getByRole('listitem')
+      .filter({ has: dialog.page().getByText('모의고사', { exact: true }) }),
   row: (dialog: Locator, title: string) =>
     mockUi
       .rows(dialog)
       .filter({ has: dialog.page().getByRole('button', { name: title, exact: true }) }),
+  // A list row has no button but its title (UX12 MOCKLIST): it starts or resumes the run, or opens
+  // the detail of an exam that cannot be practised. `openDetail` goes through the row menu.
   open: (row: Locator, title: string) => row.getByRole('button', { name: title, exact: true }),
+  rowTitle: (row: Locator) => row.getByRole('button').first(),
+  openDetail: async (row: Locator, title: string) => {
+    await mockUi.rowMenu(row, title).click();
+    await mockUi.menuAction(row.page(), /^(상세 보기|details?)$/i).click();
+  },
   practise: (scope: Locator) => scope.getByRole('button', { name: /^(풀기|practi[cs]e|start)$/i }),
   rowMenu: (row: Locator, title: string) =>
     row.getByRole('button', { name: new RegExp(`^${escape(title)} (메뉴|menu)$`, 'i') }),
