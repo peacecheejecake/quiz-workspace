@@ -102,7 +102,7 @@ test(
 );
 
 test(
-  'UX12-HOME-AC03 cells and markers are 28px and 7px apart, on narrow screens too',
+  'UX12-HOME-AC03 desktop cells and markers are 24px and 6px apart, 28px on narrow screens',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -115,10 +115,10 @@ test(
       shape(1),
       shape(2),
     ]);
-    expect(cell).toMatchObject({ width: 28, height: 28 });
-    expect(first?.width).toBeCloseTo(28, 1);
-    expect(first?.height).toBeCloseTo(28, 1);
-    expect((second?.x ?? 0) - ((first?.x ?? 0) + (first?.width ?? 0))).toBeCloseTo(7, 1);
+    expect(cell).toMatchObject({ width: 24, height: 24 });
+    expect(first?.width).toBeCloseTo(24, 1);
+    expect(first?.height).toBeCloseTo(24, 1);
+    expect((second?.x ?? 0) - ((first?.x ?? 0) + (first?.width ?? 0))).toBeCloseTo(6, 1);
 
     await page.setViewportSize({ width: 600, height: 800 });
     await expect.poll(async () => (await overviewUi.dot(page, 1).boundingBox())?.width).toBe(28);
