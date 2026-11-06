@@ -2,7 +2,7 @@
 
 Pipeline (questions.md §6): printed reading order (``reading_order``) -> rule-based
 pre-extraction (numbering, options, figures, answer key, page/bbox provenance) -> optional LLM
-refinement per question (``questions.extract/v3``, structured output, own source text only) ->
+refinement per question (``questions.extract/v4``, structured output, own source text only) ->
 structural validation -> drafts with ``review_status=pending``, ``origin=pdf_import`` and
 validation issues.
 
@@ -71,9 +71,11 @@ from book_core.question import (
     HANGUL_LABELS,
     answer_option_keys,
     canonical_key,
+    has_pipe_table,
     issue,
     loose_text,
     option_id,
+    split_pipe_blocks,
     structural_issues,
 )
 
@@ -409,6 +411,15 @@ def _note_layout_issues(
                 "from the parser's order.",
             )
         )
+    for candidate in candidates:
+        if has_pipe_table(candidate.stem):
+            candidate.issues.append(
+                issue(
+                    "table_in_stem",
+                    "A table printed in the question was put in the stem; "
+                    "merged cells may differ from the print.",
+                )
+            )
     for i in sorted(_option_outliers(candidates)):
         candidates[i].issues.append(
             issue(
@@ -724,7 +735,12 @@ def _verified_text(
         llm_options = [(k, o.text.strip()) for k, o in zip(keys, proposal.options, strict=True)]
         # The labels must form a complete sequence from the first label, so an option cannot
         # be folded into the stem (``stem 가. x`` + ``나. y`` also reproduces the print).
-        if keys_ok and _is_sequence(keys) and _reproduces(pre.stem, llm_stem, llm_options):
+        if (
+            keys_ok
+            and _is_sequence(keys)
+            and _reproduces(pre.stem, llm_stem, llm_options)
+            and _tables(llm_stem) == _tables(pre.stem)
+        ):
             return llm_stem, llm_options, issues
         issues.append(
             issue(
@@ -737,7 +753,11 @@ def _verified_text(
         return pre.stem, pre.options, issues
 
     stem = pre.stem
-    if llm_stem and loose_text(llm_stem) == loose_text(pre.stem):
+    if (
+        llm_stem
+        and loose_text(llm_stem) == loose_text(pre.stem)
+        and _tables(llm_stem) == _tables(pre.stem)
+    ):
         stem = llm_stem
     else:
         issues.append(
@@ -774,6 +794,11 @@ def _verified_text(
             )
         )
     return stem, pre.options, issues
+
+
+def _tables(stem: str) -> list[str]:
+    """The stem's pipe tables without spacing: the same letters on one line are no table."""
+    return [loose_text(text) for is_table, text in split_pipe_blocks(stem) if is_table]
 
 
 def _reproduces(printed: str, stem: str, options: Sequence[tuple[str, str]]) -> bool:

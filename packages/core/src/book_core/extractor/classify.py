@@ -135,7 +135,10 @@ def _line_key(line: SourceLine) -> tuple[int, str]:
 
 
 def _owned_lines(question: RawQuestion) -> Iterable[SourceLine]:
-    yield from question.stem_lines[:_STEM_LINES]
+    # A table in the stem is no line of its own: the document's text holds its cells, unowned.
+    yield from (
+        line for line in question.stem_lines[:_STEM_LINES] if line.block.type is not BlockType.TABLE
+    )
     for option in question.options:
         yield from option.lines[:_OPTION_LINES]
     for entry in question.answer:

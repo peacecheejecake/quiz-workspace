@@ -35,6 +35,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from book_core.contracts import BBox, Block, BlockType, QuestionType, SourceLocation
+from book_core.export import md_table
 from book_core.question.labels import (
     CIRCLED_DIGITS,
     answer_option_keys,
@@ -42,6 +43,7 @@ from book_core.question.labels import (
     has_item_label,
     leading_item_families,
     split_option_line,
+    split_pipe_blocks,
 )
 from book_core.structure.numbering import NumberingKind, parse_numbering
 
@@ -142,8 +144,16 @@ class RawQuestion:
     def stem(self) -> str:
         """The stem lines joined by spaces (a wrapped line goes on), except that each printed
         stem item (``(가) ...``, ``ㄱ. ...``) starts its own line, after a blank line below the
-        question sentence (questions.md §4 11)."""
-        return break_stem_items(" ".join(p for p in self.stem_parts if p).strip())
+        question sentence, and a table stands apart by blank lines (questions.md §4 11)."""
+        text = ""
+        after_table = False
+        for part in self.stem_parts:
+            if not part:
+                continue
+            table = split_pipe_blocks(part) == [(True, part)]
+            text += ("\n\n" if table or after_table else " ") + part if text else part
+            after_table = table
+        return break_stem_items(text.strip())
 
     @property
     def figure_labels(self) -> list[str]:
@@ -357,24 +367,42 @@ def _table_answer_entries(block: Block, index: int) -> tuple[list[AnswerKeyEntry
     return entries, orientation == "ambiguous"
 
 
+def _row_options(row: Sequence[str]) -> list[tuple[str, str]]:
+    """``(label, text)`` of the options a table row starts with a circled label: ``①``, ``①xxx``
+    or ``① x ② y`` in a cell. The cells after a label, up to the next one, are its text, joined
+    as printed (`` | ``). A row whose first cell has no label holds none."""
+    if not row or not row[0] or row[0][0] not in CIRCLED_DIGITS:
+        return []
+    labels: list[str] = []
+    parts: list[list[str]] = []
+    for cell in row:
+        if cell and cell[0] in CIRCLED_DIGITS:
+            for label, text in split_option_line(cell) or []:
+                labels.append(label)
+                parts.append([text] if text else [])
+        elif cell:
+            parts[-1].append(cell)
+    return [(label, " | ".join(cells)) for label, cells in zip(labels, parts, strict=True)]
+
+
 def _table_options(
-    block: Block, index: int, *, min_rows: int = 2
+    block: Block, index: int, *, continues: bool = False
 ) -> tuple[list[str], list[RawOption]]:
-    """``(header parts, options)`` of a table whose rows start with circled option labels (at
-    least ``min_rows``); ``([], [])`` for any other table. Cells are joined as printed
-    (`` | ``)."""
+    """``(header parts, options)`` of an option table, ``([], [])`` for any other table. Its
+    labels run on without a gap from ①, at least two; the table that continues options split
+    over pages needs one, from any label. Cells that merely mention a label are not options."""
     if block.table is None:
         return [], []
     rows = [[cell.strip() for cell in row] for row in block.table.rows]
-    labelled = [i for i, row in enumerate(rows) if len(row[0]) == 1 and row[0] in CIRCLED_DIGITS]
-    if len(labelled) < min_rows:
+    found = [_row_options(row) for row in rows]
+    labelled = [i for i, row in enumerate(found) if row]
+    labels = sorted(CIRCLED_DIGITS.index(label) for row in found for label, _ in row)
+    first = labels[0] if continues and labels else 0
+    if len(labels) < (1 if continues else 2) or labels != list(range(first, first + len(labels))):
         return [], []
     line = SourceLine(text=block.text, block=block, block_index=index)
     header = [" | ".join(c for c in row if c) for row in rows[: labelled[0]]]
-    options = [
-        RawOption(label=rows[i][0], text=" | ".join(c for c in rows[i][1:] if c), lines=[line])
-        for i in labelled
-    ]
+    options = [RawOption(label=x, text=text, lines=[line]) for row in found for x, text in row]
     return [h for h in header if h], options
 
 
@@ -547,12 +575,18 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                 # (even a single row) continues the options; only the first one's header rows
                 # belong to the stem.
                 continues = bool(current.options)
-                header, table_options = _table_options(block, index, min_rows=1 if continues else 2)
+                header, table_options = _table_options(block, index, continues=continues)
                 if table_options:
                     if not continues:
                         current.stem_parts += header
                         current.stem_lines += [table_options[0].lines[0]] if header else []
                     current.options += table_options
+                elif block.table is not None:
+                    table = md_table(block)
+                    current.stem_parts.append(table)
+                    current.stem_lines.append(
+                        SourceLine(text=table, block=block, block_index=index)
+                    )
             continue
 
         for text in lines:
