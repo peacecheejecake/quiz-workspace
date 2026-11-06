@@ -126,6 +126,14 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-NUMBER.0': ['UX12-NUMBER'],
   // UX12 DESIGN-1: which buttons may drop the boundary, hover backgrounds, compact button rows.
   'UX12-CONTROLS.0': ['UX12-CONTROLS'],
+  // UX12 EXPL-1 (2026-11-06): AI 해설 toolbar, shared disclosure heading, 작성중... text.
+  'UX12-EXPL.0': ['UX12-EXPL'],
+  // UX12 VIEW-2: option hover, result icons, study toggles without a fill, option line breaks.
+  'UX12-OPTIONS.0': ['UX12-OPTIONS'],
+  // UX12 HOME-2: no leftover AI buttons, notices or reasons where the LLM is off (D-14).
+  'UX12-AIOFF.0': ['UX12-AIOFF'],
+  // UX12 HOME-3: `AI에게 묻기` in the 본문 검색 page header.
+  'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
 };
 
 const LEADING_ID = new RegExp(

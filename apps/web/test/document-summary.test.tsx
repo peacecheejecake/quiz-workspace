@@ -166,9 +166,14 @@ describe('summary panel model', () => {
   });
 
   it('marks an environment without summaries and documents that cannot be summarized', () => {
-    expect(summaryPanelModel(state({ available: false }), { canEdit: true }).unavailable).toBe(
-      true,
-    );
+    expect(summaryPanelModel(state({ available: false }), { canEdit: true })).toMatchObject({
+      empty: true,
+      createInEmpty: false,
+    });
+    const failed = state({ available: false, run: run({ status: 'failed' }) });
+    expect(summaryPanelModel(failed, { canEdit: true }).retry).toBe(false);
+    const stored = state({ available: false, summary: SUMMARY, enabled: false });
+    expect(summaryPanelModel(stored, { canEdit: true }).auto).toEqual({ on: false, action: null });
     const paper = summaryPanelModel(state(), { canEdit: true, questionPaper: true });
     expect(paper).toMatchObject({ notice: '문제지는 요약하지 않습니다.', createInEmpty: false });
     const processing = summaryPanelModel(state({ published_revision_id: null }), {
@@ -497,8 +502,9 @@ describe('DocumentSummaryPanel', () => {
 
   it('UX10-AI-AC01 hides summary creation when unavailable', async () => {
     const { panel, client } = renderPanel(state({ available: false }));
-    await within(panel).findByText('이 환경에서는 AI 요약을 사용할 수 없습니다.');
+    await within(panel).findByText('아직 요약이 없습니다.');
     expect(within(panel).queryByRole('button', { name: '요약 만들기' })).toBeNull();
+    expect(within(panel).queryByText(/AI\s+서비스로 전송됩니다|사용할 수 없습니다/)).toBeNull();
     expect(client.create).not.toHaveBeenCalled();
   });
 

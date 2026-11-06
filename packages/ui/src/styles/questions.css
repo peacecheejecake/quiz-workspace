@@ -2,15 +2,23 @@
  * Question heatmap, markers and study-state controls (docs/design-system.md §6/§6.1,
  * docs/questions.md §3). Marker color comes only from --question-status-* via data-status.
  */
-/*
- * The dot sets the cell size on itself too, so a standalone QuestionDot (panel header, bank
- * list, stories) gets the touch size without a heatmap ancestor.
- */
 .qz-heatmap,
 .qz-heatmap-legend,
-.qz-status-summary,
-.qz-question-dot {
+.qz-status-summary {
   --qz-heatmap-cell: var(--heatmap-cell);
+}
+
+/*
+ * The dot sets the cell size on itself too, so a standalone QuestionDot (panel header, bank
+ * list, stories) gets the touch size without a heatmap ancestor. Only the heatmap grid uses the
+ * larger desktop cell.
+ */
+.qz-question-dot {
+  --qz-heatmap-cell: var(--heatmap-cell-touch);
+}
+
+.qz-heatmap .qz-question-dot {
+  --qz-heatmap-cell: inherit;
 }
 
 /* Mobile and coarse pointers use --heatmap-cell-touch (24px since UX9-STROKE, the WCAG 2.2
@@ -18,8 +26,7 @@
 @media (width < 768px), (pointer: coarse) {
   .qz-heatmap,
   .qz-heatmap-legend,
-  .qz-status-summary,
-  .qz-question-dot {
+  .qz-status-summary {
     --qz-heatmap-cell: var(--heatmap-cell-touch);
   }
 }
@@ -102,7 +109,8 @@
  * Focus: a 2px outline on the cell edge, in the neighbours' transparent margin (their square starts
  * 1/8 of the cell in), with the marker scaled up inside it.
  * Current (UX9-STROKE): a 2px near-black (dark: near-white) --color-text-primary ring hugging the
- * unscaled square with no space in between (outline inset by the square's 1/8-cell margin).
+ * unscaled square with no space in between (outline inset by the square's 1/8-cell margin, rounded
+ * up to a whole pixel: Chromium truncates a fractional offset, which left a 0.5px gap at 28px).
  * The two differ in position and size as well as color. A focused current dot shows the focus
  * ring only: same specificity, the focus rule comes later.
  */
@@ -111,7 +119,7 @@
 .qz-question-dot[data-selected] {
   z-index: var(--z-raised);
   outline: 2px solid var(--color-text-primary);
-  outline-offset: calc(var(--qz-heatmap-cell) / -8);
+  outline-offset: calc(round(up, var(--qz-heatmap-cell) / 8, 1px) * -1);
 }
 
 .qz-question-dot:focus-visible {
@@ -317,8 +325,8 @@
   }
 }
 
-/* Favorite / retry toggles: the "on" state gets the shared selected fill (controls.css) and an
-   accent icon; the label flips and the favorite star fills, so it is never color alone. */
+/* Favorite / retry toggles: the "on" state has no fill (controls.css, UX12-OPTIONS): the accent
+   icon inverts its fill and stroke and the label flips, so it is never color alone. */
 .qz-study-toggle[data-state='on'] {
   color: var(--color-accent);
 }

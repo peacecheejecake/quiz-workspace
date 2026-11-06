@@ -1025,7 +1025,7 @@ const MARK = {
 } as const;
 
 test(
-  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a text mark',
+  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a described mark',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('qplay01-ac12');
@@ -1072,8 +1072,7 @@ test(
       ],
       width,
     );
-    // Same border width before and after: the rows keep their place and width (the topmost row
-    // does not move at all; a mark line below a row may push the later rows down).
+    // Same border width and a reserved icon slot: the rows keep their place and width.
     const after = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
     for (const [i, box] of after.entries()) {
       expect(box.x).toBeCloseTo(before[i]?.x ?? NaN, 1);
@@ -1081,6 +1080,7 @@ test(
     }
     const top = (boxes: readonly { y: number }[]) => Math.min(...boxes.map((x) => x.y));
     expect(top(after)).toBeCloseTo(top(before), 1);
+    for (const [i, box] of after.entries()) expect(box.y).toBeCloseTo(before[i]?.y ?? NaN, 1);
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
 

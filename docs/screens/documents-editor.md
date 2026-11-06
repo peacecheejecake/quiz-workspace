@@ -11,7 +11,7 @@
 - 목차·PDF.js 뷰어(원본, 연속 스크롤)·쪽별로 묶은 canonical text 블록 편집기(변환본). 배치와 보기 설정(보기 설정 막대, 분할 영역 왼쪽의 docked 목차 panel 접기·펼치기, 함께 보기·원본·변환본, 좌우/상하 분할·크기 조절·위치 바꾸기, 이 브라우저에 기억, 좁은 화면 `원본`/`변환본` 전환)은 [DOCVIEW-01](documents-viewer-layout.md)이 정한다(DOCVIEW-SPEC 2026-10-29, DOCVIEW-PORT 2026-11-02). 이 명세의 "원문 텍스트 영역"은 DOCVIEW-01의 변환본 pane이다. Draft/Published revision 분리, error recovery 지원.
 - API와 화면은 owner / viewer / 로그인 상태에 따라 기능과 데이터 표시 범위를 구분한다.
 - 모든 편집·상태 변경은 서버 측 인가·revision 일관성을 검증한다.
-- **텍스트 내보내기·요약 (DOCSUM-SPEC 2026-10-29):** header에 `텍스트 내보내기` 메뉴(Markdown·텍스트·전체 복사, 편집 권한자는 교정 중 초안도; [DOC-03](documents-text-export.md))와, 교재 문서면 `요약` 링크(Workspace 홈의 요약 panel `?panel=document-summary&document=<id>`로 이동; [DOCSUM-01](documents-summary.md))가 있다. 요약을 한 번 만든 문서는 여기서 교정본을 발행할 때마다 요약이 자동으로 다시 만들어진다(DOCSUM-01-AC02). 이 화면의 기존 AC는 바뀌지 않는다.
+- **텍스트 내보내기·요약 (DOCSUM-SPEC 2026-10-29):** header에 `텍스트 내보내기` 메뉴(Markdown·텍스트·전체 복사, 편집 권한자는 교정 중 초안도; [DOC-03](documents-text-export.md))와, 교재 문서면 `요약` 링크(기능이 꺼진 환경에서는 저장된 요약이 있을 때만; Workspace 홈의 요약 panel `?panel=document-summary&document=<id>`로 이동; [DOCSUM-01](documents-summary.md))가 있다. 요약을 한 번 만든 문서는 여기서 교정본을 발행할 때마다 요약이 자동으로 다시 만들어진다(DOCSUM-01-AC02). 이 화면의 기존 AC는 바뀌지 않는다.
 
 ### 보기 개선 (DOCVIEW, 사용자 피드백 2026-11-01)
 

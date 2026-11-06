@@ -60,6 +60,8 @@ class ExplanationRow:
     target_id: uuid.UUID
     revision_id: uuid.UUID
     version: int
+    prompt_version: str
+    model: str
     status: str
     job_id: uuid.UUID | None
     error_code: str | None
@@ -116,8 +118,9 @@ class SourceView:
 
 
 _COLUMNS = (
-    "id, workspace_id, {target} as target_id, {revision} as revision_id, version, status, "
-    "job_id, error_code, body, sources, truncated, created_at, finished_at, superseded_at"
+    "id, workspace_id, {target} as target_id, {revision} as revision_id, version, "
+    "prompt_version, model, status, job_id, error_code, body, sources, truncated, created_at, "
+    "finished_at, superseded_at"
 )
 
 
@@ -129,6 +132,8 @@ def _row(kind: str, row: Any) -> ExplanationRow:
         target_id=row.target_id,
         revision_id=row.revision_id,
         version=row.version,
+        prompt_version=row.prompt_version,
+        model=row.model,
         status=row.status,
         job_id=row.job_id,
         error_code=row.error_code,

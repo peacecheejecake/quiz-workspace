@@ -488,14 +488,14 @@ test(
     await expect(questionBox).toBeDisabled();
     await expect(homeUi.questionSearchMessage(page)).toHaveText(NO_QUESTIONS);
     await expect(questionBox).toHaveAccessibleDescription(NO_QUESTIONS);
-    // No published document: the 본문 search button is disabled, Enter does not search either.
+    // No published document: the 본문 search box and button are disabled.
     await openContentSearch(page);
     const submit = searchUi.submit(page);
     await expect(submit).toBeDisabled();
     await expect(homeUi.contentSearchMessage(page)).toHaveText(NO_BODY);
     await expect(submit).toHaveAccessibleDescription(NO_BODY);
-    await searchUi.box(page).fill('chlorine');
-    await searchUi.box(page).press('Enter');
+    await expect(searchUi.box(page)).toBeDisabled();
+    await expect(searchUi.box(page)).toHaveAccessibleDescription(NO_BODY);
     await expect(searchUi.resultsRegion(page)).toHaveCount(0);
     expect(new URL(page.url()).searchParams.has('text')).toBe(false);
 

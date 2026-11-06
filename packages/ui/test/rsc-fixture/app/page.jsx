@@ -187,6 +187,7 @@ const label = questionDotLabel({
   isFavorite: true,
   lastGradedResult: 'incorrect',
 });
+const numberLabels = [questionNumberLabel(12), questionTitle(null), NO_QUESTION_NUMBER].join(' · ');
 
 export default function Page() {
   void useModalLayerOpen;
@@ -331,6 +332,7 @@ export default function Page() {
           <StarIcon />
           <RetryIcon />
           <p>{readingSummary}</p>
+          <p>{numberLabels}</p>
           <HighlightableText
             label="정리 노트 본문"
             blocks={noteBlocks.map((b, i) => ({ ...b, suffix: <a href="#fn">[{i + 1}]</a> }))}

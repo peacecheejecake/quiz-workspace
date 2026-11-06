@@ -78,7 +78,7 @@ class FakeStore:
             version=1,
             job_id=JOB,
             created_by=USER,
-            prompt_version="question.ai_explain/v1",
+            prompt_version="question.ai_explain/v2",
             model="fake-ai-explanation",
             sources=[PinnedPassage(1, DOC, REV, None, self.blocks, 2, 2, {"tag": 1})],
         )
@@ -104,7 +104,6 @@ class FakeStore:
             correct_option_ids=["opt-1"],
             accepted_answers=None,
             rubric=None,
-            explanation="사람 해설",
         )
 
     def documents(self, _ws: uuid.UUID, _ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, LiveDocument]:

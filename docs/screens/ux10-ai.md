@@ -11,7 +11,7 @@ linked_tests: [UX10-AI-AC01, UX10-AI-AC02, UX10-AI-AC03, UX10-AI-AC04]
 
 ### UX10-AI-AC01
 
-LLM 또는 기능이 꺼지면 새 AI 동작은 숨기고 일반 풀이와 보기 섞기는 사용할 수 있다.
+LLM 또는 기능이 꺼지면 새 AI 동작과 그 이유·전송 안내 문구는 숨기고(UX12 HOME-2, [UX12-AIOFF](ux12-ai-off.md)) 일반 풀이와 보기 섞기, 저장된 요약·노트·해설 읽기는 사용할 수 있다.
 
 ### UX10-AI-AC02
 

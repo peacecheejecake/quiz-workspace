@@ -85,12 +85,13 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 3 v1.2.1 additions (accent-hover/pressed, state-selected-hover)
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
     // + PALETTE-UNIFY 5 fill tokens (danger/success/warning/neutral/neutral-subtle)
-    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border.
-    expect(Object.keys(docLight)).toHaveLength(42);
-    expect(Object.keys(docDark)).toHaveLength(42);
-    // 37 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
+    // + UX9-HL-UI 3 highlight backgrounds and the search match background/border
+    // + UX12 VIEW-2 2 option control borders.
+    expect(Object.keys(docLight)).toHaveLength(44);
+    expect(Object.keys(docDark)).toHaveLength(44);
+    // 39 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
     // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width.
-    expect(Object.keys(docRoot)).toHaveLength(80);
+    expect(Object.keys(docRoot)).toHaveLength(82);
   });
 });
 
@@ -143,6 +144,9 @@ describe('generated tokens.css', () => {
       expect(t['color-warning-fill']).toBe(t['question-status-retry']);
       expect(t['color-neutral-fill']).toBe(t['question-status-viewed']);
       expect(t['color-neutral-fill-subtle']).toBe(t['question-status-unseen']);
+      // UX12 VIEW-2: aliases, because --question-status-* is marker-only.
+      expect(t['color-option-control']).toBe(t['question-status-viewed']);
+      expect(t['color-option-control-hover']).toBe(t['color-border-strong']);
     },
   );
 

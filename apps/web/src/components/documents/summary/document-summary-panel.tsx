@@ -6,7 +6,7 @@
 // while open — quickly while a run is queued/running, slowly otherwise, so a run started by a
 // publish elsewhere shows up without a reload. States are text, never colour alone:
 //   - no summary: "아직 요약이 없습니다." (+ for editors the AI-service notice and `요약 만들기`,
-//     aria-disabled with its reason when this environment has no summaries);
+//     neither where this environment cannot create summaries);
 //   - queued/running: "요약 대기 중" / "요약을 만드는 중 · 장별 요약 k/n" with a progress bar;
 //   - failed: an alert with the reason (+ `다시 시도` for editors);
 //   - an older revision's summary: a `role=status` notice "이전 발행본 기준 요약입니다." (+ running /
@@ -15,13 +15,12 @@
 //     `요약 만들기` (turn it back on) for editors of an active workspace.
 // Action buttons sit in the footer, after the summary (Tab: header → 전체 요약 → 장 → 동작).
 import { Badge, Button, ConfirmDialog, FloatingSidePanel, ProgressBar, Skeleton } from '@quiz/ui';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
   createSummaryClient,
   isActiveRun,
   newIdempotencyKey,
   SUMMARY_ACTION_MESSAGES,
-  SUMMARY_UNAVAILABLE_REASON,
   SummaryApiError,
   summaryPanelModel,
   summaryPollMs,
@@ -219,7 +218,6 @@ function SummaryPanelBody({
   const [confirmOpen, setConfirmOpen] = useState(false);
   /** The auto-refresh line's button (끄기, or 요약 만들기 once off): focus target after the dialog. */
   const autoButtonRef = useRef<HTMLButtonElement>(null);
-  const reasonId = useId();
 
   const state = load.status === 'ready' ? load.state : null;
   const active = state ? isActiveRun(state.run) : false;
@@ -310,26 +308,17 @@ function SummaryPanelBody({
 
   const model = summaryPanelModel(state, { canEdit, questionPaper });
   const summary = state.summary;
-  const createButton = (ref?: Ref<HTMLButtonElement>) =>
-    model.unavailable ? null : (
-      <Button
-        ref={ref}
-        variant="primary"
-        loading={pending === 'create'}
-        aria-disabled={model.unavailable || undefined}
-        aria-describedby={model.unavailable ? reasonId : undefined}
-        data-unavailable={model.unavailable || undefined}
-        className={styles.action}
-        onClick={create}
-      >
-        요약 만들기
-      </Button>
-    );
-  const reason = model.unavailable ? (
-    <p id={reasonId} className={styles.hint}>
-      {SUMMARY_UNAVAILABLE_REASON}
-    </p>
-  ) : null;
+  const createButton = (ref?: Ref<HTMLButtonElement>) => (
+    <Button
+      ref={ref}
+      variant="primary"
+      loading={pending === 'create'}
+      className={styles.action}
+      onClick={create}
+    >
+      요약 만들기
+    </Button>
+  );
 
   return (
     <div className={styles.body} data-screen-id={screenId}>
@@ -374,17 +363,12 @@ function SummaryPanelBody({
 
       {model.retry || model.createInEmpty || model.auto ? (
         <div className={styles.actions}>
-          {model.retry && !model.unavailable ? (
+          {model.retry ? (
             <Button variant="primary" loading={pending === 'retry'} onClick={retry}>
               다시 시도
             </Button>
           ) : null}
-          {model.createInEmpty ? (
-            <div className={styles.actionRow}>
-              {createButton()}
-              {reason}
-            </div>
-          ) : null}
+          {model.createInEmpty ? <div className={styles.actionRow}>{createButton()}</div> : null}
           {model.auto ? (
             <div className={styles.auto}>
               {model.auto.on ? (
@@ -408,10 +392,7 @@ function SummaryPanelBody({
                   <p className={styles.hint}>
                     다시 켜면 현재 발행본을 요약하고 이후 발행마다 다시 만듭니다.
                   </p>
-                  <div className={styles.actionRow}>
-                    {createButton(autoButtonRef)}
-                    {reason}
-                  </div>
+                  <div className={styles.actionRow}>{createButton(autoButtonRef)}</div>
                 </>
               ) : null}
             </div>

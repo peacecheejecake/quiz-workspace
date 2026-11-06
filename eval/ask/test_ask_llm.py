@@ -130,7 +130,6 @@ def test_real_provider_explanation_matches_the_stored_answer() -> None:
         correct_option_ids=["opt-1"],
         accepted_answers=None,
         rubric=None,
-        explanation=None,
     )
     client = _client()
     request = build_explain_request(question=question, sources=[PASSAGE], max_output_tokens=1500)

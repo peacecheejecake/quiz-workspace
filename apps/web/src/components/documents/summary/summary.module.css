@@ -229,12 +229,6 @@
   font-size: var(--font-size-label);
 }
 
-/* Unavailable in this environment: looks disabled but stays focusable (its reason is announced). */
-.action[data-unavailable] {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 /* 문서 관리 row: "요약 중" next to the row's 요약 button. */
 .rowSummary {
   display: inline-flex;
