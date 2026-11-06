@@ -180,7 +180,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | CHAPTER-3 명세·RED | 챕터 관리 | `chapter-management.md`(CHMAN-01), DOC-02-AC02 개정, questions §14, architecture §5, workspace-sharing §11 | D-9 | M·D-9 |
 | CHAPTER-4 API | 추가·수정·삭제·이동 | migration: guard에 `chapter_edit` 경로, `documents.chapter_tree_version`, 변경 이력 source 추가. API: tree 조회, 생성, 수정, 일괄 이동(`expected_version`), 삭제(`move_questions_to`). 잠금 순서 Workspace → 문서 → 문제. 사용자 챕터 key는 `user-<uuid>`, 이전 revision 복원 시 이어받기 | pgTAP, 계약, 권한 매트릭스, fork 경합 | L·CHAPTER-3 |
 | CHAPTER-5 관리 화면 | dnd 계층 관리, drop | `문제` 메뉴 `챕터 관리`, modal panel, `@dnd-kit` + 키보드 동등 메뉴. 문제를 챕터로 끌어 놓기는 기존 `chapter-assignments` 재사용 | Chromium·WebKit touch | L·CHAPTER-1, 4 |
-| CHAPTER-6 Heatmap 계층 | 계층별로(잔여) | `OverviewChapter`에 level·조상 추가, Heatmap 접기 | D-9, baseline | M·CHAPTER-2 |
+| CHAPTER-6 필터 계층 | 계층별로(잔여) | `OverviewChapter`에 level 추가, 홈 필터 `ChapterPicker`를 계층으로 표시. Heatmap 배치는 바꾸지 않는다(사용자가 완료로 체크, D-9 미응답) | D-9 | S·CHAPTER-1 |
 
 ### 4.11 SHARE — 공유 범위
 
@@ -312,10 +312,10 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | SHELL-5 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 실기기 확인 필요 |
 | SHELL-6 | 6 | 완료 | Codex P2(CI phase)는 merge에서 반영, E2E 24·lint·typecheck·unit GREEN |
 | CHAPTER-1 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과, lint·typecheck·unit GREEN, 일부 E2E는 PR CI |
-| CHAPTER-3 | 7 | 대기 | |
-| CHAPTER-4 | 7 | 대기 | |
-| CHAPTER-5 | 7 | 대기 | |
-| CHAPTER-6 | 7 | 대기 | |
+| CHAPTER-3 | 7 | 진행 | |
+| CHAPTER-4 | 7 | 진행 | |
+| CHAPTER-5 | 7 | 진행 | |
+| CHAPTER-6 | 7 | 진행 | |
 | SHARE-1 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | SHARE-2 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | VIEW-7 | 5 | 진행 | |
