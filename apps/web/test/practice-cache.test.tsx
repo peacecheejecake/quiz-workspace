@@ -4,7 +4,8 @@
 // question after recent metadata verification without a new session, never reuses a submitted session, and starts over
 // in another workspace.
 import './dom-setup';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PracticeSession, SubmitResult } from '../src/lib/questions/practice-actions';

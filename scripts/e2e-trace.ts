@@ -117,6 +117,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX11-RETURN': ['UX11-RETURN'],
   'UX12-PLAY.0': ['UX12-PLAY'],
   'UX12-HOME.0': ['UX12-HOME'],
+  // UX12 HILITE-1 (2026-11-06): selection kept under the highlight menu, press again to close.
+  'UX12-HILITE.0': ['UX12-HILITE'],
 };
 
 const LEADING_ID = new RegExp(

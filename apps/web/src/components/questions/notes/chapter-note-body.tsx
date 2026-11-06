@@ -611,7 +611,7 @@ function EditableNoteArea({
 }: AreaProps & { readonly highlighting: AreaHighlighting }) {
   const { store, noteId, plainTexts } = highlighting;
   const areaRef = useRef<HTMLDivElement>(null);
-  const { onSelectRange, menu } = useHighlightTool({
+  const { onSelectRange, activeHighlightId, menu } = useHighlightTool({
     store,
     areaRef,
     drawn,
@@ -632,6 +632,7 @@ function EditableNoteArea({
         matches={matches}
         scrollToCurrentMatch={false}
         onSelectRange={onSelectRange}
+        activeHighlightId={activeHighlightId}
         className={styles.body}
         renderLayout={renderLayout}
       />

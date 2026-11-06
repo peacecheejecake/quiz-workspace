@@ -9,7 +9,8 @@
 import './dom-setup';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

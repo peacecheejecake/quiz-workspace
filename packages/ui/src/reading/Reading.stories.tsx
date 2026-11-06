@@ -75,6 +75,7 @@ function NoteLayout({
         matches={matches}
         readOnly={readOnly}
         onSelectRange={setSelection}
+        activeHighlightId={selection?.highlightId}
         renderLayout={(block) => (
           <>
             <h3 style={{ margin: 0 }}>증발과 응축</h3>
