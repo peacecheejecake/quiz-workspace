@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 from quiz_api.api import chapter_redistribution as redist
 from quiz_api.api.questions import get_idempotency_store
 from quiz_api.authz import Action, Role, WorkspaceAccess
+from quiz_api.chapter_notes import question_label
 from quiz_api.draft_chapters import draft_chapters
 from quiz_api.errors import ProblemType
 from quiz_api.idempotency import request_hash
@@ -147,8 +148,8 @@ def _import_draft(draft_id: uuid.UUID) -> DraftRecord:
 
 
 def test_labels_and_stem_preview() -> None:
-    assert redist.question_label(12) == "12번"
-    assert redist.question_label(None) == "번호 없음"
+    assert question_label(12) == "12번"
+    assert question_label(None) == "번호 없음"
     assert redist.stem_preview("  가\n나   " + "다" * 60) == ("가 나 " + "다" * 60)[:40]
     assert len(redist.stem_preview("x" * 100)) == 40
 
