@@ -9,8 +9,9 @@
 // (맞음/틀림). Previous/next follow the heatmap order and are URL changes owned by the screen;
 // Escape/close return focus to the dot (the screen decides).
 // UX7-CACHE (QPLAY-01-AC06): the open, answer-free sessions this viewer started are kept in memory
-// (lib/questions/practice-cache.ts), so re-opening an unanswered question shows it at once; a
-// session whose submission started is never reused.
+// (lib/questions/practice-cache.ts); a session whose submission started is never reused.
+// UX12-OPEN: every opening is one `practice-open` call. It confirms the latest result and reuses
+// the cached session or opens one in one transaction; nothing can be answered before it returns.
 // UX7-BANK: editors get the screen's 문제 관리 menu (`headerExtra`) in the header; after an edit
 // the screen invalidates that question (`invalidated`) and the viewer, if it still shows it,
 // opens a session of the new revision (the cached session of the old revision is dropped).
@@ -37,8 +38,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  latestPracticeAction,
-  openPracticeSessionAction,
   resetPracticeAction,
   selfGradePracticeAction,
   submitPracticeAction,
@@ -50,6 +49,7 @@ import { useOptionalPracticeReturn } from '@/components/practice-return/practice
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
+import { openQuestionPractice } from '@/lib/questions/practice-open-client';
 import { measurePracticeOpen, PRACTICE_OPEN_MEASURE } from '@/lib/questions/practice-open-timing';
 import {
   practiceResetVersion,
@@ -149,7 +149,7 @@ interface Opening {
   readonly questionId: string | null;
   /** Idempotency key of this opening: a re-run effect (Strict Mode, retry) reuses it. */
   readonly key: string;
-  /** The open session to reuse if recent metadata confirms it is current. */
+  /** The open session to reuse if the server confirms it is current. */
   readonly cached: PracticeSession | null;
   readonly forceNew?: boolean;
 }
@@ -214,11 +214,15 @@ export function PracticeViewer({
   if (!scoped) setCache(new PracticeSessionCache(workspaceId));
 
   const liveWork = useRef<string | null>(null);
+  // The question whose reset is closing the panel: nothing may open it again on the way out, or
+  // the new session's view would bring back what the reset cleared (UX10-QVIEW-AC04).
+  const resetClosing = useRef<string | null>(null);
   useEffect(
     () =>
       subscribePracticeResets(workspaceId, (id) => {
         const stale = cache.get(id);
         if (stale) cache.dropSession(stale.id);
+        if (id === questionId) resetClosing.current = id;
         onReset?.(id);
         if (id === questionId) {
           liveWork.current = null;
@@ -258,77 +262,67 @@ export function PracticeViewer({
 
   useEffect(() => {
     const id = opening.questionId;
-    if (!id || readOnly) return;
+    if (!id) resetClosing.current = null;
+    if (!id || readOnly || resetClosing.current === id) return;
     let current = true;
     const key = opening.key;
     const resetVersion = practiceResetVersion(workspaceId, id);
     const startedAt = performance.now();
     void (async () => {
-      const latest = await latestPracticeAction(workspaceId, id);
-      measurePracticeOpen(`${PRACTICE_OPEN_MEASURE}:recent`, startedAt);
-      if (latest && !latest.ok) {
-        if (current && practiceResetVersion(workspaceId, id) === resetVersion)
-          setSession({ status: 'error', message: latest.message, key });
-        return;
-      }
+      const held =
+        opening.cached && cache.get(id)?.id === opening.cached.id ? opening.cached : null;
+      const opened = await openQuestionPractice(workspaceId, id, key, {
+        forceNew: opening.forceNew,
+        ...(held && !opening.forceNew
+          ? {
+              cached: {
+                sessionId: held.id,
+                baselineAttemptId: cache.baselineAttemptId(id) ?? null,
+              },
+            }
+          : {}),
+      });
+      measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
-      rememberPracticeEpoch(workspaceId, id, latest.data.reset_epoch);
-      if (
-        opening.cached &&
-        !opening.forceNew &&
-        cache.get(id)?.id === opening.cached.id &&
-        cache.epoch(id) === latest.data.reset_epoch &&
-        opening.cached.question_revision_id === latest.data.active_revision_id &&
-        cache.baselineAttemptId(id) === latest.data.latest_attempt_id
-      ) {
-        setSession({
-          status: 'ready',
-          session: opening.cached,
-          previousRevision: latest.data.previous_revision,
-          key,
-        });
-        measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
+      if (!opened.ok) {
+        setSession({ status: 'error', message: opened.message, key });
         return;
       }
-      if (!opening.forceNew && latest.data.session?.outcome) {
-        const saved = latest.data.submitted_answer;
+      const { data } = opened;
+      rememberPracticeEpoch(workspaceId, id, data.reset_epoch);
+      if (opening.cached && !data.reused) cache.dropSession(opening.cached.id);
+      const outcome = data.result?.outcome;
+      if (data.result && outcome) {
+        const saved = data.submitted_answer;
         const answer: PracticeAnswer = {
           selected: Array.isArray(saved?.selected_option_ids)
             ? (saved.selected_option_ids as string[])
             : [],
           text: typeof saved?.answer_text === 'string' ? saved.answer_text : '',
         };
-        onGraded?.(id, latest.data.session.outcome.result);
-        if (current)
-          setSession({
-            status: 'ready',
-            session: latest.data.session,
-            prior: { outcome: latest.data.session.outcome, answer },
-            key,
-          });
-        measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
+        onGraded?.(id, outcome.result);
+        setSession({
+          status: 'ready',
+          session: data.result,
+          prior: { outcome, answer },
+          key,
+        });
         return;
       }
-      if (opening.cached) cache.dropSession(opening.cached.id);
-      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
-      const result = await openPracticeSessionAction(workspaceId, id, key, latest.data.reset_epoch);
-      measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
-      if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
-      if (result.ok) {
-        cache.put(result.data, latest.data.reset_epoch, latest.data.latest_attempt_id);
-        if (current) onViewed(id);
+      if (!data.session) {
+        setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
+        return;
       }
-      if (current)
-        setSession(
-          result.ok
-            ? {
-                status: 'ready',
-                session: result.data,
-                previousRevision: latest?.ok && latest.data.previous_revision,
-                key,
-              }
-            : { status: 'error', message: result.message, key },
-        );
+      if (!data.reused) {
+        cache.put(data.session, data.reset_epoch, data.latest_attempt_id);
+        onViewed(id);
+      }
+      setSession({
+        status: 'ready',
+        session: data.session,
+        previousRevision: data.previous_revision,
+        key,
+      });
     })().catch(() => {
       if (current) setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
     });

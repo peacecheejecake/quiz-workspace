@@ -532,9 +532,9 @@ test(
 );
 
 /**
- * Counts the page's question-content loads: server-action POSTs (`Next-Action`, the BFF relay of
- * the practice session) and any browser call to the API. Router RSC refreshes of the overview
- * are not question content.
+ * Counts the page's question-content loads: server-action POSTs (`Next-Action`), the BFF relay of
+ * the panel's opening call (UX12-OPEN) and any browser call to the API. Router RSC refreshes of the
+ * overview are not question content.
  */
 function countContentLoads(page: Page): { count: () => number; stop: () => void } {
   let n = 0;
@@ -542,6 +542,7 @@ function countContentLoads(page: Page): { count: () => number; stop: () => void 
   const onRequest = (req: Request) => {
     const url = new URL(req.url());
     if (req.method() === 'POST' && req.headers()['next-action'] !== undefined) n += 1;
+    else if (url.pathname.endsWith('/practice-open')) n += 1;
     else if (url.host === api.host) n += 1;
   };
   page.on('request', onRequest);

@@ -5,18 +5,17 @@ from __future__ import annotations
 import re
 
 import pytest
+from quiz_api.server_timing import (
+    SERVER_TIMING_HEADER,
+    ServerTimingMiddleware,
+    install_statement_timing,
+)
 from sqlalchemy import create_engine, text
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-
-from quiz_api.server_timing import (
-    SERVER_TIMING_HEADER,
-    ServerTimingMiddleware,
-    install_statement_timing,
-)
 
 HEADER = re.compile(r'^db;dur=\d+\.\d;desc="(\d+)", app;dur=\d+\.\d$')
 QUESTION = "00000000-0000-4000-8000-000000000001"

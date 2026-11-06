@@ -18,7 +18,6 @@ import type { PracticeSession, SubmitResult } from '../src/lib/questions/practic
 import type { PracticeRun, RunItem } from '../src/lib/questions/practice-runs';
 
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  openPracticeSessionAction: vi.fn(),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(),
   setMyStateAction: vi.fn(),

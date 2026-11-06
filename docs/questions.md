@@ -118,7 +118,7 @@ function deriveDotStatus(s: UserStudyState): DotStatus {
 
 ## 4. 문제 풀이 및 채점 정책
 
-1. Heatmap dot click → `POST /questions/{id}/practice-sessions` → 서버는 정답/해설이 없는 문제 데이터를 반환.
+1. Heatmap dot click → `POST /questions/{id}/practice-open` → 서버는 최신 결과를 확인하고, 없으면 정답/해설이 없는 문제 데이터를 반환(UX12-OPEN).
 2. 객관식 보기는 기본적으로 원본 revision 순서다. 명시적으로 섞기만 선택하면 `shuffle_seed`로 섞고, 표시 순서 목록을 `practice_session`/`attempt`에 저장한다(UX10-QVIEW-AC01).
 3. 답 제출 시 server-side correct option IDs 기준 채점. 선택지 위치(A/B/C)가 아니라 변하지 않는 option ID로 비교한다.
 4. 객관식 단일·복수 선택 지원. 단답식은 등록된 허용 답안과 정규화 규칙으로 자동 채점 가능한 경우에만 채점.

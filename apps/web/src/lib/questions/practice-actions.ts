@@ -45,49 +45,6 @@ function fromOutcome<T>(outcome: ApiOutcome<T>): StudyActionResult<T> {
   return outcome.ok ? outcome : failed(outcome.failure.kind);
 }
 
-/**
- * Opens a practice session on `questionId`: the server records the caller's view (the dot turns
- * `viewed`) and returns the question without answers. `idempotencyKey` is minted once per panel
- * opening, so a repeated request (double render, retry) opens one session.
- */
-export async function openPracticeSessionAction(
-  workspaceId: string,
-  questionId: string,
-  idempotencyKey: string,
-  expectedResetEpoch?: number,
-): Promise<StudyActionResult<PracticeSession>> {
-  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
-  const key =
-    typeof idempotencyKey === 'string' && KEY.test(idempotencyKey) ? idempotencyKey : null;
-  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
-    api.POST('/api/v1/questions/{question_id}/practice-sessions', {
-      params: {
-        path: { question_id: questionId },
-        ...(key ? { header: { 'Idempotency-Key': key } } : {}),
-      },
-      body: expectedResetEpoch === undefined ? {} : { expected_reset_epoch: expectedResetEpoch },
-    }),
-  );
-  if (outcome.ok && outcome.data.workspace_id !== workspaceId) return failed('notFound');
-  return fromOutcome(outcome);
-}
-
-export async function latestPracticeAction(
-  workspaceId: string,
-  questionId: string,
-): Promise<StudyActionResult<Schemas['LatestPractice']>> {
-  if (!isWorkspaceId(workspaceId) || !isWorkspaceId(questionId)) return failed('notFound');
-  const outcome = await callQuestionApi(overviewPath(workspaceId), (api) =>
-    api.GET('/api/v1/questions/{question_id}/practice-recent', {
-      params: { path: { question_id: questionId } },
-    }),
-  );
-  if (outcome.ok && outcome.data.session && outcome.data.session.workspace_id !== workspaceId) {
-    return failed('notFound');
-  }
-  return fromOutcome(outcome);
-}
-
 export async function resetPracticeAction(
   workspaceId: string,
   questionId: string,

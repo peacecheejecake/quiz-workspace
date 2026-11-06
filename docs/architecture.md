@@ -199,7 +199,8 @@ workspace
 | POST/GET | `/api/v1/workspaces/{id}/questions` | 문제 등록·조회 |
 | GET/PATCH | `/api/v1/questions/{id}` | 문제 상세·편집 |
 | PATCH | `/api/v1/questions/{id}/my-state` | 즐겨찾기·다시 풀기 토글 |
-| POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출) |
+| POST | `/api/v1/questions/{id}/practice-open` | 풀이 panel 열기: 최신 결과 확인 후 캐시 session 재사용·결과·새 session을 한 트랜잭션으로(UX12-OPEN, 미제출 응답 정답 비노출) |
+| POST | `/api/v1/questions/{id}/practice-sessions` | 문제 열람·보기 순서 생성(정답 비노출), 범위 풀이 위치 |
 | POST | `/api/v1/practice-sessions/{id}/submit` | 답변 제출·채점 |
 | POST | `/api/v1/practice-sessions/{id}/self-grade` | 주관식·서술형 자기평가 |
 | GET | `/api/v1/questions/{id}/attempts` | 풀이 이력(합쳐진 중복의 attempt 포함, 항목별 `question_id`, UX7-DEDUP) |

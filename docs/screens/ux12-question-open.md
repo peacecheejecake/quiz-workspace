@@ -67,4 +67,4 @@ Heatmap에서 처음 여는 문제는 `POST /api/questions/{id}/practice-open` �
 
 ### UX12-OPEN-AC07
 
-DB 왕복 상한은 처음 열기 10, 캐시 재사용 8, 결과 다시 열기 9다. 한 번의 호출이 이전의 두 호출보다 적다. 응답의 `Server-Timing`에는 `db`와 `app` 시간만 있다.
+DB 왕복 상한은 처음 열기 10, 캐시 재사용 8, 결과 다시 열기 7이다. 이전에는 각각 19, 9, 9였다. 응답의 `Server-Timing`에는 `db`와 `app` 시간만 있다.

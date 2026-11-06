@@ -85,6 +85,7 @@ test(
     const opened = traffic.opens[0];
     if (!opened) throw new Error('no practice-open response');
     expect(await opened.text()).not.toMatch(ANSWER_FIELDS);
+    expect(opened.headers()['server-timing']).toMatch(/^db;dur=.*, app;dur=.*, bff;dur=[\d.]+$/);
     await closePanel(page, panel);
     await expect(overviewUi.dot(page, 1)).toHaveAttribute('data-status', 'viewed');
   },

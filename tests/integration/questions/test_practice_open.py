@@ -16,7 +16,7 @@ import httpx
 import psycopg
 import pytest
 
-pytestmark = [pytest.mark.infra, pytest.mark.red]
+pytestmark = pytest.mark.infra
 
 DB_ADMIN_URL = os.environ.get(
     "QUIZ_DB_ADMIN_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"

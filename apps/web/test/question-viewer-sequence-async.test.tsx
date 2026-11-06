@@ -19,7 +19,6 @@ import {
 } from '../src/lib/questions/practice-reset-events';
 
 vi.mock('../src/lib/questions/practice-actions', () => ({
-  openPracticeSessionAction: vi.fn(),
   submitPracticeAction: vi.fn(),
   selfGradePracticeAction: vi.fn(),
   setMyStateAction: vi.fn(),

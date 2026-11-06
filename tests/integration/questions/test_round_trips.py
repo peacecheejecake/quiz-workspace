@@ -159,7 +159,6 @@ BUDGETS = {
 }
 
 
-@pytest.mark.red
 def test_ux12_open_ac07_opening_stays_within_its_budget_and_reports_timing(
     seed: Any, measured: tuple[TestClient, CountingProxy]
 ) -> None:
@@ -183,11 +182,13 @@ def test_ux12_open_ac07_opening_stays_within_its_budget_and_reports_timing(
     result, shown = meter.trips("POST", path, {}, headers={"Idempotency-Key": uuid.uuid4().hex})
     assert shown["result"]["id"] == session["id"]
 
-    assert {"fresh": fresh, "cached": cached, "result": result} == {
+    # Before UX12-OPEN one opening took a practice-recent (9) and a practice-sessions (10).
+    used = {"fresh": fresh, "cached": cached, "result": result}
+    assert used == {
         "fresh": min(fresh, 10),
         "cached": min(cached, 8),
-        "result": min(result, 9),
-    }
+        "result": min(result, 7),
+    }, used
 
     timing = http.post(
         f"/api/v1{path}", json={}, headers={"Authorization": f"Bearer {alice.user.token}"}
