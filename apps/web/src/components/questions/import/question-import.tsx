@@ -932,6 +932,7 @@ export function QuestionImport({
               onCompare={compareDraft}
               renderExtra={renderChapter}
               onOpenPage={openDraftPage}
+              sourceDocumentId={sourceDocumentId}
             />
           ) : pageFailed ? (
             <div role="alert" className={styles.failure}>

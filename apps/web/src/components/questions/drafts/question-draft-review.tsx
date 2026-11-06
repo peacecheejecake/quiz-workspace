@@ -68,8 +68,13 @@ export interface QuestionDraftReviewProps {
   /** Opens the source comparison for the draft (e.g. the PDF page next to it). */
   readonly onCompare?: (draft: ReviewDraft) => void;
   /** Deep link of a source page (e.g. the document viewer at `?page=`); null = plain text. */
-  /** The draft's source page, in place (UX12-SOURCE). Without it pages are plain text. */
+  /**
+   * The draft's source page, in place (UX12-SOURCE). Pages are plain text without it, or for a
+   * draft with no document of its own or from `sourceDocumentId`.
+   */
   readonly onOpenPage?: (draft: ReviewDraft, page: number) => void;
+  /** The document of a draft without its own, from the import run. */
+  readonly sourceDocumentId?: string | null;
   /** Extra content per draft (e.g. a generation diff), rendered under the answer. */
   readonly renderExtra?: (draft: ReviewDraft) => ReactNode;
 }
@@ -109,6 +114,7 @@ export function QuestionDraftReview({
   onEdit,
   onCompare,
   onOpenPage,
+  sourceDocumentId,
   renderExtra,
 }: QuestionDraftReviewProps) {
   const [store] = useState(() => new SelectionStore(selected));
@@ -128,6 +134,7 @@ export function QuestionDraftReview({
             onEdit={onEdit}
             onCompare={onCompare}
             onOpenPage={onOpenPage}
+            sourceDocumentId={sourceDocumentId}
             renderExtra={renderExtra}
           />
         ))}
@@ -146,6 +153,7 @@ interface DraftItemProps {
   readonly onEdit?: QuestionDraftReviewProps['onEdit'];
   readonly onCompare?: QuestionDraftReviewProps['onCompare'];
   readonly onOpenPage?: QuestionDraftReviewProps['onOpenPage'];
+  readonly sourceDocumentId?: string | null | undefined;
   readonly renderExtra?: QuestionDraftReviewProps['renderExtra'];
 }
 
@@ -159,6 +167,7 @@ const DraftItem = memo(function DraftItem({
   onEdit,
   onCompare,
   onOpenPage,
+  sourceDocumentId,
   renderExtra,
 }: DraftItemProps) {
   const n = draftNumber(draft);
@@ -265,7 +274,7 @@ const DraftItem = memo(function DraftItem({
           <p className={styles.pages}>
             <span className={styles.noteLabel}>원본</span>
             {draft.pages.map((page) =>
-              onOpenPage ? (
+              onOpenPage && (draft.sourceDocumentId ?? sourceDocumentId) ? (
                 <button
                   key={page}
                   type="button"

@@ -69,7 +69,14 @@ const DRAFTS: ReviewDraft[] = [
 describe('QuestionDraftReview', () => {
   it('renders one list item per draft with number, answer state and page links', async () => {
     const onOpenPage = vi.fn();
-    render(<QuestionDraftReview label="가져온 초안" drafts={DRAFTS} onOpenPage={onOpenPage} />);
+    render(
+      <QuestionDraftReview
+        label="가져온 초안"
+        drafts={DRAFTS}
+        onOpenPage={onOpenPage}
+        sourceDocumentId="doc-1"
+      />,
+    );
     const list = screen.getByRole('list', { name: '가져온 초안' });
     const items = within(list).getAllByRole('listitem');
     expect(items).toHaveLength(3);
