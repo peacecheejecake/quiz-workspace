@@ -400,7 +400,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | CHAPTER-8 | 10 | 완료 | Workspace 챕터(migration 20261106210000), dropdown 새 챕터, 잠금 순서 통일, Codex 재리뷰 통과, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-11 | 10 | 진행 | |
 | VIEW-8 | 10 | 진행 | |
-| MOCKUX-12 | 10 | 진행 | |
+| MOCKUX-12 | 10 | 완료 | 이어 풀기 n/m을 주 버튼으로, 이어 풀기 지우기, Codex P2 수정 후 재리뷰 통과, 첫 머지는 리뷰를 읽기 전에 함, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-13 | 10 | 진행 | |
 | MOCKUX-14 | 10 | 진행 | |
 | MOCKUX-15 | 10 | 진행 | |
