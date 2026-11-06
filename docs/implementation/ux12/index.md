@@ -212,6 +212,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-10 동시 생성 실패 | 문제 추출 중 모의고사 생성 안 됨 | 문제 추출과 모의고사 생성을 함께 돌릴 때 생성이 안 되는 원인을 찾아 고친다(추출 대기 때문인지, 생성 자체 문제인지) | 사용자 보고(2026-11-06) | M·없음 |
 | MOCKUX-11 풀이 화면 먼저, 챕터 풀기 삭제 | 푼 문제 열기, `해설 보기`, 챕터별 버튼 | Heatmap cell로 열면 이전에 푼 문제도 문제부터 보이고, 하단 `해설 보기`로 이전 결과와 해설을 연다. MOCKUX-4의 챕터별 `풀기` 버튼을 지운다 | 사용자 요청(2026-11-06). MOCKUX-5의 범위를 모든 푼 문제로 넓힌다 | M·MOCKUX-4, 5 |
 | MOCKUX-12 모의고사 이어 풀기 | 저장된 모의고사의 끝나지 않은 풀이 | 저장된 모의고사를 풀다가 닫으면 그 행과 상세에서 `이어 풀기`로 다음 미제출 문제부터 계속한다 | 사용자 요청(2026-11-06). MOCKUX-7은 원본 풀이만 다룬다 | M·MOCKUX-7 |
+| MOCKUX-13 닫기 확인 | 풀이 닫기 confirm | 풀이 panel을 닫을 때 확인 dialog를 보인다 | 사용자 요청(2026-11-06). QVIEW-01 "확인 없이 닫는다"를 바꾼다 | S·MOCKUX-12 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -290,7 +291,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
-| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 ∥ MOCKUX-12 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 ∥ MOCKUX-7 ∥ MOCKUX-8 ∥ DESIGN-5 ∥ HOME-6 ∥ MOCKUX-9 ∥ MOCKUX-10 ∥ HOME-7 ∥ CHAPTER-7 ∥ CHAPTER-8 ∥ DOCS-3 ∥ DOCS-4 ∥ MOCKUX-11 ∥ DESIGN-6 ∥ VIEW-8 ∥ MOCKUX-12 ∥ MOCKUX-13 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -398,6 +399,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-11 | 10 | 진행 | |
 | VIEW-8 | 10 | 진행 | |
 | MOCKUX-12 | 10 | 진행 | |
+| MOCKUX-13 | 10 | 진행 | |
 | DESIGN-6 | 10 | 진행 | Heatmap 기본 28px, hover 1.5배 |
 | DOCS-3 | 10 | 완료 | 출처마다 인용 위치로 열기, 제출 전 문제 원문은 잘린 영역 유지(주변 쪽 없음), Codex 지적 없음, E2E는 PR CI에서 확인 |
 | DOCS-4 | 10 | 완료 | 유리 헤더, 터치 탭으로 켜고 끔, 브라우저 확인 전, Codex 지적 없음, E2E는 PR CI에서 확인 |
