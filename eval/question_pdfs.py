@@ -17,7 +17,7 @@ images wholly outside the body area (margin and header decoration).
 
 Columns: ``mv_page``/``mv_up`` blocks moved to an earlier page / up within their column, ``2col``
 two-column pages, ``opts`` option-count histogram, ``gaps`` missing question numbers, ``dup``
-repeated numbers, ``ans`` answered ratio, ``tbl`` non-option tables dropped from the stem (and
+repeated numbers (both per chapter), ``ans`` answered ratio, ``tbl`` non-option tables dropped from the stem (and
 the questions they hit), ``rev`` regions holding a block printed before the question's first
 line, ``seq`` questions starting before the previous question, ``ovl`` pairs of questions whose
 page regions overlap, ``marg`` images in the margin attached to a question, ``hsec`` questions
@@ -290,6 +290,20 @@ def _sections(parsed: ParsedDocument) -> dict[str, str | None]:
     }
 
 
+def _numbering(questions: Sequence[RawQuestion]) -> tuple[int, int]:
+    """``(missing, repeated)`` question numbers, summed per chapter: numbering restarts there,
+    so a number repeated in another chapter is neither a duplicate nor a reason to count a gap."""
+    chapters: dict[int, list[int]] = {}
+    for question in questions:
+        chapters.setdefault(question.chapter, []).append(question.number)
+    gaps = duplicates = 0
+    for numbers in chapters.values():
+        distinct = sorted(set(numbers))
+        duplicates += len(numbers) - len(distinct)
+        gaps += distinct[-1] - distinct[0] + 1 - len(distinct)
+    return gaps, duplicates
+
+
 def analyse(parsed: ParsedDocument, order: str, *, index: int = 1) -> Row:
     widths = {p.page: p.width for p in parsed.pages}
     blocks = reordered(parsed.blocks, order, widths)
@@ -304,11 +318,7 @@ def analyse(parsed: ParsedDocument, order: str, *, index: int = 1) -> Row:
     row.moved_earlier_page, row.moved_up, row.column_jumps = _inversions(blocks)
     row.option_histogram = dict(sorted(Counter(len(q.options) for q in questions).items()))
 
-    numbers = [q.number for q in questions]
-    distinct = sorted(set(numbers))
-    row.duplicate_numbers = len(numbers) - len(distinct)
-    if distinct:
-        row.number_gaps = distinct[-1] - distinct[0] + 1 - len(distinct)
+    row.number_gaps, row.duplicate_numbers = _numbering(questions)
     answered = sum(1 for q in questions if q.answer or keys[id(q)])
     row.answered_ratio = round(answered / len(questions), 4) if questions else 0.0
 
