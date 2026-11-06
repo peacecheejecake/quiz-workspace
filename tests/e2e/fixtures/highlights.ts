@@ -23,7 +23,7 @@
 //      question_revision_id} | {kind: "ai_explanation", ai_explanation_id, question_id},
 //      anchor: {block, start, end}, quote, anchor_status: "exact"|"relocated"|"missing",
 //      anchor_current: {block, start, end} | null, question: {question_id, number_label,
-//      stem_preview} | null (explanation targets: "3장 12번" + the stem's first 40 chars, no
+//      stem_preview} | null (explanation targets: "12번" + the stem's first 40 chars, no
 //      answers/options/explanation text), created_at, updated_at}. `prefix`/`suffix` are stored
 //      but never returned (they are explanation text around the quote the user did not pick).
 //   H2 `block` is a string: a note item is "s<i>.i<j>" (body.sections[i].items[j], rendered text
@@ -633,13 +633,13 @@ export const noteToolsUi = {
   results: (panel: Locator) => panel.locator('mark[data-search-result]'),
   current: (panel: Locator) => panel.locator('mark[data-search-result][data-current="true"]'),
   currentLabel: /현재 결과|current (result|match)/i,
-  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /\d+장\s*\d+번/ }),
+  preview: (page: Page) => page.getByRole('tooltip').filter({ hasText: /\d+번\s*·/ }),
   touchPreview: (page: Page) =>
     page.getByRole('dialog', { name: /문제 미리보기|question preview/i }),
   openQuestion: (scope: Locator) =>
     scope.getByRole('button', { name: /^(문제 열기|open question)$/i }),
   previewHeading: (n: number, type = '객관식') =>
-    new RegExp(`\\d+장\\s*${n}번\\s*·\\s*${escape(type)}`),
+    new RegExp(`(?<!\\d)${n}번\\s*·\\s*${escape(type)}`),
 };
 
 /** Computed highlight style of a mark (background + underline shape). */

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -21,8 +21,7 @@ from sqlalchemy import and_, case, func, insert, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from quiz_api.chapter_notes import Ref, parse_refs
-from quiz_api.repositories.question_overview import QuestionOverviewRepository
+from quiz_api.chapter_notes import Ref, parse_refs, relabel
 from quiz_api.repositories.questions import UNNUMBERED
 from quiz_api.repositories.tables import (
     activity_events,
@@ -226,9 +225,15 @@ class ChapterNoteRepository:
         ).one_or_none()
         return _chapter(row) if row is not None else None
 
-    def chapter_numbers(self, chapter_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
-        """chapter id -> outline path titles (top-level first), for `<n>장` labels."""
-        return QuestionOverviewRepository(self._session).chapter_lineage(chapter_ids)
+    def with_current_labels(self, note: NoteRow) -> NoteRow:
+        """`note` with its refs labelled by the questions' current numbers, for reading."""
+        rows = self._session.execute(
+            select(questions.c.id, questions.c.question_number).where(
+                questions.c.workspace_id == note.workspace_id,
+                questions.c.id.in_([r.question_id for r in note.refs]),
+            )
+        )
+        return replace(note, refs=relabel(note.refs, {r.id: r.question_number for r in rows}))
 
     def chapter_questions(
         self, workspace_id: uuid.UUID, chapter_ids: Sequence[uuid.UUID]

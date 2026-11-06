@@ -19,6 +19,7 @@ from quiz_api.chapter_notes import (
     parse_refs,
     present_body,
     question_label,
+    relabel,
     stem_preview,
 )
 from quiz_api.main import create_app
@@ -55,10 +56,19 @@ def test_fingerprint_is_order_independent_and_sensitive_to_every_input() -> None
     assert input_fingerprint([], body) == empty
 
 
-def test_labels_follow_the_heatmap_numbering() -> None:
-    assert question_label(3, "3장 물", 12, 1) == "3장 12번"
-    assert question_label(1, "Chapter 1", None, 4) == "1장 4번"
-    assert question_label(None, "부록", 2, 1) == "부록 2번"
+def test_labels_are_the_printed_number_alone() -> None:
+    assert question_label(12) == "12번"
+    assert question_label(None) == "번호 없음"
+
+
+def test_relabel_uses_current_numbers_and_keeps_labels_of_missing_questions() -> None:
+    old = [
+        Ref("Q1", Q[0], R[0], "3장 12번"),
+        Ref("Q2", Q[1], R[1], "3장 2번"),
+        Ref("Q3", Q[2], R[2], "3장 3번"),
+    ]
+    labels = [r.label for r in relabel(old, {Q[0]: 12, Q[1]: None})]
+    assert labels == ["12번", "번호 없음", "3장 3번"]
 
 
 def test_stem_preview_is_forty_characters_of_collapsed_text() -> None:

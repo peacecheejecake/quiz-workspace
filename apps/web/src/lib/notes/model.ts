@@ -262,7 +262,7 @@ const PREVIEW_TYPES: Readonly<Record<QuestionPreview['question_type'], string>> 
   ESSAY: '서술형',
 };
 
-/** Footnote preview heading: "3장 12번 · 객관식". */
+/** Footnote preview heading: "12번 · 객관식". */
 export function previewHeading(preview: QuestionPreview): string {
   return `${preview.number_label} · ${PREVIEW_TYPES[preview.question_type]}`;
 }
