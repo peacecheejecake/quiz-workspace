@@ -112,7 +112,13 @@ test('UX5-UI the gap between heatmap markers is at most 1/3 of the marker width'
   expect(mobile.gap).toBeLessThanOrEqual(mobile.width / 3);
 });
 
-// UX9-STROKE: touch cells are 24px (the WCAG 2.2 target-size minimum), like desktop.
+// UX9-STROKE: touch cells are 24px (the WCAG 2.2 target-size minimum).
+test('UX12-HOME-AC03 desktop heatmap cells are 28px', async ({ page }) => {
+  await openStory(page, 'questions-questionheatmap--full');
+  const box = await page.locator('[data-question-id="q-1-1"]').boundingBox();
+  expect(box).toMatchObject({ width: 28, height: 28 });
+});
+
 test('mobile uses 24px cells', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openStory(page, 'questions-questionheatmap--full');
@@ -161,14 +167,14 @@ for (const theme of ['light', 'dark'] as const) {
     );
     await expect(current).toHaveCSS('outline-width', '2px');
     // The marker box is the cell and its square is x=3..21 of the 24-unit viewBox, so an outline
-    // inset by cell/8 has its inner edge on the square's edge.
+    // inset by cell/8, rounded up to a whole pixel, leaves no gap around the square.
     const [cell, marker] = await Promise.all([
       current.boundingBox(),
       current.getByTestId('question-marker').boundingBox(),
     ]);
     if (!cell || !marker) throw new Error('current dot not rendered');
     expect(marker).toEqual(cell);
-    await expect(current).toHaveCSS('outline-offset', `-${cell.width / 8}px`);
+    await expect(current).toHaveCSS('outline-offset', `-${Math.ceil(cell.width / 8)}px`);
 
     await page.keyboard.press('Tab');
     await expect(current).toBeFocused();
