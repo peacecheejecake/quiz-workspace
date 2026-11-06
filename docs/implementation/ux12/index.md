@@ -99,7 +99,7 @@
 
 | Task | 항목 | 구현 | 크기·의존 |
 |---|---|---|---|
-| DESIGN-5 유리·버튼 | 투명도, 유리 위 버튼, 아이콘 버튼 테두리, hover, Heatmap 확대, header gradation | 유리 floating layer를 더 투명하게 한다. 유리 위 버튼은 `보던 문제로 돌아가기`와 목록 항목의 배경을 지우고, 해설처럼 영역이 구분돼야 하는 곳은 회색에서 흰색으로 바꾼다. 아이콘만 있는 버튼의 테두리를 지운다. 모든 버튼에 hover 색을 넣는다. Heatmap cell hover 확대를 키운다. global header의 gradation을 뺀다. 유리 레이어 하단 고정 영역에 흰색 배경을 두지 않는다 | M·DESIGN-1, 3 |
+| DESIGN-5 유리·버튼 | 투명도, 유리 위 버튼, 아이콘 버튼 테두리, hover, Heatmap 확대, header gradation | 유리 floating layer를 더 투명하게 한다. 유리 위 버튼은 `보던 문제로 돌아가기`와 목록 항목의 배경을 지우고, 해설처럼 영역이 구분돼야 하는 곳은 회색에서 흰색으로 바꾼다. 아이콘만 있는 버튼의 테두리를 지운다. 모든 버튼에 hover 색을 넣는다. Heatmap cell hover 확대를 키운다. global header의 gradation을 뺀다. 유리 레이어 하단 고정 영역에 흰색 배경을 두지 않는다. 홈 상단 고정 header 영역에 glassmorphism을 적용한다 | M·DESIGN-1, 3 |
 
 ### 4.2 SHELL — 앱 셸·세션·설정
 
