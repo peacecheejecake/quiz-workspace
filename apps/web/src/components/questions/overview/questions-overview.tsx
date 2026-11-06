@@ -17,7 +17,7 @@
 // / 수정 이력·출처: the 문제 상세 dialog over the panel; the practice session stays answer-free), and
 // editors archive the open question (보관, after a confirmation; the panel closes and the dot
 // leaves; it comes back from the home's 보관·초안 문제 dialog).
-// QVIEW-W: the practice panel is QuestionViewer `practice`; the home's 문제 › 문제 풀기 run
+// QVIEW-W: the practice panel is QuestionViewer `practice`; the home's 모의고사 range run
 // (`?practice=`, QVIEW-01) is QuestionViewer `sequence`, rendered here so it shares the panel's
 // 문제 관리 / 문제 정보 menu, its dialogs and the Heatmap refresh after studying.
 import {

@@ -6,8 +6,8 @@
 // next order — stays as the mode:
 //   practice   a Heatmap marker / `?question=` (history and 정리 노트 links too): modal panel, one
 //              question, a practice session, previous/next in Heatmap order (QPLAY-01)
-//   sequence   a range run (`문제 › 문제 풀기`, a mock exam's `풀기`): modal panel, range step,
-//              progress, results (QVIEW-01)
+//   sequence   a range run (a 모의고사 만들기 without variations, a mock exam's `풀기`): modal
+//              panel, range step, progress, results (QVIEW-01)
 //   manage     the 문제 상세 dialog over the practice panel or a 보관·초안 문제 row: answers,
 //              sources and revision history, the opener's actions; no submit UI (UX7-BANK-2)
 //   read-only  a share-link guest's preview: modal panel (UX9), answers shown, nothing recorded

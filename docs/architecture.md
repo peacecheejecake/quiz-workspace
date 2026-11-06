@@ -279,7 +279,7 @@ Worker job(ASK-SPEC 2026-11-01): `ask.answer {message_id}`와 `question.ai_expla
 - Questions Import: PDF 추출 검토, 미완성 초안 수정, 확인/등록.
 - ~~Question Generation: 원본 선택(한 문제·여러 문제·서버 임의 선택 묶음), 변형 유형 지정, LLM 또는 deterministic 변형, diff/정답 검증, 승인.~~ (MOCK-SPEC 2026-11-01 폐지 — QGEN-RM)
 - 모의고사(MOCK-SPEC 2026-11-01): `문제` 메뉴 › `모의고사` 목록 dialog, 변형 유형 옵션·범위(`전체 선택`)로 만들기, 저장·편집·다시 만들기·삭제(MOCK-01). 모의고사 문제는 은행·Heatmap 밖.
-- 통합 `QuestionViewer`(MOCK-SPEC 2026-11-01): 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트(풀이·관리·읽기 전용·범위 풀이 방식), `문제` 메뉴 › `문제 풀기`와 모의고사 `풀기`의 범위 풀이(QVIEW-01).
+- 통합 `QuestionViewer`(MOCK-SPEC 2026-11-01): 문제를 하나씩 보이는 모든 곳의 공통 컴포넌트(풀이·관리·읽기 전용·범위 풀이 방식), 모의고사 원본 풀이와 모의고사 `풀기`의 범위 풀이(QVIEW-01).
 - History: 수정·생성·풀이 이력, Job 로그.
 - 문서 전문·요약·정리 노트(DOCSUM-SPEC 2026-10-29): 문서 관리 행·DOC-02의 텍스트 내보내기(DOC-03), 홈의 문서 요약 panel(DOCSUM-01), Heatmap 챕터 header의 정리 노트 panel(CHNOTE-01).
 - AI 질문·AI 해설·관련 본문(ASK-SPEC 2026-11-01 사용자 결정, ASK-SYNC 2026-11-02): header `AI 질문`·`문제` 메뉴 `AI 질문`·본문 검색 `AI에게 묻기` → `AskPanel`(`?panel=ask`, streaming 답·각주 → 본문 발췌 panel; QuestionViewer modal 층 위에서 열면 맨 위 층), 문제의 `질문하기`(QuestionViewer `manage`·`sequence(mock)`·`manage(mock)`; `practice`·`sequence(bank)` header에는 없음), QuestionViewer 제출 결과 아래 `AI 해설`(AIEXPL-01)과 "관련 본문"(RELSRC-01).

@@ -82,8 +82,11 @@ async function openPlayByKeyboard(page: Page): Promise<Locator> {
   const play = page.getByRole('button', { name: /^풀기$/ });
   await keyTo(page, play);
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: /문제 풀기|practice/i });
+  const dialog = page.getByRole('dialog', { name: /모의고사|practice/i });
   await expect(dialog).toBeVisible();
+  await keyTo(page, mockUi.add(dialog));
+  await page.keyboard.press('Enter');
+  await expect(mockUi.next(dialog)).toBeVisible();
   return dialog;
 }
 
@@ -273,14 +276,17 @@ test(
       await settle(page);
       await expectAccessible(page, 'mock exam detail in round 2 with its questions');
 
-      // 다시 만들기 and 삭제 confirmations (both cancelled).
-      await mockUi.remake(dialog).click();
+      // The 더보기 menu, then its 다시 만들기 and 삭제 confirmations (both cancelled).
+      await mockUi.more(dialog).click();
+      await expect(mockUi.detailAction(page, 'remake')).toBeVisible();
+      await expectAccessible(page, 'mock exam detail menu');
+      await mockUi.detailAction(page, 'remake').click();
       let confirm = mockUi.confirm(page);
       await expect(confirm).toContainText(MOCK_TEXT.replaceConfirm);
       await expectAccessible(page, 'mock exam regenerate confirmation');
       await page.keyboard.press('Escape');
       await expect(confirm).toHaveCount(0);
-      await mockUi.delete(dialog).click();
+      await mockUi.chooseDetailAction(dialog, 'delete');
       confirm = mockUi.confirm(page);
       await expect(confirm).toContainText(/삭제할까요|delete/i);
       await expectAccessible(page, 'mock exam delete confirmation');
@@ -288,7 +294,7 @@ test(
       await expect(confirm).toHaveCount(0);
 
       // 설정 바꾸기 (the two steps with the current values).
-      await mockUi.changeSettings(dialog).click();
+      await mockUi.chooseDetailAction(dialog, 'settings');
       await expect(mockUi.variation(dialog, 'PARAPHRASE')).toBeChecked();
       await expectAccessible(page, 'mock exam change settings, options step');
       await mockUi.next(dialog).click();

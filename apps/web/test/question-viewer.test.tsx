@@ -958,7 +958,7 @@ describe('QVIEW-01-C06 QuestionViewer modes', () => {
         client={client}
       />,
     );
-    const panel = screen.getByRole('dialog', { name: '문제 풀기' });
+    const panel = screen.getByRole('dialog', { name: '모의고사' });
     const all = await within(panel).findByRole('checkbox', { name: '전체 선택' });
     expect(within(panel).getByRole('button', { name: '시작' })).toBeDisabled();
     expect(within(panel).getByText('풀 문제를 고르세요')).toBeInTheDocument();

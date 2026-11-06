@@ -14,7 +14,7 @@
 //              "문제 검색 설정"/"본문 검색 설정", and a status message, UX6), buttons "문서 n", "문제" (menu button, UX4; shown to everyone, UX7-DOCS-2: menuitems
 //              "직접 추가" (the modal "문제 등록" dialog, `?panel=question-create`, UX7-BANK) and
 //              "중복 문제 정리", aria-disabled without edit rights with the reason as menu text,
-//              then "보관·초안 문제" · "모의고사" · "문제 풀기" for every member; no "전체 문제"
+//              then "보관·초안 문제" · "모의고사" for every member; no "전체 문제"
 //              since UX7-BANK, no "PDF 관리" since UX7-DOCS, no "변형 출제" since QGEN-RM), then
 //              icon buttons "이력" and "공유하기" (owner); dialogs are non-modal
 //              FloatingSidePanels inside <main> named "문서 관리", "모의고사", "이력", "링크 공유"
@@ -168,7 +168,6 @@ type QuestionMenuItem =
   | 'chapters'
   | 'inactive'
   | 'mockExams'
-  | 'practice'
   | 'ask';
 const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   /** UX12-HEADER: every member, like 본문 검색 below. */
@@ -189,8 +188,6 @@ const QUESTION_MENU_ITEMS: Readonly<Record<QuestionMenuItem, RegExp>> = {
   inactive: /^(보관·초안 문제|archived and draft questions)$/i,
   /** MOCK-01: the 모의고사 dialog, usable by every member. */
   mockExams: /^(모의고사|mock exams?)$/i,
-  /** QVIEW-01: the range run (QuestionViewer sequence), usable by every member. */
-  practice: /^(문제 풀기|practice questions?|start practice)$/i,
   /** ASK-01: the AI 질문 panel, last; usable by every member (disabled when archived or off). */
   ask: /^(AI 질문|ask ai)$/i,
 };
@@ -220,7 +217,7 @@ export const QUESTION_MENU_REASONS = {
 
 /**
  * Without edit rights the `문제` button stays (UX7-DOCS-2, QOV-01-AC11): its menu shows 직접 추가
- * and 중복 문제 정리 aria-disabled (보관·초안 문제 · 모의고사 · 문제 풀기 enabled, UX7-BANK-2,
+ * and 중복 문제 정리 aria-disabled (보관·초안 문제 · 모의고사 enabled, UX7-BANK-2,
  * MOCK-SYNC), has no 변형 출제 (QGEN-RM), says why in text (described-by), skips them with the
  * arrow keys and opens nothing when one is clicked. Leaves the menu closed, focus back on the button.
  */
@@ -237,7 +234,7 @@ export async function expectReadOnlyQuestionMenu(
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitem')).toHaveText([...QUESTION_MENU_ORDER]);
   // UX7-BANK-2: 보관·초안 문제 is readable by everyone, so it stays enabled; so are 모의고사
-  // (MOCK-01, listing and practising mock exams) and 문제 풀기 (QVIEW-01, a personal practice run).
+  // (MOCK-01, listing and practising mock exams).
   for (const item of ['documents', 'contentSearch', 'inactive'] as const) {
     await expect(homeUi.questionMenuItem(page, item)).not.toHaveAttribute('aria-disabled', 'true');
   }

@@ -103,7 +103,7 @@ E2E는 기존 검색 fake(결정적 embedder·reranker, `APP_ENV=test`)를 쓴�
 ### RELSRC-01-AC06
 
 - **Given:** 장 1 쪽을 책 출처로, 문제 PDF의 쪽을 가져온 출처(`imported`)로 함께 가진 확정 객관식 문제(정답 보기 "가나다 원리")와 그 문제로 만든 `보기 섞기` 모의고사(근거 `evidence`에 두 출처가 모두 복사됨), 같은 Workspace의 보기 권한 멤버 둘(A·B)
-- **When:** A가 `문제` › `문제 풀기`로 그 문제를 시작해 제출하고 "관련 본문"을 펼친다. A가 모의고사 `풀기`로 같은 문제의 모의고사 문제를 제출 전 `GET /mock-exam-questions/{id}/related-sources`로 부르고, 제출한 뒤 "관련 본문"을 펼친다. B가 같은 모의고사 문제를 제출한다
+- **When:** A가 원본 풀이로 그 문제를 시작해 제출하고 "관련 본문"을 펼친다. A가 모의고사 `풀기`로 같은 문제의 모의고사 문제를 제출 전 `GET /mock-exam-questions/{id}/related-sources`로 부르고, 제출한 뒤 "관련 본문"을 펼친다. B가 같은 모의고사 문제를 제출한다
 - **Then:** 범위 풀이(`sequence(bank)`)의 제출 결과 아래에 접힌 "관련 본문"이 있고(펼치면) 풀이 panel과 같은 저장 목록이다(같은 행 id). 모의고사 문제는 제출 전 409 `related-before-submit`(저장 행 0), 제출 뒤 펼치면 첫 행이 `문제 출처` badge가 붙은 장 1 구절이고 문제 PDF 쪽은 어느 행에도 없다. 모의고사 문제의 목록은 원본 문제와 다른 저장 행이고, B는 계산 없이 같은 목록을 본다(검색 호출 기록 변화 없음). 관련 본문을 보는 것은 `mock_exam_attempts`·`question_attempts`·Heatmap을 바꾸지 않는다.
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)

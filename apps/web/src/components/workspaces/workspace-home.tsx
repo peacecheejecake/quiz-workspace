@@ -32,10 +32,10 @@
 //                     questions and merges each group into the question kept (QOV-01-AC16).
 //   보관·초안 문제     `?panel=inactive-questions` (문제 › 보관·초안 문제, UX7-BANK-2, every member): a
 //                     stacked floating dialog of the draft and archived questions (QOV-01-AC15).
-//   문제 풀기          `?practice=new&source=bank` → `?practice=<run>&i=<n>` (문제 › 문제 풀기, QVIEW-01,
-//                     every member): the modal range run (QuestionViewer sequence, rendered by
-//                     QuestionsOverview). Its steps replace the entry; positions push one.
-//   모의고사           `?panel=mock-exams[&mock=new|<id>]` (문제 › 모의고사, MOCK-01, every member): a
+//   원본 범위 풀이      `?practice=new&source=bank` → `?practice=<run>&i=<n>` (a 모의고사 만들기 without
+//                     variations, QVIEW-01): the modal range run (QuestionViewer sequence, rendered
+//                     by QuestionsOverview). Its steps replace the entry; positions push one.
+//   모의고사           `?panel=mock-exams[&mock=new|<id>]` (the primary `풀기`, MOCK-01, every member): a
 //                     stacked floating dialog of the workspace's mock exams; list → 만들기 / 상세
 //                     pushes an entry. A mock exam's 풀기 opens the run panel with `source=mock`.
 //   AI 질문            `?panel=ask[&conversation=<id>]` (header `AI 질문`, 문제 › AI 질문, a question's
@@ -890,7 +890,7 @@ function WorkspaceHomeContent({
             onClick={() => {
               if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
                 panelHistory.push(
-                  `${pathname}${withMockView(window.location.search, { view: 'create' })}`,
+                  `${pathname}${withMockView(window.location.search, { view: 'list' })}`,
                 );
               }
             }}

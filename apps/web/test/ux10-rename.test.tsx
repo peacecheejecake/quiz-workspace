@@ -82,10 +82,11 @@ it('UX10-PLAY-AC06 disables detail play during rename and restores it on cancel'
   );
   const play = await screen.findByRole('button', { name: '풀기' });
   expect(play).toBeEnabled();
-  await user.click(screen.getByRole('button', { name: '이름 바꾸기' }));
-  expect(play).toBeDisabled();
+  await user.click(screen.getByRole('button', { name: '더보기' }));
+  await user.click(await screen.findByRole('menuitem', { name: '이름 바꾸기' }));
+  expect(await screen.findByRole('button', { name: '풀기' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: '취소' }));
-  expect(play).toBeEnabled();
+  expect(await screen.findByRole('button', { name: '풀기' })).toBeEnabled();
 });
 
 it('UX10-PLAY-AC06 disables only the renamed list row and keeps it disabled after failure', async () => {

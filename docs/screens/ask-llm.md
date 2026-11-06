@@ -131,7 +131,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
   | 4 메뉴의 `정답·해설 보기`·`수정 이력·출처` → "문제 상세" dialog | `manage` | footer `질문하기`(`detail` → `full`) | — (정답이 이미 보이므로 제출 없이 `AI 해설`이 있고 그 아래 같은 링크도 `detail` 첨부) |
   | 5 `보관·초안 문제` dialog 행 → "문제 상세" dialog | `manage` | footer `질문하기`(편집 권한이면 그 상태의 동작 버튼 앞; `detail` → `full`) | 4와 같음 — 단 초안(DRAFT) 상세에는 `AI 해설`·관련 본문이 없다(`질문하기`는 있음; ASK-SYNC (b)) |
   | 6 공유 게스트 미리보기 | `read-only` | 없음 | 없음 |
-  | 7 `문제` › `문제 풀기` 범위 풀이 | `sequence(bank)` | **없음** | 제출 뒤 → 그 묶음 session의 `practice` 첨부 `full`(`이전`·결과 목록으로 돌아간 읽기 전용 결과에서도) |
+  | 7 모의고사 원본 풀이(범위 풀이) | `sequence(bank)` | **없음** | 제출 뒤 → 그 묶음 session의 `practice` 첨부 `full`(`이전`·결과 목록으로 돌아간 읽기 전용 결과에서도) |
   | 8 모의고사 `풀기` | `sequence(mock)` | header `질문하기`, 제출 전 `hint`·제출 후 `full` | 제출 뒤 → `mock_exam_question` 첨부 `full` |
   | 9 모의고사 상세의 문제 행(편집 권한) | `manage(mock)` | header `질문하기`(`view: manage` → `full`) | — |
 
@@ -240,7 +240,7 @@ AGENTS.md §5 "Practice APIs never send correct answers or explanations before s
 
 - **Given:** 해설("E2E-MOCK-EXPLANATION-SECRET")·정답 보기("E2E-MOCK-CORRECT-OPTION")가 있는 객관식 문제 2개로 만든 모의고사(`보기 섞기`, MOCK-01; 원본 출처는 교재 장 1의 쪽), 보기 권한 멤버와 편집 권한자, fake 답변기 marker `E2E-ASK-LEAK-PROBE`, 기능이 켜진 환경
 - **When:** 보기 권한 멤버가 모의고사 행의 `풀기` → `시작`으로 첫 문제를 열고 보기 하나를 고른 뒤(제출 전) header의 `질문하기`를 누르고 "E2E-ASK-LEAK-PROBE 이 문제 설명"을 보낸다. 뒤로가기를 한 번 누르고, 답을 제출한 뒤 header의 `질문하기`로 새 대화를 열어 같은 질문을 보내고 Escape로 닫는다. 편집 권한자가 모의고사 상세의 문제 행을 열어(`manage(mock)`) `질문하기`로 같은 질문을 보낸다. 마지막으로 편집 권한자가 그 모의고사를 삭제하고 보기 권한 멤버가 첫 대화를 다시 연다
-- **Then:** 범위 풀이 header에 `질문하기`가 있고, AI 질문 panel은 범위 풀이 panel **위**에 새 대화로 열려 focus를 가둔다. 제출 전 칩은 "문제 1 · <발문 앞부분>"과 "제출 전 — 정답 없이 힌트만"이고 probe 반향에 발문·보기 글(정답 보기 "E2E-MOCK-CORRECT-OPTION"도 정답 표시 없는 보통 보기로)·고른 보기만 있으며 "E2E-MOCK-EXPLANATION-SECRET"·정답을 가리키는 항목(C03)·근거(`evidence`) 구절이 없다. 뒤로가기 한 번은 AI 질문 panel만 닫고(URL에서 `panel=ask`가 빠지고 `practice=<id>&i=1`은 그대로) focus는 `질문하기`로, 범위 풀이의 고른 보기·진행 "2문제 중 1번째"는 그대로라 제출할 수 있다. 제출 뒤 새 대화의 칩은 "제출 후 — 정답·해설 포함"이고 probe 반향에 정답·해설·제출한 답·결과와 장 1의 출처 구절이 있다. `manage(mock)`에서 연 대화는 "정답·해설 포함"이다. 질문은 `mock_exam_attempts`·`question_attempts`·Heatmap을 바꾸지 않는다. 모의고사를 삭제한 뒤 첫 대화의 칩은 "더 이상 볼 수 없는 문제"이고 다음 메시지에는 문제 context가 없다. 등록 문제의 범위 풀이(`문제 풀기`) header에는 `질문하기`가 없다.
+- **Then:** 범위 풀이 header에 `질문하기`가 있고, AI 질문 panel은 범위 풀이 panel **위**에 새 대화로 열려 focus를 가둔다. 제출 전 칩은 "문제 1 · <발문 앞부분>"과 "제출 전 — 정답 없이 힌트만"이고 probe 반향에 발문·보기 글(정답 보기 "E2E-MOCK-CORRECT-OPTION"도 정답 표시 없는 보통 보기로)·고른 보기만 있으며 "E2E-MOCK-EXPLANATION-SECRET"·정답을 가리키는 항목(C03)·근거(`evidence`) 구절이 없다. 뒤로가기 한 번은 AI 질문 panel만 닫고(URL에서 `panel=ask`가 빠지고 `practice=<id>&i=1`은 그대로) focus는 `질문하기`로, 범위 풀이의 고른 보기·진행 "2문제 중 1번째"는 그대로라 제출할 수 있다. 제출 뒤 새 대화의 칩은 "제출 후 — 정답·해설 포함"이고 probe 반향에 정답·해설·제출한 답·결과와 장 1의 출처 구절이 있다. `manage(mock)`에서 연 대화는 "정답·해설 포함"이다. 질문은 `mock_exam_attempts`·`question_attempts`·Heatmap을 바꾸지 않는다. 모의고사를 삭제한 뒤 첫 대화의 칩은 "더 이상 볼 수 없는 문제"이고 다음 메시지에는 문제 context가 없다. 등록 문제의 범위 풀이 header에는 `질문하기`가 없다.
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)
 
