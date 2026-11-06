@@ -63,7 +63,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 **레이아웃 패턴 (floating dialog — 사용자 결정 2026-11-01):** 문서 관리 dialog([DOC-01](documents-library.md))와 보관·초안 문제 dialog(QOV-01-AC15)의 목록 dialog 패턴을 따른다(MOCK-SPEC 초안의 문제 PDF 관리 dialog는 UX7-DOCS에서 문서 관리로 합쳐져 없음) — Workspace header에서 여는 non-modal `FloatingSidePanel`, 제목·설명 header 없음(접근성 이름 "모의고사"), 위쪽 동작 영역 + 행 목록, 행은 제목 · 글자 badge · 메타 줄 · 오른쪽 아이콘 동작, 즉시 열리고 skeleton(QOV-01-AC09), 다른 홈 dialog와 쌓기(QOV-01-AC10). 만들기·상세는 같은 dialog 안에서 목록을 대신하고 위에 `BackLink` "모의고사 목록"을 둔다(넓은 화면 전환 없음). `BackLink` "모의고사 목록"도 목록 → 만들기·상세처럼 기록 항목을 하나 쌓는다(push — 그 뒤 뒤로가기는 dialog를 연 채 앞의 만들기·상세로 돌아간다) (사용자 결정 2026-11-02).
 
-- **진입:** Workspace header `문제` 메뉴의 `모의고사` 항목(모든 구성원). 메뉴 순서는 UX7 이후의 메뉴에 `모의고사`·`문제 풀기`(QVIEW-01)를 더한 것이다(MOCK-SYNC): `직접 추가`·`중복 문제 정리`(편집 권한 항목, `requiresEdit: true` — 보기 권한·보관 Workspace에는 이유 글자와 함께 비활성, UX7-DOCS-2) | `보관·초안 문제`·`모의고사`·`문제 풀기`(`requiresEdit: false`, 모든 구성원·보관 Workspace에서도 활성). `직접 추가`와 `중복 문제 정리` 사이의 `변형 출제`는 QGEN-RM(2026-11-02)에서 빠졌다. 목록 위 `추가`는 메뉴 항목이 아니므로 비활성 패턴을 쓰지 않고 편집 권한에만 보인다(AC01).
+- **진입:** 홈의 primary `풀기`(모든 구성원, [UX12-MOCKNAV](ux12-mock-nav.md)). 목록 위 `추가`는 메뉴 항목이 아니므로 비활성 패턴을 쓰지 않고 편집 권한에만 보인다(AC01).
 - **목록 화면:**
   - 목록 위 동작 줄: 왼쪽 "모의고사 n개", 오른쪽 primary 버튼 `추가`(편집 권한·보관되지 않은 Workspace에서만).
   - 행: 이름(누르면 상세) · 상태 badge(`만드는 중`·`준비됨`·`일부만 만듦`·`실패`) · 메타 줄 `문제 18개 · 문구 변형, 정오 반전 · 2026. 11. 1. 오후 3:28` · `풀기`(준비됨·일부만 만듦, 모든 구성원) · 행 메뉴(편집 권한: `이름 바꾸기`·`설정 바꾸기`·`삭제`). 만드는 중이면 메타 줄 아래 공통 `ProgressBar`("문제 생성 진행률", 값 글자 "20개 중 7개").
@@ -73,13 +73,13 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
   2. 범위: `QuestionRangePicker`(QVIEW-01과 같음; `전체 선택`, 장·문제 checkbox, 필터) + "선택 n문제 중 m문항을 만듭니다" 글자 + 안내 "고른 문제의 발문·보기·정답·해설과 관련 본문이 AI 서비스로 전송됩니다."(LLM 유형을 골랐을 때) + `이전`·`만들기`(선택 0이면 비활성 + "출제 범위를 고르세요").
   - `만들기` → 저장하고 상세 화면으로 가서 생성 진행을 보인다.
 - **`풀기`:** QuestionViewer `sequence(mock)`(QVIEW-01 "진입 (mock)"). 범위 고르기는 그 모의고사의 문제를 출처 장별로 묶어(원본의 장, 생성 때의 장 순서, 장 없음·원본 삭제는 맨 뒤 "챕터 없음") 모두 선택된 채 보인다(사용자 결정 2026-11-02, MOCK-01-C10).
-- **상세 화면:** header 이름 · 상태 badge · 메타(설정 요약, 회차 "2회차", 만든 시각) · `풀기` · 편집 권한: `설정 바꾸기`(만들기 화면과 같은 두 단계, 현재 값이 채워짐, 마지막 버튼 `다시 만들기`)·`다시 만들기`(설정 그대로)·`이름 바꾸기`·`삭제`.
+- **상세 화면:** header 이름 · 상태 badge · 메타(설정 요약, 회차 "2회차", 만든 시각) · `풀기` · 편집 권한: `더보기` 메뉴(UX12-MOCKNAV)의 `설정 바꾸기`(만들기 화면과 같은 두 단계, 현재 값이 채워짐, 마지막 버튼 `다시 만들기`)·`다시 만들기`(설정 그대로)·`이름 바꾸기`·`삭제`.
   - 문제 목록: "문제 k · <발문 앞 40자>" · 변형 유형 badge · 출처 "3장 12번"(원본 문제 번호; 원본이 지워졌으면 "원본 삭제됨") · "편집됨"·"확인 필요" badge(편집 권한자만). 편집 권한자가 행을 누르면 QuestionViewer `manage` 방식(modal)으로 열려 정답·해설을 보고 `편집`(홈 "문제 편집" dialog(QPLAY-01-AC07, UX7-BANK)와 같은 발문·보기·정답·해설 field, 저장하면 새 revision)·`이 모의고사에서 빼기`(`ConfirmDialog`)를 한다. 보기 권한자의 행은 정답이 보이지 않는 미리보기만(풀기 전 정답 노출 방지)이다.
   - 생성 중: `ProgressBar` "20개 중 7개" + "문제를 만드는 중입니다. 창을 닫아도 계속 만듭니다." 다시 만드는 중에는 이전 문제 목록을 그대로 보이고 위에 진행 줄.
   - 실패: alert "모의고사를 만들지 못했습니다" + 이유 + `다시 시도`(편집 권한). 이유 문구: `llm_unavailable`·`llm_timeout` → "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도하세요.", `no_valid_questions` → "검증을 통과한 문제를 만들지 못했습니다. 범위나 변형 유형을 바꿔 보세요.", `no-matching-questions` → "범위에 맞는 확정 문제가 없습니다.", 그 밖 → "모의고사를 만들지 못했습니다. 다시 시도하세요."
   - 일부만 만듦: "20문항 중 17문항을 만들었습니다. 3개는 검증을 통과하지 못했습니다." + `다시 만들기`.
 - **삭제:** `ConfirmDialog` "‘<이름>’을 삭제할까요? 문제와 내 풀이 기록이 목록에서 사라집니다." → soft delete(목록에서 빠짐; 풀이 기록 행은 남음). 생성 중이면 job을 취소한다.
-- **이름 바꾸기:** 행·상세의 인라인 입력(Enter 저장, Escape 취소, 1~100자, 같은 Workspace 안 중복 허용). 입력란의 Escape는 이름 바꾸기만 취소하고 dialog는 열어 둔 채 focus를 시작한 행 메뉴·`이름 바꾸기` 버튼으로 돌려보낸다. 그다음 Escape가 dialog를 닫는다(MOCK-ESC, [design-system §5.1](../design-system.md)).
+- **이름 바꾸기:** 행·상세의 인라인 입력(Enter 저장, Escape 취소, 1~100자, 같은 Workspace 안 중복 허용). 입력란의 Escape는 이름 바꾸기만 취소하고 dialog는 열어 둔 채 focus를 시작한 행 메뉴·`더보기` 버튼으로 돌려보낸다. 그다음 Escape가 dialog를 닫는다(MOCK-ESC, [design-system §5.1](../design-system.md)).
 
 ## 화면 상태
 
@@ -97,7 +97,7 @@ linked_tests: [MOCK-01-AC01 … MOCK-01-AC08]
 
 ## 접근성
 
-- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `문제` 메뉴 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
+- non-modal dialog(UX9-SPEC 사용자 결정 2026-11-02 D3부터 modal — focus trap·배경 `inert`, Escape는 dialog 안 어디서든, [HOMEDLG-01](home-dialogs.md)): 닫기 버튼·Escape(focus가 안에 있을 때)로 닫고 연 `풀기` 버튼으로 focus 복귀(QOV-01-AC10). 목록 ↔ 만들기 ↔ 상세 전환 때 focus는 새 화면의 제목(heading)으로 간다.
 - 상태 badge·"확인 필요"·"편집됨"은 글자로 전달한다(색만으로 전달하지 않음). 생성 진행은 `ProgressBar` 값 글자 + 완료·실패 때 `aria-live="polite"` 알림.
 - 행 메뉴는 Radix DropdownMenu(접근성 이름 "<이름> 메뉴"), 아이콘 버튼은 접근성 이름을 가진다. `QuestionRangePicker` 접근성은 QVIEW-01과 같다.
 - 375px에서 가로 스크롤 없음, 버튼 문구는 줄바꿈하지 않고 버튼 단위로 넘어간다.

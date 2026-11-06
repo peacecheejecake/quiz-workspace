@@ -140,7 +140,7 @@ E2E는 `APP_ENV=test`의 결정적 fake 해설기(C08)를 쓴다.
 ### AIEXPL-01-AC07
 
 - **Given:** 해설·책 출처가 있는 확정 객관식 문제 2개(1장)와 그 둘로 만든 `보기 섞기` 모의고사(MOCK-01), 같은 Workspace의 보기 권한 멤버 둘(A·B), AI 해설이 켜진 환경
-- **When:** A가 `문제` › `문제 풀기`로 두 문제를 시작해 첫 문제를 제출하고 `AI 해설`를 누른 뒤 끝나면 `다음`으로 갔다가 `이전`으로 돌아온다. A가 모의고사 `풀기`로 첫 문제를 열어 제출 전 `GET /mock-exam-questions/{id}/ai-explanation`을 그 session으로 직접 부르고, 제출한 뒤 `AI 해설`를 누른다. B가 같은 모의고사 문제를 제출한다. 편집 권한자가 그 모의고사 문제를 편집해 저장한 뒤 B가 다시 풀어 제출한다
+- **When:** A가 원본 풀이로 두 문제를 시작해 첫 문제를 제출하고 `AI 해설`를 누른 뒤 끝나면 `다음`으로 갔다가 `이전`으로 돌아온다. A가 모의고사 `풀기`로 첫 문제를 열어 제출 전 `GET /mock-exam-questions/{id}/ai-explanation`을 그 session으로 직접 부르고, 제출한 뒤 `AI 해설`를 누른다. B가 같은 모의고사 문제를 제출한다. 편집 권한자가 그 모의고사 문제를 편집해 저장한 뒤 B가 다시 풀어 제출한다
 - **Then:** 범위 풀이(`sequence(bank)`)의 제출 결과 아래에 `AI 해설`이 있고 풀이 panel과 같은 캐시다(그 문제를 Heatmap에서 제출하면 같은 해설 id, fake 호출 수 변화 없음). `이전`으로 돌아온 읽기 전용 결과에서도 그 해설이 보인다. 모의고사 문제는 제출 전 409 `explanation-before-submit`(fake 호출 없음), 제출 뒤 새로 만들어지며(fake 호출 1) 원본 등록 문제의 해설과 다른 해설 id다. B는 생성 없이 같은 해설을 본다. 편집으로 revision이 바뀐 뒤 B의 결과에는 예전 해설이 없고 `AI 해설`가 다시 보인다. 해설 생성은 `mock_exam_attempts`·`question_attempts`·Heatmap을 바꾸지 않는다.
 
 ## 계약 요구사항 (pytest·unit, 화면 AC 아님)

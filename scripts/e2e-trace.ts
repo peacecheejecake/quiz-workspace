@@ -116,6 +116,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX10-HOME.0': ['UX10-HOME'],
   'UX11-RETURN': ['UX11-RETURN'],
   'UX12-PLAY.0': ['UX12-PLAY'],
+  // UX12 MOCKUX-2: the home 풀기 opens the list, the detail's 더보기 menu, 문제 풀기 → 모의고사.
+  'UX12-MOCKNAV.0': ['UX12-MOCKNAV'],
   'UX12-HOME.0': ['UX12-HOME'],
   // UX12 HOME-4: the sticky 문서 N · 풀기 line and the single 문서 N menu (D-7).
   'UX12-HEADER.0': ['UX12-HEADER'],
