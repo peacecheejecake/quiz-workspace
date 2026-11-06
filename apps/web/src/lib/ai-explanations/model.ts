@@ -13,6 +13,9 @@ export const EXPL_TEXT = {
   working: '작성중...',
   started: '작성중...',
   ready: 'AI 해설이 준비되었습니다',
+  cancel: '취소',
+  cancelled: '취소했습니다',
+  cancelFailed: 'AI 해설을 취소하지 못했습니다. 다시 시도하세요.',
   badge: 'AI 생성',
   notice: 'AI가 만든 해설입니다. 정답이 기준이며, 틀릴 수 있습니다.',
   disabled: '이 환경에서는 AI 해설을 사용할 수 없습니다.',
@@ -29,6 +32,9 @@ export const EXPL_TEXT = {
   points: '채점 기준과 흔한 오답',
   concepts: '관련 개념',
 } as const;
+
+/** The `error` code of an explanation someone stopped: not a failure, nothing to show. */
+export const CANCELLED_CODE = 'cancelled';
 
 export const TERMINAL_STATUSES = new Set<Explanation['status']>(['succeeded', 'failed']);
 export const isLive = (explanation: Pick<Explanation, 'status'> | null | undefined) =>

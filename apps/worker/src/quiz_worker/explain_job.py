@@ -23,6 +23,11 @@ Payload (written by apps/api `POST …/ai-explanation`, `…/regenerate`, bank a
    the body, the cited sources and one usage row after the same re-checks under row locks
    (`PostgresExplainStore.finish`), then `done`.
 
+Cancelling (UX12-EXPLCANCEL): the API finishes the row. The loop reads its status at most every
+`stop_check_seconds` and before every provider call, closes the provider stream, records what the
+run spent (`stopped`) and stops; a cancel that wins the race with the finish write ends the same
+way. Nothing more is written to the Redis Stream: the stream routes see the row's status.
+
 The job result holds counts, usage and codes only (C06); logs carry ids and counts only.
 
 LLM: APP_ENV=test the deterministic `book_core.explain.FakeExplainer` (markers, call log in
@@ -34,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -95,6 +101,11 @@ class ExplainJobDeps:
     llm: Explainer | None
     enabled: bool = True
     max_output_tokens: int = 1500
+    stop_check_seconds: float = 1.0
+
+
+class _CancelledError(Exception):
+    """The row stopped being live while the provider was streaming."""
 
 
 class _Stream:
@@ -225,6 +236,12 @@ class _Tokens:
         )
 
 
+def _close(events: Iterator[TextStreamEvent] | None) -> None:
+    close = getattr(events, "close", None)
+    if callable(close):
+        close()
+
+
 def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1) -> JobResult:
     store = deps.store
     row = store.load(payload.kind, payload.explanation_id)
@@ -264,8 +281,24 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
         revision_id=str(row.revision_id),
         explanation_id=str(row.id),
     )
+    checked_at = time.monotonic()
+
+    def cancelled(*, now: bool = False) -> bool:
+        nonlocal checked_at
+        moment = time.monotonic()
+        if not now and moment - checked_at < deps.stop_check_seconds:
+            return False
+        checked_at = moment
+        return store.status(row) != "running"
+
+    def stop() -> JobResult:
+        store.record_usage(row, tokens.usage())
+        return _result("cancelled", usage=tokens.usage())
+
     missing: tuple[str, ...] = ()
     for attempt in range(MAX_CALLS):
+        if cancelled(now=True):
+            return stop()
         request = build_request(
             question=question,
             sources=sources,
@@ -283,14 +316,17 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             events = llm.stream(request, meta)
             for event in events:
                 if isinstance(event, TextDelta):
+                    if cancelled():
+                        raise _CancelledError
                     stream.delta(shown.feed(event.text))
                 elif isinstance(event, TextStreamEnd):
                     end = event
             stream.delta(shown.finish())
+        except _CancelledError:
+            _close(events)
+            return stop()
         except AnswerMismatchError:
-            close = getattr(events, "close", None) if events is not None else None
-            if callable(close):
-                close()
+            _close(events)
             return fail(ANSWER_MISMATCH, tokens.usage())
         except LLMProviderError as exc:
             return fail(error_code_of(exc), tokens.usage())
@@ -317,7 +353,7 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             usage=tokens.usage(),
         )
         if not outcome.written:
-            return _result("skipped", usage=tokens.usage())
+            return stop()
         if outcome.error_code:
             stream.error(outcome.error_code)
             return _result("failed", usage=tokens.usage(), code=outcome.error_code)

@@ -2739,6 +2739,48 @@
         "title": "ExplanationBody",
         "type": "object"
       },
+      "ExplanationCancelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "explanation_id": {
+            "description": "The explanation being made.",
+            "format": "uuid",
+            "title": "Explanation Id",
+            "type": "string"
+          },
+          "practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted practice session of this question.",
+            "title": "Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "detail",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`detail`: the 문제 상세 dialog (no submission needed).",
+            "title": "View"
+          }
+        },
+        "required": [
+          "explanation_id"
+        ],
+        "title": "ExplanationCancelRequest",
+        "type": "object"
+      },
       "ExplanationHighlightTarget": {
         "properties": {
           "kind": {
@@ -2883,6 +2925,11 @@
             "title": "Available",
             "type": "boolean"
           },
+          "can_cancel": {
+            "description": "One is being made, in an active workspace, and the caller requested it or is an owner/editor.",
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
           "can_create": {
             "description": "available, active workspace, none for this revision.",
             "title": "Can Create",
@@ -2909,6 +2956,7 @@
           "available",
           "can_create",
           "can_regenerate",
+          "can_cancel",
           "explanation"
         ],
         "title": "ExplanationState",
@@ -5916,6 +5964,48 @@
         "title": "MockExplanation",
         "type": "object"
       },
+      "MockExplanationCancelRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "explanation_id": {
+            "description": "The explanation being made.",
+            "format": "uuid",
+            "title": "Explanation Id",
+            "type": "string"
+          },
+          "mock_practice_session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The caller's submitted mock practice session of this question.",
+            "title": "Mock Practice Session Id"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "manage",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`manage`: 모의고사 문제 관리 (owner/editor, no submission).",
+            "title": "View"
+          }
+        },
+        "required": [
+          "explanation_id"
+        ],
+        "title": "MockExplanationCancelRequest",
+        "type": "object"
+      },
       "MockExplanationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5956,6 +6046,11 @@
             "title": "Available",
             "type": "boolean"
           },
+          "can_cancel": {
+            "description": "One is being made, in an active workspace, and the caller requested it or is an owner/editor.",
+            "title": "Can Cancel",
+            "type": "boolean"
+          },
           "can_create": {
             "description": "available, active workspace, none for this revision.",
             "title": "Can Create",
@@ -5981,6 +6076,7 @@
           "available",
           "can_create",
           "can_regenerate",
+          "can_cancel",
           "explanation"
         ],
         "title": "MockExplanationState",
@@ -17464,6 +17560,104 @@
         ]
       }
     },
+    "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/cancel": {
+      "post": {
+        "operationId": "cancelMockExamQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mock_exam_question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Mock Exam Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockExplanationCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Cancel Mock Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
     "/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate": {
       "post": {
         "operationId": "regenerateMockExamQuestionAiExplanation",
@@ -21265,6 +21459,105 @@
           }
         ],
         "summary": "Create Question Explanation",
+        "tags": [
+          "ai-explanations"
+        ]
+      }
+    },
+    "/api/v1/questions/{question_id}/ai-explanation/cancel": {
+      "post": {
+        "description": "Stop an explanation being made (its requester or an owner/editor).",
+        "operationId": "cancelQuestionAiExplanation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplanationCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExplanationState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "security": [
+          {
+            "SupabaseAccessToken": []
+          }
+        ],
+        "summary": "Cancel Question Explanation",
         "tags": [
           "ai-explanations"
         ]

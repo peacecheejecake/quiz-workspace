@@ -706,6 +706,23 @@ export type paths = {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Cancel Mock Explanation */
+    post: operations['cancelMockExamQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/mock-exam-questions/{mock_exam_question_id}/ai-explanation/regenerate': {
     parameters: {
       query?: never;
@@ -1370,6 +1387,26 @@ export type paths = {
      * @description Make the explanation (202), or return the cached one (200) / the one being made (202).
      */
     post: operations['createQuestionAiExplanation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/questions/{question_id}/ai-explanation/cancel': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel Question Explanation
+     * @description Stop an explanation being made (its requester or an owner/editor).
+     */
+    post: operations['cancelQuestionAiExplanation'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3756,6 +3793,25 @@ export type components = {
       /** Summary Md */
       summary_md: string;
     };
+    /** ExplanationCancelRequest */
+    ExplanationCancelRequest: {
+      /**
+       * Explanation Id
+       * Format: uuid
+       * @description The explanation being made.
+       */
+      explanation_id: string;
+      /**
+       * Practice Session Id
+       * @description The caller's submitted practice session of this question.
+       */
+      practice_session_id?: string | null;
+      /**
+       * View
+       * @description `detail`: the 문제 상세 dialog (no submission needed).
+       */
+      view?: 'detail' | null;
+    };
     /** ExplanationHighlightTarget */
     ExplanationHighlightTarget: {
       /**
@@ -3835,6 +3891,11 @@ export type components = {
        * @description This environment can make AI explanations.
        */
       available: boolean;
+      /**
+       * Can Cancel
+       * @description One is being made, in an active workspace, and the caller requested it or is an owner/editor.
+       */
+      can_cancel: boolean;
       /**
        * Can Create
        * @description available, active workspace, none for this revision.
@@ -5109,6 +5170,25 @@ export type components = {
       /** Version */
       version: number;
     };
+    /** MockExplanationCancelRequest */
+    MockExplanationCancelRequest: {
+      /**
+       * Explanation Id
+       * Format: uuid
+       * @description The explanation being made.
+       */
+      explanation_id: string;
+      /**
+       * Mock Practice Session Id
+       * @description The caller's submitted mock practice session of this question.
+       */
+      mock_practice_session_id?: string | null;
+      /**
+       * View
+       * @description `manage`: 모의고사 문제 관리 (owner/editor, no submission).
+       */
+      view?: 'manage' | null;
+    };
     /** MockExplanationRequest */
     MockExplanationRequest: {
       /**
@@ -5129,6 +5209,11 @@ export type components = {
        * @description This environment can make AI explanations.
        */
       available: boolean;
+      /**
+       * Can Cancel
+       * @description One is being made, in an active workspace, and the caller requested it or is an owner/editor.
+       */
+      can_cancel: boolean;
       /**
        * Can Create
        * @description available, active workspace, none for this revision.
@@ -11130,6 +11215,77 @@ export interface operations {
       };
     };
   };
+  cancelMockExamQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mock_exam_question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MockExplanationCancelRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MockExplanationState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   regenerateMockExamQuestionAiExplanation: {
     parameters: {
       query?: never;
@@ -13784,6 +13940,77 @@ export interface operations {
       };
       /** @description Too Many Requests */
       429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  cancelQuestionAiExplanation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        question_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ExplanationCancelRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ExplanationState'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
         headers: {
           [name: string]: unknown;
         };

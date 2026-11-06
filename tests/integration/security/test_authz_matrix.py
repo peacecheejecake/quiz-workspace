@@ -180,10 +180,12 @@ RULES: dict[str, Rule | str] = {
     "getQuestionAiExplanation": READ,
     "createQuestionAiExplanation": EXPLAIN_CREATE,
     "regenerateQuestionAiExplanation": EDIT,
+    "cancelQuestionAiExplanation": EDIT,  # or its requester: UX12-EXPLCANCEL contract tests
     "streamQuestionAiExplanation": READ,
     "getMockExamQuestionAiExplanation": EDIT_READ,
     "createMockExamQuestionAiExplanation": EDIT,
     "regenerateMockExamQuestionAiExplanation": EDIT,
+    "cancelMockExamQuestionAiExplanation": EDIT,
     "streamMockExamQuestionAiExplanation": EDIT_READ,
     "selfGradeMockPracticeSession": OWN_WRITE,
     # UX9-HL-B personal highlights (reads are the caller's rows only; HILITE-01-C01)
@@ -340,6 +342,11 @@ def body_for(op_id: str, ids: dict[str, str]) -> Any:
         "regenerateQuestionAiExplanation": {"view": "detail"},
         "createMockExamQuestionAiExplanation": {"view": "manage"},
         "regenerateMockExamQuestionAiExplanation": {"view": "manage"},
+        "cancelQuestionAiExplanation": {"view": "detail", "explanation_id": ids["explanation_id"]},
+        "cancelMockExamQuestionAiExplanation": {
+            "view": "manage",
+            "explanation_id": ids["mock_explanation_id"],
+        },
     }
     return bodies.get(op_id)
 

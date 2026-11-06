@@ -17,6 +17,7 @@
 | UX12-FILTER | 홈 검색·필터 줄 | Workspace 홈 | [ux12-home-filter.md](ux12-home-filter.md) |
 | UX12-EXTRACT | 초안 문제 전체 표시 | 문서 보기 | [ux12-extract.md](ux12-extract.md) |
 | UX12-EXPL | AI 해설 도구 줄·접기·생성 안내 | 공통 문제 표시 | [ux12-explanations.md](ux12-explanations.md) |
+| UX12-EXPLCANCEL | AI 해설 만들기 취소 | 공통 문제 표시 | [ux12-expl-cancel.md](ux12-expl-cancel.md) |
 | UX12-AIOFF | LLM off 잔여 AI UI 삭제 | 공통 AI 화면 | [ux12-ai-off.md](ux12-ai-off.md) |
 | UX12-SEARCHPAGE | 본문 검색 header의 AI에게 묻기 | 본문 검색 | [ux12-search-page.md](ux12-search-page.md) |
 | UX12-VIEW | 문제 보기 컨트롤 | 풀이 panel · 범위 풀이 | [ux12-viewer.md](ux12-viewer.md) |

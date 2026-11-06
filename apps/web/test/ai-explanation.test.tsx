@@ -90,6 +90,7 @@ function stateOf(overrides: Partial<ExplanationState> = {}): ExplanationState {
     available: true,
     can_create: true,
     can_regenerate: false,
+    can_cancel: false,
     explanation: null,
     ...overrides,
   };
@@ -100,6 +101,7 @@ function fakeClient(state: ExplanationState, created: ExplanationState = state) 
     state: vi.fn(async () => state),
     create: vi.fn(async () => created),
     regenerate: vi.fn(async () => created),
+    cancel: vi.fn(async () => created),
     shared: vi.fn(async () => null),
   } satisfies ExplanationClient;
 }
@@ -459,6 +461,120 @@ describe('AIEXPL-01 streaming', () => {
     expect(await within(region).findByText('AI 생성')).toBeInTheDocument();
     expect(region.querySelector('[aria-busy="true"]')).toBeNull();
     expect(within(region).getByRole('status')).toHaveTextContent('AI 해설이 준비되었습니다');
+  });
+});
+
+describe('UX12-EXPLCANCEL 취소', () => {
+  const originalFetch = globalThis.fetch;
+  const live = explanation({ status: 'running', body: null, sources: [], finished_at: null });
+  const liveState = stateOf({ can_create: false, can_cancel: true, explanation: live });
+
+  /** A stream that stays open, or sends `lines` and closes. */
+  function stream(lines?: string) {
+    globalThis.fetch = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (lines) {
+            controller.enqueue(new TextEncoder().encode(lines));
+            controller.close();
+          }
+          init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')));
+        },
+      });
+      return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+    });
+  }
+
+  beforeEach(() => stream());
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function mount(api: ExplanationClient) {
+    render(
+      <AiExplanation workspaceId={WS} target={target} gate={gate} options={OPTIONS} client={api} />,
+    );
+  }
+
+  it('a new one: 취소 beside 작성중..., then only the toolbar button, no alert', async () => {
+    const user = userEvent.setup();
+    const api = fakeClient(liveState, stateOf());
+    mount(api);
+    const button = await within(area()).findByRole('button', { name: '취소' });
+    expect(button.closest('div')).toHaveTextContent('작성중...');
+    await user.click(button);
+    expect(api.cancel).toHaveBeenCalledWith(target, gate, live.id);
+    const create = await within(area()).findByRole('button', { name: 'AI 해설' });
+    expect(create).toHaveFocus();
+    expect(within(area()).queryByRole('region', { name: 'AI 해설' })).toBeNull();
+    expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다');
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+
+  it('a regeneration: back to the current one, with the focus on its heading', async () => {
+    const user = userEvent.setup();
+    const current = explanation({ id: '44444444-4444-4444-8444-000000000002' });
+    const api = fakeClient(
+      liveState,
+      stateOf({ can_create: false, can_regenerate: true, explanation: current }),
+    );
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('heading', { name: 'AI 해설' })).toHaveFocus();
+    expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다');
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+
+  it('no 취소 without can_cancel', async () => {
+    mount(fakeClient({ ...liveState, can_cancel: false }));
+    expect((await within(area()).findAllByText('작성중...')).length).toBeGreaterThan(0);
+    expect(within(area()).queryByRole('button', { name: '취소' })).toBeNull();
+  });
+
+  it('finished first: the result shows and reads as ready, not as cancelled', async () => {
+    const user = userEvent.setup();
+    const done = explanation({ id: live.id });
+    const api = fakeClient(liveState, stateOf({ can_create: false, explanation: done }));
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByText('AI 생성')).toBeInTheDocument();
+    expect(within(area()).getByRole('status')).toHaveTextContent('AI 해설이 준비되었습니다');
+  });
+
+  it('a refused cancel says so and keeps the state', async () => {
+    const user = userEvent.setup();
+    const api = fakeClient(liveState);
+    api.cancel.mockRejectedValueOnce(new client.ExplanationApiError('insufficientRole', 403));
+    mount(api);
+    await user.click(await within(area()).findByRole('button', { name: '취소' }));
+    expect(await within(area()).findByRole('alert')).toHaveTextContent(
+      model.EXPL_TEXT.cancelFailed,
+    );
+  });
+
+  it('cancelled by someone else: the stream error shows nothing and no alert', async () => {
+    stream('id: 1\nevent: error\ndata: {"code":"cancelled"}\n\n');
+    const api = fakeClient(stateOf());
+    api.state.mockResolvedValueOnce({ ...liveState, can_cancel: false });
+    mount(api);
+    await waitFor(() =>
+      expect(within(area()).getByRole('status')).toHaveTextContent('취소했습니다'),
+    );
+    expect(await within(area()).findByRole('button', { name: 'AI 해설' })).toBeInTheDocument();
+    expect(within(area()).queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('AIEXPL-01 client cancel', () => {
+  it('names the explanation next to the gate', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify(stateOf()), { status: 200 }),
+    );
+    await client.createExplanationClient(fetchImpl).cancel(target, gate, 'e-1');
+    const [path, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(path).toBe(`/api/questions/${QID}/ai-explanation/cancel`);
+    expect(JSON.parse(String(init?.body))).toEqual({ ...gate, explanation_id: 'e-1' });
   });
 });
 

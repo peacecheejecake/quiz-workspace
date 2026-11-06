@@ -132,6 +132,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-CONTROLS.0': ['UX12-CONTROLS'],
   // UX12 EXPL-1 (2026-11-06): AI 해설 toolbar, shared disclosure heading, 작성중... text.
   'UX12-EXPL.0': ['UX12-EXPL'],
+  // UX12 EXPL-3 (2026-11-06): cancelling an AI explanation being made.
+  'UX12-EXPLCANCEL.0': ['UX12-EXPLCANCEL'],
   // UX12 VIEW-2: option hover, result icons, study toggles without a fill, option line breaks.
   'UX12-OPTIONS.0': ['UX12-OPTIONS'],
   // UX12 HOME-2: no leftover AI buttons, notices or reasons where the LLM is off (D-14).

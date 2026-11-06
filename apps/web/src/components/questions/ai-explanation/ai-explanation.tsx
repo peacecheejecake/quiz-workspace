@@ -10,7 +10,9 @@
 //   cached    the heading is an open disclosure, the same one as 관련 본문 (UX12-EXPL: the result
 //             stays in view); it reads the stored one, no generation
 //   making    "작성중..." and the text so far (SSE, ASK-W's Markdown and number chips),
-//             aria-busy; also joined when someone else started it (the same stream from seq 0)
+//             aria-busy; also joined when someone else started it (the same stream from seq 0);
+//             `취소` beside the text for its requester and editors (UX12-EXPLCANCEL): back to the
+//             current success, or to nothing, with only a status announcement
 //   done      `AI 생성` badge, the notice, the body (every option), footnotes `[n]` and the `출처`
 //             list (→ 본문 발췌 → PDF에서 보기), "<시각> · 버전 k" and `다시 만들기` (editors)
 //   failed    role=alert with the reason + `다시 시도` (a new generation)
@@ -36,6 +38,7 @@ import {
   type ExplanationTarget,
 } from '@/lib/ai-explanations/client';
 import {
+  CANCELLED_CODE,
   emptyMode,
   EXPL_TEXT,
   explanationErrorText,
@@ -111,6 +114,9 @@ function AiExplanationArea({
   // The area (and its heading) appears only once there is something to show: focus moves to it
   // after the render that mounts it.
   const focusHeading = useRef(false);
+  // Cancelling removes the focused `취소`: focus goes to what replaced it.
+  const focusAfterCancel = useRef(false);
+  const createRef = useRef<HTMLButtonElement>(null);
 
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [reload, setReload] = useState(0);
@@ -184,7 +190,7 @@ function AiExplanationArea({
     const controller = new AbortController();
     const { signal } = controller;
     let lastEventId = 0;
-    const finish = (done: Explanation | null, failure: string | null) => {
+    const finish = (done: Explanation | null, failure: string | null, cancelled = false) => {
       if (signal.aborted) return;
       if (done) {
         setLoad((prev) =>
@@ -193,7 +199,7 @@ function AiExplanationArea({
             : prev,
         );
       }
-      setAnnouncement(failure ? '' : EXPL_TEXT.ready);
+      setAnnouncement(cancelled ? EXPL_TEXT.cancelled : failure ? '' : EXPL_TEXT.ready);
       // A regeneration that failed leaves the current success shown: it says why (below).
       setStreamFailure(failure ? { id: liveId, text: failure } : null);
       // Read the state again (fresh permissions, the stored result). Not tied to this stream's
@@ -236,6 +242,8 @@ function AiExplanationArea({
                   setLive({ id: liveId, text: '' });
                 } else if (event.type === 'done') {
                   finish(event.explanation, null);
+                } else if (event.code === CANCELLED_CODE) {
+                  finish(null, null, true);
                 } else {
                   finish(null, explanationErrorText(event.code));
                 }
@@ -250,7 +258,8 @@ function AiExplanationArea({
           if (signal.aborted) return;
           if (next && !(next.explanation?.id === liveId && isLive(next.explanation))) {
             setLoad({ status: 'ready', state: next });
-            if (next.explanation?.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
+            if (next.explanation?.id !== liveId) setAnnouncement(EXPL_TEXT.cancelled);
+            else if (next.explanation.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
             return;
           }
           await sleep(1000, signal);
@@ -292,6 +301,31 @@ function AiExplanationArea({
       // Feature off / archived: the state read again shows that reason in place of the button.
       if (kind !== 'disabled' && kind !== 'archived') setRefusal(failure);
       if (kind !== 'rateLimited') setReload((n) => n + 1);
+    } finally {
+      busy.current = false;
+      if (mounted.current) setPending(false);
+    }
+  }
+
+  async function cancel(explanationId: string) {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    setRefusal(null);
+    try {
+      const next = await client.cancel(target, gate, explanationId);
+      if (!mounted.current) return;
+      const after = next.explanation;
+      // It may have finished first: then the result is shown and nothing was cancelled.
+      if (after?.id !== explanationId) setAnnouncement(EXPL_TEXT.cancelled);
+      else if (after.status === 'succeeded') setAnnouncement(EXPL_TEXT.ready);
+      focusAfterCancel.current = true;
+      setLive(null);
+      setLoad({ status: 'ready', state: next });
+    } catch {
+      if (!mounted.current) return;
+      setRefusal(EXPL_TEXT.cancelFailed);
+      setReload((n) => n + 1);
     } finally {
       busy.current = false;
       if (mounted.current) setPending(false);
@@ -382,7 +416,19 @@ function AiExplanationArea({
     const text = live?.id === explanation.id ? live.text : '';
     content = (
       <div className={styles.done} aria-busy="true">
-        <p className={styles.progress}>{EXPL_TEXT.working}</p>
+        <div className={styles.controls}>
+          <p className={styles.progress}>{EXPL_TEXT.working}</p>
+          {state.can_cancel ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={pending}
+              onClick={() => void cancel(explanation.id)}
+            >
+              {EXPL_TEXT.cancel}
+            </Button>
+          ) : null}
+        </div>
         {text ? (
           <AnswerMarkdown text={text} sourceNumbers={null} renderCite={(n) => `[${n}]`} />
         ) : null}
@@ -440,13 +486,22 @@ function AiExplanationArea({
       focusHeading.current = false;
       headingRef.current.focus();
     }
+    if (focusAfterCancel.current) {
+      focusAfterCancel.current = false;
+      (headingRef.current ?? createRef.current)?.focus();
+    }
   });
 
   return (
     <div role="group" aria-label={EXPL_TEXT.title} className={styles.root}>
       <div className={styles.controls}>
         {mode === 'create' ? (
-          <Button size="sm" loading={pending} onClick={() => void request('create')}>
+          <Button
+            ref={createRef}
+            size="sm"
+            loading={pending}
+            onClick={() => void request('create')}
+          >
             {EXPL_TEXT.create}
           </Button>
         ) : null}

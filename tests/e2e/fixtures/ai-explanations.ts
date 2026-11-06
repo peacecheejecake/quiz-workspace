@@ -30,7 +30,9 @@
 //      ExplanationState = {available: bool, can_create: bool, can_regenerate: bool,
 //      explanation: Explanation | null}; `available` = this environment can create (feature on
 //      and an LLM, the fake under APP_ENV=test); `can_create` = available, active workspace and
-//      no live (queued/running/succeeded) explanation for the key; `can_regenerate` = editor of an
+//      no live (queued/running/succeeded) explanation for the key; `can_cancel` (UX12-EXPLCANCEL) =
+//      one is being made, the workspace is active and the caller requested it or is an owner/
+//      editor; `can_regenerate` = editor of an
 //      active workspace and a succeeded explanation. `explanation` = the newest non-superseded
 //      row of the current revision's key (any status; EXPL-B: a current success wins over a later
 //      failed regeneration), or null.
@@ -112,7 +114,7 @@
 //   Share panel: disclosure "AI 해설" only when one exists; no create/regenerate/status/version.
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -182,6 +184,12 @@ export class ExplHold {
   release(): void {
     mkdirSync(holdDir(), { recursive: true });
     writeFileSync(join(holdDir(), `${this.token}.release`), '');
+  }
+
+  /** The next call of the fake stops at the barrier again (a regeneration after a seed). */
+  rearm(): void {
+    rmSync(join(holdDir(), `${this.token}.release`), { force: true });
+    rmSync(join(holdDir(), `${this.token}.held`), { force: true });
   }
 }
 
@@ -266,6 +274,7 @@ export interface ExplanationState {
   readonly available: boolean;
   readonly can_create: boolean;
   readonly can_regenerate: boolean;
+  readonly can_cancel: boolean;
   readonly explanation: Explanation | null;
 }
 
@@ -455,6 +464,14 @@ function uuid(value: string): string {
   return `'${value}'`;
 }
 
+/** `<status>|<error code>` of a bank explanation, for what no API shows (a cancelled row). */
+export function explanationRow(explanationId: string): string {
+  return psqlOne(
+    `select status || '|' || coalesce(error_code, '') ` +
+      `from public.question_ai_explanations where id = ${uuid(explanationId)}`,
+  );
+}
+
 /**
  * The newest practice session of `userId` on a bank question (`question`) or a mock exam question
  * (`mock`), waited for until one exists.
@@ -545,8 +562,8 @@ export const EXPL_TEXT = {
   working: /작성중\.\.\.|making the AI explanation/i,
   started: /작성중\.\.\.|making the AI explanation/i,
   ready: /AI 해설이 준비되었습니다|AI explanation is ready/i,
-  aiNotice:
-    /AI가 만든 해설입니다\. 정답이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
+  cancelled: /취소했습니다|cancelled/i,
+  aiNotice: /AI가 만든 해설입니다\. 정답이 기준이며, 틀릴 수 있습니다|written by AI.*may be wrong/i,
   unavailable:
     /AI 서비스에 연결하지 못했습니다\. 잠시 후 다시 시도하세요|could not reach the AI service/i,
   mismatch:
@@ -593,6 +610,7 @@ export const explUi = {
   sources: (area: Locator) =>
     area.getByRole('list', { name: /^(출처|sources)$/i }).getByRole('listitem'),
   regenerate: (area: Locator) => area.getByRole('button', { name: /^(다시 만들기|regenerate)$/i }),
+  cancel: (area: Locator) => area.getByRole('button', { name: /^(취소|cancel)$/i }),
   askAbout: (area: Locator) => area.getByRole('button', { name: /^(AI 질문하기|ask (the )?AI)$/i }),
   alert: (area: Locator) => area.getByRole('alert'),
   retry: (area: Locator) => area.getByRole('button', { name: /^(다시 시도|try again)$/i }),
