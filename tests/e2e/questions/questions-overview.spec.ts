@@ -1197,7 +1197,9 @@ test(
           );
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }, SEARCHED);
-      await expect(page).toHaveURL(searched);
+      await expect(page).toHaveURL(
+        (url) => panels(url) === 'documents' && url.searchParams.get('q') === SEARCHED,
+      );
       await expect(documents).toBeVisible();
     }
     // The close shows the filtered home over the entry before the open: Next reads it, and
