@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { tableGrid } from '@/lib/documents/table-grid';
+import { emptyForm, parseFormValues } from '@/lib/questions/form';
 import {
   alignedStemTables,
   applyTableEdit,
@@ -40,6 +42,25 @@ describe('alignedStemTables', () => {
     expect(alignedStemTables(GFM, null)).toBeNull();
     expect(alignedStemTables(GFM, undefined)).toBeNull();
     expect(alignedStemTables(GFM, [])).toBeNull();
+  });
+});
+
+describe('spans from outside', () => {
+  const huge = { row: 0, col: 0, row_span: 1_000_000_000, col_span: 1_000_000_000 };
+
+  it('tableGrid walks the grid only, whatever a span says', () => {
+    expect(tableGrid({ rows: [['a']], spans: [huge] })).toHaveLength(1);
+  });
+
+  it('the form drops cells whose span leaves the grid', () => {
+    const form = { ...emptyForm(), stemTables: [{ rows: [['a']], header_rows: 0, spans: [huge] }] };
+    expect(parseFormValues(form)?.stemTables).toBeNull();
+  });
+
+  it('the form keeps cells whose span fits', () => {
+    const spans = [{ row: 0, col: 0, row_span: 2, col_span: 1 }];
+    const form = { ...emptyForm(), stemTables: [{ rows: [['a'], ['a']], header_rows: 0, spans }] };
+    expect(parseFormValues(form)?.stemTables).toEqual(form.stemTables);
   });
 });
 

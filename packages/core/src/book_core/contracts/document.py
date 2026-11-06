@@ -114,11 +114,17 @@ class TableContent(CoreModel):
             raise ValueError("table rows must have the same number of cells")
         if self.header_rows > len(self.rows):
             raise ValueError("header_rows exceeds row count")
-        cells = [cell for span in self.spans or () for cell in span.cells()]
+        # Arithmetic first: spans come from clients and listing the cells of an unchecked one
+        # could take any amount of memory.
+        height, width = len(self.rows), len(self.rows[0])
+        spans = self.spans or ()
+        if any(s.row + s.row_span > height or s.col + s.col_span > width for s in spans):
+            raise ValueError("table span exceeds the grid")
+        if sum(s.row_span * s.col_span for s in spans) > height * width:
+            raise ValueError("table spans overlap")
+        cells = [cell for span in spans for cell in span.cells()]
         if len(set(cells)) != len(cells):
             raise ValueError("table spans overlap")
-        if any(r >= len(self.rows) or c >= len(self.rows[0]) for r, c in cells):
-            raise ValueError("table span exceeds the grid")
         return self
 
     @model_serializer(mode="wrap")

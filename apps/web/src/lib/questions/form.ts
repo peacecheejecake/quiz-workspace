@@ -378,10 +378,22 @@ export function validateQuestionForm(values: QuestionFormValues): FieldErrors {
   return errors;
 }
 
-function cellSpan(raw: unknown): raw is NonNullable<StemCells['spans']>[number] {
+function cellSpan(
+  raw: unknown,
+  height: number,
+  width: number,
+): raw is NonNullable<StemCells['spans']>[number] {
   if (typeof raw !== 'object' || raw === null) return false;
-  const { row, col, row_span, col_span } = raw as Record<string, unknown>;
-  return [row, col, row_span, col_span].every((n) => Number.isInteger(n));
+  const { row, col, row_span, col_span } = raw as NonNullable<StemCells['spans']>[number];
+  return (
+    [row, col, row_span, col_span].every((n) => Number.isInteger(n)) &&
+    row >= 0 &&
+    col >= 0 &&
+    row_span >= 1 &&
+    col_span >= 1 &&
+    row + row_span <= height &&
+    col + col_span <= width
+  );
 }
 
 function stemCells(raw: unknown): raw is StemCells {
@@ -395,7 +407,10 @@ function stemCells(raw: unknown): raw is StemCells {
     Number.isInteger(header_rows) &&
     (spans === undefined ||
       spans === null ||
-      (Array.isArray(spans) && (spans as unknown[]).every(cellSpan)))
+      (Array.isArray(spans) &&
+        (spans as unknown[]).every((span) =>
+          cellSpan(span, rows.length, (rows[0] as unknown[] | undefined)?.length ?? 0),
+        )))
   );
 }
 

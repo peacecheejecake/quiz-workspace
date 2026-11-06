@@ -90,6 +90,33 @@ def _refined(stem: str) -> QuestionDraft:
     return _extract("1. 표를 보고 답하시오.", MERGED, *OPTIONS, llm=client)
 
 
+@pytest.mark.parametrize(
+    ("row_span", "col_span"), [(1_000_000_000, 1), (1, 1_000_000_000), (10**30, 10**30)]
+)
+def test_a_huge_span_is_refused_without_listing_its_cells(
+    monkeypatch: pytest.MonkeyPatch, row_span: int, col_span: int
+) -> None:
+    def listed(_: TableSpan) -> None:
+        raise AssertionError("the span's cells were listed")
+
+    monkeypatch.setattr(TableSpan, "cells", listed)
+    span = TableSpan(row=0, col=0, row_span=row_span, col_span=col_span)
+    with pytest.raises(ValueError, match="exceeds the grid"):
+        TableContent(rows=(("a",),), spans=(span,))
+
+
+def test_spans_covering_more_than_the_grid_are_refused_without_listing_their_cells(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def listed(_: TableSpan) -> None:
+        raise AssertionError("the span's cells were listed")
+
+    monkeypatch.setattr(TableSpan, "cells", listed)
+    span = TableSpan(row=0, col=0, row_span=2)
+    with pytest.raises(ValueError, match="overlap"):
+        TableContent(rows=(("a",), ("b",)), spans=(span,) * 3)
+
+
 def test_gfm_table_repeats_merged_text_as_the_stem_stores_it() -> None:
     assert gfm_table(MERGED) == GFM
 

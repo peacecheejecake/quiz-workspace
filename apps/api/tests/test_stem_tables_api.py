@@ -68,6 +68,24 @@ def test_a_span_outside_the_grid_is_refused() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "span",
+    [
+        {"row": 0, "col": 0, "row_span": 1_000_000_000, "col_span": 1},
+        {"row": 0, "col": 0, "row_span": 1, "col_span": 1_000_000_000},
+    ],
+)
+def test_a_huge_span_is_refused_without_listing_its_cells(
+    monkeypatch: pytest.MonkeyPatch, span: dict[str, int]
+) -> None:
+    def listed(_: TableSpan) -> None:
+        raise AssertionError("the span's cells were listed")
+
+    monkeypatch.setattr(TableSpan, "cells", listed)
+    with pytest.raises(ValidationError, match="exceeds the grid"):
+        StemTableInput(rows=[["a"]], header_rows=0, spans=[span])  # type: ignore[list-item]
+
+
 def test_sent_cells_that_do_not_line_up_are_dropped_not_refused() -> None:
     assert sent_stem_tables(GFM, [SENT]) == (TABLE,)
     assert sent_stem_tables(GFM.replace("1", "9"), [SENT]) is None
