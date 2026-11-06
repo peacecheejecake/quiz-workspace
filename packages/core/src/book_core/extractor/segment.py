@@ -418,6 +418,13 @@ def _has_label_column(rows: Sequence[Sequence[str]]) -> bool:
     )
 
 
+def _reads_every_row(rows: Sequence[Sequence[str]], found: Sequence[OptionRow]) -> bool:
+    """Every row that opens with a label gave options: accepting a reading drops no row."""
+    return all(
+        options or not _starts_with_label(row[0]) for row, options in zip(rows, found, strict=True)
+    )
+
+
 def _is_option_run(found: Sequence[OptionRow], *, continues: bool) -> bool:
     """The labels run on without a gap from ①, at least two; the table that continues options
     split over pages needs one, from any label."""
@@ -433,7 +440,8 @@ def _table_options(
 ) -> tuple[list[str], list[RawOption]]:
     """``(header parts, options)`` of an option table, ``([], [])`` for any other table. A label
     column keeps the cells beside it as content; other tables are read cell by cell, and a table
-    that fails that reading (labels repeat in the cells) is tried by its first column. Cells that
+    that fails that reading (labels repeat in the cells) is tried by its first column. A reading
+    must account for every row that opens with a label, or the table stays in the stem. Cells that
     merely mention a label are not options."""
     if block.table is None:
         return [], []
@@ -441,7 +449,14 @@ def _table_options(
     by_column = [_label_column_row(row) for row in rows]
     by_cell = [_row_options(row) for row in rows]
     readings = [by_column, by_cell] if _has_label_column(rows) else [by_cell, by_column]
-    found = next((r for r in readings if _is_option_run(r, continues=continues)), None)
+    found = next(
+        (
+            reading
+            for reading in readings
+            if _reads_every_row(rows, reading) and _is_option_run(reading, continues=continues)
+        ),
+        None,
+    )
     if found is None:
         return [], []
     labelled = [i for i, row in enumerate(found) if row]

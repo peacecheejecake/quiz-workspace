@@ -195,6 +195,8 @@ def test_a_label_cell_and_its_text_in_turn_are_several_options() -> None:
         (("규정", "내용"), ("③항", "갑"), ("⑤항", "을")),
         # The first cell of a row holds no label.
         (("구분", "① 갑"), ("구분", "② 을")),
+        # A row that opens with a label but fits neither reading: no row may vanish.
+        (("①", "갑"), ("②", "을"), ("③ ①, ②", "병")),
         # A single label is no option list.
         (("구분", "내용"), ("①항", "갑")),
     ],
@@ -203,6 +205,13 @@ def test_a_table_merely_mentioning_labels_goes_to_the_stem(rows: Rows) -> None:
     draft = _draft("1. 옳은 것은?", rows, *OPTIONS)
     assert "| --- |" in draft.stem
     assert [o.text for o in draft.options] == ["응집", "침전"]
+
+
+def test_a_row_no_reading_accounts_for_keeps_the_whole_table_in_the_stem() -> None:
+    rows: Rows = (("①", "갑"), ("②", "을"), ("③ ①, ②", "병"))
+    draft = _draft("1. 옳은 것은?", rows)
+    assert draft.options == ()
+    assert "| ③ ①, ② | 병 |" in draft.stem
 
 
 def test_source_lines_hold_the_table_in_place() -> None:
