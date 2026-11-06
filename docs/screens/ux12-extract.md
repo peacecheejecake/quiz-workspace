@@ -20,4 +20,4 @@ linked_tests: [UX12-EXTRACT-AC01, UX12-EXTRACT-AC02]
 
 ### UX12-EXTRACT-AC02
 
-뷰어가 쓰는 초안 정보는 블록 id뿐이다. `draft-summaries`는 `include_blocks=true`일 때만 `block_ids`를 채우고 어느 경우에도 발문, 보기, 정답, 해설을 싣지 않는다. Workspace 구성원이 아니면 404다.
+뷰어가 쓰는 초안 정보는 블록 id뿐이다. `draft-summaries`는 `include_blocks=true`일 때만 `block_ids`를 싣고(없으면 키 자체가 없다) 어느 경우에도 발문, 보기, 정답, 해설을 싣지 않는다. Workspace 구성원이 아니면 404다.

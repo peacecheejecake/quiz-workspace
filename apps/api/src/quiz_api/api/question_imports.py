@@ -389,8 +389,8 @@ class ImportDraftSummary(BaseModel):
     )
     block_ids: list[str] = Field(
         default_factory=list,
-        description="The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids "
-        "only, for the document viewer to mark the whole printed question.",
+        description="The draft's source blocks: present only with `include_blocks=true` "
+        "(UX12-EXTRACT). Ids only, for the document viewer to mark the whole printed question.",
     )
 
 
@@ -826,7 +826,7 @@ def _summary_out(
 ) -> ImportDraftSummary:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
-    return ImportDraftSummary(
+    summary = ImportDraftSummary(
         id=record.id,
         version=draft_version(record.updated_at),
         position=record.position,
@@ -839,8 +839,10 @@ def _summary_out(
         validations=[DraftIssue.model_validate(v) for v in record.validations],
         chapter_id=chapter.chapter.id if chapter and chapter.chapter else None,
         duplicate_of=duplicate,
-        block_ids=list(source_pages(draft).block_ids) if include_blocks else [],
     )
+    if include_blocks:
+        summary.block_ids = list(source_pages(draft).block_ids)
+    return summary
 
 
 def _chapter_options(repo: QuestionImportRepository, run: RunRecord) -> list[BookChapterOption]:
@@ -1113,6 +1115,8 @@ def list_question_import_drafts(
 @router.get(
     "/question-imports/{import_id}/draft-summaries",
     operation_id="listQuestionImportDraftSummaries",
+    # Every field but the opt-in `block_ids` is always set, so only that one can be left out.
+    response_model_exclude_unset=True,
 )
 def list_question_import_draft_summaries(
     access: ReadImport,
