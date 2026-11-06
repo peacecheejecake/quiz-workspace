@@ -156,6 +156,12 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | ASK-1 명세·RED | 7개 전체 | `docs/screens/ux12-ask.md`, ASK-01 개정. **AI 생성 표시·다시 생성은 2026-11-01 사용자 결정을 뒤집으므로** §7에 기록 | D-10 | S·D-10 |
 | ASK-2 구현 | 목록 테두리, 입력창 삭제, FAB, 대화창 재구성, 뒤로가기, 범위 popover, 레이블 삭제 | 목록에서 footer 제거. 단 `role=status`는 content로 옮기고, 삭제 실패·보관 상태 안내는 목록에도 표시, 작성 중 draft 유지. FAB 56px 원형 sticky(새 `PlusIcon`), 마지막 행 메뉴가 가리지 않게 여백. **대화창(사용자 설계 수정 2026-11-06):** 입력창은 대화 화면 하단 floating UI다. 입력창 안 오른쪽에 왼쪽부터 제출, 질문 범위 순으로 둔다. 질문 범위는 필터 아이콘(`FilterIcon`, 이름 `질문 범위`) 버튼이며 범위가 좁혀지면 활성 표시를 한다. popover는 `side="top"`. 답을 기다리는 동안 제출 버튼이 중단 버튼으로 바뀐다. 마지막 메시지가 floating 입력창에 가리지 않게 여백을 둔다. `FloatingSidePanel`에 `headerStart` 추가. RadioGroup 삭제, 768px 미만 전체 폭 | `fixtures/ask.ts`의 `ask()`가 composer를 먼저 열도록. `ask-panel.test.tsx` 18곳, `a11y-ask.spec.ts`. HOME-5와 `FilterIcon` 공유 | L·ASK-1, DESIGN-1 |
 
+### 4.7a ASK 추가 — 답변 마크다운(사용자 요청 2026-11-06)
+
+| Task | 항목 | 내용 | 크기·의존 |
+|---|---|---|---|
+| ASK-3 답변 렌더링 | 표, 마크다운 문법 | AI 질문 답변 본문의 표를 렌더링한다. 나머지 마크다운 문법의 지원 여부를 점검하고 미지원 항목을 디자인 시스템 스타일과 함께 구현한다 | M·없음 |
+
 ### 4.8 PLAY — 모의고사
 
 | Task | 항목 | 구현 | 크기·의존 |
@@ -245,6 +251,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
 | 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
+| 10 | `askmd` | ASK-3 | 사용자 추가 요청. `mock` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -340,3 +347,4 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-4 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 홈 버튼 모의고사 포함, shuffle_options는 range jsonb, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-5 | 9 | 완료 | Codex P2(재열기 캐시) 수정 후 재리뷰 통과, 경로별 표는 보고서, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
+| ASK-3 | 10 | 진행 | |
