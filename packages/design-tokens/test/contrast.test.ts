@@ -82,10 +82,15 @@ const REQUIRED: Pair[] = [
   ['color-text-primary', 'color-state-selected', TEXT_MIN],
   ['color-text-secondary', 'color-state-hover', TEXT_MIN],
   ['color-text-primary', 'color-state-selected-hover', TEXT_MIN],
-  // UX12 DESIGN-5: areas raised off a glass layer carry the same text as glass.
-  ...TEXT_TOKENS.map((fg): Pair => [fg, 'color-surface-raised', TEXT_MIN]),
+  // UX12 DESIGN-5: the opaque grey areas of a glass layer (explanation, notices) carry the same
+  // text as glass, whatever passes behind. A secondary button on glass has the raised fill, and
+  // its hover there is the pressed step.
+  ...(['color-accent-on-glass', 'color-danger', 'color-success', 'color-warning'] as const).map(
+    (fg): Pair => [fg, 'color-surface-muted', TEXT_MIN],
+  ),
+  ['color-text-primary', 'color-surface-raised', TEXT_MIN],
+  ['color-text-primary', 'color-state-pressed', TEXT_MIN],
   ['color-accent-on-glass', 'color-glass-solid', TEXT_MIN],
-  ['color-accent-on-glass', 'color-surface-raised', TEXT_MIN],
   ['color-on-accent', 'color-accent-on-glass', TEXT_MIN],
   // Glass fallback surface (reduced transparency) carries the same text as glass.
   ['color-text-primary', 'color-glass-solid', TEXT_MIN],
@@ -256,6 +261,10 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
         expect(contrastRatio(t['color-state-hover'], bg), bg).toBeGreaterThanOrEqual(1.1);
       }
     });
+  });
+
+  it('a secondary button on glass shows its hover over the raised fill', () => {
+    expect(ratio(theme, 'color-state-pressed', 'color-surface-raised')).toBeGreaterThanOrEqual(1.1);
   });
 
   it('hover, pressed, selected and selected-hover backgrounds are all different', () => {

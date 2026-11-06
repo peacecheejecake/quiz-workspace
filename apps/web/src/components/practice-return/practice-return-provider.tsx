@@ -358,7 +358,12 @@ export function PracticeReturnProvider({
                       className={`${styles.control} glass-surface`}
                       onPointerDown={dragControl}
                     >
-                      <Button type="button" onClick={returnToTarget} disabled={busy}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={returnToTarget}
+                        disabled={busy}
+                      >
                         보던 문제로 돌아가기
                       </Button>
                       <IconButton

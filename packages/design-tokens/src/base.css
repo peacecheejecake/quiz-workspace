@@ -11,8 +11,7 @@
  * no standard declaration and Chromium never blurred (UX12 DESIGN-5).
  *
  * --glass-brightness pushes the blurred backdrop toward the surface tone, so text keeps AA while
- * the layer stays see-through. Inside glass, muted areas are raised (solid) and accent text steps
- * darker; primary hover steps with it.
+ * the layer stays see-through. Inside glass, accent text steps darker and primary hover with it.
  */
 .glass-surface {
   background-color: var(--color-glass);
@@ -22,7 +21,6 @@
   box-shadow: var(--shadow-floating);
   -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) brightness(var(--glass-brightness));
-  --color-surface-muted: var(--color-surface-raised);
   --color-accent: var(--color-accent-on-glass);
   --color-accent-hover: var(--color-accent-pressed);
 }
