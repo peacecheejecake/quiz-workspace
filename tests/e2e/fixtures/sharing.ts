@@ -223,7 +223,15 @@ export async function expectFragmentRemoved(page: Page, shareId: string): Promis
 // Types (S2, S4, S5)
 // ---------------------------------------------------------------------------------------------
 
-export interface ShareLink {
+/** UX12-SHARE: what a link exposes beyond published documents and questions. */
+export interface ShareScope {
+  readonly include_notes: boolean;
+  readonly include_ai_explanations: boolean;
+  readonly include_summary: boolean;
+  readonly include_owner_records: boolean;
+}
+
+export interface ShareLink extends ShareScope {
   readonly id: string;
   readonly workspace_id: string;
   readonly allow_fork: boolean;
@@ -240,7 +248,7 @@ export interface IssuedShareLink extends ShareLink {
   readonly share_url: string;
 }
 
-export interface SharedWorkspace {
+export interface SharedWorkspace extends ShareScope {
   readonly workspace: { readonly name: string; readonly description?: string | null };
   readonly allow_fork: boolean;
   readonly documents: readonly { readonly id: string; readonly title: string }[];
@@ -425,7 +433,7 @@ function registerShareUrl(shareUrl: string | null | undefined): void {
 export async function createShareLink(
   owner: Member,
   workspaceId: string,
-  body: { allow_fork?: boolean; expires_at?: string | null } = {},
+  body: { allow_fork?: boolean; expires_at?: string | null } & Partial<ShareScope> = {},
 ): Promise<IssuedShareLink> {
   const link = await owner.api.ok<IssuedShareLink>(
     'POST',
@@ -452,7 +460,7 @@ export async function updateShareLink(
   owner: Member,
   workspaceId: string,
   linkId: string,
-  patch: { allow_fork?: boolean; expires_at?: string | null },
+  patch: { allow_fork?: boolean; expires_at?: string | null } & Partial<ShareScope>,
 ): Promise<ShareLink> {
   const link = await owner.api.ok<ShareLink>(
     'PATCH',
@@ -816,6 +824,20 @@ export function privateRowCounts(workspaceId: string): Record<string, number> {
   return JSON.parse(out) as Record<string, number>;
 }
 
+/** UX12-SHARE-AC05: what a fork's copy holds, by table. */
+export function forkedContentCounts(workspaceId: string): Record<string, number> {
+  const w = ids(workspaceId);
+  const out = psql(
+    `select json_build_object(` +
+      `'summaries', (select count(*) from public.document_summary_runs where workspace_id = ${w}), ` +
+      `'notes', (select count(*) from public.chapter_notes where workspace_id = ${w}), ` +
+      `'ai_explanations', (select count(*) from public.question_ai_explanations where workspace_id = ${w}), ` +
+      `'attempts', (select count(*) from public.question_attempts where workspace_id = ${w}), ` +
+      `'highlights', (select count(*) from public.user_highlights where workspace_id = ${w}))`,
+  );
+  return JSON.parse(out) as Record<string, number>;
+}
+
 /** Activity events in `workspaceId` whose actor is `userId`. */
 export function activityCountBy(workspaceId: string, userId: string): number {
   return Number(
@@ -994,6 +1016,9 @@ export const sharingUi = {
     main(page)
       .getByText(/만료일은 오늘 이후|expiry must be/i)
       .first(),
+  /** UX12-SHARE: one switch of the 공유 범위 section. */
+  scopeSwitch: (page: Page, name: RegExp) =>
+    main(page).getByRole('region', { name: /공유 범위|share scope/i }).getByRole('switch', { name }),
   /** WS-SHARE-01-AC08: the copy button right after a successful copy. */
   copiedButton: (page: Page) => button(main(page), /^(복사 완료|copied)$/i),
   copiedAnnouncement: (page: Page) =>
@@ -1046,6 +1071,11 @@ export const sharedUi = {
     }),
   forkButton: (page: Page) =>
     buttonOrLink(page, /^fork|내 workspace로 (fork|복제)|fork (this )?workspace/i),
+  /** UX12-SHARE: the `공유자의 기록` card; absent unless the link opts in. */
+  ownerRecords: (page: Page) =>
+    page.getByRole('region', { name: /^(공유자의 기록|owner.s records)$/i }),
+  ownerRecordsPanel: (page: Page) =>
+    page.getByRole('dialog', { name: /공유자의 기록|owner.s records/i }),
 };
 
 export const forkUi = {
