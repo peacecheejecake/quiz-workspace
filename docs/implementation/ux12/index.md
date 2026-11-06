@@ -133,7 +133,7 @@
 |---|---|---|---|---|
 | EXPL-1 UI | 나란히 배치, 관련 본문 디자인, "작성중..." | `RelatedShell` heading을 공용 disclosure로 추출, `AI 해설 보기` 버튼 제거. 문구는 원문 그대로 | AIEXPL-01, `fixtures/ai-explanations.ts`, VISUAL-09 | S–M·없음 |
 | EXPL-2 프롬프트 | 해설 원본 참조 제거 | `explain/prompts.py`의 `기존 해설` 줄, `ExplainQuestion.explanation`과 SQL 삭제, `PROMPT_VERSION` v2, 안내 문구 수정. AI 질문 프롬프트는 범위 밖 | AIEXPL-01 C04. D-14 | S–M·없음 |
-| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, migration 불필요), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
+| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, 좁은 권한의 migration 추가), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
 
 ### 4.6 HILITE — 하이라이트
 
@@ -286,20 +286,20 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | HOME-5 | 3 | 완료 | a5278ad9 · Codex P2(CI phase)는 merge에서 반영, 검색·필터 줄 재구성, E2E GREEN |
 | ASK-1 | 3 | 완료 | |
 | ASK-2 | 3 | 완료 | 0d5f7f05 · Codex P2(CI phase)는 merge에서 반영, E2E 88·Vitest 29 GREEN |
-| EXTRACT-3 | 4 | 진행 | |
-| EXTRACT-4 | 4 | 진행 | |
-| EXTRACT-5 | 4 | 진행 | |
+| EXTRACT-3 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
+| EXTRACT-4 | 4 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, pytest 175 GREEN |
+| EXTRACT-5 | 4 | 완료 | Codex 리뷰 반영, E2E 20 GREEN |
 | EXTRACT-8 | 4 | 완료 | Codex P2(CI phase)는 merge에서 반영, pytest 1415·E2E 8 GREEN |
 | EXTRACT-6 | 4 | 대기 | |
 | EXTRACT-7 | 4 | 대기 | |
-| DESIGN-3 | 5 | 진행 | |
+| DESIGN-3 | 5 | 완료 | Codex P2 수정 후 재리뷰 통과, E2E 28 GREEN, 실기기 감각 확인 필요 |
 | DESIGN-4 | 5 | 대기 | |
 | SHELL-2 | 5 | 대기 | |
-| VIEW-3 | 5 | 진행 | |
-| EXPL-3 | 5 | 진행 | |
+| VIEW-3 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 보기 끌어서 순서 변경, E2E 102·Vitest GREEN |
+| EXPL-3 | 5 | 완료 | Codex P2 2건 수정 후 재리뷰 통과, migration 20261106120000 공유 DB 적용, E2E 18·계약 26 GREEN |
 | VIEW-4 | 5 | 대기 | |
 | VIEW-5 | 5 | 대기 | |
-| VIEW-6 | 5 | 진행 | |
+| VIEW-6 | 5 | 완료 | Codex P2(CI phase)는 merge에서 반영, 링크 대기 표시, 첫 반응 약 450→14ms, 페이지 완료 시간은 변화 없음 |
 | DOCS-2 | 5 | 진행 | |
 | SHELL-3 | 6 | 대기 | |
 | SHELL-4 | 6 | 대기 | |
