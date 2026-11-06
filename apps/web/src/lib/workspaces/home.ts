@@ -7,6 +7,7 @@
 //        |question-duplicates                                (중복 문제 정리, editors, UX7-DEDUP)
 //        |mock-exams                                         (모의고사, every member, MOCK-01)
 //        |chapter-redistribution                             (챕터 재분배, editors, CHREDIST-01)
+//        |chapter-management                                 (챕터 관리, editors, CHMAN-01)
 //        |ask                                                (AI 질문, every member, ASK-01)
 //        |question-create                                    the modal 문제 등록 editor (UX7-BANK;
 //                                                            not stacked, see FLOATING_PANELS)
@@ -50,6 +51,7 @@ export const HOME_PANELS = [
   'question-duplicates',
   'mock-exams',
   'chapter-redistribution',
+  'chapter-management',
   'ask',
 ] as const;
 export type HomePanel = (typeof HOME_PANELS)[number];
@@ -68,6 +70,9 @@ export const MOCK_EXAMS_PANEL = 'mock-exams' satisfies HomePanel;
 
 /** CHREDIST-01: `?panel=chapter-redistribution` opens the 챕터 재분배 dialog (editors only). */
 export const REDISTRIBUTION_PANEL = 'chapter-redistribution' satisfies HomePanel;
+
+/** CHMAN-01: `?panel=chapter-management` opens the 챕터 관리 panel (editors only). */
+export const CHAPTER_MANAGEMENT_PANEL = 'chapter-management' satisfies HomePanel;
 
 /**
  * ASK-01: `?panel=ask[&conversation=<id>]` opens the AI 질문 panel (every member). It is modal and

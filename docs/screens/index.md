@@ -31,7 +31,6 @@
 | UX12-KEYBOARD | 모바일 가상키보드와 화면 고정 | 공통 UI | [ux12-keyboard.md](ux12-keyboard.md) |
 | UX12-SOURCE | 원본 쪽 floating dialog | 가져오기 · 문제 상세 · 관련 본문 · 본문 발췌 · 문서 요약 | [ux12-source-panel.md](ux12-source-panel.md) |
 | UX12-SHARE | 공유 범위 선택·Owner 기록 읽기 전용 | 링크 공유 dialog · 공유 화면 | [ux12-share-scope.md](ux12-share-scope.md) |
-| CHMAN-01 | 챕터 관리 Floating Panel | `/workspaces/:workspaceId?panel=chapter-management` | [chapter-management.md](chapter-management.md) |
 | UX12-PICKER | 챕터 선택 트리 popover | 홈 필터 · 문제 편집기 · 초안 · 재분배 · AI 질문 · 본문 검색 | [ux12-chapter-picker.md](ux12-chapter-picker.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
@@ -73,6 +72,7 @@
 | UX10-DOC | 전체 높이 문서 뷰어 | DOC-02 · WS-VIEW-01 문서 보기 | [ux10-doc.md](ux10-doc.md) |
 | DOCVIEW-01 | PDF 열람 보기 설정 | DOC-02 화면 안 (`/workspaces/:workspaceId/documents/:documentId`) · WS-VIEW-01 문서 보기 | [documents-viewer-layout.md](documents-viewer-layout.md) |
 | CHREDIST-01 | 챕터 재분배 Floating Dialog | `/workspaces/:workspaceId?panel=chapter-redistribution` | [chapter-redistribution.md](chapter-redistribution.md) |
+| CHMAN-01 | 챕터 관리 Floating Panel | `/workspaces/:workspaceId?panel=chapter-management` | [chapter-management.md](chapter-management.md) |
 | HILITE-01 | 하이라이트 (공통 하이라이트 도구·내 하이라이트) | CHNOTE-01 panel 안 · QuestionViewer 해설 영역 | [highlights.md](highlights.md) |
 | CHNOTE-02 | 정리 노트 읽기 도구 (본문 항상 표시·검색·각주 미리보기·Heatmap 연동) | CHNOTE-01 panel 안 | [chapter-note-tools.md](chapter-note-tools.md) |
 | QIMPORT-02 | 문제 PDF 가져오기 두 영역 배치 | QIMPORT-01 화면 안 (`/workspaces/:workspaceId/questions/import?document=:documentId`) | [questions-import-layout.md](questions-import-layout.md) |
