@@ -105,7 +105,7 @@ def _open_with_outcome(
     revision = _revision()
     submitted = _submitted(revision)
     new_session = SimpleNamespace(**{**vars(submitted), "id": uuid.uuid4(), "state": "open"})
-    opener = MagicMock(return_value=practice_api._session_out(new_session))
+    opener = MagicMock(return_value=practice_api._session_out(new_session))  # type: ignore[arg-type]
     monkeypatch.setattr(practice_api, "_open_session", opener)
     repo = MagicMock()
     repo.lock_epoch_with_reset.return_value = (0, False)
