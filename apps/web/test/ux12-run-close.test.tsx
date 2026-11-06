@@ -3,7 +3,7 @@
 // whichever way it was closed; every other step closes at once. Browser half:
 // tests/e2e/questions/ux12-run-close.spec.ts.
 import './dom-setup';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithToasts as render } from './render-with-toasts';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useState } from 'react';
@@ -189,6 +189,19 @@ describe('UX12-RUNCLOSE', () => {
     await waitFor(() => expect(confirm()).toBeNull());
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('radio', { name: /증발/, checked: true })).toBeTruthy();
+    await waitFor(() => expect(closeButton()).toBe(document.activeElement));
+  });
+
+  // A real Escape reaches the panel only in the frame before Radix ranks the confirm; a close
+  // request on the panel takes the same path.
+  it('UX12-RUNCLOSE-AC02 a close request on the panel under the confirm cancels the confirm', async () => {
+    const user = userEvent.setup();
+    const onClose = await ready(client());
+    await user.click(closeButton());
+    await screen.findByRole('alertdialog');
+    fireEvent.click(closeButton());
+    await waitFor(() => expect(confirm()).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
     await waitFor(() => expect(closeButton()).toBe(document.activeElement));
   });
 

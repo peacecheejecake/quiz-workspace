@@ -433,6 +433,12 @@ export function SequenceViewer({
   if (closeAsk !== null && !confirmingClose) setCloseAsk(null);
   const closeReturnFocus = useRef<HTMLElement | null>(null);
   function requestClose() {
+    // Radix ranks a new layer a frame after it mounts: an Escape that early reaches the panel, and
+    // it still means this confirm.
+    if (confirmingClose) {
+      setCloseAsk(null);
+      return;
+    }
     if (view?.step !== 'solve' || !solve.unfinished) {
       onClose();
       return;
