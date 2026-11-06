@@ -22,6 +22,7 @@ import {
   FavoriteToggle,
   FloatingSidePanel,
   RetryToggle,
+  Tooltip,
   questionTypeLabels,
 } from '@quiz/ui';
 import {
@@ -173,6 +174,7 @@ function newKey(): string {
 }
 
 const NO_NEIGHBORS: Neighbors = { previous: null, next: null };
+const ANOTHER_TRY_REASON = '답안을 제출하고 채점이 끝나면 다시 풀 수 있습니다.';
 
 export function PracticeViewer({
   workspaceId,
@@ -442,13 +444,12 @@ export function PracticeViewer({
       {ready && pendingGrade ? (
         <SelfGradeButtons busy={work.busy === 'grade'} onGrade={(g) => void selfGrade(g)} />
       ) : null}
-      {ready && finished ? (
-        <Button
-          onClick={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
-        >
-          다시 풀기
-        </Button>
-      ) : null}
+      {readOnly ? null : (
+        <AnotherTryButton
+          available={ready !== null && finished}
+          onTry={() => setOpening((o) => ({ ...o, key: newKey(), cached: null, forceNew: true }))}
+        />
+      )}
       {ready && (outcome || view.lastGradedResult || view.isPendingGrading) ? (
         <Button
           onClick={() => {
@@ -669,6 +670,42 @@ export function StudyToggles({
           onPressedChange={(pressed) => onChange({ needs_retry: pressed })}
         />
       ) : null}
+    </>
+  );
+}
+
+/**
+ * The footer's `다시 풀기` (UX12-VIEW-AC04, D-8): always there, unavailable until this session has a
+ * final result. It stays focusable (`aria-disabled`) so the tooltip reaches keyboard users and
+ * pressing it does not drop focus when the new session starts.
+ */
+function AnotherTryButton({
+  available,
+  onTry,
+}: {
+  readonly available: boolean;
+  readonly onTry: () => void;
+}) {
+  const reasonId = useId();
+  const [hinted, setHinted] = useState(false);
+  return (
+    <>
+      <Tooltip open={hinted && !available} onOpenChange={setHinted} content={ANOTHER_TRY_REASON}>
+        <Button
+          aria-disabled={!available || undefined}
+          aria-describedby={available ? undefined : reasonId}
+          onClick={() => {
+            if (available) onTry();
+          }}
+        >
+          다시 풀기
+        </Button>
+      </Tooltip>
+      {available ? null : (
+        <span id={reasonId} className="qz-visually-hidden">
+          {ANOTHER_TRY_REASON}
+        </span>
+      )}
     </>
   );
 }
