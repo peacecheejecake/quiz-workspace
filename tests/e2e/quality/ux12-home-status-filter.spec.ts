@@ -196,7 +196,7 @@ test(
     await expect(homeUi.statusFilterNote(page)).toHaveText(REASON);
 
     const before = page.url();
-    await unseen.click();
+    await unseen.click({ force: true });
     await page.waitForTimeout(450); // longer than the 350ms status debounce
     await expect(unseen).toHaveAttribute('aria-pressed', 'false');
     expect(page.url()).toBe(before);
