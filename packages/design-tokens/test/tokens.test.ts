@@ -230,7 +230,7 @@ describe('density (design-system.md §4, v1.2.2)', () => {
   });
 
   it('heatmap cells keep their spec sizes (not part of the density change)', () => {
-    expect(staticTokens['heatmap-cell']).toBe('24px');
+    expect(staticTokens['heatmap-cell']).toBe('28px'); // UX12-HOME-1: 24px → 28px (user request)
     expect(staticTokens['heatmap-cell-touch']).toBe('24px'); // UX9-STROKE: 32px → 24px (user request)
     expect(staticTokens['heatmap-dot']).toBe('16px');
     expect(staticTokens['heatmap-gap']).toBe('0px');

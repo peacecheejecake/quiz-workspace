@@ -876,6 +876,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-05 | **QSEARCH-CACHE**: 문제 keyword 필터 debounce를 250ms에서 350ms로 바꾸고 검색어 비우기는 0ms로 복원한다. 전체 RSC 재조회 대신 경량 BFF와 workspace/user 범위 인메모리 LRU(최대 50·TTL 5분)를 사용한다. SSR은 무필터 및 현재 다른 필터를 유지한 빈 검색어 결과를 미리 채운다. 문제 변경 중 도착한 이전 조회는 버리고 다시 읽는다. 기존 UX7-SEARCH 기록의 250ms·server 재읽기를 이 결정으로 대체한다. | SEARCH-01-AC12 |
 
 | 2026-11-05 | **SHARE-PERSIST**: 공유 dialog 재진입·새로고침 뒤에도 소유자가 생성한 링크를 복사할 수 있게 한다. 기존 2026-10-17 결정의 발급 시 1회 표시를 변경한다. 서버 키와 링크 UUID로 HMAC-SHA256 비밀값을 재구성하되 저장 digest가 일치할 때만 반환한다. DB·idempotency는 digest-only를 유지하며 구버전 랜덤 링크·키 변경으로 재구성할 수 없는 링크는 URL을 반환하지 않는다. | `workspace-sharing.md` §2, WS-SHARE-01-AC02 |
+| 2026-11-06 | UX12-HOME-1: 데스크톱 `--heatmap-cell`을 다시 28px로 올린다(marker 21px, 간격 7px, 1/3 규칙 유지). touch 셀은 24px 유지. UX5-UI의 28px → 24px 결정을 뒤집는다. | 사용자 요청 "desktop → cell 크기 더 크게(28px?)", [UX12 계획](implementation/ux12/index.md) HOME-1 |
 
 ### UX10 사용자 결정 — 2026-11-05
 
