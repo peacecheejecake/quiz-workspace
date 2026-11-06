@@ -315,7 +315,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | CHAPTER-3 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
 | CHAPTER-4 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
 | CHAPTER-5 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
-| CHAPTER-6 | 7 | 진행 | |
+| CHAPTER-6 | 7 | 완료 | Codex P2 수정 후 재리뷰 통과(옛 응답 형식 지적은 미배포라 기각), lint·typecheck·unit GREEN, 통합·E2E는 PR CI |
 | SHARE-1 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | SHARE-2 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | VIEW-7 | 5 | 완료 | Codex P2 3건 수정 후 재리뷰 통과, 첫 구현 E2E·화면 확인, 수정분 E2E는 PR CI |
