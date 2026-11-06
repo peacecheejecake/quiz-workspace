@@ -30,6 +30,9 @@ const toHex = (c: number[]) =>
 const over = (top: number[], alpha: number, bottom: number[]) =>
   top.map((c, i) => c * alpha + (bottom[i] ?? 0) * (1 - alpha));
 
+/** Measured, not chosen: see the `busy` backdrop of the glass gradient tests. */
+const BUSY_BACKDROP_INK = 0.38;
+
 const channels = (hex: string) =>
   [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
 
@@ -79,6 +82,11 @@ const REQUIRED: Pair[] = [
   ['color-text-primary', 'color-state-selected', TEXT_MIN],
   ['color-text-secondary', 'color-state-hover', TEXT_MIN],
   ['color-text-primary', 'color-state-selected-hover', TEXT_MIN],
+  // UX12 DESIGN-5: areas raised off a glass layer carry the same text as glass.
+  ...TEXT_TOKENS.map((fg): Pair => [fg, 'color-surface-raised', TEXT_MIN]),
+  ['color-accent-on-glass', 'color-glass-solid', TEXT_MIN],
+  ['color-accent-on-glass', 'color-surface-raised', TEXT_MIN],
+  ['color-on-accent', 'color-accent-on-glass', TEXT_MIN],
   // Glass fallback surface (reduced transparency) carries the same text as glass.
   ['color-text-primary', 'color-glass-solid', TEXT_MIN],
   ['color-text-secondary', 'color-glass-solid', TEXT_MIN],
@@ -152,26 +160,14 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     );
   });
 
-  // UX-GLASS (2026-11-01): floating glass is near-opaque so the layer below barely shows. The
-  // glass tint matches its solid fallback, and text stays AA even over a pure black or white
-  // backdrop (the translucent color composited over the worst case, blur ignored).
-  it('glass is near-opaque, tinted like its solid fallback, and keeps text AA over any backdrop', () => {
+  // UX12 DESIGN-5: glass is see-through and tinted like its solid fallback.
+  it('glass is translucent and tinted like its solid fallback', () => {
     const t = themedTokens[theme];
     const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(t['color-glass']);
     if (!m) throw new Error(`color-glass must be rgba(), got "${t['color-glass']}"`);
     const [r, g, b, a] = m.slice(1).map(Number) as [number, number, number, number];
-    expect(a).toBeGreaterThanOrEqual(0.97);
-    const hex = (c: number[]) =>
-      `#${c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
-    expect(hex([r, g, b]).toLowerCase()).toBe(t['color-glass-solid'].toLowerCase());
-    for (const backdrop of [0, 255]) {
-      const composite = hex([r, g, b].map((c) => c * a + backdrop * (1 - a)));
-      for (const fg of ['color-text-primary', 'color-text-secondary'] as const) {
-        expect(contrastRatio(t[fg], composite), `${fg} over ${backdrop}`).toBeGreaterThanOrEqual(
-          TEXT_MIN,
-        );
-      }
-    }
+    expect(a).toBeLessThanOrEqual(0.7);
+    expect(toHex([r, g, b]).toLowerCase()).toBe(t['color-glass-solid'].toLowerCase());
   });
 
   // UX12 DESIGN-4 (D-3): a blue-to-lavender tint over the glass color. Every pair the plain glass
@@ -201,18 +197,46 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
       }
     });
 
-    it('body text stays AA on both stops over any backdrop', () => {
-      const m = /([\d.]+)\)$/.exec(t['color-glass']);
-      const alpha = Number(m?.[1]);
+    const alpha = Number(/([\d.]+)\)$/.exec(t['color-glass'])?.[1]);
+    const brightness = Number(t['glass-brightness']);
+    /** What the surface paints over a backdrop: the filter, then the color, then the gradient. */
+    const glassOver = (backdrop: number[]) =>
+      painted(
+        over(
+          solid,
+          alpha,
+          backdrop.map((c) => Math.min(255, c * brightness)),
+        ),
+      );
+
+    it('primary text stays AA over a pure black or white backdrop', () => {
       for (const backdrop of [0, 255]) {
-        const glass = over(solid, alpha, [backdrop, backdrop, backdrop]);
-        for (const bg of painted(glass)) {
-          for (const fg of ['color-text-primary', 'color-text-secondary'] as const) {
-            expect(contrastRatio(t[fg], bg), `${fg} over ${backdrop}`).toBeGreaterThanOrEqual(
-              TEXT_MIN,
-            );
-          }
+        for (const bg of glassOver([backdrop, backdrop, backdrop])) {
+          expect(contrastRatio(t['color-text-primary'], bg), `${backdrop}`).toBeGreaterThanOrEqual(
+            TEXT_MIN,
+          );
         }
+      }
+    });
+
+    // The strongest blurred spot of a dense heatmap, primary buttons and bold text, measured in
+    // Chromium (docs/screens/ux12-glass-buttons.md): the share of text-primary over the canvas.
+    const busy = over(
+      channels(t['color-text-primary']),
+      BUSY_BACKDROP_INK,
+      channels(t['color-canvas']),
+    );
+
+    it.each([
+      'color-text-primary',
+      'color-text-secondary',
+      'color-accent-on-glass',
+      'color-danger',
+      'color-success',
+      'color-warning',
+    ] as const)('%s stays AA over a busy blurred backdrop', (fg) => {
+      for (const bg of glassOver(busy)) {
+        expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(TEXT_MIN);
       }
     });
 

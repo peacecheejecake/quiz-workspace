@@ -1,4 +1,4 @@
-// UX12-CONTROLS: only icon ghost and `borderless` ghost buttons may drop the visible boundary, and
+// UX12-CONTROLS, UX12-GLASSBTN: only icon-only and `borderless` ghost buttons may drop the visible boundary, and
 // forced colors bring it back. Every other control keeps its border.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -19,10 +19,10 @@ function selectorsDeclaring(css: string, declaration: RegExp): string[] {
 }
 
 const NOT_TOGGLE = ":not([aria-pressed], [data-state='on'], [data-state='off'])";
-const BORDERLESS = `.qz-icon-button[data-variant='ghost']${NOT_TOGGLE}, .qz-button[data-variant='ghost'][data-borderless]${NOT_TOGGLE}`;
+const BORDERLESS = `.qz-icon-button${NOT_TOGGLE}, .qz-button[data-variant='ghost'][data-borderless]${NOT_TOGGLE}`;
 
 describe('UX12-CONTROLS button boundary guard', () => {
-  it('lets only icon ghost and borderless ghost buttons hide the border', () => {
+  it('lets only icon-only and borderless ghost buttons hide the border', () => {
     expect(selectorsDeclaring(controls, /border-color:\s*transparent/)).toEqual([BORDERLESS]);
     for (const css of [overlays, layout, questions]) {
       expect(selectorsDeclaring(css, /border(-color)?:[^;]*transparent/)).toEqual([]);

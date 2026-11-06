@@ -38,6 +38,7 @@
 | UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
 | UX12-OPEN | 문제 열기 속도 | 풀이 panel | [ux12-question-open.md](ux12-question-open.md) |
 | UX12-GLASS | floating 표면 gradient·복귀 bar 모양 | 공통 UI | [ux12-glass.md](ux12-glass.md) |
+| UX12-GLASSBTN | 실제 blur, 더 투명한 glass, 유리 위 버튼 | 공통 UI | [ux12-glass-buttons.md](ux12-glass-buttons.md) |
 | UX12-KEYBOARD | 모바일 가상키보드와 화면 고정 | 공통 UI | [ux12-keyboard.md](ux12-keyboard.md) |
 | UX12-SOURCE | 원본 쪽 floating dialog | 가져오기 · 문제 상세 · 관련 본문 · 본문 발췌 · 문서 요약 | [ux12-source-panel.md](ux12-source-panel.md) |
 | UX12-SHARE | 공유 범위 선택·Owner 기록 읽기 전용 | 링크 공유 dialog · 공유 화면 | [ux12-share-scope.md](ux12-share-scope.md) |

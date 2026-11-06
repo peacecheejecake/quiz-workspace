@@ -8,7 +8,7 @@
 
 ## 규칙
 
-- **층:** `.glass-surface`는 `--color-glass` 배경색 위에 테마별 `--glass-gradient`(파랑→라벤더, 135도)를 `background-image`로 얹는다. 표면을 쓰는 곳(side panel·popover·menu·select·toast·top bar·복귀 bar)은 코드를 바꾸지 않아도 같은 층을 받는다.
+- **층(alpha·blur는 [UX12-GLASSBTN](ux12-glass-buttons.md)가 바꿨다):** `.glass-surface`는 `--color-glass` 배경색 위에 테마별 `--glass-gradient`(파랑→라벤더, 135도)를 `background-image`로 얹는다. 표면을 쓰는 곳(side panel·popover·menu·select·toast·복귀 bar)은 코드를 바꾸지 않아도 같은 층을 받는다.
 - **색 한도:** gradient 두 끝 모두 `contrast.test.ts`가 고정한다. 글자 4.5:1 이상, 비텍스트 3:1 이상, hover 배경과의 차이 1.1 이상(양 테마).
 - **불투명 표면:** 모바일 sheet와 full-screen paired dialog는 blur 없는 `--color-glass-solid` 위에 같은 gradient를 얹는다. 읽기 영역을 가려도 불투명하다.
 - **제외:** PDF·본문 위에 뜨는 태블릿 목차 panel은 gradient 없이 단색 `--color-glass-solid`다. reduced transparency와 blur 미지원 환경도 단색이다.
@@ -17,7 +17,7 @@
 ## 수용 기준
 
 ### UX12-GLASS-AC01
-**gradient 층:** 넓은 화면의 top bar, menu, side panel은 light와 dark에서 각각 그 테마의 파랑→라벤더 gradient를 `--color-glass` 위에 그린다. 두 테마의 gradient 값은 서로 다르다.
+**gradient 층:** 넓은 화면의 menu, side panel은 light와 dark에서 각각 그 테마의 파랑→라벤더 gradient를 `--color-glass` 위에 그린다. 두 테마의 gradient 값은 서로 다르다. top bar의 gradient는 [UX12-GLASSBTN](ux12-glass-buttons.md)가 없앴다.
 
 ### UX12-GLASS-AC02
 **모바일 sheet:** 폭 390px의 side panel은 불투명한 `--color-glass-solid` 위에 gradient를 유지하고 blur는 쓰지 않는다.

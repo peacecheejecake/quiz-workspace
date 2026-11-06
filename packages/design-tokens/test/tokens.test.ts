@@ -86,12 +86,14 @@ describe('spec extraction (guards against a vacuous comparison)', () => {
     // + 4 v1.2.2 switch track colors (track, track-hover, track-border, track-checked-border)
     // + PALETTE-UNIFY 5 fill tokens (danger/success/warning/neutral/neutral-subtle)
     // + UX9-HL-UI 3 highlight backgrounds and the search match background/border
-    // + UX12 VIEW-2 2 option control borders + UX12 DESIGN-4 glass-gradient (themed, not a color).
-    expect(Object.keys(docLight)).toHaveLength(45);
-    expect(Object.keys(docDark)).toHaveLength(45);
+    // + UX12 VIEW-2 2 option control borders + UX12 DESIGN-4 glass-gradient (themed, not a color)
+    // + UX12 DESIGN-5 surface-raised, accent-on-glass and glass-brightness (themed, not a color).
+    expect(Object.keys(docLight)).toHaveLength(48);
+    expect(Object.keys(docDark)).toHaveLength(48);
     // 39 colors + 25 font/space/radius/glass/shadow/control/layout/heatmap vars + 13 typography
-    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX12 DESIGN-4 glass-gradient.
-    expect(Object.keys(docRoot)).toHaveLength(83);
+    // + 2 breakpoints + color-scheme + v1.2.7 outline-panel-width + UX12 DESIGN-4 glass-gradient
+    // + UX12 DESIGN-5 surface-raised, accent-on-glass and glass-brightness.
+    expect(Object.keys(docRoot)).toHaveLength(86);
   });
 });
 
@@ -166,6 +168,13 @@ describe('glass-surface base styles', () => {
     expect(decls.slice(0, decls.indexOf('}'))).toMatch(
       /background-color: var\(--color-glass\);\s+background-image: var\(--glass-gradient\);/,
     );
+  });
+
+  it('re-points muted areas and accent text inside glass (UX12-GLASSBTN)', () => {
+    const decls = base.slice(base.indexOf('.glass-surface {'));
+    const block = decls.slice(0, decls.indexOf('}'));
+    expect(block).toContain('--color-surface-muted: var(--color-surface-raised);');
+    expect(block).toContain('--color-accent: var(--color-accent-on-glass);');
   });
 
   it.each(['@media (prefers-reduced-transparency: reduce)', '@supports not'])(
