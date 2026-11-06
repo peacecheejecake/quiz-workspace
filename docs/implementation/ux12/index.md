@@ -361,7 +361,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-4 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 홈 버튼 모의고사 포함, shuffle_options는 range jsonb, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-5 | 9 | 완료 | Codex P2(재열기 캐시) 수정 후 재리뷰 통과, 경로별 표는 보고서, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-6 | 9 | 완료 | 모의고사 풀이의 질문하기는 채점 뒤에만, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
-| MOCKUX-7 | 10 | 진행 | |
+| MOCKUX-7 | 10 | 완료 | Codex 지적 없음, 지우기는 resume_dismissed_at 컬럼(migration 20261106180000), lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | MOCKUX-8 | 10 | 진행 | |
 | DESIGN-5 | 10 | 진행 | |
 | HOME-6 | 10 | 진행 | |
