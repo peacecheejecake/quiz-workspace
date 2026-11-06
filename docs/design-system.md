@@ -137,6 +137,8 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **v1.3.7 (PANEL-GLASS, 2026-11-07 사용자 피드백):** 데스크톱(768px 이상) side panel은 공유 glass 대신 전용 토큰 `--color-panel-glass`(light `rgba(246, 248, 252, 0.85)`, dark `rgba(30, 38, 51, 0.85)`)와 `--panel-glass-brightness`(light 1, dark 0.7)를 쓴다. 공유 `--glass-brightness` light 1.3은 밝은 페이지의 배경을 순백으로 잘라 panel이 `--color-glass`의 tint가 아니라 흰색으로 보였다. 모바일 sheet·paired 전체 화면·reduced transparency·blur 미지원은 `--color-glass-solid`로 유지하고 `.glass-surface`의 gradient 층도 그대로다. 다른 glass 표면과 `ModalDialog`(`.qz-modal`, glass가 아님)는 바뀌지 않는다. [UX12-GLASS](screens/ux12-glass.md)·[UX12-GLASSBTN](screens/ux12-glass-buttons.md) AC01을 고쳤다.
 
+**v1.3.8 (PANEL-HEADER 하단 sheet, 2026-11-07 사용자 피드백):** v1.3.6이 없앤 머리글 구분선을 하단 sheet에서만 되돌렸다: 폭 768px 미만의 `FloatingSidePanel` sheet와 paired 전체 화면 sheet의 `> .header` 아래 1px `--color-border`. 데스크톱 side panel과 `ModalDialog`(항상 가운데)는 그대로 구분선이 없다. 토큰 변경 없음.
+
 **v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
 
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`(VIEW-RESULT 2026-11-07부터 `--color-success-fill`), 오답일 때 정답 보기 `--color-danger`(같은 날부터 `--color-danger-fill`)(사용자 결정: 정답 보기를 빨간 테두리로). VIEW-RESULT의 success·danger 채움은 light에서 표면 위 2.65~2.95:1로 3:1에 약간 못 미친다(`contrast.test.ts`의 `RESULT_MARK_MIN` 2.6). RESULT-MARKS(2026-11-07)부터 아이콘이 없으므로 이 허용의 근거는 테두리 있음/없음의 구별(2px, 투명 행과 대비)과 보이지 않는 "정답"·"내 선택" 설명(UX12 VIEW-2)이며, 색만으로 전달하지 않는다.

@@ -24,6 +24,7 @@
 - **Header:** global header는 `glass-surface`이고 gradient 층만 없다.
 - **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 page 폭 전체를 차지하며(사용자 피드백 2026-11-07), 맨 위에서는 완전 투명·blur 없음이다. 고정되면(`data-stuck`) canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 고정됐을 때만 불투명 canvas다.
 - **Panel·ModalDialog 머리글(PANEL-HEADER, 사용자 피드백 2026-11-07):** 머리글 아래 1px 구분선이 없다. footer·`.pinned` 구분선과 스크롤 상태 그림자는 그대로다. 새 AC는 없다.
+- **Panel·ModalDialog 머리글(PANEL-HEADER 2026-11-07 사용자 피드백):** 구분선은 없었다가 하단 sheet에서만 되돌렸다. 폭 768px 미만의 panel sheet와 paired 전체 화면 sheet는 머리글 아래 1px `--color-border` 구분선이 있고, 데스크톱 side panel과 가운데 `ModalDialog`(어느 폭에서도 하단 sheet가 아님)는 없다. footer·`.pinned` 구분선과 스크롤 그림자는 그대로고, 모의고사 폼의 단계 목록 아래에는 구분선이 없다. 새 AC는 없다.
 - **ConfirmDialog:** 머리글과 동작 행 사이의 구분선이 없다. `ModalDialog`와 panel의 구분선은 그대로다.
 - **Heatmap:** `--heatmap-marker-hover-scale`은 UX12 DESIGN-6로 1.5였고 사용자 피드백(2026-11-07)으로 1.3이다. hover·focus-visible만 확대하고 격자는 움직이지 않으며 잘리지 않는다.
 

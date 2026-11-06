@@ -330,6 +330,10 @@ html body[data-scroll-locked] {
       animation-name: qz-sheet-out;
     }
 
+    > .header {
+      border-bottom: 1px solid var(--color-border);
+    }
+
     > :is(.header, .pinned, .body, .footer) {
       padding-inline: var(--space-4);
     }
@@ -836,6 +840,7 @@ html body[data-scroll-locked] {
 @media (width < 768px) {
   .qz-panel > .header {
     position: relative;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .qz-panel > .header > .grabber {
