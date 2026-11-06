@@ -173,6 +173,7 @@ A1~A7은 `ask-panel.tsx`의 같은 render block을 고치므로 Task 하나로 �
 | MOCKUX-3 풀이 버튼 | 제출, 이전/다음 | 범위 풀이 panel의 `제출`, 이전/다음 버튼을 Heatmap 셀로 연 풀이 panel과 같게 맞춘다(이름, 순서, 모양) | 마지막 문제의 `결과 보기`는 범위 풀이에만 있다 | M·없음 |
 | MOCKUX-4 챕터별 풀기 | 홈 챕터의 `풀기` | 홈 Heatmap의 챕터마다 `풀기` 버튼을 둔다. 누르면 저장 없는 풀이로 바로 들어간다. `보기 섞기`와 `문제 순서 무작위`만 고르고 확인한 뒤 시작한다. 범위 고르기 단계와 `모의고사 목록` 버튼은 없다 | 사용자 요청(2026-11-06). 범위는 그 챕터의 확정 문제 전체. 모든 멤버 사용 가능 | M·MOCKUX-1, 2, 3 |
 | MOCKUX-5 다시 풀기 열기 | 해설 먼저 보임 | `다시 풀기` 상태의 문제는 이미 풀었더라도 열 때 이전 결과와 해설 없이 풀이 화면부터 보인다 | 사용자 요청(2026-11-06). MOCKUX-2의 "홈 버튼 이름 `풀기` 유지"는 같은 날 요청으로 `모의고사`로 바뀌어 MOCKUX-4에서 처리한다 | M·MOCKUX-3 |
+| MOCKUX-6 제출 전 질문 | `질문하기` 버튼 | 문제를 풀기 전에는 모의고사 풀이(`sequence(mock)`) header의 `질문하기`를 숨기고, 제출 뒤에만 보인다 | 사용자 요청(2026-11-06). 등록 문제 풀이에는 이미 없다. 서버의 `hint` 모드는 그대로 둔다 | S·MOCKUX-5 |
 
 ### 4.9 DOCS — 업로드·원본
 
@@ -243,7 +244,7 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | 6 | `shell` | SHELL-3 → SHELL-4, SHELL-5, SHELL-6 | `app/layout.tsx` 공유 |
 | 7 | `chapters` | CHAPTER-1, CHAPTER-3 → CHAPTER-4 → CHAPTER-5, CHAPTER-6 | 모델 변경, D-9 필요 |
 | 8 | `share` | SHARE-1 → SHARE-2 | 공유 route 전체 권한 검사 |
-| 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
+| 9 | `mock` | MOCKUX-1 ∥ MOCKUX-2 ∥ MOCKUX-3 → MOCKUX-4, MOCKUX-5 → MOCKUX-6 | 사용자 추가 요청. `chapters` PR 뒤에 올린다 |
 
 - **DESIGN-1 범위:** 파일이 넓게 겹치므로 Wave 2 시작에 단독 실행한다.
 - **순서 고정:** `practice-return-provider.tsx`는 SHELL-1 → DESIGN-3, `practice-viewer.tsx`는 VIEW-1 → VIEW-4 → VIEW-5, `FloatingSidePanel.tsx`는 VIEW-1과 ASK-2가 공유한다.
@@ -338,3 +339,4 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | MOCKUX-3 | 9 | 완료 | Codex P2(CI phase)는 merge에서 반영, 공용 footer, lint·typecheck·unit GREEN, E2E는 PR CI에서 확인 |
 | MOCKUX-4 | 9 | 진행 | |
 | MOCKUX-5 | 9 | 진행 | |
+| MOCKUX-6 | 9 | 진행 | |
