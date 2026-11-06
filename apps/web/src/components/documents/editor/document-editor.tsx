@@ -158,6 +158,18 @@ export function DocumentEditor({
       .catch(() => undefined);
     return () => controller.abort();
   }, [client, documentId, hasQuestions, ready, workspaceId]);
+  // UX12-EXTRACT-AC01: draft questions keep their raw blocks but are highlighted whole. Ids only;
+  // without them (no import, or the list failed) selection works as before.
+  const [draftBlocks, setDraftBlocks] = useState<readonly (readonly string[])[]>([]);
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    client
+      .listDraftBlocks(workspaceId, documentId, controller.signal)
+      .then(setDraftBlocks)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [client, documentId, ready, workspaceId]);
   useEffect(() => {
     revisionIdRef.current = content?.revision?.id ?? null;
   }, [content]);
@@ -656,8 +668,8 @@ export function DocumentEditor({
     ) : null;
 
   const highlights = useMemo(
-    () => selectionHighlights(currentBlock, outlineJump, blocks, groups),
-    [blocks, currentBlock, groups, outlineJump],
+    () => selectionHighlights(currentBlock, outlineJump, blocks, groups, draftBlocks),
+    [blocks, currentBlock, draftBlocks, groups, outlineJump],
   );
   const currentSection = sectionOf(currentBlock, outline);
 

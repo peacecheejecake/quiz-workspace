@@ -580,6 +580,37 @@ describe('editor API client', () => {
     expect(fetchImpl.mock.calls.filter(([u]) => String(u).includes('/outline'))).toHaveLength(2);
   });
 
+  it('listDraftBlocks reads ids of the unregistered drafts of the newest import (UX12-EXTRACT)', async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      const body = url.includes('draft-summaries')
+        ? {
+            items: [
+              { published_question_id: null, block_ids: ['a', 'b'] },
+              { published_question_id: 'q', block_ids: ['c'] },
+              { published_question_id: null, block_ids: [] },
+            ],
+          }
+        : { items: [{ id: 'run-1' }] };
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    const client = createEditorClient(fetchImpl as typeof fetch);
+    await expect(client.listDraftBlocks('ws-1', 'doc-1')).resolves.toEqual([['a', 'b']]);
+    expect(urls[0]).toContain('limit=1&document_id=doc-1');
+    expect(urls[1]).toContain('run-1/draft-summaries?include_blocks=true');
+  });
+
+  it('listDraftBlocks is empty without an import', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    const client = createEditorClient(fetchImpl as typeof fetch);
+    await expect(client.listDraftBlocks('ws-1', 'doc-1')).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it('pages through the questions of one document via the workspace relay (DOC-02-AC11)', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
       const cursor = new URL(String(url), 'http://x').searchParams.get('cursor');

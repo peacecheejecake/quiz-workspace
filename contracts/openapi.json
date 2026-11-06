@@ -3755,6 +3755,14 @@
             "title": "Answer Missing",
             "type": "boolean"
           },
+          "block_ids": {
+            "description": "The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids only, for the document viewer to mark the whole printed question.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Block Ids",
+            "type": "array"
+          },
           "chapter_id": {
             "anyOf": [
               {
@@ -20053,6 +20061,18 @@
               "format": "uuid",
               "title": "Import Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Fill `block_ids` (the document viewer, UX12-EXTRACT).",
+            "in": "query",
+            "name": "include_blocks",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Fill `block_ids` (the document viewer, UX12-EXTRACT).",
+              "title": "Include Blocks",
+              "type": "boolean"
             }
           }
         ],

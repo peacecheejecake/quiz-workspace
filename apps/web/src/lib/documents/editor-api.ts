@@ -128,6 +128,10 @@ export const EDITOR_PATHS = {
     `/api/workspaces/${enc(workspaceId)}/questions?document_id=${enc(documentId)}` +
     `&limit=${QUESTION_PAGE_SIZE}` +
     (cursor ? `&cursor=${enc(cursor)}` : ''),
+  latestImport: (workspaceId: string, documentId: string) =>
+    `/api/workspaces/${enc(workspaceId)}/question-imports?limit=1&document_id=${enc(documentId)}`,
+  draftBlocks: (importId: string) =>
+    `/api/question-imports/${enc(importId)}/draft-summaries?include_blocks=true`,
 } as const;
 
 /** FastAPI's maximum page size for the question list. */
@@ -171,6 +175,15 @@ export interface EditorClient {
     documentId: string,
     signal?: AbortSignal,
   ): Promise<Question[]>;
+  /**
+   * UX12-EXTRACT-AC01: the source blocks of each unregistered draft of the document's newest
+   * import, in source order. Ids only: a draft's content never reaches this screen.
+   */
+  listDraftBlocks(
+    workspaceId: string,
+    documentId: string,
+    signal?: AbortSignal,
+  ): Promise<string[][]>;
 }
 
 type FetchLike = typeof fetch;
@@ -266,6 +279,21 @@ export function createEditorClient(fetchImpl: FetchLike = (...a) => fetch(...a))
         cursor = list.next_cursor;
       }
       return items;
+    },
+    async listDraftBlocks(workspaceId, documentId, signal) {
+      const runs = await call<{ items: { id: string }[] }>(
+        EDITOR_PATHS.latestImport(workspaceId, documentId),
+        { signal },
+      );
+      const run = runs.items[0];
+      if (!run) return [];
+      const { items } = await call<{
+        items: { published_question_id: string | null; block_ids?: string[] }[];
+      }>(EDITOR_PATHS.draftBlocks(run.id), { signal });
+      return items
+        .filter((d) => d.published_question_id === null)
+        .map((d) => d.block_ids ?? [])
+        .filter((ids) => ids.length > 0);
     },
   };
 }

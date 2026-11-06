@@ -119,6 +119,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-HOME.0': ['UX12-HOME'],
   // UX12 HILITE-1 (2026-11-06): selection kept under the highlight menu, press again to close.
   'UX12-HILITE.0': ['UX12-HILITE'],
+  // UX12 EXTRACT-2 (2026-11-06): a draft question's source blocks are highlighted whole.
+  'UX12-EXTRACT.0': ['UX12-EXTRACT'],
 };
 
 const LEADING_ID = new RegExp(
