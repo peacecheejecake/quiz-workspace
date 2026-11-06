@@ -17,7 +17,7 @@
 //
 // NOT in the docs (UX9.0 assumptions, to confirm or change in UX9-REDIST-B):
 //   R1 GET …/chapter-redistribution/questions → 200 {items: [{question_id, chapter_id,
-//      question_number, question_type, label ("1장 3번"), stem_preview, chapter_source}],
+//      question_number, question_type, label ("3번"), stem_preview, chapter_source}],
 //      chapters: [{id: string|null, title}] (Heatmap order, "챕터 없음" last), targets:
 //      [{document_id, document_title, chapters: [{id, title, depth}]}]} — no answers.
 //   R2 POST …/preview → 200 {items: [{question_id, number_label, stem_preview, current_chapter:
