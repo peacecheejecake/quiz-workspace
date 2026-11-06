@@ -134,44 +134,46 @@ class UnfinishedMockRun:
     next_position: int
 
 
-# The runs one read of `이어 풀기` looks at: bounds its cost when many runs were left open.
-UNFINISHED_SCAN = 100
-
-# One statement however many mock exams are listed. A position is answerable while its question
-# is still in the mock exam and it has no submission; mock exam practice has no reset epochs.
+# One statement however many mock exams are listed, one row per mock exam: its runs walked newest
+# first until one has a position left, so runs of one mock exam never crowd out another's. A
+# position is answerable while its question is still in the mock exam and it has no submission;
+# mock exam practice has no reset epochs. The sorted subquery lets the LIMIT stop at that run.
 _UNFINISHED_RUNS = """
-    with candidates as (
-      select pr.id, pr.mock_exam_id, pr.item_ids,
-             coalesce(
-               (select max(greatest(s.opened_at, s.submitted_at, s.graded_at))
-                  from public.mock_exam_practice_sessions s
-                 where s.practice_run_id = pr.id),
-               pr.created_at
-             ) as last_touched_at
-        from public.practice_runs pr
-        join public.mock_exams e
-          on e.id = pr.mock_exam_id and e.workspace_id = pr.workspace_id
-         and e.deleted_at is null and e.current_generation_id = pr.mock_exam_generation_id
-       where pr.user_id = :u and pr.workspace_id = :w and pr.source = 'mock'
-         and pr.mock_exam_id = any(:ids)
-         and pr.finished_at is null and pr.resume_dismissed_at is null
-       order by last_touched_at desc, pr.id desc
-       limit :scan
-    )
-    select c.id, c.mock_exam_id, cardinality(c.item_ids) as total, p.answered, p.next_position
-      from candidates c
+    select e.id as mock_exam_id, r.id, r.total, r.answered, r.next_position
+      from public.mock_exams e
      cross join lateral (
-       select count(*) filter (where q.id is not null and s.state <> 'open') as answered,
-              min(i.position) filter (where q.id is not null
-                                        and (s.id is null or s.state = 'open')) as next_position
-         from unnest(c.item_ids) with ordinality as i(question_id, position)
-         left join public.mock_exam_questions q
-           on q.id = i.question_id and q.workspace_id = :w and q.removed_at is null
-         left join public.mock_exam_practice_sessions s
-           on s.practice_run_id = c.id and s.run_position = i.position
-     ) p
-     where p.next_position is not null
-     order by c.last_touched_at desc, c.id desc
+       select c.id, cardinality(c.item_ids) as total, p.answered, p.next_position
+         from (
+           select pr.id, pr.item_ids,
+                  coalesce(
+                    (select max(greatest(s.opened_at, s.submitted_at, s.graded_at))
+                       from public.mock_exam_practice_sessions s
+                      where s.practice_run_id = pr.id),
+                    pr.created_at
+                  ) as last_touched_at
+             from public.practice_runs pr
+            where pr.user_id = :u and pr.workspace_id = e.workspace_id and pr.source = 'mock'
+              and pr.mock_exam_id = e.id
+              and pr.mock_exam_generation_id = e.current_generation_id
+              and pr.finished_at is null and pr.resume_dismissed_at is null
+            order by last_touched_at desc, pr.id desc
+         ) c
+        cross join lateral (
+          select count(*) filter (where q.id is not null and s.state <> 'open') as answered,
+                 min(i.position) filter (where q.id is not null
+                                           and (s.id is null or s.state = 'open')) as next_position
+            from unnest(c.item_ids) with ordinality as i(question_id, position)
+            left join public.mock_exam_questions q
+              on q.id = i.question_id and q.workspace_id = e.workspace_id
+             and q.removed_at is null
+            left join public.mock_exam_practice_sessions s
+              on s.practice_run_id = c.id and s.run_position = i.position
+        ) p
+        where p.next_position is not null
+        order by c.last_touched_at desc, c.id desc
+        limit 1
+     ) r
+     where e.id = any(:ids) and e.workspace_id = :w and e.deleted_at is null
 """
 
 
@@ -326,15 +328,14 @@ class MockExamRepository:
             return {}
         rows = self._session.execute(
             text(_UNFINISHED_RUNS),
-            {"u": user_id, "w": workspace_id, "ids": list(exam_ids), "scan": UNFINISHED_SCAN},
+            {"u": user_id, "w": workspace_id, "ids": list(exam_ids)},
         )
-        out: dict[uuid.UUID, UnfinishedMockRun] = {}
-        for r in rows:
-            out.setdefault(
-                r.mock_exam_id,
-                UnfinishedMockRun(r.id, int(r.total), int(r.answered), int(r.next_position)),
+        return {
+            r.mock_exam_id: UnfinishedMockRun(
+                r.id, int(r.total), int(r.answered), int(r.next_position)
             )
-        return out
+            for r in rows
+        }
 
     def question_counts(self, generation_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, int]:
         ids = list(set(generation_ids))

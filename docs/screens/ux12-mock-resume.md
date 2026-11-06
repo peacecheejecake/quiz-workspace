@@ -29,7 +29,7 @@ linked_tests: [UX12-MOCKRESUME-AC01 … UX12-MOCKRESUME-AC08]
 
 ## API
 
-`MockExam`에 `unfinished_run: {id, total, answered, next_position} | null`(선택 field)을 더한다. 호출자별 값이다. `GET /workspaces/{id}/mock-exams`와 `GET /mock-exams/{id}`, `PATCH /mock-exams/{id}`가 채운다. 목록은 모의고사 수와 상관없이 query 하나를 더 쓴다(N+1 없음). migration은 없다.
+`MockExam`에 `unfinished_run: {id, total, answered, next_position} | null`(선택 field)을 더한다. 호출자별 값이다. `GET /workspaces/{id}/mock-exams`와 `GET /mock-exams/{id}`, `PATCH /mock-exams/{id}`가 채운다. 목록은 모의고사 수와 상관없이 query 하나를 더 쓴다(N+1 없음). 모의고사마다 자기 풀이를 최근 순으로 살펴 이어 풀 위치가 있는 첫 풀이에서 멈추므로, 한 모의고사의 풀이나 다 푼 풀이가 다른 풀이를 가리지 않는다. migration은 없다.
 
 `POST /practice-runs/{id}/dismiss`는 이제 `source=mock` 묶음도 받는다.
 
