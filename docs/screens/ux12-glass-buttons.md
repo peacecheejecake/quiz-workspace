@@ -22,7 +22,7 @@
 - **아이콘 전용 버튼:** 모든 variant가 테두리를 투명하게 한다(toggle 제외). 크기는 그대로다.
 - **Hover:** `cursor: pointer`인 모든 버튼·버튼처럼 쓰는 링크는 `@media (hover: hover)`에서 색이 바뀐다. 터치에서 hover가 남지 않는다. 텍스트 링크는 `--color-accent-hover`, 나머지는 `--color-state-hover`다. `packages/ui/test/button-hover.test.ts`가 검사한다.
 - **Header:** global header는 `glass-surface`이고 gradient 층만 없다.
-- **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 불투명 canvas다.
+- **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 page 폭 전체를 차지하며(사용자 피드백 2026-11-07), 맨 위에서는 완전 투명·blur 없음이다. 고정되면(`data-stuck`) canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 고정됐을 때만 불투명 canvas다.
 - **ConfirmDialog:** 머리글과 동작 행 사이의 구분선이 없다. `ModalDialog`와 panel의 구분선은 그대로다.
 - **Heatmap:** `--heatmap-marker-hover-scale`은 UX12 DESIGN-6로 1.5다. hover·focus-visible만 확대하고 격자는 움직이지 않으며 잘리지 않는다.
 
@@ -45,7 +45,7 @@
 | 선택된 사용자 말풍선, 선택된 chip | side panel | 유지 | 없음 |
 | AI 질문 composer | side panel 안 floating | 흰색→glass | `glass-surface` |
 | global header | sticky | gradient 제거, glass 유지 | `layout.css` |
-| 홈 toolbar | sticky | 불투명→glass | canvas 색조, 버튼 유지 |
+| 홈 toolbar | sticky | 불투명→고정 시에만 glass (맨 위는 투명) | canvas 색조, 버튼 유지, 전체 폭 |
 
 ## 대비
 
@@ -85,7 +85,7 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 **Heatmap 확대:** cell에 pointer를 올리면 marker가 1.5배가 되고 cell 위치는 변하지 않는다. 부모가 marker를 자르지 않는다.
 
 ### UX12-GLASSBTN-AC07
-**홈 sticky 영역:** 홈 toolbar는 sticky이고 blur가 적용되며 배경이 반투명하다.
+**홈 sticky 영역:** 홈 toolbar는 sticky이고, page 맨 위에서는 배경이 투명하고 blur가 없다. 아래로 scroll해 고정되면 blur가 적용되고 배경이 반투명하며, 다시 맨 위로 오면 투명해진다.
 
 ### UX12-GLASSBTN-AC08
 **ConfirmDialog 구분선 없음:** 확인 dialog의 머리글과 동작 행에는 구분선이 없고, 동작 행 위아래 간격은 유지된다.

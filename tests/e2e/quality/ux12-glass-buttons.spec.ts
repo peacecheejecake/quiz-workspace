@@ -252,28 +252,45 @@ test(
 );
 
 test(
-  'UX12-GLASSBTN-AC07 the sticky home toolbar is translucent and blurs what passes behind it',
+  'UX12-GLASSBTN-AC07 the sticky home toolbar is clear at the top and blurs what passes behind it once stuck',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const { ws } = await openOverview(page, workspaceFactory, 'ux12-gb-07');
     await page.goto(homePath(ws.id));
     const history = page.getByRole('button', { name: /^(이력|history)$/i });
     await expect(history).toBeVisible();
+    await overviewUi.heatmap(page).evaluate((element: HTMLElement) => {
+      element.style.minHeight = '250vh';
+    });
     const toolbar = await history.evaluateHandle((element) => {
       let node: Element | null = element;
       while (node && getComputedStyle(node).position !== 'sticky') node = node.parentElement;
       return node;
     });
-    const style = await toolbar.evaluate((element) => {
-      if (!(element instanceof Element)) return null;
-      const css = getComputedStyle(element);
-      return {
-        color: css.backgroundColor,
-        blur: css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'),
-      };
-    });
-    expect(style?.blur).toMatch(BLUR);
-    expect(style?.color).not.toMatch(OPAQUE);
+    const read = () =>
+      toolbar.evaluate((element) => {
+        if (!(element instanceof Element)) return null;
+        const css = getComputedStyle(element);
+        return {
+          color: css.backgroundColor,
+          blur: css.backdropFilter || css.getPropertyValue('-webkit-backdrop-filter'),
+        };
+      });
+    const scrollTo = async (top: number) => {
+      await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), top);
+      await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(top);
+    };
+
+    const atTop = await read();
+    expect(atTop?.color).toBe(TRANSPARENT);
+    expect(atTop?.blur ?? 'none').not.toMatch(/blur\(/);
+
+    await scrollTo(500);
+    await expect.poll(async () => (await read())?.blur ?? '').toMatch(BLUR);
+    expect((await read())?.color).not.toMatch(OPAQUE);
+
+    await scrollTo(0);
+    await expect.poll(async () => (await read())?.color).toBe(TRANSPARENT);
   },
 );
 
