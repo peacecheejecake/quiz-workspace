@@ -53,7 +53,7 @@ import {
   type ExplanationState,
 } from '../fixtures/ai-explanations.ts';
 import { expectAccessible } from '../fixtures/a11y.ts';
-import { listMockQuestions, type MockQuestion } from '../fixtures/mock-exams.ts';
+import { listMockQuestions, mockUi, type MockQuestion } from '../fixtures/mock-exams.ts';
 import {
   createShuffleMockExam,
   mockAttemptCount,
@@ -932,14 +932,16 @@ test(
     const other = await contextFor(browser, b);
     try {
       const p = other.page;
-      const startMock = async (): Promise<Locator> => {
+      const startMock = async (unfinished = false): Promise<Locator> => {
         await p.goto(homePath(s.workspaceId, 'panel=mock-exams'));
-        await p
-          .getByRole('dialog', { name: /^(모의고사|mock exams?)$/i })
-          .getByRole('listitem')
-          .filter({ hasText: name })
-          .getByRole('button', { name: /^(풀기|practi[sc]e|start)$/i })
-          .click();
+        const row = mockUi.row(mockUi.dialog(p), name);
+        // With an unfinished run the row leads with 이어 풀기 and 풀기 is in its menu.
+        if (unfinished) {
+          await mockUi.rowMenu(row, name).click();
+          await mockUi.menuAction(p, /^(풀기|practi[cs]e)$/i).click();
+        } else {
+          await mockUi.practise(row).click();
+        }
         await runUi.start(runUi.panel(p)).click();
         const r = runUi.panel(p);
         await expect(runUi.mockTitle(r, 1)).toBeVisible();
@@ -958,7 +960,7 @@ test(
         { base_revision_id: mq.revision.id, explanation: `${label} 고친 모의고사 해설` },
         [200],
       );
-      r = await startMock();
+      r = await startMock(true);
       await expect(explUi.create(explUi.area(r))).toBeVisible();
       await expect(explUi.show(explUi.area(r))).toHaveCount(0);
     } finally {
