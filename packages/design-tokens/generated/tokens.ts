@@ -148,7 +148,7 @@ export const staticTokens = {
   'heatmap-cell-touch': '28px',
   'heatmap-gap': '7px',
   'heatmap-dot': '16px',
-  'heatmap-marker-hover-scale': '1.5',
+  'heatmap-marker-hover-scale': '1.4',
   'heatmap-marker-stroke-width': '0.5px',
   'z-base': '0',
   'z-raised': '1',

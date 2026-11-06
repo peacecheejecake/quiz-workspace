@@ -182,7 +182,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Tab');
     await expect(current).toBeFocused();
     await expect(current).toHaveCSS('outline-color', await tokenColor(page, '--color-focus'));
-    await expect(current).toHaveCSS('outline-offset', '8px'); // 1px outside the 42px scaled square
+    await expect(current).toHaveCSS('outline-offset', '6.6px'); // 1px outside the 39.2px scaled square
   });
 }
 

@@ -73,7 +73,7 @@
 
 - **Given:** 해당 화면과 테스트용 데이터 및 권한이 주어진 상태
 - **When:** 관련 조작/네트워크 요청을 수행
-- **Then:** Hover 또는 키보드 focus 시 1.5배 확대(UX12 DESIGN-6, 이전 1.3배)와 Popover를 보여주고 reduced-motion에서는 움직임을 제거한다.
+- **Then:** Hover 또는 키보드 focus 시 1.4배 확대(HOME-SCALE 2026-11-07, 이전 1.5배)와 Popover를 보여주고 reduced-motion에서는 움직임을 제거한다.
 
 ### QOV-01-AC05
 
