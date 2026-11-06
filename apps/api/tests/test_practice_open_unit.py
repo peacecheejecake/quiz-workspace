@@ -101,6 +101,7 @@ def _open_with_outcome(
     needs_retry: bool,
     latest_result: str,
     stored: StoredResponse | None = None,
+    body: practice_api.PracticeOpenBody | None = None,
 ) -> tuple[practice_api.PracticeOpened, MagicMock]:
     revision = _revision()
     submitted = _submitted(revision)
@@ -109,7 +110,9 @@ def _open_with_outcome(
     monkeypatch.setattr(practice_api, "_open_session", opener)
     repo = MagicMock()
     repo.lock_epoch_with_reset.return_value = (0, False)
-    repo.get_session.return_value = SimpleNamespace(reset_epoch=0, state="graded")
+    repo.get_session.return_value = (
+        new_session if body else SimpleNamespace(reset_epoch=0, state="graded")
+    )
     repo.latest_outcome.return_value = SimpleNamespace(
         session=submitted,
         latest_attempt_id=uuid.uuid4(),
@@ -127,6 +130,7 @@ def _open_with_outcome(
         questions=questions,
         idempotency=idempotency,
         user=SimpleNamespace(id=uuid.uuid4()),  # type: ignore[arg-type]
+        body=body,
         idempotency_key="k",
     )
     return out, opener
@@ -171,3 +175,48 @@ def test_ux12_retryopen_ac09_the_same_opening_keeps_its_own_submission(
     )
     opener.assert_not_called()
     assert out.result is not None
+
+
+def test_ux12_retryopen_ac09_a_cleared_mark_outranks_the_cached_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, opener = _open_with_outcome(
+        monkeypatch,
+        needs_retry=False,
+        latest_result="correct",
+        body=practice_api.PracticeOpenBody(cached_session_id=uuid.uuid4()),
+    )
+    opener.assert_not_called()
+    assert out.reused is False
+    assert out.session is None
+    assert out.result is not None
+
+
+def test_ux12_retryopen_ac09_another_try_stays_in_front_of_the_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(practice_api, "_reusable", lambda *_: True)
+    out, opener = _open_with_outcome(
+        monkeypatch,
+        needs_retry=False,
+        latest_result="correct",
+        body=practice_api.PracticeOpenBody(cached_session_id=uuid.uuid4(), cached_another_try=True),
+    )
+    opener.assert_not_called()
+    assert out.reused is True
+    assert out.result is None
+
+
+def test_ux12_retryopen_ac09_a_marked_question_reuses_its_cached_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(practice_api, "_reusable", lambda *_: True)
+    out, opener = _open_with_outcome(
+        monkeypatch,
+        needs_retry=True,
+        latest_result="correct",
+        body=practice_api.PracticeOpenBody(cached_session_id=uuid.uuid4()),
+    )
+    opener.assert_not_called()
+    assert out.reused is True
+    assert out.result is None

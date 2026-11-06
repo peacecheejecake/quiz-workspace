@@ -6132,10 +6132,17 @@ export type components = {
      * PracticeOpenBody
      * @description What the panel knows of this question: an open session it keeps in memory and the latest
      *     attempt when that session was opened, or `force_new` for another try after a result.
+     *     `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
+     *     result the question would otherwise open with.
      */
     PracticeOpenBody: {
       /** Baseline Attempt Id */
       baseline_attempt_id?: string | null;
+      /**
+       * Cached Another Try
+       * @default false
+       */
+      cached_another_try?: boolean;
       /** Cached Session Id */
       cached_session_id?: string | null;
       /**

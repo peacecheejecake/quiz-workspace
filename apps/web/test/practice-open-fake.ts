@@ -39,19 +39,21 @@ export function fakePracticeOpen(deps: {
       result: null,
       reused: false,
     };
+    const outcome = found.data.session?.outcome;
+    const showsResult =
+      !!outcome && !(found.data.needs_retry === true && outcome.result !== 'pending');
     const cached = request.cached ? known.get(request.cached.sessionId) : undefined;
     if (
       cached &&
       cached.epoch === epoch &&
       request.cached?.baselineAttemptId === attempt &&
       (found.data.active_revision_id ?? cached.session.question_revision_id) ===
-        cached.session.question_revision_id
+        cached.session.question_revision_id &&
+      (!showsResult || request.cached?.anotherTry)
     ) {
       return { ok: true, data: { ...metadata, session: cached.session, reused: true } };
     }
-    const outcome = found.data.session?.outcome;
-    const retryClean = found.data.needs_retry === true && outcome?.result !== 'pending';
-    if (!request.forceNew && outcome && !retryClean) {
+    if (!request.forceNew && showsResult) {
       return {
         ok: true,
         data: {

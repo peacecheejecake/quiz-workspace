@@ -109,6 +109,18 @@ describe('PracticeSessionCache', () => {
     expect(cache.get(Q1)?.id).toBe(s1.id);
   });
 
+  it('UX12-RETRYOPEN remembers which session is another try', () => {
+    const cache = new PracticeSessionCache(WS);
+    const tried = session(Q1);
+    const plain = session(Q2);
+    cache.put(tried, 0, null, true);
+    cache.put(plain);
+    expect(cache.anotherTry(Q1)).toBe(true);
+    expect(cache.anotherTry(Q2)).toBe(false);
+    cache.dropSession(tried.id);
+    expect(cache.anotherTry(Q1)).toBe(false);
+  });
+
   it('expires entries after the TTL', () => {
     let now = 1_000;
     const cache = new PracticeSessionCache(WS, { now: () => now });

@@ -181,12 +181,15 @@ class PracticeSessionCreate(BaseModel):
 
 class PracticeOpenBody(BaseModel):
     """What the panel knows of this question: an open session it keeps in memory and the latest
-    attempt when that session was opened, or `force_new` for another try after a result."""
+    attempt when that session was opened, or `force_new` for another try after a result.
+    `cached_another_try`: the cached session came from `force_new`, so it stays in front of a
+    result the question would otherwise open with."""
 
     model_config = ConfigDict(extra="forbid")
 
     cached_session_id: uuid.UUID | None = None
     baseline_attempt_id: uuid.UUID | None = None
+    cached_another_try: bool = False
     force_new: bool = False
 
     @model_validator(mode="after")
@@ -869,14 +872,17 @@ def open_question_practice(
             }
         )
 
-    if body.cached_session_id is not None:
+    # What this opening shows decides first: only another try outranks a result, so a cached
+    # session of a question whose 다시 풀기 mark was cleared gives way to the result.
+    marked_for_retry = found is not None and found.needs_retry and found.latest_result != "pending"
+    result = None if body.force_new or marked_for_retry else latest_result()
+    if body.cached_session_id is not None and (result is None or body.cached_another_try):
         cached = practice.get_session(body.cached_session_id, user.id)
         if cached is not None and _reusable(
             cached, question.id, active, epoch, body.baseline_attempt_id, latest_id
         ):
             return response(_session_out(cached), reused=True)
-    marked_for_retry = found is not None and found.needs_retry and found.latest_result != "pending"
-    if not body.force_new and not marked_for_retry and (result := latest_result()) is not None:
+    if result is not None:
         return result
 
     # The hash leaves the cached ids out: a re-run of one opening may no longer have them.
@@ -895,8 +901,8 @@ def open_question_practice(
                 )
             if session.state == "open":
                 return replayed
-            if (result := latest_result()) is not None:
-                return result
+            if (own_result := latest_result()) is not None:
+                return own_result
             # No result to show (the question has a new revision). The key's record cannot be
             # replaced, so opening here would add a session on every retry; a new key opens one.
             raise ProblemException(

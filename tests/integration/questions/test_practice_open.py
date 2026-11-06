@@ -202,7 +202,11 @@ def test_ux12_open_ac04_reuses_only_a_current_open_session(seed: Any) -> None:
     matched = open_practice(
         owner,
         q["id"],
-        {"cached_session_id": fresh["session"]["id"], "baseline_attempt_id": current},
+        {
+            "cached_session_id": fresh["session"]["id"],
+            "baseline_attempt_id": current,
+            "cached_another_try": True,
+        },
     )
     assert matched["reused"] is True
 
@@ -461,6 +465,35 @@ def test_ux12_retryopen_ac09_clearing_the_mark_brings_the_result_back(seed: Any)
     assert opened["session"] is None
     assert opened["result"]["id"] == first
     assert opened["result"]["outcome"]["result"] == "correct"
+
+
+def test_ux12_retryopen_ac09_a_cleared_mark_outranks_the_cached_session(seed: Any) -> None:
+    owner, _, q, first = _solved_and_marked(seed, "ux12-retryopen-cached-clear")
+    opened = open_practice(owner, q["id"])
+    cached = {
+        "cached_session_id": opened["session"]["id"],
+        "baseline_attempt_id": opened["latest_attempt_id"],
+    }
+    owner.ok("PATCH", f"/questions/{q['id']}/my-state", {"needs_retry": False})
+    shown = open_practice(owner, q["id"], cached)
+    assert shown["reused"] is False
+    assert shown["session"] is None
+    assert shown["result"]["id"] == first
+
+
+def test_ux12_retryopen_ac09_another_try_stays_in_front_of_the_result(seed: Any) -> None:
+    owner, _, q = _mcq(seed, "ux12-retryopen-another-try")
+    first = open_practice(owner, q["id"])["session"]
+    assert choose(owner, first["id"], "opt-1") == "correct"
+    forced = open_practice(owner, q["id"], {"force_new": True})
+    cached = {
+        "cached_session_id": forced["session"]["id"],
+        "baseline_attempt_id": forced["latest_attempt_id"],
+    }
+    again = open_practice(owner, q["id"], {**cached, "cached_another_try": True})
+    assert again["reused"] is True
+    assert answer_keys(again) == []
+    assert open_practice(owner, q["id"], cached)["result"]["id"] == first["id"]
 
 
 def test_ux12_retryopen_ac09_the_mark_is_each_users_own(seed: Any) -> None:

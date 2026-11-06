@@ -197,14 +197,8 @@ test(
     await expectClean(panel);
     await panelUi.retryOff(panel).click();
     await expect(panelUi.retryOn(panel)).toBeVisible();
-    await expect
-      .poll(async () => (await overviewItem(s.owner, s.workspaceId, marked.id)).needs_retry)
-      .toBe(false);
     await closePanel(panel);
 
-    // A session still in this screen's cache is reused, so a new page reads the server's answer.
-    await page.reload();
-    await expect(overviewUi.heatmap(page)).toBeVisible();
     panel = await openDot(page, 1);
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await expect(panel).toContainText(EXPLANATION);

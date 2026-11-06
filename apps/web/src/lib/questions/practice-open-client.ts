@@ -16,7 +16,12 @@ export type PracticeOpened = Schemas['PracticeOpened'];
 
 export interface PracticeOpenRequest {
   /** The open session kept in memory, with the latest attempt known when it was opened. */
-  readonly cached?: { readonly sessionId: string; readonly baselineAttemptId: string | null };
+  readonly cached?: {
+    readonly sessionId: string;
+    readonly baselineAttemptId: string | null;
+    /** It came from `forceNew`: without this, the server prefers the latest result. */
+    readonly anotherTry?: boolean;
+  };
   /** Another try: a new session, whatever the latest result is. */
   readonly forceNew?: boolean;
 }
@@ -54,6 +59,7 @@ export async function openQuestionPractice(
           ? {
               cached_session_id: request.cached.sessionId,
               baseline_attempt_id: request.cached.baselineAttemptId,
+              ...(request.cached.anotherTry ? { cached_another_try: true } : {}),
             }
           : {}),
         ...(request.forceNew ? { force_new: true } : {}),

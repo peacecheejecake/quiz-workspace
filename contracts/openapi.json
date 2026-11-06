@@ -7725,7 +7725,7 @@
       },
       "PracticeOpenBody": {
         "additionalProperties": false,
-        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.",
+        "description": "What the panel knows of this question: an open session it keeps in memory and the latest\nattempt when that session was opened, or `force_new` for another try after a result.\n`cached_another_try`: the cached session came from `force_new`, so it stays in front of a\nresult the question would otherwise open with.",
         "properties": {
           "baseline_attempt_id": {
             "anyOf": [
@@ -7738,6 +7738,11 @@
               }
             ],
             "title": "Baseline Attempt Id"
+          },
+          "cached_another_try": {
+            "default": false,
+            "title": "Cached Another Try",
+            "type": "boolean"
           },
           "cached_session_id": {
             "anyOf": [
