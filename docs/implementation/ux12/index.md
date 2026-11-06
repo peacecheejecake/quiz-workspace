@@ -10,7 +10,7 @@
 | 완료(제외) | 21 |
 | 남은 작업(부분 완료 포함) | 75 |
 | 큰 Task(Epic) | 12 |
-| 구현 Task | 46 |
+| 구현 Task | 47 |
 
 ## 1. 실행 규칙
 
@@ -126,6 +126,12 @@
 | VIEW-4 원문 보기 메뉴 | 더보기 메뉴의 원문 보기 | `Preview`를 hook과 view로 분리, `headerExtra`로 전달. 본문 버튼도 유지 | QSRC-01 새 AC. 기본: 진입점 둘 다 유지 | M·VIEW-1 |
 | VIEW-5 로딩 속도 | 문제 로딩 개선 | 측정 먼저(Server-Timing, client mark). 열기마다 server action 2회가 직렬로 돈다. `POST …/practice-open` 한 트랜잭션 + BFF route로 통합. 미제출 payload 유출 test·리셋 경합 유지 | ux10/qview.md, `make contracts`. hover prefetch는 측정 뒤 결정 | L·VIEW-1 |
 | VIEW-6 탐색 반응 | breadcrumb 지연 | 코드만으로 원인 미확정. `useLinkStatus` pending 표시, `documents/[documentId]/loading.tsx` 추가. 측정 후 확정 | D-13 | S–M·없음 |
+
+### 4.4a VIEW 추가 — 제시문 구분(사용자 요청 2026-11-06)
+
+| Task | 항목 | 구현 | 개정·test | 크기·의존 |
+|---|---|---|---|---|
+| VIEW-7 제시문 | 제시문 내 줄바꿈, 제시문 사이 구분, 제시문마다 영역 구분 | `<제목>` 형태의 제시문과 `(가)` 항목을 나누어 각각 박스로 표시한다. `∙`, `-` 항목은 줄을 나눈다. 표시 단계에서 처리해 이미 등록된 문제에도 적용하고, 추출기에도 같은 규칙을 넣는다 | QPLAY-01, questions.md §4. TS/Python parity | M·없음 |
 
 ### 4.5 EXPL — AI 해설
 
@@ -312,3 +318,4 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | CHAPTER-6 | 7 | 대기 | |
 | SHARE-1 | 8 | 진행 | |
 | SHARE-2 | 8 | 진행 | |
+| VIEW-7 | 5 | 진행 | |
