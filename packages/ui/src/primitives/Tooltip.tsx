@@ -3,7 +3,7 @@
 import { Tooltip as RadixTooltip } from 'radix-ui';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { useLayerStyle } from '../internal/layer';
-import { TOOLTIP_DELAY_MS } from './tooltip-delay';
+import { POPPER_COLLISION_PADDING, TOOLTIP_DELAY_MS } from './tooltip-delay';
 
 export interface TooltipProps extends Pick<
   ComponentProps<typeof RadixTooltip.Root>,
@@ -38,6 +38,7 @@ export function Tooltip({
           <RadixTooltip.Content
             side={side}
             sideOffset={6}
+            collisionPadding={POPPER_COLLISION_PADDING}
             className="qz-tooltip"
             style={layerStyle}
           >
