@@ -241,6 +241,20 @@ describe('UX12-RUNCLOSE', () => {
     expect(confirm()).toBeNull();
   });
 
+  it('UX12-RUNCLOSE-AC05 a position still loading closes at once', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const given = client({ getItem: vi.fn(() => new Promise<never>(() => undefined)) });
+    render(<Harness given={given} initial={SOLVE} onClose={onClose} />);
+    await waitFor(() => expect(given.getRun).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await user.click(closeButton());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(confirm()).toBeNull();
+  });
+
   it('UX12-RUNCLOSE-AC05 the results step and the range step close at once', async () => {
     const user = userEvent.setup();
     const onResults = vi.fn();

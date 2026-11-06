@@ -1439,7 +1439,7 @@ function useSolveStep({
       run !== null &&
       run.finished_at === null &&
       run.answered + newSubmissions < run.total &&
-      itemLoad?.status !== 'error',
+      itemLoad?.status === 'ready',
   };
 }
 
