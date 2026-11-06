@@ -10,7 +10,7 @@
 
 - **범위:** 답을 받는 `QuestionBody`(`practice`·`sequence`)의 보기 행. 다른 화면의 `Checkbox`·`RadioGroup`은 바뀌지 않는다.
 - **선택 안 한 원·상자:** 평소 테두리는 `--color-option-control`(값 = Heatmap `viewed`), 행 hover는 `--color-option-control-hover`(값 = `--color-border-strong`). `--question-status-*`는 marker 전용이므로 별칭 토큰을 쓴다. 고른 보기는 accent 그대로다. `unseen` 색은 흰 표면 대비 약 1.2:1이라 쓰지 않는다(D-8).
-- **보기 글자:** 행 hover 때 `--font-weight-semibold`. 굵기는 테두리와 같은 `--qz-transition-fast`로 바뀐다(변수형 글꼴을 싣지 않으면 굵기는 단계적으로 바뀐다). 굵은 글자로 줄이 늘어도 행 높이가 움직이지 않도록 숨긴 굵은 사본(`::after`, 접근성 이름에 들어가지 않음)이 높이를 잡아 둔다.
+- **보기 글자:** 행 hover 때도 굵기가 바뀌지 않는다(사용자 피드백 2026-11-07: 이전의 semibold hover와 숨긴 굵은 사본을 없앴다). 대신 선택 안 한 원·상자의 테두리가 hover 때 2px이 된다(색은 `--color-option-control-hover` 그대로, 바깥 크기는 border-box라 그대로이며 고른 라디오의 점과 1px 테두리는 움직이지 않는다).
 - **Hover:** hover가 있는 장치(`@media (hover: hover)`)에서 행 어디든 올리면 동작한다. 비활성 행은 반응하지 않는다. 키보드는 기존 focus ring을 쓴다.
 - **채점 결과:** 객관식은 `정답`·`내 선택`·`정답 · 내 선택`·`정답입니다.`·`오답입니다.` 글자가 보이지 않는다. 대신 정답 보기 행에 체크, 오답으로 고른 행에 X 아이콘을 둔다(`data-option-mark="correct|wrong"`, 아이콘 색은 행 테두리 색). 아이콘 자리는 제출 전부터 비워 두어 제출해도 줄바꿈과 행 위치가 그대로다. 글자는 `qz-visually-hidden`으로 남는다: 결과 문장은 `role="status"`이고, 행 표시는 radio/checkbox의 `aria-describedby`다. 숨긴 글자에는 focus ring이 보일 수 없으므로 제출 뒤 focus는 보기 영역으로 간다: 이 영역은 `role="group"`이고 이름이 결과 문장이며 키보드로 제출하면 focus ring이 보인다. 채점 대기·직접 채점 문구와 단답형·서술형의 결과 문구는 보이는 그대로다.
 - **즐겨찾기·다시 풀기:** 켜진 toggle(`.qz-study-toggle[data-state='on']`)에는 `--color-state-selected` 채움이 없다. 아이콘의 fill·stroke 반전과 이름 변화가 상태를 전달한다. hover·pressed는 꺼진 toggle과 같다.
@@ -19,7 +19,7 @@
 ## 수용 기준
 
 ### UX12-OPTIONS-AC01
-**행 hover:** 단일 정답·복수 정답 문제 풀이 panel에서 선택 안 한 원·상자의 테두리는 `--color-option-control`이고 글자 굵기는 regular다. 보기 행에 마우스를 올리면 테두리가 `--color-option-control-hover`, 글자가 semibold가 되고 행 높이는 그대로다(긴 보기 포함). 마우스가 나가면 돌아온다. 테두리와 글자는 같은 시간으로 바뀌고 접근성 이름은 보기 글자 하나다.
+**행 hover:** 단일 정답·복수 정답 문제 풀이 panel에서 선택 안 한 원·상자의 테두리는 `--color-option-control`이고 글자 굵기는 regular다. 보기 행에 마우스를 올리면 테두리가 `--color-option-control-hover` 색의 2px이 되고(사용자 피드백 2026-11-07) 글자 굵기는 그대로이며, 컨트롤의 바깥 크기와 행 높이는 그대로다(긴 보기 포함). 마우스가 나가면 1px로 돌아온다. 접근성 이름은 보기 글자 하나다.
 
 ### UX12-OPTIONS-AC02
 **비활성 행:** 제출 뒤 비활성 보기 행에 마우스를 올려도 테두리와 글자 굵기가 바뀌지 않는다.
