@@ -338,6 +338,11 @@ class PostgresExplainStore:
             _usage(conn, row, usage, "failed", code)
         return True
 
+    def record_usage(self, row: ExplanationRow, usage: Usage | None) -> None:
+        """What a cancelled run spent; the row itself was finished by the API."""
+        with self._engine.begin() as conn:
+            _usage(conn, row, usage, "stopped", None)
+
 
 def _revisions_current(
     conn: Connection, workspace_id: uuid.UUID, pinned: Sequence[PinnedPassage]

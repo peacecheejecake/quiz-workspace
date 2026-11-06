@@ -3,10 +3,12 @@
     GET  /questions/{id}/ai-explanation                 state + the current explanation
     POST /questions/{id}/ai-explanation                 make it (cache hit: 200, no job)
     POST /questions/{id}/ai-explanation/regenerate      a new version (owner/editor)
+    POST /questions/{id}/ai-explanation/cancel          stop one being made (requester or editor)
     GET  /ai-explanations/{id}/stream                   Server-Sent Events while it is made
     GET  /mock-exam-questions/{id}/ai-explanation        the same for a mock exam question
     POST /mock-exam-questions/{id}/ai-explanation       (its own rows: never the source
     POST /mock-exam-questions/{id}/ai-explanation/regenerate    question's, C09)
+    POST /mock-exam-questions/{id}/ai-explanation/cancel
     GET  /mock-ai-explanations/{id}/stream
 
 The gate (C01, C09), decided from the DB on every request, never from client values: a bank
@@ -29,6 +31,12 @@ the feature (409 `explanation-disabled`), then the environment's monthly token c
 `explanation-daily-limit`) and the per-user rate (in-process token bucket: 429 `rate-limited` +
 Retry-After). Regenerating is capped at 3 per revision per day (409
 `explanation-regenerate-limit`).
+
+Cancelling (UX12-EXPLCANCEL) names the explanation, so a late click never stops a newer run. The
+requester or an owner/editor of an active workspace moves an unfinished row to failed +
+`cancelled`; a finished row stays as it is, so repeating it answers the same state. A cancelled row
+reads as nothing: the current success when a regeneration was stopped, else no explanation. It
+still counts toward the limits, and the worker stops at its next check of the row.
 
 Creating pins the passages here — the question's own published book sources first, then the ASK
 retrieval (`quiz_api.ask_retrieval`: books only, no question paper, a `mixed` book's question
@@ -81,6 +89,7 @@ from quiz_api.errors import ProblemException, ProblemType, problem_responses
 from quiz_api.jobs import JobMessage, JobPublisher
 from quiz_api.rate_limit import TokenBucketLimiter, retry_after_header
 from quiz_api.repositories.ai_explanations import (
+    CANCELLED,
     EXPLAIN_JOB_SCHEMA_VERSION,
     EXPLAIN_JOB_TYPE,
     ExplanationRepository,
@@ -163,6 +172,14 @@ class _StateBase(BaseModel):
     available: bool = Field(description="This environment can make AI explanations.")
     can_create: bool = Field(description="available, active workspace, none for this revision.")
     can_regenerate: bool = Field(description="An owner/editor of an active workspace, a success.")
+    can_cancel: bool = Field(
+        description="One is being made, in an active workspace, and the caller requested it or is "
+        "an owner/editor."
+    )
+    cancelled_id: uuid.UUID | None = Field(
+        description="The newest attempt, when it was cancelled: why a live id is gone, as opposed "
+        "to a failure that leaves the current success shown."
+    )
 
 
 class ExplanationState(_StateBase):
@@ -196,6 +213,14 @@ class MockExplanationRequest(BaseModel):
     view: Literal["manage"] | None = Field(
         default=None, description="`manage`: 모의고사 문제 관리 (owner/editor, no submission)."
     )
+
+
+class ExplanationCancelRequest(ExplanationRequest):
+    explanation_id: uuid.UUID = Field(description="The explanation being made.")
+
+
+class MockExplanationCancelRequest(MockExplanationRequest):
+    explanation_id: uuid.UUID = Field(description="The explanation being made.")
 
 
 # --- dependencies -------------------------------------------------------------------------------
@@ -395,6 +420,10 @@ def _explanation_out(
     return out
 
 
+def _may_cancel(access: WorkspaceAccess, row: ExplanationRow) -> bool:
+    return access.role in EDIT_ROLES or row.created_by == access.user_id
+
+
 def _state(
     repo: ExplanationRepository,
     settings: Settings,
@@ -406,9 +435,15 @@ def _state(
     newest = repo.newest(kind.name, revision_id, PROMPT_VERSION, model)
     live = repo.live(kind.name, revision_id, PROMPT_VERSION, model)
     current = repo.current(kind.name, revision_id, PROMPT_VERSION, model)
+    cancelled = (
+        newest.id
+        if newest is not None and newest.status == "failed" and newest.error_code == CANCELLED
+        else None
+    )
     # A failed attempt after a success (a regeneration that failed) never hides that success:
-    # the current success is shown; a failed row is shown only when nothing succeeded.
-    if newest is not None and newest.status == "failed" and current is not None:
+    # the current success is shown; a failed row is shown only when nothing succeeded. A cancelled
+    # row is never shown: it was asked to go away.
+    if newest is not None and newest.status == "failed" and (current or cancelled):
         newest = current
     available = settings.ai_explanations_available and model is not None
     active = access.status == "active"
@@ -420,6 +455,8 @@ def _state(
         and access.role in EDIT_ROLES
         and live is None
         and current is not None,
+        "can_cancel": live is not None and active and _may_cancel(access, live),
+        "cancelled_id": cancelled,
         "explanation": _explanation_out(repo, newest),
     }
     model_type = ExplanationState if kind is BANK else MockExplanationState
@@ -706,6 +743,32 @@ def _read(
     return _state(repo, settings, kind, access, revision_id)
 
 
+def _cancel(
+    repo: ExplanationRepository,
+    settings: Settings,
+    user_id: uuid.UUID,
+    kind: _Kind,
+    target_id: uuid.UUID,
+    gate: _Gate,
+    explanation_id: uuid.UUID,
+) -> dict[str, Any]:
+    access = _authorize(repo, user_id, kind, target_id, Action.READ, LockMode.SHARE)
+    _require_active(access)
+    row = _readable(repo, settings, user_id, kind, explanation_id, gate)
+    if row.target_id != target_id:
+        raise HTTPException(status_code=404, detail=EXPLANATION_NOT_FOUND)
+    if not _may_cancel(access, row):
+        raise ProblemException(
+            403,
+            ProblemType.INSUFFICIENT_ROLE,
+            detail="Only its requester or an editor can cancel this AI explanation.",
+        )
+    repo.cancel(kind.name, row.id)
+    body = _state(repo, settings, kind, access, row.revision_id)
+    repo.commit()
+    return body
+
+
 def _settings(request: Request) -> Settings:
     settings: Settings = request.app.state.settings
     return settings
@@ -775,6 +838,25 @@ def regenerate_question_explanation(
     return _create(repo, deps, user.id, BANK, question_id, gate, regenerate=True)
 
 
+@router.post(
+    "/questions/{question_id}/ai-explanation/cancel",
+    operation_id="cancelQuestionAiExplanation",
+    responses=problem_responses(409),
+)
+def cancel_question_explanation(
+    question_id: uuid.UUID,
+    body: ExplanationCancelRequest,
+    user: CurrentUser,
+    repo: Repo,
+    settings: SettingsDep,
+) -> ExplanationState:
+    """Stop an explanation being made (its requester or an owner/editor)."""
+    gate = _Gate(body.practice_session_id, body.view is not None)
+    return ExplanationState.model_validate(
+        _cancel(repo, settings, user.id, BANK, question_id, gate, body.explanation_id)
+    )
+
+
 # --- routes: mock exam questions ----------------------------------------------------------------
 
 
@@ -830,6 +912,24 @@ def regenerate_mock_explanation(
 ) -> JSONResponse:
     gate = _Gate(body.mock_practice_session_id, body.view is not None)
     return _create(repo, deps, user.id, MOCK, mock_exam_question_id, gate, regenerate=True)
+
+
+@router.post(
+    "/mock-exam-questions/{mock_exam_question_id}/ai-explanation/cancel",
+    operation_id="cancelMockExamQuestionAiExplanation",
+    responses=problem_responses(409),
+)
+def cancel_mock_explanation(
+    mock_exam_question_id: uuid.UUID,
+    body: MockExplanationCancelRequest,
+    user: CurrentUser,
+    repo: Repo,
+    settings: SettingsDep,
+) -> MockExplanationState:
+    gate = _Gate(body.mock_practice_session_id, body.view is not None)
+    return MockExplanationState.model_validate(
+        _cancel(repo, settings, user.id, MOCK, mock_exam_question_id, gate, body.explanation_id)
+    )
 
 
 # --- SSE ----------------------------------------------------------------------------------------

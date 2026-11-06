@@ -23,6 +23,14 @@ Payload (written by apps/api `POST …/ai-explanation`, `…/regenerate`, bank a
    the body, the cited sources and one usage row after the same re-checks under row locks
    (`PostgresExplainStore.finish`), then `done`.
 
+Cancelling (UX12-EXPLCANCEL): the API finishes the row. The loop reads its status at most every
+`stop_check_seconds` and before every provider call, closes the provider stream, records what the
+run spent (`stopped`) and stops; a cancel that wins the race with the finish write ends the same
+way. A closed stream has no `TextStreamEnd`, so the interrupted call counts the input the provider
+reported at its start and an estimate of the rest (`_Tokens.interrupted`): the monthly cap has to
+see a paid call. Nothing more is written to the Redis Stream: the stream routes see the row's
+status.
+
 The job result holds counts, usage and codes only (C06); logs carry ids and counts only.
 
 LLM: APP_ENV=test the deterministic `book_core.explain.FakeExplainer` (markers, call log in
@@ -34,9 +42,11 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,7 +63,14 @@ from book_core.explain import (
     finish_explanation,
 )
 from book_core.explain.output import ANSWER_MISMATCH
-from book_core.llm import LLMProviderError, TextDelta, TextStreamEnd, TextStreamEvent
+from book_core.llm import (
+    LLMProviderError,
+    LLMUsage,
+    TextDelta,
+    TextStreamEnd,
+    TextStreamEvent,
+    TextStreamUsage,
+)
 from book_core.llm.config import Effort
 from pydantic import BaseModel, ConfigDict
 
@@ -78,6 +95,8 @@ PASSAGE_CHARS = 2000
 EFFORT: Effort = "low"
 # One re-request when an option is missing (C04); the provider call itself is not retried.
 MAX_CALLS = 2
+# Estimating an interrupted call: Korean text runs near two characters per token, so this errs high.
+CHARS_PER_TOKEN = 2
 
 
 class ExplainPayloadV1(BaseModel):
@@ -95,6 +114,11 @@ class ExplainJobDeps:
     llm: Explainer | None
     enabled: bool = True
     max_output_tokens: int = 1500
+    stop_check_seconds: float = 1.0
+
+
+class _CancelledError(Exception):
+    """The row stopped being live while the provider was streaming."""
 
 
 class _Stream:
@@ -203,6 +227,31 @@ class _Tokens:
         self.calls = 0
         self.input = self.output = self.cache_read = self.cache_creation = 0
         self.cost: float | None = None
+        self._prompt_chars = 0
+        self._reported: LLMUsage | None = None
+        self._received_chars = 0
+
+    def begin(self, prompt_chars: int) -> None:
+        self.calls += 1
+        self._prompt_chars = prompt_chars
+        self._reported = None
+        self._received_chars = 0
+
+    def reported(self, usage: LLMUsage) -> None:
+        self._reported = usage
+
+    def received(self, text: str) -> None:
+        self._received_chars += len(text)
+
+    def interrupted(self) -> None:
+        """The call being read was closed before its `TextStreamEnd`: what the provider reported,
+        an estimate from the characters for the rest. Text the model made but nobody read is not
+        in it, nor is the cost, which only the provider's final count gives."""
+        known = self._reported or LLMUsage()
+        self.input += known.input_tokens or ceil(self._prompt_chars / CHARS_PER_TOKEN)
+        self.cache_read += known.cache_read_input_tokens
+        self.cache_creation += known.cache_creation_input_tokens
+        self.output += max(known.output_tokens, ceil(self._received_chars / CHARS_PER_TOKEN))
 
     def add(self, end: TextStreamEnd) -> None:
         self.input += end.usage.input_tokens
@@ -223,6 +272,12 @@ class _Tokens:
             llm_calls=self.calls,
             cost_usd=self.cost,
         )
+
+
+def _close(events: Iterator[TextStreamEvent] | None) -> None:
+    close = getattr(events, "close", None)
+    if callable(close):
+        close()
 
 
 def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1) -> JobResult:
@@ -264,8 +319,24 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
         revision_id=str(row.revision_id),
         explanation_id=str(row.id),
     )
+    checked_at = time.monotonic()
+
+    def cancelled(*, now: bool = False) -> bool:
+        nonlocal checked_at
+        moment = time.monotonic()
+        if not now and moment - checked_at < deps.stop_check_seconds:
+            return False
+        checked_at = moment
+        return store.status(row) != "running"
+
+    def stop() -> JobResult:
+        store.record_usage(row, tokens.usage())
+        return _result("cancelled", usage=tokens.usage())
+
     missing: tuple[str, ...] = ()
     for attempt in range(MAX_CALLS):
+        if cancelled(now=True):
+            return stop()
         request = build_request(
             question=question,
             sources=sources,
@@ -277,20 +348,27 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             stream.reset()
         shown = ExplanationStream(question)
         end: TextStreamEnd | None = None
-        tokens.calls += 1
+        tokens.begin(len(request.system) + len(request.prompt))
         events: Iterator[TextStreamEvent] | None = None
         try:
             events = llm.stream(request, meta)
             for event in events:
                 if isinstance(event, TextDelta):
+                    tokens.received(event.text)
+                    if cancelled():
+                        raise _CancelledError
                     stream.delta(shown.feed(event.text))
+                elif isinstance(event, TextStreamUsage):
+                    tokens.reported(event.usage)
                 elif isinstance(event, TextStreamEnd):
                     end = event
             stream.delta(shown.finish())
+        except _CancelledError:
+            _close(events)
+            tokens.interrupted()
+            return stop()
         except AnswerMismatchError:
-            close = getattr(events, "close", None) if events is not None else None
-            if callable(close):
-                close()
+            _close(events)
             return fail(ANSWER_MISMATCH, tokens.usage())
         except LLMProviderError as exc:
             return fail(error_code_of(exc), tokens.usage())
@@ -317,7 +395,7 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             usage=tokens.usage(),
         )
         if not outcome.written:
-            return _result("skipped", usage=tokens.usage())
+            return stop()
         if outcome.error_code:
             stream.error(outcome.error_code)
             return _result("failed", usage=tokens.usage(), code=outcome.error_code)

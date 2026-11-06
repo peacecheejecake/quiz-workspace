@@ -19,7 +19,14 @@ from book_core.explain import (
     FakeExplainer,
     explain_question,
 )
-from book_core.llm import LLMProviderError, TextStreamEvent
+from book_core.llm import (
+    LLMProviderError,
+    LLMUsage,
+    TextDelta,
+    TextStreamEnd,
+    TextStreamEvent,
+    TextStreamUsage,
+)
 from quiz_worker.ask_store import LiveDocument, Usage
 from quiz_worker.explain_job import ExplainJobDeps, ExplainPayloadV1, run_explain
 from quiz_worker.explain_store import ExplanationRow, FinishOutcome, PinnedPassage
@@ -63,6 +70,7 @@ class FakeStore:
     content_kind: str | None = "book"
     finished: list[dict[str, Any]] = field(default_factory=list)
     failed: list[tuple[str, Usage | None]] = field(default_factory=list)
+    stopped: list[Usage | None] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.passages = Readers(self.content_kind)
@@ -91,6 +99,12 @@ class FakeStore:
             return False
         self.status_value = "running"
         return True
+
+    def status(self, _row: ExplanationRow) -> str:
+        return self.status_value
+
+    def record_usage(self, _row: ExplanationRow, usage: Usage | None) -> None:
+        self.stopped.append(usage)
 
     def member_active(self, _row: ExplanationRow) -> bool:
         return self.member
@@ -139,7 +153,12 @@ def fake(tmp_path: Path) -> FakeExplainer:
 
 
 def _run(store: FakeStore, llm: Any, stream: MemoryStream | None = None) -> dict[str, Any]:
-    deps = ExplainJobDeps(store=store, stream=stream or MemoryStream(), llm=llm)  # type: ignore[arg-type]
+    deps = ExplainJobDeps(
+        store=store,  # type: ignore[arg-type]
+        stream=stream or MemoryStream(),
+        llm=llm,
+        stop_check_seconds=0,
+    )
     ctx = JobContext(
         job_id=JOB,
         job_type="question.ai_explain",
@@ -237,6 +256,181 @@ def test_aiexpl_01_c06_the_job_result_holds_counts_and_codes_only(fake: FakeExpl
     keys = {"status", "sources", "dropped_citations", "llm_calls", "usage", "error_code"}
     assert set(result) == keys
     assert store.stem not in json.dumps(result, ensure_ascii=False)
+
+
+class CancelledMidStream:
+    """Streams two deltas; the row is cancelled after the first one. `closed` proves the provider
+    stream was closed, and the deltas after the cancel are never read."""
+
+    model_name = "fake-ai-explanation"
+
+    def __init__(self, store: FakeStore) -> None:
+        self.store = store
+        self.closed = False
+        self.read = 0
+
+    def stream(self, _request: ExplainRequest, _meta: ExplainCallMeta) -> Iterator[TextStreamEvent]:
+        try:
+            self.read += 1
+            yield TextDelta(text="정답: 1번\n")
+            self.store.status_value = "failed"
+            self.read += 1
+            yield TextDelta(text="요약\n")
+            self.read += 1
+            yield TextDelta(text="끝\n")
+        finally:
+            self.closed = True
+
+
+def test_ux12_explcancel_a_cancel_closes_the_provider_stream_and_records_usage() -> None:
+    store = FakeStore()
+    stream = MemoryStream()
+    llm = CancelledMidStream(store)
+    result = _run(store, llm, stream)
+    assert result["status"] == "cancelled"
+    assert llm.closed is True
+    assert llm.read == 2
+    assert not store.finished
+    assert not store.failed
+    usage = store.stopped[0]
+    assert usage is not None
+    assert usage.llm_calls == 1
+    # No TextStreamEnd arrived: the estimate keeps the paid call under the monthly cap.
+    assert usage.input_tokens >= 10
+    assert usage.output_tokens >= len("정답: 1번\n요약\n") // 2
+    assert {event for event, _, _ in stream.events} <= {"delta"}
+
+
+class ReportsItsInput:
+    """The provider's start event, then a delta, cancelled before the end."""
+
+    model_name = "fake-ai-explanation"
+
+    def __init__(self, store: FakeStore) -> None:
+        self.store = store
+
+    def stream(self, _request: ExplainRequest, _meta: ExplainCallMeta) -> Iterator[TextStreamEvent]:
+        yield TextStreamUsage(LLMUsage(input_tokens=321, cache_read_input_tokens=9))
+        self.store.status_value = "failed"
+        yield TextDelta(text="가" * 40)
+
+
+def test_ux12_explcancel_a_cancel_counts_the_input_the_provider_reported() -> None:
+    store = FakeStore()
+    _run(store, ReportsItsInput(store))
+    usage = store.stopped[0]
+    assert usage is not None
+    assert (usage.input_tokens, usage.cache_read_tokens) == (321, 9)
+    assert usage.output_tokens == 20
+
+
+class SecondCallCancelled:
+    """A complete first call that leaves an option out, then a second one cancelled mid-way."""
+
+    model_name = "fake-ai-explanation"
+
+    def __init__(self, store: FakeStore) -> None:
+        self.store = store
+        self.calls = 0
+
+    def stream(self, _request: ExplainRequest, _meta: ExplainCallMeta) -> Iterator[TextStreamEvent]:
+        self.calls += 1
+        if self.calls == 1:
+            yield TextDelta(text="정답: opt-1\n")
+            yield TextStreamEnd(
+                model="m",
+                stop_reason="end_turn",
+                usage=LLMUsage(input_tokens=100, output_tokens=50),
+            )
+            return
+        yield TextStreamUsage(LLMUsage(input_tokens=200))
+        self.store.status_value = "failed"
+        yield TextDelta(text="가" * 10)
+
+
+def test_ux12_explcancel_the_interrupted_call_adds_to_the_finished_one() -> None:
+    store = FakeStore()
+    _run(store, SecondCallCancelled(store))
+    usage = store.stopped[0]
+    assert usage is not None
+    assert usage.llm_calls == 2
+    assert (usage.input_tokens, usage.output_tokens) == (300, 55)
+
+
+def test_ux12_explcancel_the_stop_check_is_throttled(fake: FakeExplainer) -> None:
+    store = FakeStore()
+    reads: list[str] = []
+    original = store.status
+
+    def counted(row: ExplanationRow) -> str:
+        reads.append("read")
+        return original(row)
+
+    store.status = counted  # type: ignore[method-assign,assignment]
+    deps = ExplainJobDeps(
+        store=store,  # type: ignore[arg-type]
+        stream=MemoryStream(),
+        llm=fake,
+        stop_check_seconds=3600,
+    )
+    ctx = JobContext(
+        job_id=JOB,
+        job_type="question.ai_explain",
+        workspace_id=WS,
+        created_by=USER,
+        idempotency_key=None,
+        schema_version=1,
+        attempt=1,
+        max_attempts=2,
+        _store=InMemoryJobStore(),
+    )
+    payload = ExplainPayloadV1(kind="question", explanation_id=uuid.UUID(int=7), target_id=TARGET)
+    result = run_explain(deps, ctx, payload)
+    assert result is not None
+    assert result["status"] == "succeeded"
+    assert reads == ["read"]  # only the one before the provider call
+
+
+def test_ux12_explcancel_a_cancel_before_the_provider_call_spends_nothing(
+    fake: FakeExplainer,
+) -> None:
+    store = FakeStore()
+    real_start = store.start
+
+    def cancelled_right_after(row: ExplanationRow) -> bool:
+        started = real_start(row)
+        store.status_value = "failed"
+        return started
+
+    store.start = cancelled_right_after  # type: ignore[method-assign,assignment]
+    result = _run(store, fake)
+    assert result["status"] == "cancelled"
+    assert result["llm_calls"] == 0
+    assert not store.finished
+
+
+def test_ux12_explcancel_a_queued_row_already_cancelled_is_skipped(fake: FakeExplainer) -> None:
+    store = FakeStore(status_value="failed")
+    assert _run(store, fake)["status"] == "skipped"
+    assert not store.stopped
+
+
+def test_ux12_explcancel_a_cancel_that_beats_the_finish_write_records_usage(
+    fake: FakeExplainer,
+) -> None:
+    store = FakeStore()
+    real_finish = store.finish
+
+    def beaten(row: ExplanationRow, **kwargs: Any) -> FinishOutcome:
+        store.status_value = "failed"
+        return real_finish(row, **kwargs)
+
+    store.finish = beaten  # type: ignore[method-assign,assignment]
+    stream = MemoryStream()
+    result = _run(store, fake, stream)
+    assert result["status"] == "cancelled"
+    assert [u.llm_calls for u in store.stopped if u] == [1]
+    assert "done" not in {event for event, _, _ in stream.events}
 
 
 class Exploding:

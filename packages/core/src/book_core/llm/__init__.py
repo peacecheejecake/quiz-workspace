@@ -33,6 +33,7 @@ from book_core.llm.streaming import (
     TextStreamEnd,
     TextStreamEvent,
     TextStreamRequest,
+    TextStreamUsage,
     create_text_stream_client,
 )
 
@@ -58,6 +59,7 @@ __all__ = [
     "TextStreamEnd",
     "TextStreamEvent",
     "TextStreamRequest",
+    "TextStreamUsage",
     "create_llm_client",
     "create_text_stream_client",
     "parse_structured_output",
