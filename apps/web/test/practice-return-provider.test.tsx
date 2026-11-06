@@ -685,6 +685,35 @@ it('UX11-RETURN-AC04 shows the notice over an open modal during an outage', asyn
   expect(screen.getByText(/연결/)).toBeInTheDocument();
 });
 
+it('UX11-RETURN-AC04 keeps a visible notice in the accessibility tree when a modal opens', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  );
+  const { ModalDialog } = await import('@quiz/ui');
+  const tree = (open: boolean) => (
+    <PracticeReturnProvider userId={ownerId}>
+      <ModalDialog open={open} onOpenChange={() => undefined} title="Modal">
+        <p>content</p>
+      </ModalDialog>
+    </PracticeReturnProvider>
+  );
+  const view = render(tree(false));
+  await act(async () => {
+    fireEvent.focus(window);
+    await vi.advanceTimersByTimeAsync(10_100);
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('연결');
+  await act(async () => {
+    view.rerender(tree(true));
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(screen.getByRole('dialog', { name: 'Modal' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('연결');
+  expect(screen.getByRole('status').closest('[aria-hidden="true"]')).toBeNull();
+});
+
 it('UX11-RETURN-AC04 an auth-event outage keeps the page hidden and explains why at once', async () => {
   vi.stubGlobal(
     'fetch',

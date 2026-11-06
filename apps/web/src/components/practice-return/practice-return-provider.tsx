@@ -328,8 +328,9 @@ export function PracticeReturnProvider({
       {portalReady && (!modalOpen || identityPending || identityNotice) && protectedRoute
         ? createPortal(
             <div data-app-global-control="practice-return">
+              {/* Explicit aria-live: a modal's hideOthers exempts it, not an implicit role=status. */}
               {identityNotice ? (
-                <p className={styles.notice} role="status">
+                <p className={styles.notice} role="status" aria-live="polite">
                   연결이 불안정합니다. 다시 확인하고 있습니다.
                 </p>
               ) : null}
