@@ -334,3 +334,33 @@ test(
     await expect(panelUi.result(unanswered)).toContainText(RESULT_TEXT.correct);
   },
 );
+
+test(
+  'UX12-SOLVEDOPEN-AC10 a question still loading shows blocks and a hidden status',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const s = await seed(workspaceFactory, 'ux12-solvedopen-10', 1);
+    await openHome(page, s);
+
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route('**/practice-open', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    const busy = panel.locator('[aria-busy="true"]');
+    await expect(busy).toBeVisible();
+    await expect(busy.getByRole('status')).toHaveText(
+      /문제를 불러오는 중입니다|loading questions/i,
+    );
+    await expect(busy.locator('[data-shape="rect"]')).toHaveCount(4);
+    await expect(busy.locator('.qz-visually-hidden')).toHaveCount(1);
+
+    release();
+    await expect(panelUi.options(panel)).toHaveCount(4);
+    await expect(busy).toHaveCount(0);
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+  },
+);

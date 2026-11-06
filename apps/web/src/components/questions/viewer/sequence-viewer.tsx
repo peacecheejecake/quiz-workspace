@@ -35,6 +35,7 @@ import {
 } from 'react';
 import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AskQuestionButton } from '@/components/ask/ask-launcher';
+import { QuestionSkeleton } from '@/components/questions/question-skeleton';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import type { AskAttachmentInput } from '@/lib/ask/client';
@@ -1153,19 +1154,15 @@ function useSolveStep({
         </div>
       );
   } else if (!item || !run) {
-    content = (
-      <div aria-busy="true">
-        <p className={styles.loading}>문제를 불러오는 중입니다…</p>
-      </div>
-    );
+    content = <QuestionSkeleton />;
   } else if (unavailable) {
     content = <p className={styles.notice}>이 문제는 더 이상 풀 수 없습니다.</p>;
   } else if (!shownQuestion || (sessionWanted && !session && sessionLoad?.status !== 'error')) {
     content = (
-      <div aria-busy="true">
-        <QuestionStem stem={item.stem ?? ''} stemTables={item.stem_tables} />
-        <p className={styles.loading}>문제를 불러오는 중입니다…</p>
-      </div>
+      <QuestionSkeleton
+        questionType={item.question_type ?? 'MCQ'}
+        stem={<QuestionStem stem={item.stem ?? ''} stemTables={item.stem_tables} />}
+      />
     );
   } else {
     content = (

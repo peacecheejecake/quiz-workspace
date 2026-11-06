@@ -2,6 +2,7 @@
 
 import { Button, FloatingSidePanel } from '@quiz/ui';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { QuestionSkeleton } from '@/components/questions/question-skeleton';
 import { createMockPracticeApi } from '@/components/questions/mock-exams/mock-exam-client';
 import {
   selfGradePracticeAction,
@@ -165,7 +166,7 @@ export function SeparateRetry({
       }
     >
       {error ? <p role="alert">{error}</p> : null}
-      {!session && !error ? <p role="status">문제를 불러오는 중입니다.</p> : null}
+      {!session && !error ? <QuestionSkeleton /> : null}
       {session ? (
         <form id={form} onSubmit={(event) => void submit(event)}>
           <QuestionBody

@@ -30,6 +30,7 @@ import {
   useToast,
   type HeatmapChapter,
 } from '@quiz/ui';
+import { QuestionLineSkeleton } from '@/components/questions/question-skeleton';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   useCallback,
@@ -770,7 +771,7 @@ export function QuestionsOverview({
         문제
       </h2>
       <p className={styles.inFilter} role="status">
-        {busy ? '문제를 불러오는 중입니다.' : ''}
+        {busy ? <QuestionLineSkeleton /> : ''}
       </p>
 
       {failure ? (

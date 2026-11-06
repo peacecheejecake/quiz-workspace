@@ -51,6 +51,7 @@ import { useOptionalPracticeReturn } from '@/components/practice-return/practice
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { useHoldAnswerGuard } from '@/lib/questions/answer-guard';
+import { QuestionSkeleton } from '@/components/questions/question-skeleton';
 import { OpeningViews, PracticeSessionCache } from '@/lib/questions/practice-cache';
 import {
   openQuestionPractice,
@@ -791,10 +792,10 @@ export function PracticeViewer({
               </Button>
             </div>
           ) : (
-            <div aria-busy="true">
-              <QuestionStem stem={view.preview} />
-              <p className={styles.loading}>문제를 불러오는 중입니다…</p>
-            </div>
+            <QuestionSkeleton
+              questionType={view.questionType}
+              stem={<QuestionStem stem={view.preview} />}
+            />
           )}
         </div>
       ) : null}

@@ -7,7 +7,7 @@
 
 ```yaml
 id: UX12-SOLVEDOPEN
-linked_tests: [UX12-SOLVEDOPEN-AC01 … UX12-SOLVEDOPEN-AC09]
+linked_tests: [UX12-SOLVEDOPEN-AC01 … UX12-SOLVEDOPEN-AC10]
 ```
 
 **명세:** [UX12 MOCKUX-11](../implementation/ux12/index.md) (사용자 요청 2026-11-06), [UX12-RETRYOPEN](ux12-retry-open.md)(범위를 모든 푼 문제로 넓힘), [UX12-OPEN](ux12-question-open.md), [QPLAY-01](questions-practice.md), [questions.md](../questions.md) §4
@@ -24,6 +24,8 @@ linked_tests: [UX12-SOLVEDOPEN-AC01 … UX12-SOLVEDOPEN-AC09]
 - **누른 뒤의 화면.** 기존 결과 화면(읽기 전용)으로 바뀌고 focus는 결과로 간다. 답하던 화면으로 돌아가는 길은 없고, footer의 `다시 풀기`가 새 session을 연다.
 - **쓰던 답.** 답을 고르거나 쓴 뒤 누르면 확인 dialog가 먼저 뜬다. 취소하면 답이 그대로이고, 확인하면 답은 제출되지 않고 사라진다. 답이 없으면 바로 연다.
 - **같은 열기 안의 이전/다음.** 패널을 한 번 연 동안 화면에 보인 것은 client가 메모리에 둔다(`OpeningViews`): 문제 내용과, 이번 열기에서 제출했거나 `해설 보기`로 본 결과. 이전/다음으로 돌아오면 불러오는 표시 없이 바로 그것을 그린다. 패널을 닫으면 모두 잊고, 브라우저 저장소에는 쓰지 않는다. 이 열기가 이미 보인 결과만 들어 있으므로 새로 드러나는 답은 없다. 결과는 요청 없이 그대로 보인다. 다른 탭의 제출은 이 패널을 닫을 때까지 반영되지 않는다. 안 푼 문제는 session을 조용히 확인한다(`practice-open`, 재사용이면 쓰는 것 없음). 확인 전에도 답을 고를 수 있지만 `제출`은 확인 뒤에만 된다. 확인 결과 session이 다르면(다른 곳의 제출·수정) 그 session으로 바뀌고 고른 답은 비워진다. `다시 풀기`를 누르거나, 초기화하거나, 문제가 수정되면 그 문제는 빠진다.
+- **불러오는 동안은 skeleton (사용자 요청 2026-11-06).** "문제를 불러오는 중입니다." 글자를 보이지 않고 `Skeleton` 블록을 그린다. 읽기 도구를 위해 같은 문구가 숨긴 `role="status"`로 남고 영역은 `aria-busy`다. 한 문제(풀이 panel, 범위 풀이, 별도 다시 풀기, 문제 상세)는 발문 줄과 보기 4줄이고, 발문을 이미 알면 그 발문을, 객관식이 아니면 답안 칸을 그린다. 보기 수는 받기 전에 모르므로 4줄이고, 미리보기보다 긴 발문은 내용이 오면 늘어날 수 있다. 목록(공유 보기, 보관·초안 문제, 챕터 재분배)은 발문·보기 모양이 맞지 않아 행 블록이다. 홈은 Heatmap이 흐려진 채 남아 있으므로 상태 줄 한 줄이다.
+- **범위 풀이의 돌아가기.** 위치를 다시 읽으므로 범위 풀이는 돌아갈 때 그때도 skeleton이 잠깐 보인다. `OpeningViews`는 풀이 panel에만 있다.
 - **같은 재시도(key).** 이미 제출된 session의 `Idempotency-Key`가 다시 오면 409 `practice-session-submitted`다. 열기 응답에는 결과를 싣지 않으므로 UX12-OPEN의 "결과를 준다"를 바꾼다.
 - **`다시 풀기` 표시.** 열기를 정하지 않는다. 필터와 Heatmap 표시의 뜻은 그대로다. MOCKUX-5의 `flagsSettled`·`cached_another_try`와 `latest_outcome`의 `needs_retry`는 지웠다.
 - **범위 풀이·모의고사.** 각자의 기록대로이고 바뀌지 않는다. `해설 보기`는 풀이 panel(`practice`)에만 있다.
@@ -92,6 +94,12 @@ linked_tests: [UX12-SOLVEDOPEN-AC01 … UX12-SOLVEDOPEN-AC09]
 - **Given:** 같은 panel에서 안 푼 1번을 보고, 2번을 풀고, 3번까지 간 상태. 서버의 열기 응답이 늦다
 - **When:** 이전으로 2번, 1번에 돌아온다
 - **Then:** 2번은 결과·해설이, 1번은 문제와 보기가 바로 보이고 불러오는 표시(글자, `aria-busy`)가 없다. 응답이 오면 1번을 그대로 풀어 제출할 수 있다.
+
+### UX12-SOLVEDOPEN-AC10
+
+- **Given:** 열기 응답이 늦은 문제
+- **When:** Heatmap 셀로 연다
+- **Then:** `aria-busy` 영역에 보기 4줄의 skeleton이 있고 "문제를 불러오는 중입니다."는 숨긴 `role="status"`로만 있다. 응답이 오면 보기로 바뀌고 `aria-busy`가 사라진다.
 
 ### UX12-SOLVEDOPEN-AC08
 
