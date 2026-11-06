@@ -198,7 +198,13 @@ function OptionList({ values, errors, update }: OptionListProps) {
       collisionDetection={closestCenter}
       autoScroll={EDGE_SCROLL}
       modifiers={[verticalOnly]}
-      accessibility={{ announcements: SILENT, screenReaderInstructions: NO_INSTRUCTIONS }}
+      accessibility={{
+        announcements: SILENT,
+        screenReaderInstructions: NO_INSTRUCTIONS,
+        // Outside the dialog: a live region inside would keep the dialog itself in the
+        // accessibility tree while another modal covers it (HOMEDLG-01-AC02).
+        container: portalTarget ?? undefined,
+      }}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveId(null)}
