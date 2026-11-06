@@ -3,9 +3,10 @@
 // One document row (DOC-01 문서 관리, UX3c; the only PDF list since UX7-DOCS): the title (a DOC-02 link once
 // ready; the file name in its tooltip) with the kind badge (교재 / 문제지 / 교재+문제, "분석 중"
 // until classified, UX6-UPLOAD) and the status badge right next to it, a meta line
-// "<date time> · <size>", the live progress — upload progress with cancel, parse/index progress,
+// "<date time> · <size>", the live progress — upload progress, parse/index progress,
 // the failure reason with retry — `요약` (DOCSUM-01, ready 교재 / 교재+문제 rows, with "요약 중" while a
-// run is queued/running), `텍스트 내보내기` (DOC-03) and a trash icon button to delete. Upload and processing are one
+// run is queued/running), `텍스트 내보내기` (DOC-03) and a trash icon button to delete, or to cancel
+// an upload (UX12-DOCS-1). Upload and processing are one
 // step progress 업로드 → 분석 → 색인 (UX6-PROGRESS) whose bar never drops back between steps. A
 // long-running job also shows how long it has waited or run, with a hint (DOC-01-AC05). State is always text, never colour
 // alone (the badge text carries it).
@@ -178,11 +179,6 @@ export function DocumentRowItem({
             다시 시도
           </Button>
         ) : null}
-        {onCancel && row.cancellable && localId ? (
-          <Button size="sm" onClick={() => onCancel(localId)}>
-            업로드 취소
-          </Button>
-        ) : null}
         {summary && row.documentId && summarizable(row) ? (
           <SummaryRowButton documentId={row.documentId} title={row.title} action={summary} />
         ) : null}
@@ -196,6 +192,15 @@ export function DocumentRowItem({
             title="삭제"
             icon={<TrashIcon />}
             onClick={() => onDelete(row)}
+          />
+        ) : null}
+        {onCancel && row.cancellable && localId ? (
+          <IconButton
+            size="sm"
+            label={`업로드 취소: ${row.title}`}
+            title="업로드 취소"
+            icon={<TrashIcon />}
+            onClick={() => onCancel(localId)}
           />
         ) : null}
       </div>
