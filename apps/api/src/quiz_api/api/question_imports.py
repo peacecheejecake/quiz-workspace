@@ -387,6 +387,11 @@ class ImportDraftSummary(BaseModel):
     duplicate_of: DraftDuplicate | None = Field(
         default=None, description="As `ImportDraft.duplicate_of` (UX7-DEDUP)."
     )
+    block_ids: list[str] = Field(
+        default_factory=list,
+        description="The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids "
+        "only, for the document viewer to mark the whole printed question.",
+    )
 
 
 class ImportDraftSummaryList(BaseModel):
@@ -816,6 +821,8 @@ def _summary_out(
     record: DraftRecord,
     chapter: DraftChapter | None = None,
     duplicate: DraftDuplicate | None = None,
+    *,
+    include_blocks: bool = False,
 ) -> ImportDraftSummary:
     draft = parse_payload(record.payload)
     content = _content(record, draft)
@@ -832,6 +839,7 @@ def _summary_out(
         validations=[DraftIssue.model_validate(v) for v in record.validations],
         chapter_id=chapter.chapter.id if chapter and chapter.chapter else None,
         duplicate_of=duplicate,
+        block_ids=list(source_pages(draft).block_ids) if include_blocks else [],
     )
 
 
@@ -1107,7 +1115,11 @@ def list_question_import_drafts(
     operation_id="listQuestionImportDraftSummaries",
 )
 def list_question_import_draft_summaries(
-    access: ReadImport, repo: ImportRepo
+    access: ReadImport,
+    repo: ImportRepo,
+    include_blocks: Annotated[
+        bool, Query(description="Fill `block_ids` (the document viewer, UX12-EXTRACT).")
+    ] = False,
 ) -> ImportDraftSummaryList:
     """Every draft of the run in source order without its content (QIMP-PAGING): the review
     screen selects, counts and registers over all drafts from this and reads the content of the
@@ -1118,7 +1130,10 @@ def list_question_import_draft_summaries(
     chapters = _chapters_of(repo.session, run, drafts)
     duplicates = draft_duplicates(repo.session, run.workspace_id, drafts)
     return ImportDraftSummaryList(
-        items=[_summary_out(d, chapters.get(d.id), duplicates.get(d.id)) for d in drafts],
+        items=[
+            _summary_out(d, chapters.get(d.id), duplicates.get(d.id), include_blocks=include_blocks)
+            for d in drafts
+        ],
         chapters=_chapter_options(repo, run),
     )
 

@@ -4225,6 +4225,11 @@ export type components = {
       /** Answer Missing */
       answer_missing: boolean;
       /**
+       * Block Ids
+       * @description The draft's source blocks, with `include_blocks=true` (UX12-EXTRACT): ids only, for the document viewer to mark the whole printed question.
+       */
+      block_ids?: string[];
+      /**
        * Chapter Id
        * @description Import drafts: the book chapter the draft is registered under (as `ImportDraft.chapter.id`, sent back as `chapter_id` when registering); null = none.
        */
@@ -12945,7 +12950,10 @@ export interface operations {
   };
   listQuestionImportDraftSummaries: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Fill `block_ids` (the document viewer, UX12-EXTRACT). */
+        include_blocks?: boolean;
+      };
       header?: never;
       path: {
         import_id: string;

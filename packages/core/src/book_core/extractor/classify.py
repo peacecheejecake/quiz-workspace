@@ -6,9 +6,9 @@ questions, e.g. chapter-end exercises). It reuses the question extractor's own s
 (``segment``), so a "question" here is exactly what an import would find; there is no second
 detector to drift from it. Deterministic, no LLM, no document text in the result.
 
-The document is segmented chapter by chapter with ``segment_chapters`` and its key matched with
-``answer_entries`` - the same reading the import (``QuestionExtractor``) does, so a document
-classified as having questions yields them as drafts.
+The document is put in ``reading_order``, segmented chapter by chapter with ``segment_chapters``
+and its key matched with ``answer_entries`` - the same reading the import
+(``QuestionExtractor``) does, so a document classified as having questions yields them as drafts.
 
 Evidence:
 
@@ -29,7 +29,8 @@ Evidence:
 - **page share** (reported, not decisive): pages where such a question starts or the answer
   key is printed, over pages with text.
 
-Rule (``CLASSIFIER_VERSION`` 1; calibrate with ``eval/classify_pdfs.py`` on local PDFs):
+Rule (``CLASSIFIER_VERSION`` 2: the thresholds of 1, on blocks in ``reading_order``; calibrate
+with ``eval/classify_pdfs.py`` on local PDFs):
 
 - fewer than ``MIN_STRONG_QUESTIONS`` strong questions -> ``book``;
 - coverage >= ``PAPER_COVERAGE`` -> ``question_paper``;
@@ -52,6 +53,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from book_core.contracts import Block, BlockType, CoreModel
+from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
     AnswerKeyEntry,
     RawQuestion,
@@ -61,7 +63,7 @@ from book_core.extractor.segment import (
 )
 from book_core.question import answer_option_keys, canonical_key
 
-CLASSIFIER_VERSION = "book-core-content-classifier/1"
+CLASSIFIER_VERSION = "book-core-content-classifier/2"
 
 ContentKind = Literal["book", "question_paper", "mixed"]
 Confidence = Literal["high", "low"]
@@ -158,6 +160,7 @@ def _gaps(numbers: Sequence[int]) -> int:
 
 
 def classify_content(blocks: Sequence[Block]) -> ContentDetection:
+    blocks = reading_order(blocks)
     seg = segment_chapters(blocks)
     questions, entries = seg.questions, seg.answer_key
     keys = answer_entries(seg)

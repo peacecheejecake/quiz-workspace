@@ -123,34 +123,61 @@ export function textTargetForPage(groups: readonly PageGroup[], page: number): T
 }
 
 /**
+ * One box per page around a question's blocks. An image beside or above the question's text on
+ * its page is decoration an earlier import kept as a figure (UX12-EXTRACT): it does not stretch
+ * the box. A page with no text of the question proves nothing: a figure there stays.
+ */
+function questionBoxes(blocks: readonly ContentBlock[]): ContentBlock['locations'] {
+  type Box = { x0: number; y0: number; x1: number; y1: number };
+  const grow = (boxes: Map<number, Box>, page: number, bbox: Box) => {
+    const box = boxes.get(page);
+    boxes.set(
+      page,
+      box
+        ? {
+            x0: Math.min(box.x0, bbox.x0),
+            y0: Math.min(box.y0, bbox.y0),
+            x1: Math.max(box.x1, bbox.x1),
+            y1: Math.max(box.y1, bbox.y1),
+          }
+        : { ...bbox },
+    );
+  };
+  const text = new Map<number, Box>();
+  for (const block of blocks) {
+    if (block.type === 'image') continue;
+    for (const { page, bbox } of block.locations) if (bbox) grow(text, page, bbox);
+  }
+  const boxes = new Map(text);
+  for (const block of blocks) {
+    if (block.type !== 'image') continue;
+    for (const { page, bbox } of block.locations) {
+      if (!bbox) continue;
+      const beside = text.get(page);
+      const inColumn = beside && bbox.x1 > beside.x0 && bbox.x0 < beside.x1;
+      if (!beside || (inColumn && bbox.y1 > beside.y0)) grow(boxes, page, bbox);
+    }
+  }
+  return [...boxes.entries()].sort(([a], [b]) => a - b).map(([page, bbox]) => ({ page, bbox }));
+}
+
+/**
  * The PDF highlights of the selection: a question's whole printed place (stem and options, one box
- * per page) when the selected block is one of its source blocks, else viewerHighlights.
+ * per page) when the selected block is one of the source blocks of a confirmed question or of a
+ * draft (`drafts`, UX12-EXTRACT-AC01: its outline rows are sections cut by headings inside the
+ * question, not the question), else viewerHighlights.
  */
 export function selectionHighlights(
   currentBlock: ContentBlock | undefined,
   jump: OutlineJump | null,
   blocks: readonly ContentBlock[],
   groups: readonly PageGroup[],
+  drafts: readonly (readonly string[])[] = [],
 ): ContentBlock['locations'] {
-  const question = currentBlock ? questionItemOf(groups, currentBlock.block_id) : undefined;
-  if (!question) return viewerHighlights(currentBlock, jump, blocks);
-  const boxes = new Map<number, { x0: number; y0: number; x1: number; y1: number }>();
-  for (const block of question.blocks) {
-    for (const { page, bbox } of block.locations) {
-      if (!bbox) continue;
-      const box = boxes.get(page);
-      boxes.set(
-        page,
-        box
-          ? {
-              x0: Math.min(box.x0, bbox.x0),
-              y0: Math.min(box.y0, bbox.y0),
-              x1: Math.max(box.x1, bbox.x1),
-              y1: Math.max(box.y1, bbox.y1),
-            }
-          : { ...bbox },
-      );
-    }
-  }
-  return [...boxes.entries()].sort(([a], [b]) => a - b).map(([page, bbox]) => ({ page, bbox }));
+  const id = currentBlock?.block_id;
+  const confirmed = id ? questionItemOf(groups, id)?.blocks : undefined;
+  const draft = id ? drafts.find((ids) => ids.includes(id)) : undefined;
+  const members = confirmed ?? blocks.filter((b) => draft?.includes(b.block_id));
+  if (members.length === 0) return viewerHighlights(currentBlock, jump, blocks);
+  return questionBoxes(members);
 }

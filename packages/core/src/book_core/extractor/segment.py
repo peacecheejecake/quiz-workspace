@@ -1,7 +1,9 @@
 """Deterministic, rule-based pre-extraction of a question paper (no LLM).
 
-Walks the parsed blocks in reading order, split into lines (Docling emits one block per printed
-line, the ideal fixture documents one block per question), and segments:
+Walks blocks in the order it is given, split into lines (Docling emits one block per printed line,
+the ideal fixture documents one block per question). Docling's body order is not the printed
+order, so callers pass ``reading_order(blocks)``, and every position here (``block_indices``,
+``SourceLine.block_index``) indexes that list. It segments:
 
 - questions by numbering (``1.``, ``1번``, ``문 1.``, ``Q1.``), or a bare number (``01 ...``) on a
   heading line or a line with a question cue (``?``, ``시오``, an answer blank ``( )``); a bare
