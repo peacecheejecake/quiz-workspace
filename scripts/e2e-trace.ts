@@ -128,6 +128,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-CONTROLS.0': ['UX12-CONTROLS'],
   // UX12 EXPL-1 (2026-11-06): AI 해설 toolbar, shared disclosure heading, 작성중... text.
   'UX12-EXPL.0': ['UX12-EXPL'],
+  // UX12 HOME-2: no leftover AI buttons, notices or reasons where the LLM is off (D-14).
+  'UX12-AIOFF.0': ['UX12-AIOFF'],
 };
 
 const LEADING_ID = new RegExp(

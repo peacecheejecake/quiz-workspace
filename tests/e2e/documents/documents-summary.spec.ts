@@ -408,7 +408,7 @@ test(
 );
 
 test(
-  'DOCSUM-01-AC05 with the feature off create is disabled with a reason and publishing starts no run',
+  'DOCSUM-01-AC05 with the feature off only stored summaries are offered and publishing starts no run',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('docsum01-ac05');
@@ -421,9 +421,9 @@ test(
     try {
       await page.goto(`${off.webUrl}${summaryPanelPath(ws.id, without.documentId)}`);
       let panel = summaryUi.panel(page);
-      await expect(panel).toBeVisible();
-      const create = summaryUi.createButton(panel);
-      await expect(create).toHaveCount(0);
+      await expect(summaryUi.empty(panel)).toBeVisible();
+      await expect(summaryUi.createButton(panel)).toHaveCount(0);
+      await expect(panel.getByText(summaryUi.unavailableReason)).toHaveCount(0);
 
       const state = await off.request<SummaryState>(
         owner,

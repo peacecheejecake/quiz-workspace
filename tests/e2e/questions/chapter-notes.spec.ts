@@ -680,14 +680,14 @@ test(
       hold.release();
       await waitForNote(s.owner, s.ch1, 'succeeded');
 
-      // Feature off: create is disabled with the reason, POST is 409, stored notes still read.
+      // Feature off: no create action or reason, POST is 409, stored notes still read.
       const off = await startChapterNotesOffStack();
       try {
         await page.goto(`${off.webUrl}${notePanelPath(s.workspaceId, enCh1)}`);
         panel = noteUi.panel(page);
         await expect(panel).toBeVisible();
-        const create = noteUi.create(panel);
-        await expect(create).toHaveCount(0);
+        await expect(noteUi.create(panel)).toHaveCount(0);
+        await expect(panel.getByText(noteUi.unavailableReason)).toHaveCount(0);
         const state = await off.request<ChapterNoteState>(
           s.owner,
           'GET',

@@ -700,13 +700,13 @@ test(
       await limited.stop();
     }
 
-    // Feature off: the reason instead of a button; existing explanations still read.
+    // Feature off: neither a button nor a reason; existing explanations still read.
     const off = await startExplanationsOffStack();
     try {
       await page.goto(`${off.webUrl}${overviewPath(s.workspaceId)}`);
       let { panel } = await openAndSubmit(page, 7, correctText(withoutExpl), RESULT_TEXT.correct);
-      await expect(explUi.area(panel).getByText(EXPL_TEXT.disabled)).toBeVisible();
-      await expect(explUi.create(explUi.area(panel))).toHaveCount(0);
+      await expect(panel.getByText(EXPL_TEXT.disabled)).toHaveCount(0);
+      await expect(explUi.create(panel)).toHaveCount(0);
       await panelUi.close(panel).click();
       panel = await openPanel(page, 6);
       await expect(result(panel)).toContainText(RESULT_TEXT.correct);
