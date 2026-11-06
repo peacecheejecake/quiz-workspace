@@ -1,9 +1,11 @@
 -- UX12 CHAPTER-4 chapter editing on the active revision (CHMAN-01, docs/questions.md §14.5, D-9).
 --
 -- A published revision stays frozen except through one path: the `chapter_edit_*` functions below.
--- They are SECURITY DEFINER and carry the function-level setting `quiz.chapter_edit = on`. The
--- guards trust the setting only when the current role is not one of the login roles, so
--- `quiz_api` cannot enable the path with a plain `set_config`. Inside the path:
+-- They are SECURITY DEFINER and set `quiz.chapter_edit = on` for the transaction (not as a
+-- function-level SET: only a superuser may attach a custom setting to a function, and the migration
+-- role is not one on Supabase). The guards trust the setting only when the current role is not one
+-- of the login roles, so `quiz_api` cannot use the path with a plain `set_config`, and the setting
+-- means nothing once the function has returned. Inside the path:
 --   chapters        UPDATE of title, parent_id, level, sort_order only; INSERT of a `user-<uuid>`
 --                   chapter without page or heading; DELETE
 --   content_blocks  UPDATE of chapter_id only
@@ -174,12 +176,13 @@ begin
     raise exception 'document % has no chapter tree to edit', p_document_id
       using errcode = 'no_data_found';
   end if;
+  perform pg_catalog.set_config('quiz.chapter_edit', 'on', true);
   return rev;
 end;
 $$;
 
 comment on function public.chapter_edit_revision(uuid, uuid) is
-  'CHMAN-01: lock a live book and return its active revision.';
+  'CHMAN-01: lock a live book, open the chapter_edit path, return the active revision.';
 
 create function public.chapter_edit_create(
   p_workspace_id uuid, p_document_id uuid, p_chapter_id uuid, p_parent_id uuid, p_title text
@@ -189,7 +192,6 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
-set quiz.chapter_edit = 'on'
 as $$
 declare
   rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
@@ -213,7 +215,6 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
-set quiz.chapter_edit = 'on'
 as $$
 declare
   rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
@@ -240,7 +241,6 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
-set quiz.chapter_edit = 'on'
 as $$
 declare
   rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
@@ -273,7 +273,6 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
-set quiz.chapter_edit = 'on'
 as $$
 declare
   rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
@@ -312,7 +311,6 @@ language plpgsql
 volatile
 security definer
 set search_path = ''
-set quiz.chapter_edit = 'on'
 as $$
 declare
   rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
@@ -343,8 +341,17 @@ security definer
 set search_path = ''
 as $$
 declare
-  rev uuid := public.chapter_edit_revision(p_workspace_id, p_document_id);
+  rev uuid;
 begin
+  -- Any document: a restore of a question paper passes here too, and a draft needs no path.
+  select d.active_revision_id into rev
+    from public.documents d
+   where d.id = p_document_id and d.workspace_id = p_workspace_id
+     for update;
+  if rev is null then
+    raise exception 'document % has no active revision', p_document_id
+      using errcode = 'no_data_found';
+  end if;
   if not exists (select 1 from public.document_revisions r
                   where r.id = p_draft_id and r.document_id = p_document_id
                     and r.workspace_id = p_workspace_id and r.status = 'draft') then

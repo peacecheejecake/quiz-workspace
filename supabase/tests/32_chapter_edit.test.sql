@@ -4,7 +4,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(48);
+select plan(49);
 
 -- Privileges -----------------------------------------------------------------------------------
 select ok(has_function_privilege('quiz_api', f, 'execute'), 'quiz_api can execute ' || f)
@@ -22,7 +22,7 @@ select ok(not has_function_privilege('quiz_api', 'public.chapter_edit_revision(u
   'execute'), 'the document lock helper is internal');
 select is((select proconfig from pg_proc
             where oid = 'public.chapter_edit_tree(uuid, uuid, jsonb)'::regprocedure),
-  array['search_path=""', 'quiz.chapter_edit=on'], 'SECURITY DEFINER with both settings');
+  array['search_path=""'], 'SECURITY DEFINER with an empty search_path (no custom function SET)');
 select ok(not has_table_privilege('quiz_api', 'public.document_revisions', 'delete'),
   'no new table grant for the path');
 
@@ -213,6 +213,14 @@ select lives_ok($$ select public.chapter_edit_sync_draft('10000000-0000-4000-800
 select throws_ok($$ select public.chapter_edit_sync_draft('10000000-0000-4000-8000-0000000e0001',
     '20000000-0000-4000-8000-0000000e0001', '30000000-0000-4000-8000-0000000e0001', null) $$,
   'P0002', null, 'a published revision is not a draft');
+insert into public.document_revisions (id, workspace_id, document_id, revision_number,
+                                       parent_revision_id, source_object_key, created_by)
+select '30000000-0000-4000-8000-0000000e0004', workspace_id, document_id, 2, id, source_object_key,
+       created_by
+  from public.document_revisions where id = '30000000-0000-4000-8000-0000000e0002';
+select lives_ok($$ select public.chapter_edit_sync_draft('10000000-0000-4000-8000-0000000e0001',
+    '20000000-0000-4000-8000-0000000e0002', '30000000-0000-4000-8000-0000000e0004', null) $$,
+  'a question paper''s restored draft syncs too');
 
 -- History and publish --------------------------------------------------------------------------
 insert into public.questions (id, workspace_id, chapter_id, question_type, origin, created_by)
