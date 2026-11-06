@@ -92,6 +92,7 @@ import { listChapterNotes } from '@/lib/notes/client';
 import { generatingChapters, type ChapterNoteList } from '@/lib/notes/model';
 import { WorkspaceSharingPanel } from '@/components/sharing/workspace-sharing-panel';
 import { AskIcon } from '@/components/ask/ask-icons';
+import { MockExamIcon } from './home-icons';
 import {
   AskLauncherProvider,
   useGuardedAskLaunch,
@@ -925,6 +926,7 @@ function WorkspaceHomeContent({
           />
           <Button
             variant="primary"
+            className={styles.compactButton}
             onClick={() => {
               if (!homeOpensBlocked(new URLSearchParams(window.location.search))) {
                 panelHistory.push(
@@ -933,7 +935,8 @@ function WorkspaceHomeContent({
               }
             }}
           >
-            모의고사
+            <MockExamIcon width={16} height={16} className={styles.compactIcon} />
+            <span className={styles.compactLabel}>모의고사</span>
           </Button>
         </div>
         <QuestionSearch

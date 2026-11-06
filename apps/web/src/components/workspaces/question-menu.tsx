@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@quiz/ui';
+import { DocumentsIcon } from './home-icons';
 import styles from './workspace-home.module.css';
 
 /** Why the workspace is read-only for this member, or null when they can edit. */
@@ -107,9 +108,17 @@ export function QuestionMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button ref={triggerRef}>
-          문서 <span className={styles.count}>{documentCount}</span>
-          <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+        <Button ref={triggerRef} className={styles.compactButton}>
+          <DocumentsIcon width={16} height={16} className={styles.compactIcon} />
+          <span className={styles.documentsLabel}>
+            문서 <span className={styles.count}>{documentCount}</span>
+          </span>
+          <ChevronDownIcon
+            width={16}
+            height={16}
+            aria-hidden="true"
+            className={styles.documentsChevron}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

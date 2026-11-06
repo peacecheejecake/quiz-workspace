@@ -57,11 +57,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 문서 N's words and count: laid out as direct children of the button until they are hidden. */
+.documentsLabel {
+  display: contents;
+}
+
+/* The icons of the two text buttons, shown only while the open search needs their room. */
+.compactIcon {
+  display: none;
+}
+
 /* Narrow screens: AI 질문 keeps its name but shows only its icon, the groups sit closer and the
    buttons give up side padding, never words, so seven of them fit one row at 375px with a
-   three-digit count (UX12-HEADER-AC05). */
+   three-digit count (UX12-HEADER-AC05). --home-icon-size also sizes 검색 and 필터. */
 @media (max-width: 539px) {
   .toolbar {
+    --home-icon-size: var(--control-height-sm);
+
     column-gap: var(--space-1);
   }
 
@@ -72,7 +84,7 @@
 
   .toolbar :global(.qz-icon-button),
   .toolbar .askButton {
-    width: var(--control-height-sm);
+    width: var(--home-icon-size);
     padding-inline: 0;
   }
 
@@ -86,13 +98,65 @@
   }
 }
 
-/* The open 문제 search has the line to itself: 검색 닫기 brings the buttons back. */
+/* The open 문제 search takes what is left of the line and every button stays. From 540px the
+   narrow line above makes the room. */
 @media (width < 768px) {
-  .toolbar:has([data-open]) .actionGroup {
-    display: none;
+  .toolbar:has([data-open]) {
+    --home-icon-size: var(--control-height-sm);
+
+    column-gap: var(--space-1);
   }
 
-  .toolbar:has([data-open]) :global(.qz-icon-button) {
-    width: var(--control-height-md);
+  .toolbar:has([data-open]) :global(.qz-button) {
+    gap: var(--space-1);
+    padding-inline: var(--space-2);
+  }
+
+  .toolbar:has([data-open]) :global(.qz-icon-button),
+  .toolbar:has([data-open]) .askButton {
+    width: var(--home-icon-size);
+    padding-inline: 0;
+  }
+
+  .toolbar:has([data-open]) .askLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* On a phone that is not enough: every button is an icon, at the 24px minimum target width, so the
+   box keeps at least 120px at 360px. The names stay for assistive technology. */
+@media (max-width: 539px) {
+  .toolbar:has([data-open]) {
+    --home-icon-size: calc(var(--control-height-sm) - var(--space-1));
+  }
+
+  .toolbar:has([data-open]) .compactButton {
+    width: var(--home-icon-size);
+    padding-inline: 0;
+  }
+
+  .toolbar:has([data-open]) .compactIcon {
+    display: block;
+    flex: none;
+  }
+
+  .toolbar:has([data-open]) .compactLabel,
+  .toolbar:has([data-open]) .documentsLabel {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .toolbar:has([data-open]) .documentsChevron {
+    display: none;
   }
 }

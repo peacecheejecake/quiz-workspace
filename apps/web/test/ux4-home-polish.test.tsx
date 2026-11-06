@@ -37,6 +37,14 @@ function menu(readOnly: QuestionMenuReadOnly) {
 }
 
 describe('home `문제` menu', () => {
+  it('UX12-HOMEFILTER-AC08 keeps the 문서 N name when the open search hides its words', () => {
+    menu(null);
+    const trigger = screen.getByRole('button', { name: '문서 3' });
+    const icons = [...trigger.querySelectorAll('svg')];
+    expect(icons).toHaveLength(2); // the compact icon and the chevron; CSS shows one or the other
+    for (const icon of icons) expect(icon).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('QOV-01-AC11 offers 직접 추가, 중복 문제 정리 and 챕터 재분배 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
