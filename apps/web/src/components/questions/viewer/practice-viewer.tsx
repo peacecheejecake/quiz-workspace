@@ -246,8 +246,10 @@ export function PracticeViewer({
   const liveWork = useRef<string | null>(null);
   // What this opening of the panel has shown: closing it forgets everything.
   const [views] = useState(() => new OpeningViews<ShownView>());
-  // The opening whose `해설 보기` started: its quiet confirmation must not replace the result.
+  // The opening whose `해설 보기` is running: its quiet confirmation waits in `heldConfirmation`, to
+  // be dropped when the result arrives or applied if the reveal fails.
   const revealStarted = useRef<string | null>(null);
+  const heldConfirmation = useRef<(() => void) | null>(null);
   // The question whose reset is closing the panel: nothing may open it again on the way out, or
   // the new session's view would bring back what the reset cleared (UX10-QVIEW-AC04).
   const resetClosing = useRef<string | null>(null);
@@ -316,6 +318,7 @@ export function PracticeViewer({
     const startedAt = performance.now();
     const open = async () => {
       const resetVersion = practiceResetVersion(workspaceId, id);
+      const viewToken = views.token(id);
       const held =
         opening.cached && cache.get(id)?.id === opening.cached.id ? opening.cached : null;
       const opened = await openQuestionPractice(
@@ -333,40 +336,44 @@ export function PracticeViewer({
       );
       measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
-      if (revealStarted.current === key) return;
-      if (!opened.ok) {
-        setSession({ status: 'error', message: opened.message, key });
-        return;
-      }
-      const { data } = opened;
-      rememberPracticeEpoch(workspaceId, id, data.reset_epoch);
-      if (opening.cached && !data.reused) cache.dropSession(opening.cached.id);
-      const outcome = data.result?.outcome;
-      if (data.result && outcome) {
-        onGraded?.(id, outcome.result);
+      const apply = () => {
+        if (!current) return;
+        if (!opened.ok) {
+          setSession({ status: 'error', message: opened.message, key });
+          return;
+        }
+        const { data } = opened;
+        rememberPracticeEpoch(workspaceId, id, data.reset_epoch);
+        if (opening.cached && !data.reused) cache.dropSession(opening.cached.id);
+        const outcome = data.result?.outcome;
+        if (data.result && outcome) {
+          onGraded?.(id, outcome.result);
+          const view: ShownView = {
+            session: data.result,
+            prior: { outcome, answer: savedAnswer(data.submitted_answer) },
+          };
+          views.put(id, view, viewToken);
+          setSession({ status: 'ready', ...view, key });
+          return;
+        }
+        if (!data.session) {
+          setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
+          return;
+        }
+        if (!data.reused) {
+          cache.put(data.session, data.reset_epoch, data.latest_attempt_id);
+          onViewed(id);
+        }
         const view: ShownView = {
-          session: data.result,
-          prior: { outcome, answer: savedAnswer(data.submitted_answer) },
+          session: data.session,
+          previousRevision: data.previous_revision,
+          revealable: data.latest_attempt_id !== null && !data.previous_revision,
         };
-        views.put(id, view);
+        views.put(id, view, viewToken);
         setSession({ status: 'ready', ...view, key });
-        return;
-      }
-      if (!data.session) {
-        setSession({ status: 'error', message: '문제를 불러오지 못했습니다.', key });
-        return;
-      }
-      if (!data.reused) {
-        cache.put(data.session, data.reset_epoch, data.latest_attempt_id);
-        onViewed(id);
-      }
-      const view: ShownView = {
-        session: data.session,
-        previousRevision: data.previous_revision,
-        revealable: data.latest_attempt_id !== null && !data.previous_revision,
       };
-      views.put(id, view);
-      setSession({ status: 'ready', ...view, key });
+      if (revealStarted.current === key) heldConfirmation.current = apply;
+      else apply();
     };
     const start = () => {
       open().catch(() => {
@@ -450,6 +457,7 @@ export function PracticeViewer({
     }
     const qid = view.id;
     const resetVersion = practiceResetVersion(workspaceId, qid);
+    const viewToken = views.token(qid);
     // Submitted (or failed: already submitted elsewhere) sessions are never shown again.
     cache.dropSession(ready.id);
     updateWork(workId, () => ({ busy: 'submit', error: null }));
@@ -461,7 +469,8 @@ export function PracticeViewer({
     }
     if (result.ok && practiceResetVersion(workspaceId, qid) === resetVersion) {
       onGraded?.(qid, result.data.result);
-      views.put(qid, { session: ready, prior: { outcome: result.data, answer: work.answer } });
+      const prior = { outcome: result.data, answer: work.answer };
+      views.put(qid, { session: ready, prior }, viewToken);
     }
     if (result.ok) submittedHere.current = result.data.attempt_id;
     updateWork(workId, () =>
@@ -482,6 +491,7 @@ export function PracticeViewer({
     }
     const qid = view.id;
     const resetVersion = practiceResetVersion(workspaceId, qid);
+    const viewToken = views.token(qid);
     updateWork(workId, () => ({ busy: 'grade', error: null }));
     let ok = false;
     let message: string = QUESTION_FAILURE_MESSAGES.unavailable;
@@ -497,12 +507,18 @@ export function PracticeViewer({
       const kept = views.get(qid);
       if (kept?.prior) {
         const outcome = { ...kept.prior.outcome, result: grade, state: 'graded' as const };
-        views.put(qid, { ...kept, prior: { ...kept.prior, outcome } });
+        views.put(qid, { ...kept, prior: { ...kept.prior, outcome } }, viewToken);
       }
     }
     updateWork(workId, () =>
       ok ? { busy: null, selfGrade: grade } : { busy: null, error: message },
     );
+  }
+
+  function takeHeldConfirmation() {
+    const held = heldConfirmation.current;
+    heldConfirmation.current = null;
+    return held;
   }
 
   /** `해설 보기`: the earlier result replaces this session, which the server closes. */
@@ -512,8 +528,10 @@ export function PracticeViewer({
     const sessionId = ready.id;
     const key = opening.key;
     const resetVersion = practiceResetVersion(workspaceId, qid);
+    const viewToken = views.token(qid);
     setRevealOpen(false);
     revealStarted.current = key;
+    takeHeldConfirmation();
     updateWork(workId, () => ({ busy: 'reveal', error: null }));
     let shown: Awaited<ReturnType<typeof revealQuestionPractice>>;
     try {
@@ -529,8 +547,10 @@ export function PracticeViewer({
       const message = shown.ok ? QUESTION_FAILURE_MESSAGES.unavailable : shown.message;
       revealStarted.current = null;
       updateWork(workId, () => ({ busy: null, error: message }));
+      takeHeldConfirmation()?.();
       return;
     }
+    takeHeldConfirmation();
     cache.dropSession(sessionId);
     onGraded?.(qid, revealed.outcome.result);
     // The button leaves with the form: focus moves to the result, as after a submission.
@@ -539,7 +559,7 @@ export function PracticeViewer({
       session: revealed,
       prior: { outcome: revealed.outcome, answer: savedAnswer(shown.data.submitted_answer) },
     };
-    views.put(qid, shownView);
+    views.put(qid, shownView, viewToken);
     setSession({ status: 'ready', ...shownView, key });
   }
 

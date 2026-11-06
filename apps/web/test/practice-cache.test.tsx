@@ -51,13 +51,31 @@ function session(questionId: string, overrides: Partial<PracticeSession> = {}): 
 describe('OpeningViews', () => {
   it('UX12-SOLVEDOPEN-AC09 keeps one view per question until it is dropped or cleared', () => {
     const views = new OpeningViews<string>();
-    views.put(Q1.toUpperCase(), 'first');
-    views.put(Q2, 'second');
+    views.put(Q1.toUpperCase(), 'first', views.token(Q1));
+    views.put(Q2, 'second', views.token(Q2));
     expect(views.get(Q1)).toBe('first');
     views.drop(Q1);
     expect(views.get(Q1)).toBeUndefined();
     views.clear();
     expect(views.get(Q2)).toBeUndefined();
+  });
+
+  it('UX12-SOLVEDOPEN-AC09 a write begun before a clear or a drop lands nowhere', () => {
+    const views = new OpeningViews<string>();
+    const beforeClear = views.token(Q1);
+    views.clear();
+    views.put(Q1, 'late', beforeClear);
+    expect(views.get(Q1)).toBeUndefined();
+
+    const beforeDrop = views.token(Q2);
+    const other = views.token(Q1);
+    views.drop(Q2);
+    views.put(Q2, 'late', beforeDrop);
+    expect(views.get(Q2)).toBeUndefined();
+    views.put(Q1, 'kept', other);
+    expect(views.get(Q1)).toBe('kept');
+    views.put(Q2, 'new', views.token(Q2));
+    expect(views.get(Q2)).toBe('new');
   });
 });
 
@@ -759,6 +777,54 @@ describe('UX12-SOLVEDOPEN the question first, 해설 보기 on request', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
     });
     expect(latest).not.toHaveBeenCalled();
+  });
+
+  it('AC09 a submission that lands after the panel closed cannot fill the next opening', async () => {
+    const user = userEvent.setup();
+    let finish: (value: unknown) => void = () => undefined;
+    submit.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const view = render(<Harness questionId={Q1} />);
+    await user.click(await screen.findByRole('radio', { name: '보기 가' }));
+    await user.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    view.rerender(<Harness questionId={null} />);
+    await act(async () => finish({ ok: true, data: outcome }));
+
+    latest.mockResolvedValue(solved);
+    view.rerender(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    expect(screen.queryByText('이전 해설')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('AC09 a reveal that fails after the quiet check returned leaves the session usable', async () => {
+    const user = userEvent.setup();
+    latest.mockResolvedValue(solved);
+    const view = render(<Harness questionId={Q1} />);
+    await screen.findByRole('button', { name: '해설 보기' });
+    view.rerender(<Harness questionId={Q2} />);
+    await screen.findByText(`stem of ${Q2}`);
+
+    const check = holdLatest();
+    const failing = holdLatest();
+    view.rerender(<Harness questionId={Q1} />);
+    await act(async () => {
+      await check.called;
+    });
+    await user.click(screen.getByRole('button', { name: '해설 보기' }));
+    await act(async () => {
+      await failing.called;
+    });
+    await act(async () => check.release(solved));
+    expect(screen.getByRole('button', { name: '제출' })).toBeDisabled();
+    await act(async () =>
+      failing.release({ ok: false, kind: 'unavailable', message: '일시적인 오류입니다.' }),
+    );
+
+    await screen.findByText('일시적인 오류입니다.');
+    await user.click(screen.getByRole('radio', { name: '보기 가' }));
+    expect(screen.getByRole('button', { name: '제출' })).toBeEnabled();
+    expect(screen.queryByText('이전 해설')).toBeNull();
   });
 
   it('AC09 해설 보기 pressed during the quiet check keeps the result', async () => {

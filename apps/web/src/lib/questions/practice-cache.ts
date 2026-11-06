@@ -147,20 +147,31 @@ export class PracticeSessionCache {
  */
 export class OpeningViews<T> {
   private readonly views = new Map<string, T>();
+  private readonly drops = new Map<string, number>();
+  private opening = 0;
 
   get(questionId: string): T | undefined {
     return this.views.get(questionId.toLowerCase());
   }
 
-  put(questionId: string, view: T): void {
-    this.views.set(questionId.toLowerCase(), view);
+  /** Taken before awaiting: `put` refuses it once the question or the opening has been dropped. */
+  token(questionId: string): string {
+    return `${this.opening}:${this.drops.get(questionId.toLowerCase()) ?? 0}`;
+  }
+
+  put(questionId: string, view: T, token: string): void {
+    if (token === this.token(questionId)) this.views.set(questionId.toLowerCase(), view);
   }
 
   drop(questionId: string): void {
-    this.views.delete(questionId.toLowerCase());
+    const key = questionId.toLowerCase();
+    this.views.delete(key);
+    this.drops.set(key, (this.drops.get(key) ?? 0) + 1);
   }
 
   clear(): void {
     this.views.clear();
+    this.drops.clear();
+    this.opening += 1;
   }
 }
