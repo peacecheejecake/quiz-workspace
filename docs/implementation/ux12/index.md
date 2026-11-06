@@ -316,6 +316,6 @@ Wave 안의 Task는 파일 범위가 겹치지 않아 병렬 실행할 수 있�
 | CHAPTER-4 | 7 | 대기 | |
 | CHAPTER-5 | 7 | 대기 | |
 | CHAPTER-6 | 7 | 대기 | |
-| SHARE-1 | 8 | 진행 | |
+| SHARE-1 | 8 | 완료 | Codex P2(CI phase)는 merge에서 반영, lint·typecheck·unit GREEN, 통합·E2E는 PR CI에서 확인 |
 | SHARE-2 | 8 | 진행 | |
 | VIEW-7 | 5 | 진행 | |
