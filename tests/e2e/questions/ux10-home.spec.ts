@@ -1,6 +1,7 @@
 import {
   createNumberedQuestions,
   expect,
+  openQuestionSearch,
   overviewPath,
   overviewUi,
   signInAs,
@@ -81,7 +82,7 @@ test(
     await page.waitForTimeout(450); // the cancelled 350ms timer must not write after Back
     await expect(page).not.toHaveURL(/status=/);
     await unseen.click();
-    const search = page.getByRole('searchbox', { name: /문제 검색/i });
+    const search = await openQuestionSearch(page);
     await search.fill('ux10');
     await expect(page).toHaveURL(/q=ux10/);
     await expect(page).toHaveURL(/status=/);

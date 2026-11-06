@@ -809,18 +809,6 @@ export function QuestionsOverview({
         >
           즐겨찾기만
         </Button>
-        <Button
-          size="sm"
-          aria-pressed={view.retry === true}
-          onClick={() => onFiltersChange({ retry: view.retry === true ? null : true })}
-        >
-          다시 풀기만
-        </Button>
-        {filtered ? (
-          <Button size="sm" variant="ghost" onClick={onResetFilters}>
-            필터 초기화
-          </Button>
-        ) : null}
       </div>
 
       {failure ? (

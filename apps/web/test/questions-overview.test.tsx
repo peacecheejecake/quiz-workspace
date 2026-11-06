@@ -227,12 +227,14 @@ const heatmap = () => screen.getByRole('group', { name: '문제 heatmap' });
 const dot = (n: number) =>
   within(heatmap()).getByRole('button', { name: new RegExp(`(?<!\\d)${n}번 문제`) });
 
-describe('UX10-HOME-AC02 status filter', () => {
+describe('UX12-FILTER-AC01 status filter', () => {
   it('is always visible with all statuses selected', async () => {
     const user = userEvent.setup();
     onFiltersChange.mockReset();
     render(<Screen />);
     const group = screen.getByRole('group', { name: '상태 필터' });
+    expect(within(group).queryByRole('button', { name: '다시 풀기만' })).toBeNull();
+    expect(within(group).queryByRole('button', { name: '필터 초기화' })).toBeNull();
     const retry = within(group).getByRole('button', { name: '다시 풀기' });
     expect(retry).toHaveAttribute('aria-pressed', 'true');
     await user.click(retry);

@@ -58,16 +58,16 @@ const box = async (target: Locator) => {
 const durations = (target: Locator) =>
   target.evaluate((el) => getComputedStyle(el).transitionDuration);
 
-/** The closed box takes no room and cannot be reached. */
+/** The closed box cannot be seen or reached; its column has no width. */
 async function expectClosedBox(page: Page): Promise<void> {
   const state = await homeUi.header(page).evaluate((form) => {
-    const input = form.querySelector('input[type="search"]');
-    return {
-      width: input?.getBoundingClientRect().width,
-      inert: input?.closest('[inert]') !== null,
-    };
+    const slot = form.querySelector('input[type="search"]')?.closest('[inert]');
+    if (!slot) return null;
+    const style = getComputedStyle(slot);
+    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    return { opacity: style.opacity, room: slot.getBoundingClientRect().width - padding };
   });
-  expect(state).toEqual({ width: 0, inert: true });
+  expect(state).toEqual({ opacity: '0', room: 0 });
 }
 
 test(
@@ -89,9 +89,11 @@ test(
     expect(filterBox.x).toBeGreaterThan(searchBox.x);
     await expectClosedBox(page);
 
-    await search.focus();
-    await page.keyboard.press('Tab');
-    await expect(filter).toBeFocused();
+    // inert: not even a script can focus the closed box (Tab skips buttons in WebKit by default).
+    await homeUi.header(page).evaluate((form) => {
+      form.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+    });
+    await expect(page.locator('input[type="search"]:focus')).toHaveCount(0);
 
     await expect(main(page).getByRole('combobox')).toHaveCount(0);
     await expect(main(page).getByText(/^(챕터|유형)$/)).toHaveCount(0);
@@ -109,6 +111,7 @@ test(
   'UX12-FILTER-AC02 opening 검색 widens the gap, turns the button into a borderless arrow and focuses the box',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await ownerHome(page, workspaceFactory, 'ux12-filter-02');
     const button = homeUi.questionSearchButton(page);
     const before = await box(filterButton(page));
@@ -162,7 +165,7 @@ test(
     await expect(button).toBeFocused();
     await expect(button).toHaveAccessibleName(OPEN_SEARCH);
     await expect(button).toHaveAttribute('aria-expanded', 'false');
-    await expect.poll(() => expectClosedBox(page).then(() => true)).toBe(true);
+    await expectClosedBox(page);
 
     await button.click();
     await expect(search).toHaveValue('');
