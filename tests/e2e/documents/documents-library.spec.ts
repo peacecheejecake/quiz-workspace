@@ -21,6 +21,7 @@ import {
   expectReadOnlyQuestionMenu,
   homePath,
   homeUi,
+  QUESTION_MENU_ORDER,
   JOB_TIMEOUT_MS,
   importPath,
   importUi,
@@ -388,7 +389,7 @@ test(
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*2$/); // 교재 + 교재+문제; not the 문제지
-    await button.click();
+    await homeUi.openDocuments(page);
     await expect(page).toHaveURL(/[?&]panel=documents(&|$)/);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
@@ -453,7 +454,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(`/workspaces/${ws.id}`);
     await expect(homeBackgroundUi.documentsButton(page)).toHaveText(/문서\s*0$/);
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await expect(dialog).toBeVisible();
 
@@ -548,7 +549,7 @@ test(
     await page.goto(`/workspaces/${ws.id}`);
     const button = homeBackgroundUi.documentsButton(page);
     await expect(button).toHaveText(/문서\s*1$/);
-    await button.click();
+    await homeUi.openDocuments(page);
     const paperRow = docUi.item(page, /questions-ko/);
     const bookRow = docUi.item(page, /book-ko/);
     await expect(docUi.kindBadge(paperRow, '문제지')).toBeVisible();
@@ -622,16 +623,10 @@ test(
 
     await signInAs(page, owner.user);
     await page.goto(homePath(ws.id));
-    // The 문제 menu has no PDF 관리 item any more.
-    await homeUi.questionMenuButton(page).click();
+    // The menu has no PDF 관리 item any more.
+    await homeUi.openMenu(page);
     await expect(homeUi.questionMenu(page).getByRole('menuitem')).toHaveText([
-      /^(직접 추가|add question)$/i,
-      // UX7-DEDUP (QOV-01-AC16).
-      /^(중복 문제 정리|clean up duplicates|duplicate questions)$/i,
-      // CHREDIST-01 (UX9-REDIST-W).
-      /^(챕터 재분배|redistribute chapters)$/i,
-      // UX7-BANK-2 (QOV-01-AC15).
-      /^(보관·초안 문제|archived and draft questions)$/i,
+      ...QUESTION_MENU_ORDER,
     ]);
     await expect(homeUi.questionMenuItem(page, 'pdfs')).toHaveCount(0);
     await page.keyboard.press('Escape');

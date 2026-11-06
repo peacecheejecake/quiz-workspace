@@ -1,7 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { Fragment, useId, useRef } from 'react';
+import { isPlainClick, markSearchEntryFromHome } from '@/components/search/search-entry';
 import {
+  Button,
   ChevronDownIcon,
   DropdownMenu,
   DropdownMenuContent,
@@ -9,8 +12,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  IconButton,
 } from '@quiz/ui';
+import styles from './workspace-home.module.css';
 
 /** Why the workspace is read-only for this member, or null when they can edit. */
 export type QuestionMenuReadOnly = 'viewer' | 'archived' | null;
@@ -33,7 +36,11 @@ interface QuestionMenuAction {
 }
 
 /**
- * The header's `문제` menu (UX4): 직접 추가 (the 문제 등록 editor on the home,
+ * The header's `문서 N` menu (UX12-HEADER, D-7): the one menu of the home, grouped 문서 관리 · 본문
+ * 검색 | the 문제 items below | 보관·초안 문제. Its trigger is named after the book count, and so is
+ * the menu (Radix labels it by its trigger). 문서 관리 and 본문 검색 are for every member; 본문 검색
+ * is a real link (SEARCH-02), so a modified click opens a new tab. Before it was this menu, the
+ * `문제` menu (UX4): 직접 추가 (the 문제 등록 editor on the home,
  * `?panel=question-create`, UX7-BANK). 변형 출제 and its 문제 생성 dialog were retired with QGEN-01
  * (QGEN-RM; 모의고사 replaces them, MOCK-01-AC01). The 전체 문제 link
  * (UX6-PROGRESS) went with its page (UX7-BANK) and PDF 관리 with the 문제 PDF 관리 dialog, merged
@@ -52,12 +59,18 @@ interface QuestionMenuAction {
  */
 export function QuestionMenu({
   readOnly,
+  documentCount,
+  searchHref,
+  onDocuments,
   onCreate,
   onDuplicates,
   onRedistribute,
   onInactive,
 }: {
   readonly readOnly: QuestionMenuReadOnly;
+  readonly documentCount: number;
+  readonly searchHref: string;
+  readonly onDocuments: () => void;
   readonly onCreate: () => void;
   readonly onDuplicates: () => void;
   readonly onRedistribute: () => void;
@@ -71,7 +84,13 @@ export function QuestionMenu({
     pending.current = action;
   };
   const actions: readonly QuestionMenuAction[] = [
-    { key: 'create', label: '직접 추가', requiresEdit: true, onSelect: onCreate },
+    {
+      key: 'create',
+      label: '직접 추가',
+      requiresEdit: true,
+      separated: true,
+      onSelect: onCreate,
+    },
     { key: 'duplicates', label: '중복 문제 정리', requiresEdit: true, onSelect: onDuplicates },
     { key: 'redistribute', label: '챕터 재분배', requiresEdit: true, onSelect: onRedistribute },
     {
@@ -87,15 +106,14 @@ export function QuestionMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <IconButton
-          ref={triggerRef}
-          label="문제 메뉴"
-          icon={<ChevronDownIcon width={16} height={16} aria-hidden="true" />}
-        />
+        <Button ref={triggerRef}>
+          문서 <span className={styles.count}>{documentCount}</span>
+          <ChevronDownIcon width={16} height={16} aria-hidden="true" />
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        aria-label="문제"
+        aria-label="문서"
         aria-describedby={anyDisabled ? reasonId : undefined}
         onCloseAutoFocus={(event) => {
           const action = pending.current;
@@ -108,6 +126,17 @@ export function QuestionMenu({
         }}
       >
         {anyDisabled ? <DropdownMenuLabel id={reasonId}>{reason}</DropdownMenuLabel> : null}
+        <DropdownMenuItem onSelect={afterClose(onDocuments)}>문서 관리</DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link
+            href={searchHref}
+            onClick={(event) => {
+              if (isPlainClick(event)) markSearchEntryFromHome();
+            }}
+          >
+            본문 검색
+          </Link>
+        </DropdownMenuItem>
         {actions.map((action) => {
           const own = action.ownReason ?? null;
           const disabled = (action.requiresEdit && reason !== null) || own !== null;

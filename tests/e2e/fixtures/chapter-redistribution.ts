@@ -56,7 +56,7 @@ import { execFileSync } from 'node:child_process';
 import { expect, type Locator, type Page } from '@playwright/test';
 import type { ApiResponse } from './api.ts';
 import { localDbAdminUrl } from './local-env.ts';
-import { main } from './workspace-ui.ts';
+import { HOME_MENU_NAME, main } from './workspace-ui.ts';
 import type { Member } from './workspaces.ts';
 
 export const REDIST_PANEL = 'chapter-redistribution';
@@ -170,7 +170,7 @@ function escape(text: string): string {
 export const redistUi = {
   menuItem: (page: Page) =>
     page
-      .getByRole('menu', { name: /^(문제 메뉴|question menu)$/i })
+      .getByRole('menu', { name: HOME_MENU_NAME })
       .getByRole('menuitem', { name: /^(챕터 재분배|redistribute chapters)$/i }),
   dialog: (page: Page) =>
     page.getByRole('dialog', { name: /^(챕터 재분배|redistribute chapters)$/i }),
@@ -260,7 +260,7 @@ export function summaryText(parts: {
 
 /** Opens `문제` › `챕터 재분배` with the keyboard (Enter, arrows) and returns the dialog. */
 export async function openRedistributionByKeyboard(page: Page): Promise<Locator> {
-  const button = main(page).getByRole('button', { name: /^(문제 메뉴|question menu)$/i });
+  const button = main(page).getByRole('button', { name: HOME_MENU_NAME });
   const item = redistUi.menuItem(page);
   // Right after a navigation the page may still be settling (hydration, a late history write):
   // a menu that lost its focus meanwhile is closed with Escape and opened again, keyboard only.

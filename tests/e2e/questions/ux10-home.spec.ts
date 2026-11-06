@@ -10,7 +10,7 @@ import {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test(
-  'UX10-HOME-AC01 primary play and icon-only question menu',
+  'UX10-HOME-AC01 primary play and the 문서 N menu',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux10-home-01');
@@ -18,7 +18,7 @@ test(
     await signInAs(page, owner.user);
     await page.goto(overviewPath(workspace.id));
     await expect(page.getByRole('button', { name: /^풀기$/ })).toBeVisible();
-    const menu = page.getByRole('button', { name: /문제 메뉴|question menu/i });
+    const menu = page.getByRole('main').getByRole('button', { name: /^(문서|documents)\s*\d+$/i });
     await expect(menu).toBeVisible();
     await menu.click();
     await expect(page.getByRole('menuitem', { name: /문제 풀기|모의고사|AI 질문/i })).toHaveCount(

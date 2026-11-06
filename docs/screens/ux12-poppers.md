@@ -23,7 +23,7 @@
 **문제 미리보기 여백:** Heatmap 문제 미리보기(`QuestionPreviewPopover`)도 marker가 화면 끝에 붙어 있을 때 화면 가장자리와 16px 이상 떨어진다.
 
 ### UX12-POPPERS-AC04
-**Dropdown 메뉴 마우스:** `modal={false}` Dropdown 메뉴(문제 메뉴, Workspace 목록 더보기)의 trigger를 마우스로 다시 누르면 메뉴가 닫히고 다시 열리지 않으며, 세 번째 누름에 다시 열린다.
+**Dropdown 메뉴 마우스:** `modal={false}` Dropdown 메뉴(홈 `문서 N` 메뉴, Workspace 목록 더보기)의 trigger를 마우스로 다시 누르면 메뉴가 닫히고 다시 열리지 않으며, 세 번째 누름에 다시 열린다.
 
 ### UX12-POPPERS-AC05
 **Dropdown 메뉴 터치:** 같은 메뉴를 터치로 다시 탭해도 AC04와 같다.

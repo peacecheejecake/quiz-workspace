@@ -148,7 +148,7 @@ test(
     const ws = await workspaceFactory.create(owner);
     await signInAs(page, owner.user);
     await page.goto(overviewPath(ws.id));
-    await homeUi.documentsButton(page).click();
+    await homeUi.openDocuments(page);
     const dialog = homeUi.documentsDialog(page);
     await swipe(dialog.locator(':scope > .header'), 5, 5);
     await swipe(dialog.locator(':scope > .body'), 100, 100);

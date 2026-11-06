@@ -4,7 +4,7 @@ linked_tests: `tests/e2e/questions/ux10-home.spec.ts`
 
 ### UX10-HOME-AC01
 
-문서 뒤의 primary 풀기 버튼으로 통합 풀이에 진입하고, 아이콘 전용 문제 메뉴에 중복 풀이 및 AI 질문 항목이 없다.
+`문서 N` 메뉴 버튼 뒤의 primary 풀기 버튼으로 통합 풀이에 진입하고, 그 메뉴에 중복 풀이 및 AI 질문 항목이 없다. (UX12 HOME-4: 아이콘 전용 `문제 메뉴`는 `문서 N` 메뉴로 합쳐졌다, [UX12-HEADER](ux12-home-header.md).)
 
 ### UX10-HOME-AC02
 

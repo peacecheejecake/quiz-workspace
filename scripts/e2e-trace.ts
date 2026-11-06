@@ -117,6 +117,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX11-RETURN': ['UX11-RETURN'],
   'UX12-PLAY.0': ['UX12-PLAY'],
   'UX12-HOME.0': ['UX12-HOME'],
+  // UX12 HOME-4: the sticky 문서 N · 풀기 line and the single 문서 N menu (D-7).
+  'UX12-HEADER.0': ['UX12-HEADER'],
   // UX12 HILITE-1 (2026-11-06): selection kept under the highlight menu, press again to close.
   'UX12-HILITE.0': ['UX12-HILITE'],
   // UX12 DESIGN-2: tooltip safe margin and closing a popper by pressing its trigger again.

@@ -1,10 +1,21 @@
-/* Workspace home (QOV-01, UX3c): header with the 문제 search and actions, then the 본문 search
-   (collapsed by default, UX7-SEARCH) and the 문제 영역. Semantic tokens only. */
+/* Workspace home (QOV-01, UX3c): the sticky line of actions (UX12-HEADER), the 문제 search, then
+   the 문제 영역. Semantic tokens only. */
 
+/* A flex column, not a grid: a grid item's sticky range ends with its row (UX12-HEADER).
+   --home-toolbar-height is the one-row height until the page measures the line. */
 .home {
-  display: grid;
+  --home-toolbar-padding: var(--space-2);
+  --home-toolbar-height: calc(var(--control-height-md) + 2 * var(--home-toolbar-padding));
+
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
+}
+
+/* Keyboard moves keep the focused marker clear of the app header and the sticky line. */
+.home :global(.qz-question-dot) {
+  scroll-margin-top: calc(var(--app-header-height) + var(--home-toolbar-height) + var(--space-2));
 }
 
 /* A wrapper that only carries `inert` (no box of its own). */
@@ -21,16 +32,21 @@
   min-width: 0;
 }
 
-/* Two button groups (UX4): 문서 · 문제, then 이력 · 공유하기 aligned right. Groups and
-   buttons wrap as whole buttons on narrow screens; labels never wrap. */
-.actions {
+/* Two button groups (UX4): 문서 N · 풀기, then AI 질문 · 이력 · 공유하기 aligned right. Under the
+   app header and over the heatmap's raised markers and hover layers; opaque, since the page
+   passes behind it. The negative margins cancel its padding while it is not stuck. */
+.toolbar {
+  position: sticky;
+  z-index: calc(var(--z-popover) - 2);
+  top: var(--app-header-height);
   display: flex;
-  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2) var(--space-3);
   min-width: 0;
+  margin-block: calc(-1 * var(--home-toolbar-padding));
+  padding-block: var(--home-toolbar-padding);
+  background: var(--color-canvas);
 }
 
 .actionGroup {
@@ -49,8 +65,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 767px) {
-  .actions {
-    justify-content: flex-start;
+/* Narrow screens: AI 질문 keeps its name but shows only its icon, so the line fits one row at 375px
+   with a three-digit count (UX12-HEADER-AC05). */
+@media (max-width: 479px) {
+  .toolbar .askButton {
+    width: var(--control-height-md);
+    padding-inline: 0;
+  }
+
+  .askLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

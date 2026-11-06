@@ -5,7 +5,7 @@
 //
 // Each test indexes synthetic books into its own workspace (deterministic fake embedder/reranker,
 // docs/e2e-strategy.md §3).
-import { devices, type Locator, type Page } from '@playwright/test';
+import { devices, type Page } from '@playwright/test';
 import {
   block,
   book,
@@ -68,17 +68,8 @@ async function expectSearchPage(page: Page, workspace: { id: string; name: strin
   expect(navBox && titleBox && titleBox.y - (navBox.y + navBox.height)).toBeGreaterThanOrEqual(12);
 }
 
-/** Accessible names of the home's buttons and links, in document order. */
-async function controlNames(scope: Locator): Promise<string[]> {
-  return scope
-    .locator('a[href], button')
-    .evaluateAll((els) =>
-      els.map((el) => (el.getAttribute('aria-label') ?? el.textContent ?? '').trim()),
-    );
-}
-
 test(
-  'SEARCH-02-AC01 the home header has a 본문 검색 icon link before 이력 that opens the search page; Back returns to the home address',
+  'SEARCH-02-AC01 the 문서 N menu has a 본문 검색 link that opens the search page; Back returns to the home address',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('search02-ac01');
@@ -96,20 +87,12 @@ test(
     await page.goto(home);
     await expect(overviewUi.dots(page)).toHaveCount(1);
 
-    // The icon link sits right before 이력, shows no text, names itself and has a tooltip.
+    // The link lives in the 문서 N menu (UX12-HEADER), not on the page.
     const entry = searchPageUi.homeEntry(page);
+    await homeUi.openMenu(page);
     await expect(entry).toBeVisible();
     await expect(entry).toHaveAttribute('href', new RegExp(`^${searchPagePath(ws.id)}`));
-    expect((await entry.innerText()).trim(), 'icon only').toBe('');
-    const names = await controlNames(main(page));
-    const historyAt = names.findIndex((n) => /^(이력|history)$/i.test(n));
-    expect(historyAt, 'the 이력 button').toBeGreaterThan(0);
-    expect(names[historyAt - 1]).toMatch(/^(본문 검색|body search|content search)$/i);
-    await entry.hover();
-    await expect(page.getByRole('tooltip')).toHaveText(/^(본문 검색|body search|content search)$/i);
-    await page.mouse.move(0, 0);
-    await entry.focus();
-    await expect(page.getByRole('tooltip')).toHaveText(/^(본문 검색|body search|content search)$/i);
+    await page.keyboard.press('Escape');
     // The home has no 본문 search left: no disclosure, box or results; 문제 search stays.
     await expect(homeUi.contentSearchToggle(page)).toHaveCount(0);
     await expect(main(page).getByRole('button', { name: /본문 검색|body search/i })).toHaveCount(0);
@@ -118,6 +101,7 @@ test(
     await expect(homeUi.questionSearch(page)).toHaveValue('chlorine');
 
     // Click: the page, its box focused.
+    await homeUi.openMenu(page);
     await entry.click();
     await expectSearchPage(page, ws);
     await expect(searchPageUi.box(page)).toBeFocused();
@@ -125,7 +109,10 @@ test(
     // Keyboard Enter does the same.
     await page.goBack();
     await expect(page).toHaveURL((url) => url.pathname === homePath(ws.id));
-    await searchPageUi.homeEntry(page).focus();
+    await homeUi.documentsButton(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowDown');
+    await expect(entry).toBeFocused();
     await page.keyboard.press('Enter');
     await expectSearchPage(page, ws);
     await expect(searchPageUi.box(page)).toBeFocused();

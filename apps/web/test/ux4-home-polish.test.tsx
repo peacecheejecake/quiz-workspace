@@ -18,12 +18,20 @@ const { QuestionMenu } = await import('../src/components/workspaces/question-men
 
 function menu(readOnly: QuestionMenuReadOnly) {
   const handlers = {
+    onDocuments: vi.fn(),
     onCreate: vi.fn(),
     onDuplicates: vi.fn(),
     onRedistribute: vi.fn(),
     onInactive: vi.fn(),
   };
-  render(<QuestionMenu readOnly={readOnly} {...handlers} />);
+  render(
+    <QuestionMenu
+      readOnly={readOnly}
+      documentCount={3}
+      searchHref="/workspaces/w/search"
+      {...handlers}
+    />,
+  );
   return handlers;
 }
 
@@ -31,12 +39,19 @@ describe('home `문제` menu', () => {
   it('QOV-01-AC11 offers 직접 추가, 중복 문제 정리 and 챕터 재분배 to editors, then 모의고사, and opens each', async () => {
     const user = userEvent.setup();
     const handlers = menu(null);
-    const trigger = screen.getByRole('button', { name: '문제 메뉴' });
+    const trigger = screen.getByRole('button', { name: '문서 3' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
 
     await user.click(trigger);
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toEqual(['직접 추가', '중복 문제 정리', '챕터 재분배', '보관·초안 문제']);
+    expect(items).toEqual([
+      '문서 관리',
+      '본문 검색',
+      '직접 추가',
+      '중복 문제 정리',
+      '챕터 재분배',
+      '보관·초안 문제',
+    ]);
     await user.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     // UX7-BANK: the 문제 등록 dialog opens on the home once focus is back on the trigger.
     await waitFor(() => expect(handlers.onCreate).toHaveBeenCalledTimes(1));
@@ -46,7 +61,7 @@ describe('home `문제` menu', () => {
     trigger.focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByRole('menu')).toBeInTheDocument());
-    await user.keyboard('{ArrowDown}{Enter}');
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
     await waitFor(() => expect(handlers.onDuplicates).toHaveBeenCalledTimes(1));
     // The dialog opens after the menu returned focus to its trigger.
     expect(trigger).toHaveFocus();
@@ -65,10 +80,10 @@ describe('home `문제` menu', () => {
     async (readOnly) => {
       const user = userEvent.setup();
       menu(readOnly);
-      const trigger = screen.getByRole('button', { name: '문제 메뉴' });
+      const trigger = screen.getByRole('button', { name: '문서 3' });
       trigger.focus();
       await user.keyboard('{Enter}');
-      const opened = await screen.findByRole('menu', { name: '문제 메뉴' });
+      const opened = await screen.findByRole('menu', { name: '문서 3' });
       expect(opened).toContainElement(screen.getByRole('menuitem', { name: '보관·초안 문제' }));
       expect(screen.queryByRole('menuitem', { name: 'AI 질문' })).toBeNull();
       await user.keyboard('{Escape}');
@@ -84,19 +99,21 @@ describe('home `문제` menu', () => {
     async (readOnly, reason) => {
       const user = userEvent.setup();
       const handlers = menu(readOnly);
-      const trigger = screen.getByRole('button', { name: '문제 메뉴' });
+      const trigger = screen.getByRole('button', { name: '문서 3' });
       await user.click(trigger);
-      const menuEl = await screen.findByRole('menu', { name: '문제 메뉴' });
+      const menuEl = await screen.findByRole('menu', { name: '문서 3' });
       expect(menuEl).toHaveTextContent(reason);
       expect(menuEl).toHaveAccessibleDescription(reason);
       const all = screen.getAllByRole('menuitem');
       expect(all.map((item) => item.textContent)).toEqual([
+        '문서 관리',
+        '본문 검색',
         '직접 추가',
         '중복 문제 정리',
         '챕터 재분배',
         '보관·초안 문제',
       ]);
-      const items = all.slice(0, 3);
+      const items = all.slice(2, 5);
       for (const item of items) {
         expect(item).toHaveAttribute('aria-disabled', 'true');
         expect(item).toHaveAccessibleDescription(reason);

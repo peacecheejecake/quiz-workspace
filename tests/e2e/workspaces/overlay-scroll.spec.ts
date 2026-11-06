@@ -48,14 +48,9 @@ async function makePageScrollable(page: Page, y = 400): Promise<void> {
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(y);
 }
 
-/**
- * Opens 문서 관리 from the home without moving the page: the `문서 n` button may be scrolled out of
- * view, and a real click would first scroll it back (the test moving the page, not the overlay).
- */
+/** Opens 문서 관리 from the home: the `문서 N` button is sticky, so this never moves the page. */
 async function openDocumentsInPlace(page: Page): Promise<Locator> {
-  const button = homeUi.documentsButton(page);
-  await button.evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
-  await button.dispatchEvent('click');
+  await homeUi.openDocuments(page);
   const dialog = homeUi.documentsDialog(page);
   await expect(dialog).toBeVisible();
   return dialog;
