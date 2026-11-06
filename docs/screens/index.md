@@ -27,6 +27,7 @@
 | UX12-NAV | 페이지 이동 반응 | 하위 페이지 링크 | [ux12-navigation.md](ux12-navigation.md) |
 | UX12-SRCMENU | 더보기 메뉴의 원문 보기 | 풀이 panel · 범위 풀이 | [ux12-source-menu.md](ux12-source-menu.md) |
 | UX12-GESTURE | overlay·복귀 bar 스와이프 닫기 | 공통 UI | [ux12-gesture.md](ux12-gesture.md) |
+| UX12-SOURCE | 원본 쪽 floating dialog | 가져오기 · 문제 상세 · 관련 본문 · 본문 발췌 · 문서 요약 | [ux12-source-panel.md](ux12-source-panel.md) |
 | UX11-RETURN | 풀이 복귀·별도 다시 풀기 | 인증된 Workspace | [ux11-return.md](ux11-return.md) |
 | UX11-STEM | 발문 문단·제시 항목 | 공통 문제 표시 | [ux11-stem.md](ux11-stem.md) |
 | UX10-UI | 공통 버튼·overlay swipe | 공통 UI | [ux10-ui.md](ux10-ui.md) |

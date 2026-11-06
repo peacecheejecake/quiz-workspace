@@ -24,7 +24,7 @@ linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 - **진입 (UX12 HOME-4 2026-11-06, D-7):** `문서 N` 메뉴의 `본문 검색` 링크 항목. 아래 아이콘 버튼 설명은 그 이전 기록이다. **이전 (사용자 결정 2026-11-02 (v) — 처음 제안(문제 검색 아래 글자 버튼)이 아님):** Workspace header 오른쪽 아이콘 묶음에서 `이력` **앞**에 `본문 검색` 아이콘 버튼(secondary `IconButton`, `SearchIcon`, 글자 없음, 접근성 이름·tooltip "본문 검색"; `이력`·`공유하기`와 같은 모양, 링크로 렌더링 `<a href>`). 문제 검색 입력란 아래의 이전 "본문 검색" 펼치기 버튼 자리는 **비운다**(없어지고 아무것도 두지 않는다 — 문제 검색 입력란과 "문제 설정"만 남음). 누르면 같은 탭에서 이 페이지로 이동하고(기록 항목 하나) route `loading.tsx` skeleton을 먼저 보인다(QOV-01-AC09). modal 홈 dialog가 열려 있으면 header가 비활성이라 누를 수 없다(HOMEDLG-01).
 - **URL과 redirect:** 상태는 이 페이지의 URL `text`·`mode`·`document`·`section`이다(SEARCH-01 "상태는 URL에 둔다"의 본문 key; 검색 실행은 `replace`). 이전 주소는 이 페이지로 옮긴다(server redirect, 검색 key만 유지): 홈 `?text=…&mode=&document=&section=` → `/search?text=…`(홈의 다른 key `q`·필터·`panel`·`question`은 버림 (사용자 결정 2026-11-02)), 홈 `scope=content&q=` → `/search?text=`, 이전 `/workspaces/:id/search?q=&chapter=` → `/search?text=&section=`(UX7-SEARCH가 홈으로 보내던 것을 이제 이 페이지로).
 - **돌아가기:** 페이지 header에 `BackLink` "Workspace 홈"과 breadcrumb `Workspace 이름 › 본문 검색`(현재 항목 `aria-current="page"`, 아래 제목까지 12px — QOV-01-AC13). 홈에서 들어왔으면 `BackLink`는 브라우저 뒤로가기처럼 홈의 그 주소(문제 검색어·필터 포함)로 돌아가고, 직접 들어왔으면 `/workspaces/:id`로 간다. 브라우저 뒤로가기도 같다.
-- **결과에서 문서 열기:** 발췌 panel의 "PDF에서 보기"는 DOC-02(`/documents/<id>?page=<n>&block=<id>`)를 연다(AC03). DOC-02의 뒤로가기는 이 검색 페이지의 같은 검색(URL `text`로 다시 실행, 결과 목록 scroll 위치는 다시 처음)으로 돌아온다. 발췌 panel의 열림·선택 항목은 URL에 남기지 않는다(지금과 같음).
+- **결과에서 문서 열기:** 발췌 panel의 "PDF에서 보기"는 "원본 PDF" dialog로 그 쪽을 열고([UX12-SOURCE](ux12-source-panel.md), UX12 DOCS-2), dialog의 `전체 문서 보기`가 DOC-02(`/documents/<id>?page=<n>&block=<id>`)를 연다(AC03). DOC-02의 뒤로가기는 이 검색 페이지의 같은 검색(URL `text`로 다시 실행, 결과 목록 scroll 위치는 다시 처음)으로 돌아온다. 발췌 panel의 열림·선택 항목은 URL에 남기지 않는다(지금과 같음).
 - **공유 보기:** 공유 Workspace 화면(WS-VIEW-01)의 검색 카드는 그대로다(사용자 확인 2026-11-01 "공유 화면 검색은 그대로").
 
 ## 레이아웃 및 컴포넌트
@@ -44,8 +44,8 @@ linked_tests: [SEARCH-02-AC01 … SEARCH-02-AC04]
 ### SEARCH-02-AC02
 
 - **Given:** 본문 검색 결과가 여럿 나오는 검색어가 있는 Workspace(편집 권한, 데스크톱과 휴대폰 터치)
-- **When:** 검색 페이지에서 "본문 설정"으로 문서 하나를 고른 뒤 검색하고, 결과 항목의 발췌를 눌러 "본문 발췌" panel을 열고 "PDF에서 보기"를 누른 뒤 PDF 열람 페이지에서 뒤로가기를 누른다
-- **Then:** 결과는 고른 문서의 발췌만이다(URL `document`). 발췌 panel이 modal로 열려(결과 목록 `inert`) 문서·쪽 위치와 표시된 검색어를 보이고(휴대폰은 bottom sheet), `다음 결과`가 다음 결과의 발췌로 바꾸며, "PDF에서 보기"는 그 PDF의 그 쪽(DOC-02 `?page=`)을 연다. 뒤로가기는 같은 검색어·같은 문서 설정의 검색 페이지와 결과로 돌아온다. 문제지는 결과·문서 필터에 없다(UX7-SEARCH-2).
+- **When:** 검색 페이지에서 "본문 설정"으로 문서 하나를 고른 뒤 검색하고, 결과 항목의 발췌를 눌러 "본문 발췌" panel을 열고 "PDF에서 보기"와 `전체 문서 보기`를 누른 뒤 PDF 열람 페이지에서 뒤로가기를 누른다
+- **Then:** 결과는 고른 문서의 발췌만이다(URL `document`). 발췌 panel이 modal로 열려(결과 목록 `inert`) 문서·쪽 위치와 표시된 검색어를 보이고(휴대폰은 bottom sheet), `다음 결과`가 다음 결과의 발췌로 바꾸며, "PDF에서 보기"는 "원본 PDF" dialog로 그 쪽을 열고 `전체 문서 보기`가 그 PDF의 그 쪽(DOC-02 `?page=`)을 연다. 뒤로가기는 같은 검색어·같은 문서 설정의 검색 페이지와 결과로 돌아온다. 문제지는 결과·문서 필터에 없다(UX7-SEARCH-2).
 
 ### SEARCH-02-AC03
 
