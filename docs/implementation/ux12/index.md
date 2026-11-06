@@ -133,7 +133,7 @@
 |---|---|---|---|---|
 | EXPL-1 UI | 나란히 배치, 관련 본문 디자인, "작성중..." | `RelatedShell` heading을 공용 disclosure로 추출, `AI 해설 보기` 버튼 제거. 문구는 원문 그대로 | AIEXPL-01, `fixtures/ai-explanations.ts`, VISUAL-09 | S–M·없음 |
 | EXPL-2 프롬프트 | 해설 원본 참조 제거 | `explain/prompts.py`의 `기존 해설` 줄, `ExplainQuestion.explanation`과 SQL 삭제, `PROMPT_VERSION` v2, 안내 문구 수정. AI 질문 프롬프트는 범위 밖 | AIEXPL-01 C04. D-14 | S–M·없음 |
-| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, migration 불필요), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
+| EXPL-3 취소 | 만들기·다시 만들기 실행 취소 | `POST …/ai-explanation/cancel`(요청자 또는 editor, 좁은 권한의 migration 추가), worker stream에 ask의 `stopped()` 방식 추가, `취소` 버튼. 다시 만들기 취소 시 기존 해설로 복귀. 취소분도 한도에 계산 | 새 AC, cross-user 403, `make contracts` | L·EXPL-1 |
 
 ### 4.6 HILITE — 하이라이트
 
