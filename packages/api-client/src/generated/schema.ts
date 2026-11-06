@@ -218,6 +218,11 @@ export type paths = {
      * Delete Chapter
      * @description Delete a chapter. Its questions go where the person chose (no new question revision;
      *     attempts and runs stay), its blocks and sub-chapters go to its parent.
+     *
+     *     A retry finds the chapter gone, so the saved response comes first: the key is the caller's
+     *     own, and the workspace the saved response names is authorized like the delete was (a member
+     *     removed since gets the same 404, a viewer or an archived workspace the same 403). The advisory
+     *     lock comes first too, so a retry racing the first request waits and finds the response.
      */
     delete: operations['deleteChapter'];
     options?: never;
@@ -3131,6 +3136,12 @@ export type components = {
       moved_questions: number;
       /** Version */
       version: number;
+      /**
+       * Workspace Id
+       * Format: uuid
+       * @description Where the chapter was: a retry is authorized here, the chapter being gone.
+       */
+      workspace_id: string;
     };
     /** ChapterMove */
     ChapterMove: {

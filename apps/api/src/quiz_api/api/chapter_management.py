@@ -58,6 +58,7 @@ from quiz_api.authz import (
     ResourceType,
     WorkspaceAccess,
     authorize_resource,
+    authorize_workspace,
     get_access_repository,
     require_workspace_access,
 )
@@ -93,6 +94,7 @@ from quiz_api.repositories.questions import QuestionRepository
 router = APIRouter(tags=["chapters"], responses=problem_responses(503))
 
 NOT_FOUND = "Not found."
+CHAPTER_NOT_FOUND = "Chapter not found."  # `authorize_resource`'s body, for one 404 on DELETE
 MAX_MOVES = 500
 
 ChapterTitle = Annotated[
@@ -172,6 +174,9 @@ class ChapterTreeResult(BaseModel):
 
 
 class ChapterDeleteResult(BaseModel):
+    workspace_id: uuid.UUID = Field(
+        description="Where the chapter was: a retry is authorized here, the chapter being gone."
+    )
     moved_questions: int
     version: int
 
@@ -595,7 +600,9 @@ def move_chapters(
     responses=problem_responses(409),
 )
 def delete_chapter(
-    access: EditChapter,
+    chapter_id: Annotated[uuid.UUID, Path()],
+    user: CurrentUser,
+    access_repo: AccessRepo,
     edit: EditRepo,
     content: ContentRepo,
     questions: QuestionRepo,
@@ -608,9 +615,31 @@ def delete_chapter(
     idempotency_key: IdempotencyKey = None,
 ) -> Any:
     """Delete a chapter. Its questions go where the person chose (no new question revision;
-    attempts and runs stay), its blocks and sub-chapters go to its parent."""
+    attempts and runs stay), its blocks and sub-chapters go to its parent.
+
+    A retry finds the chapter gone, so the saved response comes first: the key is the caller's
+    own, and the workspace the saved response names is authorized like the delete was (a member
+    removed since gets the same 404, a viewer or an archived workspace the same 403). The advisory
+    lock comes first too, so a retry racing the first request waits and finds the response.
+    """
+    scope = f"DELETE /chapters/{chapter_id}"
+    body_hash = request_hash({"move_questions_to": str(move_questions_to)})
+    if idempotency_key is not None:
+        idempotency.lock(user.id, scope, idempotency_key)
+        stored = idempotency.find(user.id, scope, idempotency_key)
+        if stored is not None:
+            authorize_workspace(
+                access_repo,
+                user.id,
+                uuid.UUID(stored.body["workspace_id"]),
+                Action.DOCUMENT_EDIT,
+                not_found_detail=CHAPTER_NOT_FOUND,
+            )
+            return replay(stored, body_hash)
+    access = authorize_resource(
+        access_repo, user.id, ResourceType.CHAPTER, chapter_id, Action.DOCUMENT_EDIT
+    )
     workspace_id, actor_id = access.workspace.workspace_id, access.workspace.user_id
-    chapter_id = access.resource_id
     target_id = move_questions_to if isinstance(move_questions_to, uuid.UUID) else None
 
     def work() -> ChapterDeleteResult:
@@ -678,16 +707,18 @@ def delete_chapter(
                 "target_chapter_id": str(target_id) if target_id else None,
             },
         )
-        return ChapterDeleteResult(moved_questions=len(moving), version=version)
+        return ChapterDeleteResult(
+            workspace_id=workspace_id, moved_questions=len(moving), version=version
+        )
 
     return _idempotent(
         idempotency,
         edit,
         questions,
         actor_id=actor_id,
-        scope=f"DELETE /chapters/{chapter_id}",
+        scope=scope,
         key=idempotency_key,
-        body_hash=request_hash({"move_questions_to": str(move_questions_to)}),
+        body_hash=body_hash,
         success=status.HTTP_200_OK,
         work=work,
     )

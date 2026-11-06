@@ -898,9 +898,16 @@
           "version": {
             "title": "Version",
             "type": "integer"
+          },
+          "workspace_id": {
+            "description": "Where the chapter was: a retry is authorized here, the chapter being gone.",
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
           }
         },
         "required": [
+          "workspace_id",
           "moved_questions",
           "version"
         ],
@@ -15298,7 +15305,7 @@
     },
     "/api/v1/chapters/{chapter_id}": {
       "delete": {
-        "description": "Delete a chapter. Its questions go where the person chose (no new question revision;\nattempts and runs stay), its blocks and sub-chapters go to its parent.",
+        "description": "Delete a chapter. Its questions go where the person chose (no new question revision;\nattempts and runs stay), its blocks and sub-chapters go to its parent.\n\nA retry finds the chapter gone, so the saved response comes first: the key is the caller's\nown, and the workspace the saved response names is authorized like the delete was (a member\nremoved since gets the same 404, a viewer or an archived workspace the same 403). The advisory\nlock comes first too, so a retry racing the first request waits and finds the response.",
         "operationId": "deleteChapter",
         "parameters": [
           {

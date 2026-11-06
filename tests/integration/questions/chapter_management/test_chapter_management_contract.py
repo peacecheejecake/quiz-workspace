@@ -350,6 +350,35 @@ def test_chman_01_c06_delete_moves_questions_and_keeps_records(seed: Any, db: An
     assert res.status_code == 200, res.text
 
 
+def test_chman_01_c06_a_delete_retry_replays_for_the_caller_alone(seed: Any) -> None:
+    s = Space(seed, "chman-retry")
+    editor = notes.member(seed, s.ws, "chman-retry-editor", "editor")
+    key = {"Idempotency-Key": str(uuid.uuid4())}
+    path = f"/chapters/{s.ch[CH1]}?move_questions_to=none"
+    first = editor.send("DELETE", path, None, headers=key)
+    assert first.status_code == 200, first.text
+    again = editor.send("DELETE", path, None, headers=key)
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json()
+    assert again.headers["Idempotent-Replayed"] == "true"
+
+    other = editor.send("DELETE", f"/chapters/{s.ch[CH1]}", None, headers=key)
+    assert other.status_code == 409, other.text
+    assert other.json()["type"] == KEY_REUSED
+    assert editor.call("DELETE", path).status_code == 404, "without the key it is simply gone"
+
+    # Another caller with the same key has no saved response.
+    stranger = seed.client("chman-retry-stranger")
+    assert stranger.send("DELETE", path, None, headers=key).status_code == 404
+    assert s.owner.send("DELETE", path, None, headers=key).status_code == 404
+
+    # The caller's own saved response follows the workspace's authorization.
+    s.owner.ok("POST", f"/workspaces/{s.ws}/archive")
+    res = editor.send("DELETE", path, None, headers=key)
+    assert res.status_code == 403, res.text
+    assert res.json()["type"] == ARCHIVED
+
+
 def test_chman_01_c06_a_chapter_with_only_inactive_questions_reports_them(seed: Any) -> None:
     s = Space(seed, "chman-inactive")
     notes.delete_question(s.owner, s.q1)

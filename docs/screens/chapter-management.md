@@ -74,7 +74,7 @@ Workspace FOR SHARE → 문서 FOR UPDATE → 문제 id 순 FOR UPDATE. 삭제 �
 
 ### CHMAN-01-C06 삭제
 
-`DELETE /chapters/{id}?move_questions_to=<chapter id|none>` → 200 `{moved_questions, version}`. 이 장을 가리키는 모든 문제(초안·보관·삭제 표시 포함)를 옮긴다. 옮길 문제가 있는데 값이 없으면 422 `chapter-target-required`. 대상은 살아 있는 교재의 활성 revision 장이어야 하고(CHREDIST-01과 같은 검사) 자기 자신이면 422 `chapter-invalid`, 다른 Workspace의 장이면 404다. 삭제로 옮기는 문제와 같은 대상으로 초안의 직접 고른 챕터(`question_drafts`)도 옮기며, `none`이면 FK가 지운다. import 실행의 목표 챕터(`question_import_runs.target_chapter_id`)도 같은 대상으로 옮기거나 지운다.
+`DELETE /chapters/{id}?move_questions_to=<chapter id|none>` → 200 `{workspace_id, moved_questions, version}`. 같은 `Idempotency-Key`의 재시도는 장이 이미 없어도 저장한 응답을 돌려준다: 키는 호출자 본인 것만 찾고, 저장된 `workspace_id`로 권한을 다시 확인한다(구성원에서 빠졌으면 같은 404, 보기 권한·보관이면 403). 이 장을 가리키는 모든 문제(초안·보관·삭제 표시 포함)를 옮긴다. 옮길 문제가 있는데 값이 없으면 422 `chapter-target-required`. 대상은 살아 있는 교재의 활성 revision 장이어야 하고(CHREDIST-01과 같은 검사) 자기 자신이면 422 `chapter-invalid`, 다른 Workspace의 장이면 404다. 삭제로 옮기는 문제와 같은 대상으로 초안의 직접 고른 챕터(`question_drafts`)도 옮기며, `none`이면 FK가 지운다. import 실행의 목표 챕터(`question_import_runs.target_chapter_id`)도 같은 대상으로 옮기거나 지운다.
 
 ### CHMAN-01-C07 쓰기의 공통 효과
 
