@@ -185,7 +185,7 @@ export const SequenceSolving: Story = {
 };
 export const SequenceSolvingDark = dark(SequenceSolving);
 
-/** A submitted position read again: the result border with 정답 / 내 선택 in text. */
+/** A submitted position read again: the result border with the check/X icon. */
 export const SequenceGraded: Story = {
   args: {
     ...sequence,

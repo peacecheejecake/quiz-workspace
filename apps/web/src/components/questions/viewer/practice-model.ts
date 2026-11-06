@@ -81,7 +81,18 @@ export function resultMessage(submitted: AttemptResult, selfGrade: GradeResult |
   return submitted === 'correct' ? '정답입니다.' : '오답입니다.';
 }
 
-/** Mark next to an MCQ option once the answers are revealed. */
+/**
+ * An MCQ grade shows on the option rows (UX12-OPTIONS), so its sentence stays for assistive tech
+ * only. Pending and non-MCQ wording is the only visible result, so it stays on screen.
+ */
+export function resultIsVisuallyHidden(
+  questionType: AnswerShape['question_type'],
+  submitted: AttemptResult,
+): boolean {
+  return questionType === 'MCQ' && submitted !== 'pending';
+}
+
+/** Description of an MCQ option once the answers are revealed (visually hidden, UX12-OPTIONS). */
 export function optionMark(
   optionId: string,
   correct: readonly string[] | null,
@@ -94,8 +105,8 @@ export function optionMark(
 /**
  * Border tone of an MCQ option row once graded (UX7-QDISPLAY, QPLAY-01-AC12): a correct answer
  * marks the chosen options `correct` (green); a wrong one marks the chosen wrong options `chosen`
- * (grey) and every correct option `answer` (red), a chosen correct one too. The text mark
- * (`optionMark`) carries the meaning; the tone only reinforces it.
+ * (grey) and every correct option `answer` (red), a chosen correct one too. The row icon and the
+ * hidden description (`optionMark`) carry the meaning; the tone only reinforces it.
  */
 export type OptionTone = 'correct' | 'chosen' | 'answer';
 

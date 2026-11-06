@@ -1,14 +1,15 @@
 // QVIEW-01 `QuestionBody` (docs/screens/question-viewer.md "문제 본문 부품"): what every
 // QuestionViewer mode shows of one question.
 //   kind `answer` (practice, sequence): the stem, the numbered options as the answer input (or the
-//     answer box), the result status (정답/오답/채점 대기 in text, role=status) and, only once a
-//     submission revealed them, the accepted answers, rubric and explanation. Graded MCQ rows get
-//     the UX7-QDISPLAY result border with the 정답 / 내 선택 text mark (QPLAY-01-AC12).
+//     answer box), the result status (role=status; 채점 대기 and non-MCQ wording visible, an MCQ
+//     grade for assistive tech only, UX12-OPTIONS) and, only once a submission revealed them, the
+//     accepted answers, rubric and explanation. Graded MCQ rows get the UX7-QDISPLAY result border
+//     with a check/X icon and the 정답 / 내 선택 text as their description (QPLAY-01-AC12).
 //   kind `revision` (manage, read-only): a revision with its correct options marked ("정답" text +
 //     check icon), accepted answers, rubric and explanation; no answer input at all.
 // The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
 // 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only.
-import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
+import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
 import type { Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { StemBlocks } from '@/components/questions/stem/stem-text';
@@ -19,6 +20,7 @@ import {
   finalResult,
   optionMark,
   optionTone,
+  resultIsVisuallyHidden,
   resultMessage,
   toggleOption,
   type AttemptResult,
@@ -112,7 +114,11 @@ function AnswerBody({
         ref={resultRef}
         role="status"
         tabIndex={-1}
-        className={styles.result}
+        className={
+          outcome && resultIsVisuallyHidden(question.question_type, outcome.result)
+            ? `${styles.result} qz-visually-hidden`
+            : styles.result
+        }
         data-result={outcome ? finalResult(outcome.result, selfGrade) : undefined}
       >
         {outcome ? resultMessage(outcome.result, selfGrade) : ''}
@@ -156,13 +162,26 @@ function AnswerField({
     );
   }
   // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
-  // only colors it; the text mark below the label is the meaning, linked as the description.
+  // only colors it; the row-end icon and the hidden text linked as the description are the meaning.
+  const toneOf = (id: string) =>
+    graded ? optionTone(id, correct, answer.selected, graded) : undefined;
   const mark = (id: string) => {
     const text = graded ? optionMark(id, correct, answer.selected) : undefined;
-    return text ? <span className={styles.mark}>{text}</span> : undefined;
+    if (!text) return undefined;
+    const tone = toneOf(id);
+    return (
+      <span className={styles.mark} data-option-mark={tone ? TONE_MARK[tone] : undefined}>
+        {tone === 'chosen' ? (
+          <CloseIcon width={16} height={16} strokeWidth={3} />
+        ) : tone ? (
+          <CheckIcon width={16} height={16} strokeWidth={3} />
+        ) : null}
+        <span className="qz-visually-hidden">{text}</span>
+      </span>
+    );
   };
   const rowClass = (id: string) => {
-    const tone = graded ? optionTone(id, correct, answer.selected, graded) : undefined;
+    const tone = toneOf(id);
     return tone ? `${styles.option} ${TONE_CLASS[tone]}` : styles.option;
   };
   if (!question.is_multi_answer) {
@@ -219,6 +238,12 @@ const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
   correct: styles.toneCorrect,
   chosen: styles.toneChosen,
   answer: styles.toneAnswer,
+};
+
+const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
+  correct: 'correct',
+  chosen: 'wrong',
+  answer: 'correct',
 };
 
 /**
