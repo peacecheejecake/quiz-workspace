@@ -258,7 +258,7 @@ test('UX12-MOCKFORM-AC06 설정 바꾸기 shares the screen and restores the sav
   await page.goto(homePath(workspace.id, `panel=mock-exams&mock=${exam.id}`));
 
   const dialog = createDialog(page);
-  await mockUi.changeSettings(dialog).click();
+  await mockUi.chooseDetailAction(dialog, 'settings');
   await expect(mockUi.steps(dialog)).toBeVisible();
   await mockUi.next(dialog).click();
   await expect(picker.selectAll(dialog)).toBeVisible();
