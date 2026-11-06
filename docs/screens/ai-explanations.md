@@ -30,7 +30,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
 
 ### 캐싱 (사용자 결정 2026-11-01: 문제 revision마다 Workspace 공유 하나)
 
-- **키:** `(question_revision_id, prompt_version, model)`. 문제를 고치면(새 question_revision) 키가 바뀌어 예전 해설은 그 문제에 더는 보이지 않고 다시 만들어야 한다(예전 행은 남음 — 이력). `LLM_MODEL`이나 prompt 버전이 바뀌어도 새 키다. 예전 키의 행도 지우거나 대체(`superseded_at`)하지 않고 그대로 두되 어디에도 보이지 않는다(예전 id로 `…/stream`에 다시 붙어도 404) — 문제는 해설이 없는 상태(`AI 해설` 만들기 가능, 공유 게스트 404)로 돌아가고 처음 만드는 것과 같이 version 1, 하루 한도·token 상한에 계산된다(UX12 D-14: `question.ai_explain/v2`로 올릴 때 사용자 결정). 근거 문서가 새로 발행되어도 해설은 그대로이며, 출처 링크에 "이 출처는 이전 발행본입니다."가 붙는다(ASK와 같음).
+- **키:** `(question_revision_id, prompt_version, model)`. 문제를 고치면(새 question_revision) 키가 바뀌어 예전 해설은 그 문제에 더는 보이지 않고 다시 만들어야 한다(예전 행은 남음 — 이력). `LLM_MODEL`이나 prompt 버전이 바뀌어도 새 키다. 예전 키의 행도 지우거나 대체(`superseded_at`)하지 않고 그대로 두되 어디에도 보이지 않는다(예전 id로 `…/stream`에 다시 붙어도 404) — 문제는 해설이 없는 상태(`AI 해설` 만들기 가능, 공유 게스트 404)로 돌아가고 처음 만드는 것과 같이 version 1, 하루 한도·token 상한에 계산된다(UX12 D-14: `question.ai_explain/v2`로 올릴 때 사용자 결정). 예외: `question.ai_explain/v3`(UX12-ASK-3, 사용자 결정 2026-11-06)은 허용 Markdown만 바꾸므로 v2 행은 숨기지 않는다. v3은 새로 만들 때만 쓰고, v2 성공 행은 같은 키처럼 보이고 캐시로 쓰이며(POST는 생성 없이 돌려준다, 공유 게스트와 `…/stream`도 같다), `다시 만들기`가 version을 이어 v3 행을 만들면 그 행이 보인다. v1은 그대로 숨겨진다. 근거 문서가 새로 발행되어도 해설은 그대로이며, 출처 링크에 "이 출처는 이전 발행본입니다."가 붙는다(ASK와 같음).
 - **범위:** 문제 revision 하나에 Workspace 공유 해설 하나 — 한 구성원이 만들면 그 문제를 제출한 다른 구성원은 LLM 호출 없이 같은 해설을 본다(비용 1회). 구성원 누구나(보기 권한 포함) 처음 만들 수 있다.
 - **저장:** Postgres `question_ai_explanations`(이력 포함, 아래 architecture). 지우지 않는다(문제 삭제 시에만 함께 지움).
 - **동시 요청:** 두 사용자가 동시에 눌러도 생성은 하나다: 대기·실행·성공 상태의 행은 키마다 하나(partial unique)이고 `POST`는 `INSERT … ON CONFLICT DO NOTHING` 뒤 기존 행을 돌려준다(Workspace·revision advisory lock 안). 두 번째 요청은 같은 해설 id와 같은 stream을 받아 진행 중인 글자를 이어 본다. 실패한 행은 막지 않는다(다음 요청이 새 행으로 다시 만든다).
@@ -77,7 +77,7 @@ linked_tests: [AIEXPL-01-AC01 … AIEXPL-01-AC07]
   - 만든 적 없음: 글자 버튼 `AI 해설`(접근성 이름 "AI 해설"; 이전 이름 `AI 해설`). 자동 생성하지 않는다.
   - 이미 있음(캐시) (사용자 결정 2026-11-01, UX12 EXPL-1 개정 2026-11-06): 도구 줄 바로 아래 영역 제목 `AI 해설`이 곧 접기/펼치기 버튼이다(`aria-expanded`, 기본 펼침, 글자 + chevron, RELSRC-01 "관련 본문"과 같은 공용 disclosure). `AI 해설 보기` 버튼은 없다. 제목 버튼은 완료된 해설에만 있고 만드는 중·실패의 제목은 일반 글자다([UX12-EXPL](ux12-explanations.md)).
   - 만드는 중: "작성중..." 글자 + 받은 글자를 이어 붙임(ASK-01과 같은 SSE·`aria-busy`·status 알림 규칙: 시작 한 번 "작성중...", 끝 한 번 "AI 해설이 준비되었습니다"). 다른 사람이 만드는 중이면 같은 stream을 이어 본다.
-  - 완료: `AI 생성` badge, 안내 문구, 본문(Markdown 일부만, sanitize), 각주 `[1]`과 `출처` 목록(문서·장·쪽, 버튼 → "본문 발췌" panel → "PDF에서 보기"가 "원본 PDF" dialog로 그 쪽, `전체 문서 보기`가 DOC-02 그 쪽 — 발췌와 PDF는 해설을 만들 때 인용한 문서 revision으로 열린다; 그 뒤 다시 발행되었으면 "이 출처는 이전 발행본입니다."), 메타 "<생성 시각> · 버전 k"(다시 만든 경우), 편집 권한이면 `다시 만들기`, (`AI 질문하기`는 위 도구 줄에 있다).
+  - 완료: `AI 생성` badge, 안내 문구, 본문(허용 목록 Markdown만, sanitize, [UX12-ASKMD](ux12-ask-markdown.md)의 문법. 모델 지시 `question.ai_explain/v3`는 문단·목록·강조·코드·제목·인용·표를 허용하고 HTML·링크·이미지를 금지하며, 표는 항목을 비교할 때 작게 쓰고 각주 tag는 표 칸에도 적는다), 각주 `[1]`과 `출처` 목록(문서·장·쪽, 버튼 → "본문 발췌" panel → "PDF에서 보기"가 "원본 PDF" dialog로 그 쪽, `전체 문서 보기`가 DOC-02 그 쪽 — 발췌와 PDF는 해설을 만들 때 인용한 문서 revision으로 열린다; 그 뒤 다시 발행되었으면 "이 출처는 이전 발행본입니다."), 메타 "<생성 시각> · 버전 k"(다시 만든 경우), 편집 권한이면 `다시 만들기`, (`AI 질문하기`는 위 도구 줄에 있다).
   - 실패: `role="alert"` 이유(ASK-01 오류 문구, `explanation_answer_mismatch` → "정답과 맞지 않는 해설이 나와 보여 주지 않았습니다. 다시 시도하세요.") + `다시 시도`.
   - 기능 꺼짐: 버튼과 이유 문구 없음(이미 있는 해설은 보임, UX12 HOME-2).
   - 보관된 Workspace: 이미 있는 해설만, 만들기·다시 만들기 없음("보관된 Workspace에서는 새 AI 해설을 만들 수 없습니다.").

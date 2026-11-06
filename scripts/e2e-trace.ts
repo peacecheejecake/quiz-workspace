@@ -144,6 +144,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SEARCHPAGE.0': ['UX12-SEARCHPAGE'],
   // UX12 ASK: the conversation list's FAB, the floating composer and the answer labels (D-10).
   'UX12-ASK.0': ['UX12-ASK'],
+  // UX12 ASK-3: tables and the rest of Markdown in an AI answer, safe while streaming.
+  'UX12-ASKMD.0': ['UX12-ASKMD'],
   // UX12 VIEW-1: sequence arrows, footer 다시 풀기·초기화, panel body back to the top.
   'UX12-VIEW.0': ['UX12-VIEW'],
   // UX12 MOCKUX-3: the run's footer matches the Heatmap path; `건너뛰기` is gone.

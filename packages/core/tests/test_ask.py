@@ -11,6 +11,7 @@ import pytest
 from book_core.ask import (
     ASK_FIELDS_FORBIDDEN_IN_HINT,
     NO_ANSWER_MARK,
+    PROMPT_VERSION,
     AskCallMeta,
     AskSource,
     FakeAskAnswerer,
@@ -24,6 +25,7 @@ from book_core.ask import (
     markers_of,
     validate_citations,
 )
+from book_core.ask.fake import MARKDOWN_ANSWER
 from book_core.llm import LLMProviderError, TextDelta, TextStreamEnd
 
 SECRET = "SECRET-EXPLANATION"  # noqa: S105 - a marker string, not a credential
@@ -33,6 +35,46 @@ def _source(n: int, text: str = "가나다 원리는 합성 개념이다. 둘째
     return AskSource(
         tag=f"S{n}", document_title="책", chapter_title="1장", page_from=2, page_to=2, text=text
     )
+
+
+def test_ux12_askmd_citation_cleanup_keeps_markdown_whitespace() -> None:
+    raw = (
+        "- 가 [S1]\n    - 나  다 [S9] .\n"
+        "줄 끝  \n다음 줄\n\n"
+        "```py\nif a:\n    b  =  1 [S1]\n```\n"
+        "끝  [S9] ."
+    )
+    assert validate_citations(raw, ["S1"]).text == (
+        "- 가 [1]\n    - 나 다.\n줄 끝  \n다음 줄\n\n```py\nif a:\n    b  =  1 [1]\n```\n끝."
+    )
+
+
+def test_ux12_askmd_the_prompt_allows_tables_and_bans_links() -> None:
+    request = build_request(
+        question="질문", sources=[_source(1)], attachment=None, max_output_tokens=100
+    )
+    assert PROMPT_VERSION == "ask.answer/v3"
+    assert request.prompt_version == PROMPT_VERSION
+    assert "문단·목록·강조·코드·제목·인용·표를 쓸 수 있다" in request.system
+    assert "HTML·링크·이미지는 쓰지 않는다" in request.system
+    assert "표 칸에서도" in request.system
+    assert "[S1]" in request.system
+
+
+def test_ux12_askmd_fake_streams_the_markdown_answer() -> None:
+    fake = FakeAskAnswerer(sleep=lambda _: None)
+    assert markers_of("E2E-ASK-MARKDOWN 질문") == ("E2E-ASK-MARKDOWN",)
+    request = build_request(
+        question="E2E-ASK-MARKDOWN E2E-ASK-SLOW 질문",
+        sources=[_source(1)],
+        attachment=None,
+        max_output_tokens=100,
+    )
+    events = list(fake.stream(request, AskCallMeta(message_id="m")))
+    text = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert text == MARKDOWN_ANSWER
+    assert len(events) > 30
+    assert "| :--- | :---: | ---: |" in text
 
 
 def test_ask_01_c03_hint_dto_fields_cannot_carry_the_answer() -> None:
