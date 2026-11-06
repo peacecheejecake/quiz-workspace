@@ -138,7 +138,10 @@
         "x1": 337.67,
         "y1": 229.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 2,
@@ -179,7 +182,10 @@
         "x1": 340.56,
         "y1": 344.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 3,
@@ -228,7 +234,10 @@
           "x1": 294.51,
           "y1": 519.0
         }
-      }
+      },
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 4,
@@ -250,7 +259,10 @@
         "x1": 345.99,
         "y1": 640.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 5,
@@ -289,7 +301,10 @@
         "x1": 261.03,
         "y1": 175.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 6,
@@ -306,7 +321,10 @@
         "x1": 443.51,
         "y1": 214.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 7,
@@ -323,7 +341,10 @@
         "x1": 531.28,
         "y1": 327.0
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     },
     {
       "number": 8,
@@ -363,7 +384,10 @@
         "x1": 327.41,
         "y1": 438.5
       },
-      "figure": null
+      "figure": null,
+      "stem_table": null,
+      "stem_after": null,
+      "option_table": null
     }
   ]
 }

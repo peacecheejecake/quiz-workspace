@@ -194,8 +194,8 @@ export interface QuestionPaper extends PdfFile {
   readonly questions: readonly TruthQuestion[];
 }
 
-export function questionPaper(): QuestionPaper {
-  const truth = JSON.parse(readFileSync(join(PDF_DIR, 'questions-ko.truth.json'), 'utf8')) as {
+export function questionPaper(fixture = 'questions-ko'): QuestionPaper {
+  const truth = JSON.parse(readFileSync(join(PDF_DIR, `${fixture}.truth.json`), 'utf8')) as {
     file: string;
     sha256: string;
     questions: TruthQuestion[];
@@ -765,17 +765,13 @@ export async function createNumberedQuestions(
   return out;
 }
 
-/** Imports questions-ko.pdf through the public API (A4); returns the run and its drafts (A13). */
+/** Imports a question paper through the public API (A4); returns the run and its drafts (A13). */
 export async function importPaperDrafts(
   owner: Member,
   workspaceId: string,
+  paper: QuestionPaper = questionPaper(),
 ): Promise<{ run: ImportRun; drafts: Draft[] }> {
-  const { documentId, jobId } = await uploadPdf(
-    owner,
-    workspaceId,
-    questionPaper(),
-    'question_paper',
-  );
+  const { documentId, jobId } = await uploadPdf(owner, workspaceId, paper, 'question_paper');
   await waitForJob(owner, jobId);
   const run = await startImport(owner, workspaceId, documentId);
   await waitForJob(owner, run.job_id);

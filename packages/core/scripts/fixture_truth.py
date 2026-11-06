@@ -250,6 +250,11 @@ class TruthQuestion(CoreModel):
     page: PageNumber
     bbox: BBox
     figure: TruthFigure | None = None
+    stem_table: TruthTable | None = None
+    """QTABLE-01: printed after ``stem``; ``stem_after`` continues the stem below it."""
+    stem_after: NonEmptyText | None = None
+    option_table: TruthTable | None = None
+    """QTABLE-01: the options as printed, a table (``options`` holds them as read)."""
 
     @model_validator(mode="after")
     def _check(self) -> Self:
