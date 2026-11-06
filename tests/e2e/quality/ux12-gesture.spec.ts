@@ -96,15 +96,26 @@ test.describe('phone', () => {
       const panel = homeUi.documentsDialog(page);
       const grabber = panel.locator(':scope > .header > .grabber');
       await expect(grabber).toBeVisible();
-      const box = await grabber.boundingBox();
-      const surface = await panel.boundingBox();
-      if (!box || !surface) throw new Error('missing bounds');
-      expect(Math.abs(box.x + box.width / 2 - (surface.x + surface.width / 2))).toBeLessThan(1);
-      expect(box.y - surface.y).toBeLessThan(16);
+      // Both rects in one frame: the sheet may still be sliding in.
+      const place = await grabber.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const surface = element.closest('.qz-panel')?.getBoundingClientRect();
+        if (!surface) throw new Error('missing panel');
+        return {
+          center: box.left + box.width / 2 - (surface.left + surface.width / 2),
+          top: box.top - surface.top,
+        };
+      });
+      expect(Math.abs(place.center)).toBeLessThan(1);
+      expect(place.top).toBeLessThan(16);
       await page.setViewportSize({ width: 1280, height: 800 });
       await expect(grabber).toBeHidden();
       await page.setViewportSize(PHONE.viewport);
       await expect(grabber).toBeVisible();
+      // WebKit can deliver that resize after the layout changed: mid-drag, at the same size.
+      await page.evaluate(() => {
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+      });
       await drag(grabber, line(0, 120));
       await expect(panel).toBeHidden();
     },

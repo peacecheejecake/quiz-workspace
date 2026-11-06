@@ -139,6 +139,9 @@ interface Gesture {
   readonly x: number;
   readonly y: number;
   readonly time: number;
+  /** Viewport at the start: a resize event can arrive after the size it reports was laid out. */
+  readonly width: number;
+  readonly height: number;
   readonly surface: HTMLElement;
   readonly edges: readonly DragEdge[];
   readonly reduced: boolean;
@@ -286,6 +289,10 @@ export function useDragDismiss({
         current.edge && !current.reduced ? translateFor(current.edge, current.offset) : '',
       );
     };
+    const resize = () => {
+      const current = gesture.current;
+      if (current?.width !== window.innerWidth || current.height !== window.innerHeight) cancel();
+    };
     const down = (event: PointerEvent) => {
       if (gesture.current && event.pointerId !== gesture.current.id) cancel();
     };
@@ -329,13 +336,13 @@ export function useDragDismiss({
         latest.current.close();
       } else leave(element, edge, offset, velocity);
     };
-    window.addEventListener('resize', cancel);
+    window.addEventListener('resize', resize);
     window.addEventListener('pointercancel', cancel);
     window.addEventListener('pointerdown', down, true);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     return () => {
-      window.removeEventListener('resize', cancel);
+      window.removeEventListener('resize', resize);
       window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('pointerdown', down, true);
       window.removeEventListener('pointermove', move);
@@ -364,6 +371,8 @@ export function useDragDismiss({
       x: event.clientX,
       y: event.clientY,
       time: event.timeStamp,
+      width: window.innerWidth,
+      height: window.innerHeight,
       surface: element,
       edges: typeof edges === 'function' ? edges() : edges,
       reduced: reducedMotion(),
