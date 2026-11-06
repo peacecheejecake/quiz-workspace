@@ -77,7 +77,8 @@ test.describe('UX12-SETTINGS', () => {
     await expect(themeRadio(page, DARK)).not.toBeChecked();
 
     await themeRadio(page, SYSTEM).focus();
-    await page.keyboard.press('ArrowRight');
+    // Radix selects on the focus move, which comes a task after keydown: the key must stay down.
+    await page.keyboard.press('ArrowRight', { delay: 50 });
     await expect(themeRadio(page, LIGHT)).toBeChecked();
     await expect(userMenu(page)).toBeVisible();
   });

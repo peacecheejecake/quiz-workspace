@@ -73,6 +73,16 @@ describe('ThemeProvider', () => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
   });
 
+  it('leaves data-theme off in "system" with omitSystemAttribute, and on for a picked theme', () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    const { rerender } = render(<ThemeProvider theme="system" omitSystemAttribute />);
+    expect(document.documentElement).not.toHaveAttribute('data-theme');
+    rerender(<ThemeProvider theme="dark" omitSystemAttribute />);
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    rerender(<ThemeProvider theme="system" omitSystemAttribute />);
+    expect(document.documentElement).not.toHaveAttribute('data-theme');
+  });
+
   it('useTheme throws outside the provider', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<ThemeToggle />)).toThrow(/ThemeProvider/);

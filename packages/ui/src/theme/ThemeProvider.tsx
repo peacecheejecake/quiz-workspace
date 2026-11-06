@@ -42,6 +42,11 @@ export interface ThemeProviderProps {
    * carrying `data-theme`, for side-by-side previews.
    */
   scope?: 'document' | 'element';
+  /**
+   * With `scope="document"`, leave `data-theme` off `<html>` while following the system: the
+   * tokens' `prefers-color-scheme` query then switches the theme with no script in between.
+   */
+  omitSystemAttribute?: boolean;
 }
 
 /**
@@ -54,6 +59,7 @@ export function ThemeProvider({
   defaultTheme = 'light',
   onThemeChange,
   scope = 'document',
+  omitSystemAttribute = false,
 }: ThemeProviderProps) {
   const [uncontrolledTheme, setUncontrolledTheme] = useState<ThemePreference>(defaultTheme);
   const theme = controlledTheme ?? uncontrolledTheme;
@@ -70,16 +76,19 @@ export function ThemeProvider({
 
   const resolvedTheme: ThemeName = theme === 'system' ? system : theme;
 
+  const documentTheme = omitSystemAttribute && theme === 'system' ? null : resolvedTheme;
+
   useEffect(() => {
     if (scope !== 'document') return;
     const root = document.documentElement;
     const previous = root.getAttribute('data-theme');
-    root.setAttribute('data-theme', resolvedTheme);
+    if (documentTheme === null) root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', documentTheme);
     return () => {
       if (previous === null) root.removeAttribute('data-theme');
       else root.setAttribute('data-theme', previous);
     };
-  }, [scope, resolvedTheme]);
+  }, [scope, documentTheme]);
 
   const setTheme = useCallback(
     (next: ThemePreference) => {
