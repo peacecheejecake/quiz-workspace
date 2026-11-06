@@ -42,7 +42,7 @@ export function loadPdfjs(): Promise<Pdfjs> {
  * 원본 PDF dialog handing over to DOC-02) makes the open throw "the worker is being destroyed".
  */
 export function openPdf(pdfjs: Pdfjs, data: Uint8Array): PdfLoadingTask {
-  worker ??= pdfjs.PDFWorker.create({ port: pdfjs.GlobalWorkerOptions.workerPort });
+  worker ??= pdfjs.PDFWorker.create({ port: pdfjs.GlobalWorkerOptions.workerPort ?? undefined });
   return pdfjs.getDocument({
     data,
     worker,
