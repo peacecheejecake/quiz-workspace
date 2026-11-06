@@ -168,7 +168,9 @@ test(
     expect((await session.get('/chapter-notes')).status).toBe(404);
     const off = await session.get(`/chapters/${s.ch1}/note`);
     expect(off.status).toBe(404);
-    expect(stableProblem(off)).toEqual(stableProblem(await session.get(`/chapters/${RANDOM_ID}/note`)));
+    expect(stableProblem(off)).toEqual(
+      stableProblem(await session.get(`/chapters/${RANDOM_ID}/note`)),
+    );
     await page.reload();
     await expect(sharedUi.heading(page)).toBeVisible();
     await expect(sharedUi.questions(page)).toBeVisible();
@@ -338,12 +340,17 @@ test(
     for (const res of await Promise.all(writes)) expect([401, 404, 405]).toContain(res.status);
 
     await openGuest(page, link);
-    await sharedUi.ownerRecords(page).getByRole('button', { name: /기록 보기/ }).click();
+    await sharedUi
+      .ownerRecords(page)
+      .getByRole('button', { name: /기록 보기/ })
+      .click();
     const panel = sharedUi.ownerRecordsPanel(page);
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('region', { name: '풀이 이력' }).getByText('정답')).toBeVisible();
     await expect(
-      panel.getByRole('region', { name: '하이라이트' }).getByText(quoteOf(question), { exact: true }),
+      panel
+        .getByRole('region', { name: '하이라이트' })
+        .getByText(quoteOf(question), { exact: true }),
     ).toBeVisible();
     await expect(panel.getByText(s.owner.user.email)).toHaveCount(0);
     await expect(sharedUi.forbiddenControls(page)).toHaveCount(0);
@@ -368,9 +375,9 @@ test(
     const link = await createShareLink(s.owner, s.workspaceId, { include_owner_records: true });
     const session = await ShareSession.open(link.id, link.secret);
     const kinds = async () =>
-      (
-        await session.ok<{ items: { kind: string }[] }>('/owner-highlights')
-      ).items.map((i) => i.kind);
+      (await session.ok<{ items: { kind: string }[] }>('/owner-highlights')).items.map(
+        (i) => i.kind,
+      );
     expect((await kinds()).sort()).toEqual(['explanation', 'note']);
 
     // Notes left out: their highlights go with them.
@@ -386,7 +393,8 @@ test(
     expect(await attemptCount()).toBe(2);
     await s.owner.api.ok('DELETE', `/questions/${second.id}`, undefined, [200, 204]);
     expect(await attemptCount()).toBe(1);
-    expect((await kinds()).sort()).toEqual(['explanation', 'note']);
+    // The note cited that question: it no longer matches its sources, so its highlight goes too.
+    expect(await kinds()).toEqual(['explanation']);
 
     // The owner's notice follows the option.
     await signInAs(page, s.owner.user);

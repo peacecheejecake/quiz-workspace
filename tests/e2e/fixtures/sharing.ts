@@ -1018,7 +1018,9 @@ export const sharingUi = {
       .first(),
   /** UX12-SHARE: one switch of the 공유 범위 section. */
   scopeSwitch: (page: Page, name: RegExp) =>
-    main(page).getByRole('region', { name: /공유 범위|share scope/i }).getByRole('switch', { name }),
+    main(page)
+      .getByRole('region', { name: /공유 범위|share scope/i })
+      .getByRole('switch', { name }),
   /** WS-SHARE-01-AC08: the copy button right after a successful copy. */
   copiedButton: (page: Page) => button(main(page), /^(복사 완료|copied)$/i),
   copiedAnnouncement: (page: Page) =>

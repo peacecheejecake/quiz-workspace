@@ -36,6 +36,8 @@ function fakeClient(pdfError: unknown): SharedClient {
   return {
     exchange: vi.fn(),
     workspace: vi.fn(),
+    ownerAttempts: vi.fn(),
+    ownerHighlights: vi.fn(),
     document: vi.fn(async () => ({
       id: DOC,
       title: '책',

@@ -18,6 +18,10 @@ export type OutlineItem = Schemas['OutlineItem'];
 export type SharedChapterNote = Schemas['SharedChapterNote'];
 export type SharedChapterNoteList = Schemas['SharedChapterNoteList'];
 export type SharedQuestionPreview = Schemas['QuestionPreview'];
+export type SharedOwnerAttempt = Schemas['SharedOwnerAttempt'];
+export type SharedOwnerAttemptPage = Schemas['SharedOwnerAttemptPage'];
+export type SharedOwnerHighlight = Schemas['SharedOwnerHighlight'];
+export type SharedOwnerHighlightPage = Schemas['SharedOwnerHighlightPage'];
 
 export const SHARE_UNAVAILABLE = 'urn:quiz-workspace:problem:share-unavailable';
 export const SHARE_SESSION_REQUIRED = 'urn:quiz-workspace:problem:share-session-required';
@@ -106,6 +110,10 @@ export interface SharedClient {
   chapterNotes(signal?: AbortSignal): Promise<SharedChapterNoteList>;
   /** A chapter's newest 정리 노트; `notFound` while it does not match its source questions. */
   chapterNote(chapterId: string, signal?: AbortSignal): Promise<SharedChapterNote>;
+  /** The owner's attempts, newest first, on a link that opts in (UX12-SHARE). */
+  ownerAttempts(cursor: string | null, signal?: AbortSignal): Promise<SharedOwnerAttemptPage>;
+  /** The owner's highlights, newest first, on a link that opts in (UX12-SHARE). */
+  ownerHighlights(cursor: string | null, signal?: AbortSignal): Promise<SharedOwnerHighlightPage>;
   /**
    * The original PDF bytes. Rejects with {@link SharedApiError} when the link or session is no
    * longer usable, else with {@link PdfLoadError}.
@@ -192,6 +200,16 @@ export function createSharedClient(
       if (!response.ok) await fail(response);
     },
     workspace: (signal) => json<SharedWorkspace>('', { signal }),
+    ownerAttempts: (cursor, signal) =>
+      json<SharedOwnerAttemptPage>(
+        `/owner-attempts${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+        { signal },
+      ),
+    ownerHighlights: (cursor, signal) =>
+      json<SharedOwnerHighlightPage>(
+        `/owner-highlights${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+        { signal },
+      ),
     document: (documentId, signal) => loadDocument(documentId, signal),
     questions: (cursor, signal, documentId) =>
       json<SharedQuestionList>(

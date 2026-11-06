@@ -10,7 +10,8 @@
 // nothing of the workspace. All reads go through the same-origin relay; nothing here writes,
 // practises or shows personal data, and the API refuses such requests regardless. A shared book
 // whose current revision has a summary offers `요약` next to its link: the read-only 문서 요약 panel
-// (DOCSUM-01-AC06, `?panel=document-summary&document=<id>`).
+// (DOCSUM-01-AC06, `?panel=document-summary&document=<id>`). The link's scope (UX12-SHARE) decides
+// which of 요약, 정리 노트 and 공유자의 기록 appear; the API refuses them regardless.
 import { Badge, Button } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -33,6 +34,7 @@ import {
 import { ForkWorkspaceDialog } from './fork-workspace-dialog';
 import { SharedChapterNotes } from './shared-chapter-notes';
 import { SharedDocumentView } from './shared-document-view';
+import { SharedOwnerRecords } from './shared-owner-records';
 import { SharedQuestions } from './shared-questions';
 import { SharedSearch } from './shared-search';
 import { ownSummaryDocument } from '@/lib/workspaces/home';
@@ -85,7 +87,7 @@ export function SharedWorkspaceView({
   const markUnavailable = useCallback(() => setPhase(UNAVAILABLE), []);
   const summaries = useSharedSummaries(
     shareId ?? '',
-    phase.status === 'ready' ? phase.workspace.documents : null,
+    phase.status === 'ready' && phase.workspace.include_summary ? phase.workspace.documents : null,
   );
   /** The `요약` button that opened the summary panel (focus returns there). */
   const summaryOpenerRef = useRef<HTMLElement | null>(null);
@@ -174,7 +176,9 @@ export function SharedWorkspaceView({
     ? (documents.find((d) => d.id === view.documentId) ?? null)
     : null;
   const forkHref = signedIn ? forkPanelHref(shareId) : forkLoginHref;
-  const summaryDocument = ownSummaryDocument(view.summaryDocumentId, documents);
+  const summaryDocument = workspace.include_summary
+    ? ownSummaryDocument(view.summaryDocumentId, documents)
+    : null;
 
   return (
     <main className={styles.main} data-screen-id={screenId}>
@@ -249,12 +253,22 @@ export function SharedWorkspaceView({
             )}
           </nav>
           <SharedSearch shareId={shareId} client={client} onUnavailable={markUnavailable} />
-          <SharedChapterNotes
-            shareId={shareId}
-            client={client}
-            documents={documents}
-            onUnavailable={markUnavailable}
-          />
+          {workspace.include_notes ? (
+            <SharedChapterNotes
+              shareId={shareId}
+              client={client}
+              documents={documents}
+              onUnavailable={markUnavailable}
+            />
+          ) : null}
+          {workspace.include_owner_records ? (
+            <SharedOwnerRecords
+              shareId={shareId}
+              client={client}
+              documents={documents}
+              onUnavailable={markUnavailable}
+            />
+          ) : null}
         </aside>
 
         <div className={styles.content}>
