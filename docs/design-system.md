@@ -69,6 +69,8 @@
 | `--color-glass` | `rgba(246,248,252,.7)` | floating glass surface(옅은 tint, 뒤가 비친다. UX12 DESIGN-5) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
 | `--glass-gradient` | `linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2))` | glass 표면의 파랑→라벤더 tint 층(UX12 DESIGN-4). `--color-glass`·모바일 sheet의 `--color-glass-solid` 위에 얹는다 |
+| `--color-panel-glass` | `rgba(246, 248, 252, 0.85)` | 데스크톱 side panel(`.qz-panel`, 768px 이상)의 반투명 배경. `--color-glass-solid`의 색을 .85로 둔다(PANEL-GLASS v1.3.7). dark `rgba(30, 38, 51, 0.85)`. .8은 light 바쁜 배경 위 success 글자가 4.46:1이라 .85로 올렸다 |
+| `--panel-glass-brightness` | `1` | 데스크톱 side panel의 blur 밝기 배율. 색 값이 아니지만 테마별이다(light 1, dark 0.7). 공유 `--glass-brightness`(light 1.3)는 밝은 페이지를 순백으로 잘라 panel이 흰색으로 보여 따로 둔다 |
 | `--glass-brightness` | `1.3` | blur한 배경의 밝기 배율. 색 값이 아니지만 테마별이다(UX12 DESIGN-5) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#E7ECF0` | 보지 않은 문제 |
@@ -133,6 +135,8 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **v1.3.6 (PANEL-HEADER, 2026-11-07 사용자 피드백):** `FloatingSidePanel`과 `ModalDialog`의 머리글(`:is(.qz-panel, .qz-modal) > .header`) 아래 1px `--color-border` 구분선을 없앴다. footer·`.pinned` 구분선, 스크롤 그림자, drawer·ConfirmDialog 규칙은 그대로다. 머리글 높이를 계산에 쓰는 곳은 없다. 토큰 변경 없음.
 
+**v1.3.7 (PANEL-GLASS, 2026-11-07 사용자 피드백):** 데스크톱(768px 이상) side panel은 공유 glass 대신 전용 토큰 `--color-panel-glass`(light `rgba(246, 248, 252, 0.85)`, dark `rgba(30, 38, 51, 0.85)`)와 `--panel-glass-brightness`(light 1, dark 0.7)를 쓴다. 공유 `--glass-brightness` light 1.3은 밝은 페이지의 배경을 순백으로 잘라 panel이 `--color-glass`의 tint가 아니라 흰색으로 보였다. 모바일 sheet·paired 전체 화면·reduced transparency·blur 미지원은 `--color-glass-solid`로 유지하고 `.glass-surface`의 gradient 층도 그대로다. 다른 glass 표면과 `ModalDialog`(`.qz-modal`, glass가 아님)는 바뀌지 않는다. [UX12-GLASS](screens/ux12-glass.md)·[UX12-GLASSBTN](screens/ux12-glass-buttons.md) AC01을 고쳤다.
+
 **v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
 
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`(VIEW-RESULT 2026-11-07부터 `--color-success-fill`), 오답일 때 정답 보기 `--color-danger`(같은 날부터 `--color-danger-fill`)(사용자 결정: 정답 보기를 빨간 테두리로). VIEW-RESULT의 success·danger 채움은 light에서 표면 위 2.65~2.95:1로 3:1에 약간 못 미친다(`contrast.test.ts`의 `RESULT_MARK_MIN` 2.6). RESULT-MARKS(2026-11-07)부터 아이콘이 없으므로 이 허용의 근거는 테두리 있음/없음의 구별(2px, 투명 행과 대비)과 보이지 않는 "정답"·"내 선택" 설명(UX12 VIEW-2)이며, 색만으로 전달하지 않는다.
@@ -159,8 +163,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-focus: #A2B3FF;
   --color-glass: rgba(30, 38, 51, 0.65);
   --color-glass-solid: #1E2633;
+  --color-panel-glass: rgba(30, 38, 51, 0.85);
   --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
   --glass-brightness: 0.7;
+  --panel-glass-brightness: 0.7;
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #3A4554;
   --question-status-viewed: #8591A1;
@@ -217,8 +223,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-focus: #356CFF;
   --color-glass: rgba(246,248,252,.7);
   --color-glass-solid: #F6F8FC;
+  --color-panel-glass: rgba(246, 248, 252, 0.85);
   --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2));
   --glass-brightness: 1.3;
+  --panel-glass-brightness: 1;
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #E7ECF0;
   --question-status-viewed: #ACB6C2;

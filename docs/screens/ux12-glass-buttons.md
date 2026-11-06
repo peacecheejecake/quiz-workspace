@@ -14,7 +14,7 @@
 
 - **표면:** `--color-glass` alpha는 light `.7`, dark `.65`, `--glass-gradient` alpha는 light `.2`, dark `.05`, `--glass-blur`는 24px이다. 새 테마별 값 `--glass-brightness`(light 1.3, dark .7)가 blur한 배경을 표면 쪽 밝기로 밀어 글자 대비를 지킨다.
 - **Fallback:** reduced transparency·blur 미지원·모바일 sheet·full-screen paired dialog·태블릿 PDF 위 목차는 지금처럼 불투명 `--color-glass-solid`이고 blur가 없다.
-- **PDF 위:** floating glass는 PDF 읽기 영역을 덮어도 된다(사용자 결정 2026-11-06). 복귀 bar·메뉴·toast와 viewport side panel은 PDF 위에서도 blur와 투명도를 그대로 쓴다. 모바일 sheet·태블릿 목차·reduced transparency의 단색은 그대로다.
+- **PDF 위:** floating glass는 PDF 읽기 영역을 덮어도 된다(사용자 결정 2026-11-06). 복귀 bar·메뉴·toast와 viewport side panel은 PDF 위에서도 blur와 투명도를 그대로 쓴다(side panel은 전용 토큰). 모바일 sheet·태블릿 목차·reduced transparency의 단색은 그대로다.
 - **회색 영역:** 해설처럼 구분돼야 하는 영역은 불투명한 `--color-surface-muted` 회색 그대로다(사용자 결정 2026-11-06, 처음의 "회색을 흰색으로"를 되돌림).
 - **유리 안 토큰:** `.glass-surface` 안에서 `--color-accent`는 `--color-accent-on-glass`로 바뀐다. primary hover는 `--color-accent-pressed`로 한 단계 내려간다.
 - **유리 위 버튼:** 배경을 지우는 것은 사용자가 지목한 `보던 문제로 돌아가기`와 목록 항목(AI 질문 출처·각주, 모의고사 목록·문제 행)뿐이다. 복귀 버튼은 `보던 문제로 돌아가기`를 이름으로 가진 테두리 없는 아이콘 버튼이다(사용자 피드백 2026-11-07). secondary 버튼은 채움을 유지한다(사용자 정정 2026-11-06: 지운 것은 footer 영역의 배경이지 버튼의 배경이 아니다). 유리 안에서 그 채움은 `--color-surface-raised`이고(light 흰색, dark `#27313E`), dark의 raised와 `--color-state-hover`가 거의 같아 hover는 `--color-state-pressed`다. 입력·primary·toggle은 그대로다.
@@ -68,7 +68,7 @@ Chromium에서 실제 토큰과 Lightning CSS를 거친 CSS로 그린 표면의 
 ## 수용 기준
 
 ### UX12-GLASSBTN-AC01
-**실제 blur:** 넓은 화면의 top bar, menu, side panel은 light와 dark에서 `blur(24px)`가 계산값으로 적용되고 배경색이 반투명하다(light alpha .7, dark .65). top bar에는 gradient 층이 없고 menu와 side panel에는 있다.
+**실제 blur:** 넓은 화면의 top bar, menu, side panel은 light와 dark에서 `blur(24px)`가 계산값으로 적용되고 배경색이 반투명하다(top bar·menu는 light alpha .7, dark .65; side panel은 PANEL-GLASS(2026-11-07)부터 전용 `--color-panel-glass` alpha .85와 `--panel-glass-brightness` light 1·dark .7이다. 공유 `--glass-brightness` light 1.3은 밝은 페이지를 순백으로 잘라 panel이 흰색으로 보였다). top bar에는 gradient 층이 없고 menu와 side panel에는 있다.
 
 ### UX12-GLASSBTN-AC02
 **불투명 fallback:** 폭 390px의 side panel은 불투명하고 blur가 없다.

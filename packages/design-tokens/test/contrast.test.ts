@@ -256,6 +256,52 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
       }
     });
 
+    // PANEL-GLASS: desktop side panels paint their own color and brightness over the backdrop. The
+    // same busy-backdrop pairs hold, and the panel stays tinted like --color-glass-solid.
+    const panelRgba = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(t['color-panel-glass']);
+    if (!panelRgba) throw new Error('color-panel-glass must be rgba()');
+    const panelAlpha = Number(panelRgba[4]);
+    const panelBrightness = Number(t['panel-glass-brightness']);
+    const panelOver = (backdrop: number[]) =>
+      painted(
+        over(
+          solid,
+          panelAlpha,
+          backdrop.map((c) => Math.min(255, c * panelBrightness)),
+        ),
+      );
+
+    it('panel glass is the solid fallback color at .7 to .9', () => {
+      expect(toHex(panelRgba.slice(1, 4).map(Number)).toLowerCase()).toBe(
+        t['color-glass-solid'].toLowerCase(),
+      );
+      expect(panelAlpha).toBeGreaterThanOrEqual(0.7);
+      expect(panelAlpha).toBeLessThanOrEqual(0.9);
+    });
+
+    it.each([
+      'color-text-primary',
+      'color-text-secondary',
+      'color-accent-on-glass',
+      'color-danger',
+      'color-success',
+      'color-warning',
+    ] as const)('%s stays AA over a busy blurred backdrop on the panel glass', (fg) => {
+      for (const bg of panelOver(busy)) {
+        expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(TEXT_MIN);
+      }
+    });
+
+    it('primary text stays AA over a pure black or white backdrop on the panel glass', () => {
+      for (const backdrop of [0, 255]) {
+        for (const bg of panelOver([backdrop, backdrop, backdrop])) {
+          expect(contrastRatio(t['color-text-primary'], bg), `${backdrop}`).toBeGreaterThanOrEqual(
+            TEXT_MIN,
+          );
+        }
+      }
+    });
+
     it.each([
       'color-switch-track',
       'color-border-strong',

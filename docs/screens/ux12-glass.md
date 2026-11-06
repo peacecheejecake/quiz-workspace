@@ -17,7 +17,7 @@
 ## 수용 기준
 
 ### UX12-GLASS-AC01
-**gradient 층:** 넓은 화면의 menu, side panel은 light와 dark에서 각각 그 테마의 파랑→라벤더 gradient를 `--color-glass` 위에 그린다. 두 테마의 gradient 값은 서로 다르다. top bar의 gradient는 [UX12-GLASSBTN](ux12-glass-buttons.md)가 없앴다.
+**gradient 층:** 넓은 화면의 menu, side panel(배경색은 전용 `--color-panel-glass`, PANEL-GLASS 2026-11-07)은 light와 dark에서 각각 그 테마의 파랑→라벤더 gradient를 `--color-glass` 위에 그린다. 두 테마의 gradient 값은 서로 다르다. top bar의 gradient는 [UX12-GLASSBTN](ux12-glass-buttons.md)가 없앴다.
 
 ### UX12-GLASS-AC02
 **모바일 sheet:** 폭 390px의 side panel은 불투명한 `--color-glass-solid` 위에 gradient를 유지하고 blur는 쓰지 않는다.
