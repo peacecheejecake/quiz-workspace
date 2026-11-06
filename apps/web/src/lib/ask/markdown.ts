@@ -3,7 +3,6 @@
 // model output can never inject markup. Emphasis uses the DOCSUM pattern rather than CommonMark's
 // flanking rules, which leave `**"정답"**은` unbolded; tables split rows as QTABLE-01 does.
 // With `streaming`, the unfinished end of the text is shown as if it were closed, or held back.
-import { EMPHASIS } from '@/lib/documents/summary';
 import { pipeCells } from '@/lib/questions/stem-table';
 
 export type Inline =
@@ -401,7 +400,8 @@ const SPECIAL = /[\\\n`*_~[!<h]/;
 const ESCAPABLE = /^[!-/:-@[-`{-~]$/;
 const WORD = /^[A-Za-z0-9]$/;
 const TRIPLE = /(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/y;
-const SPAN = new RegExp(EMPHASIS.source, 'y');
+const STRONG = /(\*\*|__)(?=\S)([\s\S]*?\S)\1/y;
+const EM = /(\*|_)(?=\S)([\s\S]*?\S)\1/y;
 const STRIKE = /~~(?=\S)([\s\S]*?\S)~~/y;
 const CITE_LABEL = /^S?\d{1,3}$/;
 const PARTIAL_CITE = /^\[S?\d{0,3}$/;
@@ -418,6 +418,64 @@ function stickyMatch(pattern: RegExp, value: string, at: number): RegExpExecArra
 }
 
 const endOf = (match: RegExpExecArray) => match.index + match[0].length;
+
+/**
+ * What every marker of a text would otherwise scan to its end to find out: an answer is parsed
+ * again on each stream chunk, and thousands of unclosed markers made that quadratic.
+ */
+interface InlineScan {
+  /** The last place `marker` can close a span (not after whitespace); at or before `at`: none. */
+  closer(marker: string): number;
+  /** The `]` that pairs with the `[` at `at`, or -1. */
+  bracketClose(at: number): number;
+  /** The `](` of a link still waiting for its `)`, or -1. */
+  partialLink(): number;
+}
+
+function pairBrackets(value: string): Map<number, number> {
+  const pairs = new Map<number, number>();
+  const opened: number[] = [];
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (char === '\\') i += 1;
+    else if (char === '[') opened.push(i);
+    else if (char === ']') {
+      const start = opened.pop();
+      if (start !== undefined) pairs.set(start, i);
+    }
+  }
+  return pairs;
+}
+
+function inlineScan(value: string): InlineScan {
+  const closers = new Map<string, number>();
+  let pairs: Map<number, number> | undefined;
+  let partial: number | undefined;
+  return {
+    closer(marker) {
+      let last = closers.get(marker);
+      if (last === undefined) {
+        last = value.lastIndexOf(marker);
+        while (last > 0 && /\s/.test(value[last - 1] as string)) {
+          last = value.lastIndexOf(marker, last - 1);
+        }
+        closers.set(marker, last);
+      }
+      return last;
+    },
+    bracketClose(at) {
+      pairs ??= pairBrackets(value);
+      return pairs.get(at) ?? -1;
+    },
+    partialLink() {
+      if (partial === undefined) {
+        const last = value.lastIndexOf('](');
+        partial = last >= 0 && !value.includes(')', last) ? last : -1;
+      }
+      return partial;
+    },
+  };
+}
 
 function codeAt(value: string, at: number, open: boolean): Hit {
   let end = at;
@@ -438,11 +496,19 @@ function codeAt(value: string, at: number, open: boolean): Hit {
   return { nodes: rest ? [{ kind: 'code', text: rest }] : [], end: value.length };
 }
 
-function emphasisAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
+function emphasisAt(
+  value: string,
+  at: number,
+  open: boolean,
+  inLink: boolean,
+  depth: number,
+  scan: InlineScan,
+): Hit {
   const char = value[at] as string;
   if (char === '_' && WORD.test(value[at - 1] ?? '')) return null;
   const closed = (end: number) => char !== '_' || !WORD.test(value[end] ?? '');
-  const triple = stickyMatch(TRIPLE, value, at);
+  const canClose = (width: number) => scan.closer(char.repeat(width)) > at;
+  const triple = canClose(3) ? stickyMatch(TRIPLE, value, at) : null;
   if (triple && closed(endOf(triple))) {
     const inner = parseAnswerInline(triple[2] ?? '', false, inLink, depth + 1);
     return {
@@ -451,19 +517,14 @@ function emphasisAt(value: string, at: number, open: boolean, inLink: boolean, d
     };
   }
   const double = value[at + 1] === char;
-  const match = stickyMatch(SPAN, value, at);
-  if (match && closed(endOf(match)) && (!open || !double || match[1] !== undefined)) {
-    const strong = match[1] !== undefined;
+  const strong = double && canClose(2) ? stickyMatch(STRONG, value, at) : null;
+  const match = strong ?? (canClose(1) ? stickyMatch(EM, value, at) : null);
+  if (match && closed(endOf(match)) && (!open || !double || strong)) {
     return {
       nodes: [
         {
           kind: strong ? 'strong' : 'em',
-          children: parseAnswerInline(
-            (strong ? match[2] : match[4]) ?? '',
-            false,
-            inLink,
-            depth + 1,
-          ),
+          children: parseAnswerInline(match[2] ?? '', false, inLink, depth + 1),
         },
       ],
       end: endOf(match),
@@ -485,11 +546,18 @@ function emphasisAt(value: string, at: number, open: boolean, inLink: boolean, d
   };
 }
 
-function strikeAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
+function strikeAt(
+  value: string,
+  at: number,
+  open: boolean,
+  inLink: boolean,
+  depth: number,
+  scan: InlineScan,
+): Hit {
   if (value[at + 1] !== '~') {
     return open && at === value.length - 1 ? { nodes: [], end: value.length } : null;
   }
-  const match = stickyMatch(STRIKE, value, at);
+  const match = scan.closer('~~') > at ? stickyMatch(STRIKE, value, at) : null;
   if (match) {
     return {
       nodes: [
@@ -516,18 +584,8 @@ interface LinkSyntax {
 }
 
 /** `[label](url "title")` at `at`, by its syntax only. */
-function linkSyntaxAt(value: string, at: number): LinkSyntax | null {
-  let depth = 0;
-  let close = -1;
-  for (let i = at; i < value.length && close < 0; i += 1) {
-    const char = value[i];
-    if (char === '\\') i += 1;
-    else if (char === '[') depth += 1;
-    else if (char === ']') {
-      depth -= 1;
-      if (depth === 0) close = i;
-    }
-  }
+function linkSyntaxAt(value: string, at: number, scan: InlineScan): LinkSyntax | null {
+  const close = scan.bracketClose(at);
   if (close < 0 || value[close + 1] !== '(') return null;
   let i = close + 2;
   while (value[i] === ' ') i += 1;
@@ -557,8 +615,8 @@ function linkSyntaxAt(value: string, at: number): LinkSyntax | null {
   return { label: value.slice(at + 1, close), url, end: i + 1 };
 }
 
-function linkAt(value: string, at: number, open: boolean, depth: number): Hit {
-  const link = linkSyntaxAt(value, at);
+function linkAt(value: string, at: number, open: boolean, depth: number, scan: InlineScan): Hit {
+  const link = linkSyntaxAt(value, at, scan);
   if (link) {
     if (CITE_LABEL.test(link.label)) return null;
     const href = safeHref(link.url);
@@ -573,6 +631,7 @@ function linkAt(value: string, at: number, open: boolean, depth: number): Hit {
   if (!open) return null;
   const rest = value.slice(at);
   if (PARTIAL_CITE.test(rest)) return { nodes: [], end: value.length };
+  if (scan.partialLink() < at) return null;
   const partial = PARTIAL_LINK.exec(rest);
   if (!partial || CITE_LABEL.test(partial[1] ?? '')) return null;
   return { nodes: parseAnswerInline(partial[1] ?? '', false, true, depth + 1), end: value.length };
@@ -601,7 +660,14 @@ function angleUrlAt(value: string, at: number): Hit {
     : null;
 }
 
-function tokenAt(value: string, at: number, open: boolean, inLink: boolean, depth: number): Hit {
+function tokenAt(
+  value: string,
+  at: number,
+  open: boolean,
+  inLink: boolean,
+  depth: number,
+  scan: InlineScan,
+): Hit {
   const nestable = depth < MAX_INLINE_DEPTH;
   switch (value[at]) {
     case '\n':
@@ -616,14 +682,14 @@ function tokenAt(value: string, at: number, open: boolean, inLink: boolean, dept
       return codeAt(value, at, open);
     case '*':
     case '_':
-      return nestable ? emphasisAt(value, at, open, inLink, depth) : null;
+      return nestable ? emphasisAt(value, at, open, inLink, depth, scan) : null;
     case '~':
-      return nestable ? strikeAt(value, at, open, inLink, depth) : null;
+      return nestable ? strikeAt(value, at, open, inLink, depth, scan) : null;
     case '[':
-      return inLink || !nestable ? null : linkAt(value, at, open, depth);
+      return inLink || !nestable ? null : linkAt(value, at, open, depth, scan);
     case '!': {
       if (value[at + 1] !== '[') return null;
-      const image = linkSyntaxAt(value, at + 1);
+      const image = linkSyntaxAt(value, at + 1, scan);
       if (image) return { nodes: [text(value.slice(at, image.end))], end: image.end };
       return open ? { nodes: [text(value.slice(at))], end: value.length } : null;
     }
@@ -649,8 +715,11 @@ export function parseAnswerInline(
   const nodes: Inline[] = [];
   let plain = '';
   let at = 0;
+  const scan = inlineScan(value);
   while (at < value.length) {
-    const hit = SPECIAL.test(value[at] as string) ? tokenAt(value, at, open, inLink, depth) : null;
+    const hit = SPECIAL.test(value[at] as string)
+      ? tokenAt(value, at, open, inLink, depth, scan)
+      : null;
     if (hit) {
       if (plain) nodes.push(text(plain));
       plain = '';
