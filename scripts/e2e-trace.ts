@@ -158,6 +158,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-SRCMENU.0': ['UX12-SRCMENU'],
   // UX12 DESIGN-4 + SHELL-2: the themed glass gradient and the return bar's shape (D-3).
   'UX12-GLASS.0': ['UX12-GLASS'],
+  // UX12 DOCS-2: source page links open the 원본 PDF dialog in place (D-13).
+  'UX12-SOURCE.0': ['UX12-SOURCE'],
 };
 
 const LEADING_ID = new RegExp(

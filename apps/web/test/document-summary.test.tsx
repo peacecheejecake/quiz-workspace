@@ -508,15 +508,22 @@ describe('DocumentSummaryPanel', () => {
     expect(client.create).not.toHaveBeenCalled();
   });
 
-  it('shows the summary with collapsed chapters and page links into DOC-02', async () => {
+  it('shows the summary with collapsed chapters and page links to the source dialog', async () => {
     const user = userEvent.setup();
     const { panel } = renderPanel(state({ summary: SUMMARY, enabled: true, run: run() }));
     expect(await within(panel).findByRole('heading', { level: 3, name: '전체 요약' })).toBeTruthy();
     expect(within(panel).getByText(/발행본 기준 · 장 2개$/)).toBeTruthy();
-    const link = within(within(panel).getByRole('list', { name: '핵심' })).getByRole('link', {
-      name: '2–3쪽 열기',
-    });
-    expect(link.getAttribute('href')).toBe(`/workspaces/${WS}/documents/${DOC}?page=2`);
+    await user.click(
+      within(within(panel).getByRole('list', { name: '핵심' })).getByRole('button', {
+        name: '2–3쪽 열기',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: '원본 PDF' });
+    expect(within(dialog).getByRole('link', { name: '전체 문서 보기' })).toHaveAttribute(
+      'href',
+      `/workspaces/${WS}/documents/${DOC}?page=2`,
+    );
+    await user.click(within(dialog).getByRole('button', { name: '원본 닫기' }));
     const chapter = within(panel).getByRole('button', { name: /^1장 물의 순환 p\.2–3/ });
     expect(chapter.getAttribute('aria-expanded')).toBe('false');
     await user.click(chapter);

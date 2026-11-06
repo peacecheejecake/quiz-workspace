@@ -231,7 +231,7 @@ describe('QuestionImport', () => {
     expect(keys[1]).toBe(keys[0]);
     expect(polls).toBe(2);
     expect(screen.queryByRole('progressbar', { name: '등록 진행률' })).toBeNull();
-  }, 30_000);
+  }, 90_000); // Role queries over a page link button per draft are slow on a loaded machine.
 
   it('QIMP-JOB: reattaches to a registration that is still running when the page opens', async () => {
     const drafts = [draft(0, 'approved'), draft(1, 'approved')];

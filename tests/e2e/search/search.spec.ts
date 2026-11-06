@@ -38,6 +38,7 @@ import {
   searchUi,
   section,
   signInAs,
+  sourcePdfUi,
   test,
   uploadPdf,
   uploadReadyBook,
@@ -220,6 +221,7 @@ test(
     expect(await isBlocked(box), 'the search box is inert').toBe(true);
 
     await searchUi.openInPdf(panel).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${ws.id}/documents/${documentId}`,
     );
@@ -540,6 +542,7 @@ test(
     // Back from the PDF viewer and Back onto the page restore the search it had.
     await items.first().getByRole('button').first().click();
     await searchUi.openInPdf(searchUi.excerptPanel(page)).click();
+    await sourcePdfUi.fullDocument(sourcePdfUi.dialog(page)).click();
     await expect(page).toHaveURL(
       (url) => url.pathname === `/workspaces/${ws.id}/documents/${documentId}`,
     );

@@ -27,6 +27,7 @@ import {
   type SummaryClient,
   type SummaryState,
 } from '@/lib/documents/summary';
+import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
 import { SummaryContentView } from './summary-content';
 import styles from './summary.module.css';
 
@@ -216,6 +217,7 @@ function SummaryPanelBody({
   const pendingRef = useRef<Pending>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pdfPage, setPdfPage] = useState<PdfPageTarget | null>(null);
   /** The auto-refresh line's button (끄기, or 요약 만들기 once off): focus target after the dialog. */
   const autoButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -359,7 +361,15 @@ function SummaryPanelBody({
         </p>
       ) : null}
 
-      {summary ? <SummaryContentView content={summary} pageHref={pageHref} /> : null}
+      {summary ? (
+        <SummaryContentView
+          content={summary}
+          onOpenPage={(page) =>
+            setPdfPage(documentId ? { documentId, page, documentHref: pageHref(page) } : null)
+          }
+        />
+      ) : null}
+      <PdfPageDialog target={pdfPage} onClose={() => setPdfPage(null)} />
 
       {model.retry || model.createInEmpty || model.auto ? (
         <div className={styles.actions}>

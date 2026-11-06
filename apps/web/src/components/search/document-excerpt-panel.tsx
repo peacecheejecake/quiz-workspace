@@ -5,13 +5,14 @@
 // not step aside) with the hit's paragraph-complete excerpt — the text around the keyword, the
 // keyword marked (SEARCH-01-AC11) and scrolled into view —, its location and the jump into the
 // PDF. `이전 결과`/`다음 결과` (Alt+↑/Alt+↓) move it along the results; closing it returns focus
-// to the result last shown.
+// to the result last shown. `PDF에서 보기` opens the page in place (UX12-SOURCE).
 // The jump target is refined to the block that holds the match (lib/search/jump.ts) while the
 // panel is open; a click before that finished waits for it.
 import { Button, FloatingSidePanel } from '@quiz/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { PdfPageDialog, type PdfPageTarget } from '@/components/documents/editor/pdf-page-dialog';
 import type { SearchClient, SearchItem } from '@/lib/search/client';
 import { apiJumpTarget, resolveJumpTarget, type JumpTarget } from '@/lib/search/jump';
 import { pageLabel, pdfLinkFor } from '@/lib/search/state';
@@ -20,8 +21,13 @@ import { hitKey } from './search-result-list';
 import styles from './search.module.css';
 
 export interface DocumentExcerptPanelProps {
-  /** Member view: "PDF에서 보기" links into the workspace's DOC-02 viewer. */
+  /** Member view: "PDF에서 보기" opens the 원본 PDF dialog, which links to DOC-02. */
   readonly workspaceId?: string;
+  /**
+   * "PDF에서 보기" stays a plain DOC-02 link: the AI 질문 panel, which can be open over a mock exam
+   * question before its submission, where no whole-PDF dialog may open (QSRC-01).
+   */
+  readonly linkOnly?: boolean;
   /** Shared view (WS-VIEW-01): opens the hit in place instead of linking to DOC-02. */
   readonly onJump?: (item: SearchItem, target: JumpTarget) => void;
   readonly client: Pick<SearchClient, 'block'>;
@@ -46,6 +52,7 @@ const linkFor = (workspaceId: string, item: SearchItem, target: JumpTarget) =>
 
 export function DocumentExcerptPanel({
   workspaceId,
+  linkOnly = false,
   onJump: jumpInPlace,
   client,
   item,
@@ -59,6 +66,7 @@ export function DocumentExcerptPanel({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [resolved, setResolved] = useState<{ key: string; target: JumpTarget } | null>(null);
   const pendingRef = useRef<{ key: string; promise: Promise<JumpTarget> } | null>(null);
+  const [pdfPage, setPdfPage] = useState<PdfPageTarget | null>(null);
 
   useEffect(() => {
     if (!item) return;
@@ -100,11 +108,23 @@ export function DocumentExcerptPanel({
     void pending.promise.then((t) => router.push(linkFor(workspaceId, item, t)));
   };
 
+  const openPdfPage =
+    workspaceId !== undefined && !linkOnly
+      ? (hit: SearchItem, to: JumpTarget) =>
+          setPdfPage({
+            documentId: hit.document_id,
+            page: to.page,
+            documentHref: linkFor(workspaceId, hit, to),
+            documentTitle: hit.document_title,
+          })
+      : undefined;
+  const jump = jumpInPlace ?? openPdfPage;
+
   const openInPlace = () => {
-    if (!item || !target || !jumpInPlace) return;
+    if (!item || !target || !jump) return;
     const pending = pendingRef.current;
-    if (resolved?.key === key || !pending || pending.key !== key) jumpInPlace(item, target);
-    else void pending.promise.then((t) => jumpInPlace(item, t));
+    if (resolved?.key === key || !pending || pending.key !== key) jump(item, target);
+    else void pending.promise.then((t) => jump(item, t));
   };
 
   return (
@@ -138,8 +158,12 @@ export function DocumentExcerptPanel({
         item && target ? `${item.document_title} · ${pageLabel(target.page)}` : undefined
       }
       footer={
-        item && target && jumpInPlace ? (
-          <Button variant="primary" onClick={openInPlace}>
+        item && target && jump ? (
+          <Button
+            variant="primary"
+            aria-haspopup={jumpInPlace ? undefined : 'dialog'}
+            onClick={openInPlace}
+          >
             PDF에서 보기
           </Button>
         ) : item && target && workspaceId !== undefined ? (
@@ -173,6 +197,8 @@ export function DocumentExcerptPanel({
           />
         </div>
       ) : null}
+      {/* Inside the panel, so it stacks over it and Escape closes only this. */}
+      <PdfPageDialog target={pdfPage} onClose={() => setPdfPage(null)} />
     </FloatingSidePanel>
   );
 }

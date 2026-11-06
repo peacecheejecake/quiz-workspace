@@ -132,9 +132,15 @@
 }
 
 .pageLink {
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-sm);
+  background: none;
   color: var(--color-accent);
+  font-family: inherit;
   font-size: var(--font-size-label);
+  text-decoration: underline;
+  cursor: pointer;
   white-space: nowrap;
 }
 

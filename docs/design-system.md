@@ -430,7 +430,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - 열린 `FloatingSidePanel`(문제 풀이 panel 등) **곁에 참고 내용을 나란히 보이는** 짝 dialog 패턴이다. 짝 dialog는 `side="start"`(문제 panel은 `end`)로 같은 modal 층의 맨 위에 쌓이고, 본 panel은 가려지지 않고 보이되 `inert`다. Escape·backdrop click은 짝 dialog만 닫고 focus는 연 버튼으로 돌아온다(§5.5의 "맨 위부터 닫기").
 - 폭 `< 768px`(`--breakpoint-md`, §4 breakpoint)와 그 위에서도 자리가 모자란 폭에서는 `mobileLayout="full"` 전체 화면 sheet가 본 panel을 덮고, 닫으면 본 panel로 돌아온다. 브라우저 Back은 sheet만 닫는다(sheet를 연 history 항목을 쓰며 URL은 바뀌지 않음).
 - 본 panel + 짝 dialog 최소 폭(320px) + 여백이 들어갈 자리가 없는 폭(500+16+16+320+16 = 868px 미만)에서는 모바일과 같은 전체 화면 sheet다(QSRC-01 사용자 결정 2026-11-04).
-- 쓰는 곳: QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
+- 쓰는 곳: [UX12-SOURCE](screens/ux12-source-panel.md) `PdfPageDialog`(원본 PDF), QSRC-01 `문제 원문`. 짧은 미리보기는 `Tooltip`(hover·`:focus-visible`·터치 long-press 500ms, 바깥 터치·Escape로 닫힘, `aria-describedby`)이고 click이 짝 dialog를 연다.
 
 ## 6. QuestionDot / Heatmap 컴포넌트 계약
 

@@ -358,7 +358,9 @@ describe('AIEXPL-01 sources keep the pinned revision', () => {
     const excerpt = await screen.findByRole('dialog', { name: '본문 발췌' });
     expect(await within(excerpt).findByText(/원래 구절 b-1/)).toBeInTheDocument();
     expect(within(excerpt).getByText(model.EXPL_TEXT.outdated)).toBeInTheDocument();
-    const link = within(excerpt).getByRole('link', { name: 'PDF에서 보기' });
+    await user.click(within(excerpt).getByRole('button', { name: 'PDF에서 보기' }));
+    const dialog = await screen.findByRole('dialog', { name: '원본 PDF' });
+    const link = within(dialog).getByRole('link', { name: '전체 문서 보기' });
     expect(
       new URL(link.getAttribute('href') ?? '', 'http://web.test').searchParams.get('revision'),
     ).toBe(PINNED);

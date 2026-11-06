@@ -92,7 +92,7 @@
 //   button (the row: document title · chapter · `p.12–13` + excerpt with <mark> on the query terms,
 //   bold + underline) opening SEARCH-01's excerpt panel (dialog named "본문 발췌" with
 //   "PDF에서 보기"), the badge text "문제 출처" on question-source rows, "이전 발행본" on stale rows,
-//   and a link "PDF" to DOC-02 at the page (`/workspaces/{ws}/documents/{doc}?page=n`); status
+//   and a button "PDF" opening the 원본 PDF dialog at the page (UX12-SOURCE); status
 //   "관련 본문 n개" once; empty: status "관련 본문을 찾지 못했습니다."; degraded: the notice
 //   "의미 검색을 일시적으로 사용할 수 없어 키워드 결과만 표시합니다" next to the rows; error: alert
 //   "관련 본문을 불러오지 못했습니다." + button "다시 시도". Not on drafts; guests only stored lists.
@@ -698,7 +698,7 @@ export const relatedUi = {
   rows: (scope: Locator) => relatedUi.list(scope).getByRole('listitem'),
   row: (scope: Locator, k: number) => relatedUi.rows(scope).nth(k),
   open: (row: Locator) => row.getByRole('button').first(),
-  pdf: (row: Locator) => row.getByRole('link', { name: /^PDF$/i }),
+  pdf: (row: Locator) => row.getByRole('button', { name: /^PDF$/i }),
   badge: (row: Locator) => row.getByText(UI_TEXT.sourceBadge),
   marks: (row: Locator) => row.locator('mark'),
   status: (scope: Locator, text: RegExp) => scope.getByRole('status').filter({ hasText: text }),
