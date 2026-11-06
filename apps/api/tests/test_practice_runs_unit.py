@@ -401,3 +401,12 @@ def test_ux12_resume_list_has_no_content_and_is_an_allowlist() -> None:
         "last_touched_at",
     }  # fmt: skip
     assert "/api/v1/practice-runs/{run_id}/dismiss" in spec["paths"]
+
+
+def test_ux12_mockresume_the_run_on_a_mock_exam_has_no_content() -> None:
+    spec = json.loads(render_openapi())
+    node = spec["components"]["schemas"]["MockExamUnfinishedRun"]
+    assert set(node["properties"]) == {"id", "total", "answered", "next_position"}
+    exam = spec["components"]["schemas"]["MockExam"]
+    assert "unfinished_run" in exam["properties"]
+    assert "unfinished_run" not in exam["required"]

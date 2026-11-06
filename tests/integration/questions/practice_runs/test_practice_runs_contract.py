@@ -1698,7 +1698,7 @@ def test_ux12_resume_finished_and_fully_answered_runs_leave_the_list(seed: Any) 
     assert unfinished(owner, ws_id) == []
 
 
-def test_ux12_resume_mock_runs_are_not_listed_and_cannot_be_dismissed(seed: Any) -> None:
+def test_ux12_resume_mock_runs_are_not_listed(seed: Any) -> None:
     owner, ws_id, qs = resume_workspace(seed, "mock", 1)
     exam = create_mock_exam(owner, ws_id, [q["id"] for q in qs])
     run = created(
@@ -1706,8 +1706,8 @@ def test_ux12_resume_mock_runs_are_not_listed_and_cannot_be_dismissed(seed: Any)
         ws_id,
         {"source": "mock", "mock_exam_id": exam["id"], "range": {"all": True}},
     )
+    assert run["source"] == "mock"
     assert unfinished(owner, ws_id) == []
-    assert owner.call("POST", f"/practice-runs/{run['id']}/dismiss").status_code == 404
 
 
 def test_ux12_resume_lists_only_the_callers_runs_of_this_workspace(seed: Any) -> None:
@@ -1824,3 +1824,164 @@ def test_ux12_resume_order_is_last_touched_first_and_capped_at_twenty(seed: Any)
     assert rows[0]["id"] == runs[0]["id"]
     touched = [r["last_touched_at"] for r in rows]
     assert touched == sorted(touched, reverse=True)
+
+
+# ---------------------------------------------------------------------------------------------
+# UX12-MOCKRESUME: MockExam.unfinished_run on the list, the detail and a rename
+# ---------------------------------------------------------------------------------------------
+
+
+def exam_row(client: Any, ws_id: str, exam_id: str) -> dict[str, Any]:
+    items = client.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"]
+    row: dict[str, Any] = next(e for e in items if e["id"] == exam_id)
+    return row
+
+
+def mock_answer(client: Any, question: dict[str, Any], run_id: str, position: int) -> None:
+    session = client.ok_response(
+        mock_session(client, question["id"], run_id, position), "POST", "open", (201,)
+    )
+    client.ok_response(
+        mock_submit(client, session["id"], question["correct_option_ids"]),
+        "POST",
+        "submit",
+        (200,),
+    )
+
+
+def mock_resume_world(
+    seed: Any, label: str, n: int = 3
+) -> tuple[Any, str, dict[str, Any], list[dict[str, Any]]]:
+    owner = seed.client(f"mock-resume-{label}")
+    ws_id = str(owner.create_workspace()["id"])
+    tag = f"{label}-{uuid.uuid4().hex[:6]}"
+    bank_qs = [owner.create_question(ws_id, mcq(tag, 1, k, None)) for k in range(1, n + 1)]
+    exam = create_mock_exam(owner, ws_id, [q["id"] for q in bank_qs])
+    return owner, ws_id, exam, mock_questions(owner, exam["id"])
+
+
+def test_ux12_mockresume_reports_progress_and_the_next_position(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "shape")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    mock_answer(owner, mq[2], run["id"], 3)
+    # An opened position is still unanswered.
+    owner.ok_response(mock_session(owner, mq[1]["id"], run["id"], 2), "POST", "open", (201,))
+
+    expected = {"id": run["id"], "total": 3, "answered": 2, "next_position": 2}
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] == expected
+    assert owner.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"] == expected
+    renamed = owner.ok("PATCH", f"/mock-exams/{exam['id']}", {"title": "새 이름"})
+    assert renamed["unfinished_run"] == expected
+
+
+def test_ux12_mockresume_options_keep_their_order_within_the_run(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "order")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    before = [o["id"] for o in item(owner, run["id"], 2)["options"]]
+    owner.ok_response(mock_session(owner, mq[1]["id"], run["id"], 2), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["next_position"] == 2
+    assert [o["id"] for o in item(owner, run["id"], 2)["options"]] == before
+
+
+def test_ux12_mockresume_picks_the_last_touched_unfinished_run(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "pick", 2)
+    older = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    newer = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    owner.ok_response(mock_session(owner, mq[0]["id"], older["id"], 1), "POST", "open", (201,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == older["id"]
+
+    owner.ok("POST", f"/practice-runs/{older['id']}/finish")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == newer["id"]
+
+    mock_answer(owner, mq[0], newer["id"], 1)
+    mock_answer(owner, mq[1], newer["id"], 2)
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+
+def test_ux12_mockresume_removed_questions_are_skipped(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "removed")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    assert owner.call("DELETE", f"/mock-exam-questions/{mq[1]['id']}").status_code == 204
+    found = exam_row(owner, ws_id, exam["id"])["unfinished_run"]
+    assert (found["answered"], found["total"], found["next_position"]) == (1, 3, 3)
+    assert owner.call("DELETE", f"/mock-exam-questions/{mq[2]['id']}").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+
+def test_ux12_mockresume_a_new_round_leaves_the_old_run_behind(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "round")
+    run = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], run["id"], 1)
+    owner.ok("POST", f"/mock-exams/{exam['id']}/generations", {}, (202,))
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+    # The old run keeps its questions and opens by its URL (decision n).
+    assert item(owner, run["id"], 2)["available"] is True
+
+
+def test_ux12_mockresume_a_deleted_exam_shows_nothing(seed: Any) -> None:
+    owner, ws_id, exam, _ = mock_resume_world(seed, "deleted", 1)
+    created(owner, ws_id, mock(exam["id"], {"all": True}))
+    assert owner.call("DELETE", f"/mock-exams/{exam['id']}").status_code == 204
+    assert owner.ok("GET", f"/workspaces/{ws_id}/mock-exams")["items"] == []
+    assert owner.call("GET", f"/mock-exams/{exam['id']}").status_code == 404
+
+
+def test_ux12_mockresume_dismiss_keeps_the_run_and_shows_the_older_one(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "dismiss")
+    older = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    newer = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], newer["id"], 1)
+    attempts = "select count(*) from public.mock_exam_attempts where workspace_id = %s"
+    assert count(attempts, (ws_id,)) == 1
+
+    assert owner.call("POST", f"/practice-runs/{newer['id']}/dismiss").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == older["id"]
+    assert owner.call("POST", f"/practice-runs/{older['id']}/dismiss").status_code == 204
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"] is None
+
+    read = owner.ok("GET", f"/practice-runs/{newer['id']}")
+    assert (read["finished_at"], read["answered"]) == (None, 1)
+    assert count(attempts, (ws_id,)) == 1
+
+
+def test_ux12_mockresume_only_the_callers_runs_show(seed: Any) -> None:
+    owner, ws_id, exam, mq = mock_resume_world(seed, "users")
+    viewer = seed.client("mock-resume-viewer")
+    editor = seed.client("mock-resume-editor")
+    outsider = seed.client("mock-resume-outsider")
+    seed.membership(ws_id, viewer.user, "viewer")
+    seed.membership(ws_id, editor.user, "editor")
+    mine = created(owner, ws_id, mock(exam["id"], {"all": True}))
+    theirs = created(viewer, ws_id, mock(exam["id"], {"all": True}))
+    mock_answer(owner, mq[0], mine["id"], 1)
+
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+    assert exam_row(viewer, ws_id, exam["id"])["unfinished_run"]["id"] == theirs["id"]
+    assert exam_row(editor, ws_id, exam["id"])["unfinished_run"] is None
+    assert viewer.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"]["id"] == theirs["id"]
+    assert editor.ok("GET", f"/mock-exams/{exam['id']}")["unfinished_run"] is None
+
+    # Another workspace's mock exam of the same owner never mixes in.
+    other_ws = str(owner.create_workspace()["id"])
+    other_q = owner.create_question(other_ws, mcq("other", 1, 1, None))
+    other_exam = create_mock_exam(owner, other_ws, [other_q["id"]])
+    assert exam_row(owner, other_ws, other_exam["id"])["unfinished_run"] is None
+
+    assert outsider.call("GET", f"/workspaces/{ws_id}/mock-exams").status_code == 404
+    assert outsider.call("GET", f"/mock-exams/{exam['id']}").status_code == 404
+    res = editor.call("POST", f"/practice-runs/{mine['id']}/dismiss")
+    assert res.status_code == 404
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+
+    # An archived workspace shows it as 풀기 stays readable; attempts stay in the mock tables.
+    owner.ok("POST", f"/workspaces/{ws_id}/archive")
+    assert exam_row(owner, ws_id, exam["id"])["unfinished_run"]["id"] == mine["id"]
+    assert exam_row(viewer, ws_id, exam["id"])["unfinished_run"]["id"] == theirs["id"]
+    assert (
+        count("select count(*) from public.question_attempts where workspace_id = %s", (ws_id,))
+        == 0
+    )

@@ -10,7 +10,7 @@ docs/questions.md §12, architecture.md §6).
     POST /practice-runs/{id}/finish                 the run's creator; fix the summary
     GET  /workspaces/{id}/practice-runs/unfinished  member; the caller's own unfinished bank runs
                                                     (UX12-RESUME); no content, at most 20
-    POST /practice-runs/{id}/dismiss                the run's creator (bank); out of that list only
+    POST /practice-runs/{id}/dismiss                the run's creator; out of the 이어 풀기 lists
 
 A position is practised through the practice API (quiz_api.api.practice): POST
 /questions/{id}/practice-sessions with `{practice_run_id, run_position}`, then the usual submit /
@@ -963,10 +963,8 @@ def list_unfinished_practice_runs(
     operation_id="dismissPracticeRun",
 )
 def dismiss_practice_run(run: WriteRun, runs: RunRepo) -> None:
-    """Take the run out of the `이어 풀기` list. The run, its sessions and attempts stay as they
-    are, and it still opens by its URL. A mock run is not in that list (404)."""
-    if run.source != "bank":
-        raise _not_found()
+    """Stop offering the run for `이어 풀기` (the mock exam list's group or a mock exam's row).
+    The run, its sessions and attempts stay as they are, and it still opens by its URL."""
     runs.dismiss(run.id)
     runs.commit()
 

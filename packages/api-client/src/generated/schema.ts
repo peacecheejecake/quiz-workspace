@@ -1067,8 +1067,8 @@ export type paths = {
     put?: never;
     /**
      * Dismiss Practice Run
-     * @description Take the run out of the `이어 풀기` list. The run, its sessions and attempts stay as they
-     *     are, and it still opens by its URL. A mock run is not in that list (404).
+     * @description Stop offering the run for `이어 풀기` (the mock exam list's group or a mock exam's row).
+     *     The run, its sessions and attempts stay as they are, and it still opens by its URL.
      */
     post: operations['dismissPracticeRun'];
     delete?: never;
@@ -5297,6 +5297,8 @@ export type components = {
       status: 'generating' | 'ready' | 'partial' | 'failed';
       /** Title */
       title: string;
+      /** @description The caller's run of the shown generation to resume. */
+      unfinished_run?: components['schemas']['MockExamUnfinishedRun'] | null;
       /**
        * Updated At
        * Format: date-time
@@ -5532,6 +5534,32 @@ export type components = {
        * @description null: the source was deleted.
        */
       question_id: string | null;
+    };
+    /**
+     * MockExamUnfinishedRun
+     * @description The caller's run to resume: counts and a position, never question content.
+     */
+    MockExamUnfinishedRun: {
+      /**
+       * Answered
+       * @description Positions submitted.
+       */
+      answered: number;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Next Position
+       * @description The first position still answerable.
+       */
+      next_position: number;
+      /**
+       * Total
+       * @description Positions 1..total.
+       */
+      total: number;
     };
     /** MockExamUpdate */
     MockExamUpdate: {

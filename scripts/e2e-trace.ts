@@ -204,6 +204,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-CHAPTERRUN.0': ['UX12-CHAPTERRUN'],
   // UX12 MOCKUX-7: the viewer's unfinished bank runs in the mock exam list.
   'UX12-RESUME.0': ['UX12-RESUME'],
+  // UX12 MOCKUX-12: the caller's unfinished run on a saved mock exam's row and detail.
+  'UX12-MOCKRESUME.0': ['UX12-MOCKRESUME'],
   // UX12 HOME-7 + CHAPTER-7: 문서 N counts every PDF; lists in floating layers scroll by touch.
   'UX12-CHAPTERSCROLL.0': ['UX12-CHAPTERSCROLL'],
   // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).

@@ -134,6 +134,18 @@ export function canPractise(
   return exam.current_generation !== null && exam.question_count_current > 0;
 }
 
+/** Whether the viewer has a run of this mock exam to resume (UX12-MOCKRESUME). */
+export function canResume(
+  exam: Pick<MockExam, 'current_generation' | 'question_count_current' | 'unfinished_run'>,
+): boolean {
+  return canPractise(exam) && exam.unfinished_run != null;
+}
+
+/** "이어 풀기 3/10": the button is the progress too, so a row grows no extra line. */
+export function resumeLabel(run: Pick<UnfinishedRun, 'answered' | 'total'>): string {
+  return `이어 풀기 ${unfinishedRunProgress(run)}`;
+}
+
 /** Whether the newest round is still being made. */
 export function isGenerating(exam: Pick<MockExam, 'latest_generation'>): boolean {
   const status = exam.latest_generation?.status;
