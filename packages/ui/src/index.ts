@@ -108,6 +108,8 @@ export { EmptyState } from './feedback/EmptyState';
 export type { EmptyStateProps } from './feedback/EmptyState';
 export { ProgressBar } from './feedback/ProgressBar';
 export type { ProgressBarProps } from './feedback/ProgressBar';
+export { StepList } from './feedback/StepList';
+export type { StepListProps } from './feedback/StepList';
 export { StepProgress } from './feedback/StepProgress';
 export type { ProgressStep, StepProgressProps } from './feedback/StepProgress';
 export { ToastProvider, useToast } from './feedback/Toast';
@@ -124,7 +126,11 @@ export { AppShell } from './layout/AppShell';
 export type { AppShellProps } from './layout/AppShell';
 export { ConfirmDialog } from './layout/ConfirmDialog';
 export type { ConfirmDialogProps } from './layout/ConfirmDialog';
-export { FloatingSidePanel } from './layout/FloatingSidePanel';
+export {
+  FloatingPanelFooter,
+  FloatingPanelPinned,
+  FloatingSidePanel,
+} from './layout/FloatingSidePanel';
 export type { FloatingSidePanelProps, PanelSteps } from './layout/FloatingSidePanel';
 export { usePairedSheet } from './layout/paired-sheet';
 export { DialogClose, ModalDialog } from './layout/ModalDialog';

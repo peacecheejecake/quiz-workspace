@@ -2,7 +2,50 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useEffect, useRef, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Button, FloatingSidePanel, Input, ModalDialog } from '../src';
+import {
+  Button,
+  FloatingPanelFooter,
+  FloatingPanelPinned,
+  FloatingSidePanel,
+  Input,
+  ModalDialog,
+} from '../src';
+
+describe('FloatingSidePanel fixed areas (UX12-MOCKFORM)', () => {
+  it("shows a view's pinned and footer content outside the scrolling body", async () => {
+    render(
+      <FloatingSidePanel defaultOpen title="모의고사">
+        <div data-testid="view">
+          <FloatingPanelPinned>
+            <p>단계</p>
+          </FloatingPanelPinned>
+          본문
+          <FloatingPanelFooter>
+            <Button>다음</Button>
+          </FloatingPanelFooter>
+        </div>
+      </FloatingSidePanel>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: '모의고사' });
+    const body = dialog.querySelector('.body');
+    const pinned = await screen.findByText('단계');
+    const next = await screen.findByRole('button', { name: '다음' });
+    expect(body).not.toContainElement(pinned);
+    expect(body).not.toContainElement(next);
+    expect(pinned.closest('.pinned')?.nextElementSibling).toBe(body);
+    expect(next.closest('.footer')?.previousElementSibling).toBe(body);
+  });
+
+  it('renders in place outside a panel', () => {
+    render(
+      <div data-testid="host">
+        <FloatingPanelPinned>단계</FloatingPanelPinned>
+        <FloatingPanelFooter>아래</FloatingPanelFooter>
+      </div>,
+    );
+    expect(screen.getByTestId('host')).toHaveTextContent('단계아래');
+  });
+});
 
 describe('FloatingSidePanel container', () => {
   it('portals into the given element so the panel stays in that landmark', async () => {
