@@ -76,6 +76,7 @@ QuestionViewer는 아래 **방식(mode)**을 갖는다. 기존 AC가 요구하�
 ## 레이아웃 및 컴포넌트
 
 - **진입 (bank):** 홈 `모의고사`가 연 모의고사 목록의 `추가`에서 변형 유형을 고르지 않은 원본 풀이(UX10-PLAY, UX12-MOCKNAV). 범위 고르기 단계의 주소 `?practice=new&source=bank`로 열면 QuestionViewer가 그 단계로 바로 열리고 목록을 불러오는 동안 skeleton(QOV-01-AC09 규칙).
+- **진입 (챕터):** 홈 Heatmap 챕터의 `풀기`. 범위 고르기 없이 옵션 dialog에서 바로 시작한다([UX12-CHAPTERRUN](ux12-chapter-run.md)).
 - **진입 (mock):** 모의고사 행·상세의 `풀기`(MOCK-01). 범위 고르기 단계는 그 모의고사의 문제만 보이고(출처 장별 묶음) 처음에 모두 선택되어 있다. 출처 장별 묶음 (사용자 결정 2026-11-02, MOCK-W-3): 등록 문제와 같은 장 그룹 `QuestionRangePicker`(tri-state `전체 선택`, 장 checkbox·펼치기, 긴 장 virtualize)이고, 장은 원본 문제의 지금 장(API `source.chapter`, MOCK-01-C10 — 출처 글자 "3장 12번"의 장과 같음)이며 생성 계획의 장 순서(`chapter_rank`, 만들 때의 Heatmap 순서)로 놓인다. 원본에 장이 없거나 원본이 삭제된 문제는 맨 뒤 "챕터 없음" 묶음이다. 문제 행은 모의고사 안 번호 "문제 k · 발문 앞 40자 · 유형"이고 상태 필터는 없다(모의고사 문제는 개인 상태가 없음). `시작`은 장 전체를 고른 것도 그 문제들의 id(`question_ids`)로 보낸다 — 모의고사 묶음 범위는 `chapter_ids`를 받지 않으므로(422 `range-invalid`, MOCK-P) 범위 API는 그대로다. 전부 고르면 `all`.
 - **범위 고르기 단계:** 제목 "모의고사"(mock이면 "<모의고사 이름> 풀기").
   - 필터 줄(언제나 보임, 홈 상태 필터와 같은 칩과 색 견본, 유형 체크박스 묶음 — [UX12-MOCKFORM](ux12-mock-form.md)) → `QuestionRangePicker`. 목록은 Heatmap에 보이는 문제와 같다: 보관된 문제(중복 정리로 보관된 중복 포함)·초안은 없고, 풀이 상태·즐겨찾기·다시 풀기 필터는 합쳐진 중복의 기록까지 합친 상태로 판정한다(Heatmap marker와 같은 상태, C07).

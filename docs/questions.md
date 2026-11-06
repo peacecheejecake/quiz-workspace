@@ -304,6 +304,7 @@ fingerprint = SHA-256(`fingerprint/3`, 문제 유형, 정규화한 발문, 정�
 - **하나의 컴포넌트:** 문제를 하나씩 보이는 모든 곳(§3.2의 풀이 panel, 문제 상세, 공유 미리보기, 범위 풀이)은 `QuestionViewer`를 쓴다. 출처는 등록 문제(`bank`)와 모의고사 문제(`mock`) 두 가지이고 §4 풀이·채점 정책은 둘 다 같다(제출 전 정답·해설 비노출, option ID 채점, immutable attempt, 서술형 `PENDING`·자기평가).
 - **범위 고르기:** 장 그룹 → 문제 두 단계 checkbox, 맨 위 `전체 선택`(지금 필터에 보이는 문제 전체, 일부 선택은 mixed), §7 필터(풀이 상태·즐겨찾기·유형)로 좁힘. 범위 단위는 사용자 결정(2026-11-01)이다(QVIEW-01 "범위 단위"). 한 묶음은 최대 5,000문제. 모의고사 만들기의 범위 고르기도 같은 부품이다.
 - **순서:** 시작 전 `무작위 순서` checkbox. 꺼짐 = Heatmap 기본 정렬(§3.1), 켜짐 = 서버 seed shuffle. 순서는 묶음(`practice_run`)에 고정되어 새로 고침해도 같다.
+- **챕터별 풀기:** 홈 챕터의 `풀기`는 범위 고르기 없이 그 챕터의 확정 문제로 묶음을 시작하고, `보기 섞기`(`shuffle_options`)와 `문제 순서 무작위`만 고른다. 위치마다 보기 순서는 묶음의 seed로 고정되고 채점은 option ID 그대로다([UX12-CHAPTERRUN](screens/ux12-chapter-run.md)).
 - **기록:** `bank` 범위 풀이는 §2.1·§4 그대로 `viewed`·attempt·`question_user_state`에 반영된다(풀이 panel을 연 것과 같음). `mock`은 §11.
 
 ## 13. AI 질문 첨부·AI 문제 해설·관련 본문 (ASK-SPEC 2026-11-01 사용자 결정, ASK-SYNC 2026-11-02)

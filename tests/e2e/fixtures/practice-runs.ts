@@ -154,6 +154,7 @@ export interface PracticeRun {
   readonly source: 'bank' | 'mock';
   readonly mock_exam_id: string | null;
   readonly random_order: boolean;
+  readonly shuffle_options: boolean;
   readonly seed: number;
   readonly total: number;
   readonly finished_at: string | null;

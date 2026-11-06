@@ -8,8 +8,9 @@
 | UX12-OPTIONS | 객관식 보기 표시 | 문제 풀이 | [ux12-options.md](ux12-options.md) |
 | UX12-POPPERS | tooltip 안전 여백·trigger 재누름 닫기 | 공통 UI | [ux12-poppers.md](ux12-poppers.md) |
 | UX12-HILITE | 하이라이트 메뉴 선택 유지·재클릭 닫기 | 공통 하이라이트 도구 | [ux12-highlight.md](ux12-highlight.md) |
-| UX12-PLAY | 풀기 옵션의 이름 | Workspace 홈 풀기 | [ux12-play.md](ux12-play.md) |
-| UX12-MOCKNAV | 모의고사 진입·상세 메뉴·용어 | Workspace 홈 풀기 · 모의고사 상세 | [ux12-mock-nav.md](ux12-mock-nav.md) |
+| UX12-PLAY | 풀기 옵션의 이름 | Workspace 홈 모의고사 | [ux12-play.md](ux12-play.md) |
+| UX12-MOCKNAV | 모의고사 진입·상세 메뉴·용어 | Workspace 홈 모의고사 · 모의고사 상세 | [ux12-mock-nav.md](ux12-mock-nav.md) |
+| UX12-CHAPTERRUN | 챕터별 풀기 | Workspace 홈 Heatmap | [ux12-chapter-run.md](ux12-chapter-run.md) |
 | UX12-MOCKFORM | 모의고사 만들기·설정 바꾸기 화면 | 모의고사 dialog | [ux12-mock-form.md](ux12-mock-form.md) |
 | UX12-CONTROLS | 버튼 경계·hover·간격 | 공통 UI | [ux12-controls.md](ux12-controls.md) |
 | UX12-ASK | AI 질문 목록·대화 화면 재구성 | AI 질문 panel | [ux12-ask.md](ux12-ask.md) |

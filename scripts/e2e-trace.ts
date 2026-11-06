@@ -183,6 +183,8 @@ export const PHASES: Readonly<Record<string, readonly string[]>> = {
   'UX12-STEMTABLE.0': ['UX12-STEMTABLE'],
   // UX12 MOCKUX-1: the mock exam create and 설정 바꾸기 screens.
   'UX12-MOCKFORM.0': ['UX12-MOCKFORM'],
+  // UX12 MOCKUX-4: a Heatmap chapter's 풀기, a bank run of the whole chapter with two options.
+  'UX12-CHAPTERRUN.0': ['UX12-CHAPTERRUN'],
   // UX12 CHAPTER-3..6: chapter editing on the active revision and the 챕터 관리 panel (D-9).
   'CHMAN.0': ['CHMAN-01'],
 };
