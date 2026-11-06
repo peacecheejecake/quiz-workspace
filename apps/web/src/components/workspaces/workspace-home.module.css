@@ -150,6 +150,9 @@
 @media (max-width: 539px) {
   .toolbar:has([data-open]) {
     --home-icon-size: calc(var(--control-height-sm) - var(--space-1));
+
+    /* A classic scrollbar gutter leaves 3px too few at 360px. */
+    column-gap: calc(var(--space-1) / 2);
   }
 
   .toolbar:has([data-open]) .compactButton {
