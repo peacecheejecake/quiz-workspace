@@ -50,6 +50,7 @@ import { useOptionalPracticeReturn } from '@/components/practice-return/practice
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
 import { PracticeSessionCache } from '@/lib/questions/practice-cache';
+import { measurePracticeOpen, PRACTICE_OPEN_MEASURE } from '@/lib/questions/practice-open-timing';
 import {
   practiceResetVersion,
   rememberPracticeEpoch,
@@ -261,8 +262,10 @@ export function PracticeViewer({
     let current = true;
     const key = opening.key;
     const resetVersion = practiceResetVersion(workspaceId, id);
+    const startedAt = performance.now();
     void (async () => {
       const latest = await latestPracticeAction(workspaceId, id);
+      measurePracticeOpen(`${PRACTICE_OPEN_MEASURE}:recent`, startedAt);
       if (latest && !latest.ok) {
         if (current && practiceResetVersion(workspaceId, id) === resetVersion)
           setSession({ status: 'error', message: latest.message, key });
@@ -284,6 +287,7 @@ export function PracticeViewer({
           previousRevision: latest.data.previous_revision,
           key,
         });
+        measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
         return;
       }
       if (!opening.forceNew && latest.data.session?.outcome) {
@@ -302,11 +306,13 @@ export function PracticeViewer({
             prior: { outcome: latest.data.session.outcome, answer },
             key,
           });
+        measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
         return;
       }
       if (opening.cached) cache.dropSession(opening.cached.id);
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
       const result = await openPracticeSessionAction(workspaceId, id, key, latest.data.reset_epoch);
+      measurePracticeOpen(PRACTICE_OPEN_MEASURE, startedAt);
       if (!current || practiceResetVersion(workspaceId, id) !== resetVersion) return;
       if (result.ok) {
         cache.put(result.data, latest.data.reset_epoch, latest.data.latest_attempt_id);

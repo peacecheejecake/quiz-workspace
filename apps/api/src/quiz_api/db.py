@@ -31,6 +31,7 @@ from sqlalchemy import exc as sa_exc
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+from quiz_api.server_timing import install_statement_timing
 from quiz_api.settings import Settings
 
 # A pooled connection idle for longer than this is pinged before reuse.
@@ -72,6 +73,7 @@ def create_database(settings: Settings) -> Database | None:
         connect_args={"connect_timeout": max(1, int(settings.db_connect_timeout_seconds))},
     )
     install_idle_ping(engine)
+    install_statement_timing(engine)
     return Database(
         engine=engine,
         sessionmaker=sessionmaker(engine, expire_on_commit=False),

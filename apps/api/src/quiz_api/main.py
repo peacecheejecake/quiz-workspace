@@ -21,6 +21,7 @@ from quiz_api.health import router as health_router
 from quiz_api.logging_config import configure_logging
 from quiz_api.middleware import NoStoreMiddleware, RequestIdMiddleware
 from quiz_api.security import SecurityHeadersMiddleware, install_browser_security
+from quiz_api.server_timing import ServerTimingMiddleware
 from quiz_api.settings import Environment, Settings, get_settings
 
 API_TITLE = "Quiz Workspace API"
@@ -61,7 +62,9 @@ def create_app(
     )
 
     install_error_handlers(app)
-    # Outermost last: RequestId → SecurityHeaders → NoStore → Origin guard → CORS → routes.
+    # Outermost last: RequestId → SecurityHeaders → NoStore → Origin guard → CORS → Server-Timing
+    # → routes.
+    app.add_middleware(ServerTimingMiddleware)
     install_browser_security(
         app,
         allowed_origins=settings.effective_cors_origins,
