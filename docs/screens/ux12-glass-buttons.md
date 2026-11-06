@@ -23,6 +23,7 @@
 - **Hover:** `cursor: pointer`인 모든 버튼·버튼처럼 쓰는 링크는 `@media (hover: hover)`에서 색이 바뀐다. 터치에서 hover가 남지 않는다. 텍스트 링크는 `--color-accent-hover`, 나머지는 `--color-state-hover`다. `packages/ui/test/button-hover.test.ts`가 검사한다.
 - **Header:** global header는 `glass-surface`이고 gradient 층만 없다.
 - **홈 sticky 영역:** sticky인 것은 global header와 홈 toolbar(`문서`·`모의고사`·`AI 질문`·`이력`·`공유하기`)다. Heatmap 챕터 머리글은 sticky가 아니다. toolbar는 page 폭 전체를 차지하며(사용자 피드백 2026-11-07), 맨 위에서는 완전 투명·blur 없음이다. 고정되면(`data-stuck`) canvas 색조의 glass라 내용이 지나갈 때만 보이고, 버튼 모양은 그대로이며, fallback에서는 고정됐을 때만 불투명 canvas다.
+- **Panel·ModalDialog 머리글(PANEL-HEADER, 사용자 피드백 2026-11-07):** 머리글 아래 1px 구분선이 없다. footer·`.pinned` 구분선과 스크롤 상태 그림자는 그대로다. 새 AC는 없다.
 - **ConfirmDialog:** 머리글과 동작 행 사이의 구분선이 없다. `ModalDialog`와 panel의 구분선은 그대로다.
 - **Heatmap:** `--heatmap-marker-hover-scale`은 UX12 DESIGN-6로 1.5였고 사용자 피드백(2026-11-07)으로 1.3이다. hover·focus-visible만 확대하고 격자는 움직이지 않으며 잘리지 않는다.
 

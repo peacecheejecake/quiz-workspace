@@ -61,10 +61,10 @@
 | `--color-text-primary` | `#172033` | 기본 텍스트 |
 | `--color-text-secondary` | `#5F697E` | 보조 텍스트(surface-muted 위에서도 4.5:1 이상) |
 | `--color-border` | `#E6E9EF` | 표면 경계·구분선(장식용, 필수 경계는 `--color-border-strong`) |
-| `--color-accent` | `#5268D8` | primary action, navigation |
-| `--color-accent-hover` | `#4A5EC1` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
-| `--color-accent-pressed` | `#4355AD` | primary 버튼 누르는 동안(`:active`) |
-| `--color-accent-on-glass` | `#4A5EC1` | `.glass-surface` 안의 `--color-accent`. 투명한 표면에서 accent 글자가 AA를 지키는 값 |
+| `--color-accent` | `#3F5BEB` | primary action, navigation |
+| `--color-accent-hover` | `#3450D6` | primary(accent 채움) 버튼·체크된 선택 컨트롤 hover |
+| `--color-accent-pressed` | `#2B44BC` | primary 버튼 누르는 동안(`:active`) |
+| `--color-accent-on-glass` | `#3450D6` | `.glass-surface` 안의 `--color-accent`. 투명한 표면에서 accent 글자가 AA를 지키는 값 |
 | `--color-focus` | `#356CFF` | focus outline |
 | `--color-glass` | `rgba(246,248,252,.7)` | floating glass surface(옅은 tint, 뒤가 비친다. UX12 DESIGN-5) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
@@ -129,6 +129,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **v1.3.4 (UX12 DOCS-4, 2026-11-06 사용자 피드백):** 문서 화면의 PDF 헤더가 `.glass-surface`다. PDF가 그 뒤에 비친다. 새 토큰은 없다. 기준은 [UX12-PDFPREVIEW](screens/ux12-pdf-preview.md).
 
+**v1.3.5 (ACCENT, 2026-11-07 사용자 피드백 "primary 색의 채도와 밝기를 높여 달라"):** `--color-accent`를 채도·밝기가 더 높은 값으로 바꿨다: light `#5268D8` → `#3F5BEB`, dark `#8CA0FF` → `#7C94FF`(HSV 채도 45% → 52%). hover·pressed·on-glass는 같은 색조에서 다시 뽑았다(light hover/on-glass `#3450D6`, pressed `#2B44BC`; dark hover `#8EA3FF`, pressed `#9DB0FF`, on-glass는 busy glass 위 AA 때문에 `#8CA0FF` 유지). focus와 값을 공유하지 않는다: 체크된 체크박스·라디오·스위치는 accent 채움과 테두리 바로 바깥(`outline-offset: 0`)에 focus ring을 그리고, 입력 focus 테두리(`border-color: --color-focus`)와 accent 테두리가 같은 모양이 되면 focus와 선택을 구분할 수 없으므로 `--color-focus`는 그대로(`#356CFF`/`#A2B3FF`)다. 대비: light accent는 흰색 위 5.37:1·canvas 위 5.06:1, hover 6.43:1, pressed 7.91:1이고 dark accent는 canvas 위 6.56:1·surface 위 5.74:1, `--color-on-accent`(`#11151D`)는 hover 7.69:1·pressed 8.78:1이다(`contrast.test.ts`). `--color-on-accent`와 `--color-focus`는 바꾸지 않았다.
+
+**v1.3.6 (PANEL-HEADER, 2026-11-07 사용자 피드백):** `FloatingSidePanel`과 `ModalDialog`의 머리글(`:is(.qz-panel, .qz-modal) > .header`) 아래 1px `--color-border` 구분선을 없앴다. footer·`.pinned` 구분선, 스크롤 그림자, drawer·ConfirmDialog 규칙은 그대로다. 머리글 높이를 계산에 쓰는 곳은 없다. 토큰 변경 없음.
+
 **v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
 
 **v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`(VIEW-RESULT 2026-11-07부터 `--color-success-fill`), 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(같은 날부터 `--color-danger-fill`)(사용자 결정: 정답 보기를 빨간 테두리로). border-strong은 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(border-strong 3.25/3.61, `contrast.test.ts`). VIEW-RESULT의 success·danger 채움은 light에서 표면 위 2.65~2.95:1로 3:1에 약간 못 미치지만 체크·X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 같이 있어 색만으로 전달하지 않는다(`contrast.test.ts`의 `RESULT_MARK_MIN` 2.6). 테두리 색은 의미를 보강할 뿐이고 각 행의 체크/X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 의미를 전달한다(UX12 VIEW-2).
@@ -148,9 +152,9 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-text-primary: #F2F5F9;
   --color-text-secondary: #ACB7C5;
   --color-border: #2D3745;
-  --color-accent: #8CA0FF;
-  --color-accent-hover: #9AACFE;
-  --color-accent-pressed: #A7B6FD;
+  --color-accent: #7C94FF;
+  --color-accent-hover: #8EA3FF;
+  --color-accent-pressed: #9DB0FF;
   --color-accent-on-glass: #8CA0FF;
   --color-focus: #A2B3FF;
   --color-glass: rgba(30, 38, 51, 0.65);
@@ -206,10 +210,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-text-primary: #172033;
   --color-text-secondary: #5F697E;
   --color-border: #E6E9EF;
-  --color-accent: #5268D8;
-  --color-accent-hover: #4A5EC1;
-  --color-accent-pressed: #4355AD;
-  --color-accent-on-glass: #4A5EC1;
+  --color-accent: #3F5BEB;
+  --color-accent-hover: #3450D6;
+  --color-accent-pressed: #2B44BC;
+  --color-accent-on-glass: #3450D6;
   --color-focus: #356CFF;
   --color-glass: rgba(246,248,252,.7);
   --color-glass-solid: #F6F8FC;
