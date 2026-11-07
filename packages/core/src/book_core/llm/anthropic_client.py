@@ -162,7 +162,8 @@ class AnthropicLLMClient:
         )
         logger.info(
             "llm call task=%s prompt_version=%s model=%s fingerprint=%s stop=%s "
-            "input_tokens=%d output_tokens=%d latency_ms=%d",
+            "input_tokens=%d output_tokens=%d cache_read_tokens=%d cache_creation_tokens=%d "
+            "latency_ms=%d",
             info.task,
             info.prompt_version,
             info.model,
@@ -170,6 +171,8 @@ class AnthropicLLMClient:
             info.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            usage.cache_read_input_tokens,
+            usage.cache_creation_input_tokens,
             latency_ms,
         )
 
@@ -217,7 +220,16 @@ class AnthropicLLMClient:
             "output_config": output_config,
         }
         if request.system is not None:
-            payload["system"] = request.system
+            # Breakpoint on the fixed system block (prompt + schema repeat across calls); the
+            # per-call user prompt stays outside the cached prefix. Below the model's minimum
+            # cacheable length the marker is a no-op.
+            payload["system"] = [
+                {
+                    "type": "text",
+                    "text": request.system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
         return payload
 
     def _post(self, request: LLMRequest, schema: type[BaseModel]) -> dict[str, Any]:
