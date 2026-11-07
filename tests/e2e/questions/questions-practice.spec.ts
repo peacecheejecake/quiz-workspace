@@ -1028,7 +1028,7 @@ const MARK = {
 } as const;
 
 test(
-  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered green, a wrong choice grey and the correct option red, each with a described mark',
+  'QPLAY-01-AC12 after an MCQ submission the chosen correct option is bordered in the primary colour, a wrong choice has no border and the correct option is red, each with a described mark',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const label = unique('qplay01-ac12');
@@ -1044,10 +1044,10 @@ test(
     const [a = '', b = '', c = '', d = ''] = texts;
     const [ma = '', mb = '', mc = '', md = ''] = multi.revision.options.map((o) => o.text);
     await openOverview(page, s);
-    const success = await tokenColor(page, 'color-success-fill');
+    // Inside the glass panel `--color-accent` is the on-glass step (RESULT-PRIMARY).
+    const success = await tokenColor(page, 'color-accent-on-glass');
     const danger = await tokenColor(page, 'color-danger-fill');
-    const grey = await tokenColor(page, 'color-border-strong');
-    expect(new Set([success, danger, grey, TRANSPARENT]).size).toBe(4);
+    expect(new Set([success, danger, TRANSPARENT]).size).toBe(3);
 
     // Before submitting: every row has the same transparent border (nothing to see yet).
     let panel = await openPanel(page, 1);
@@ -1062,7 +1062,7 @@ test(
     await panelUi.option(panel, c).check();
     const before = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
 
-    // Correct: the chosen (correct) option is green with "정답 · 내 선택"; nothing else is marked.
+    // Correct: the chosen (correct) option has the primary-colour border with "정답 · 내 선택"; nothing else is marked.
     await panelUi.submit(panel).click();
     await expect(panelUi.result(panel)).toContainText(RESULT_TEXT.correct);
     await expectRows(
@@ -1075,7 +1075,7 @@ test(
       ],
       width,
     );
-    // Same border width and a reserved icon slot: the rows keep their place and width.
+    // Same border width and the reserved end padding: the rows keep their place and width.
     const after = await Promise.all(texts.map((t) => optionRowBox(panelUi.option(panel, t))));
     for (const [i, box] of after.entries()) {
       expect(box.x).toBeCloseTo(before[i]?.x ?? NaN, 1);
@@ -1087,7 +1087,7 @@ test(
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
 
-    // Wrong: the chosen option grey with "내 선택", the correct option red with "정답".
+    // Wrong: the chosen option without a border but with "내 선택", the correct option red with "정답".
     panel = await openPanel(page, 1);
     await panelUi.option(panel, a).check();
     await panelUi.submit(panel).click();
@@ -1095,7 +1095,7 @@ test(
     await expectRows(
       panel,
       [
-        { text: a, color: grey, mark: MARK.mine },
+        { text: a, color: TRANSPARENT, mark: MARK.mine },
         { text: c, color: danger, mark: MARK.correct },
         { text: b, color: TRANSPARENT, mark: null },
         { text: d, color: TRANSPARENT, mark: null },
@@ -1107,13 +1107,12 @@ test(
     await page.emulateMedia({ colorScheme: 'dark' });
     const dark = {
       danger: await tokenColor(page, 'color-danger-fill'),
-      grey: await tokenColor(page, 'color-border-strong'),
     };
     expect(dark.danger).not.toBe(danger);
     await expectRows(
       panel,
       [
-        { text: a, color: dark.grey, mark: MARK.mine },
+        { text: a, color: TRANSPARENT, mark: MARK.mine },
         { text: c, color: dark.danger, mark: MARK.correct },
       ],
       width,
@@ -1133,7 +1132,7 @@ test(
       panel,
       [
         { text: ma, color: danger, mark: MARK.correctMine },
-        { text: mb, color: grey, mark: MARK.mine },
+        { text: mb, color: TRANSPARENT, mark: MARK.mine },
         { text: mc, color: danger, mark: MARK.correct },
         { text: md, color: TRANSPARENT, mark: null },
       ],

@@ -105,8 +105,8 @@ export function optionMark(
 /**
  * Border tone of an MCQ option row once graded (UX7-QDISPLAY, QPLAY-01-AC12): a correct answer
  * marks the chosen options `correct` (green); a wrong one marks the chosen wrong options `chosen`
- * (grey) and every correct option `answer` (red), a chosen correct one too. The row icon and the
- * hidden description (`optionMark`) carry the meaning; the tone only reinforces it.
+ * (no border) and every correct option `answer` (red), a chosen correct one too. The hidden
+ * description (`optionMark`) carries the meaning; the border only reinforces it.
  */
 export type OptionTone = 'correct' | 'chosen' | 'answer';
 

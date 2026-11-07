@@ -108,6 +108,35 @@ html body[data-scroll-locked] {
   }
 }
 
+/*
+ * Desktop side panels have their own glass tokens (PANEL-GLASS): the shared --glass-brightness
+ * clips a light page to pure white. Phone sheets, reduced transparency and blur-less browsers keep
+ * the opaque --color-glass-solid. -webkit- first (Lightning CSS, see base.css);
+ * the background-color longhand keeps the gradient layer.
+ */
+@media (width >= 768px) {
+  .qz-panel {
+    background-color: var(--color-panel-glass);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) brightness(var(--panel-glass-brightness));
+    backdrop-filter: blur(var(--glass-blur)) brightness(var(--panel-glass-brightness));
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .qz-panel {
+      background-color: var(--color-glass-solid);
+    }
+  }
+
+  /* Not combined with the width query: WebKit does not know this feature and would drop the rule. */
+  @media (prefers-reduced-transparency: reduce) {
+    .qz-panel {
+      background-color: var(--color-glass-solid);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+}
+
 /* Header shared by FloatingSidePanel and ModalDialog / ConfirmDialog. */
 :is(.qz-panel, .qz-modal) {
   > .header {
@@ -299,6 +328,10 @@ html body[data-scroll-locked] {
 
     &[data-state='closed'] {
       animation-name: qz-sheet-out;
+    }
+
+    > .header {
+      border-bottom: 1px solid var(--color-border);
     }
 
     > :is(.header, .pinned, .body, .footer) {
@@ -807,6 +840,7 @@ html body[data-scroll-locked] {
 @media (width < 768px) {
   .qz-panel > .header {
     position: relative;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .qz-panel > .header > .grabber {
