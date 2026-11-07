@@ -640,7 +640,7 @@ def build_mock_exam_llm(settings: WorkerSettings) -> LLMClient | None:
             max_output_tokens=settings.mock_exam_max_output_tokens,
         )
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="MOCK_EXAMS")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     if config is None:
