@@ -69,6 +69,8 @@
 | `--color-glass` | `rgba(246,248,252,.7)` | floating glass surface(옅은 tint, 뒤가 비친다. UX12 DESIGN-5) |
 | `--color-glass-solid` | `#F6F8FC` | glass의 불투명 대응색(reduced transparency·blur 미지원 fallback, 모바일 sheet) |
 | `--glass-gradient` | `linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2))` | glass 표면의 파랑→라벤더 tint 층(UX12 DESIGN-4). `--color-glass`·모바일 sheet의 `--color-glass-solid` 위에 얹는다 |
+| `--color-panel-glass` | `rgba(246, 248, 252, 0.85)` | 데스크톱 side panel(`.qz-panel`, 768px 이상)의 반투명 배경. `--color-glass-solid`의 색을 .85로 둔다(PANEL-GLASS v1.3.7). dark `rgba(30, 38, 51, 0.85)`. .8은 light 바쁜 배경 위 success 글자가 4.46:1이라 .85로 올렸다 |
+| `--panel-glass-brightness` | `1` | 데스크톱 side panel의 blur 밝기 배율. 색 값이 아니지만 테마별이다(light 1, dark 0.7). 공유 `--glass-brightness`(light 1.3)는 밝은 페이지를 순백으로 잘라 panel이 흰색으로 보여 따로 둔다 |
 | `--glass-brightness` | `1.3` | blur한 배경의 밝기 배율. 색 값이 아니지만 테마별이다(UX12 DESIGN-5) |
 | `--color-glass-stroke` | `rgba(255,255,255,.66)` | inset/translucent border |
 | `--question-status-unseen` | `#E7ECF0` | 보지 않은 문제 |
@@ -133,9 +135,13 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
 
 **v1.3.6 (PANEL-HEADER, 2026-11-07 사용자 피드백):** `FloatingSidePanel`과 `ModalDialog`의 머리글(`:is(.qz-panel, .qz-modal) > .header`) 아래 1px `--color-border` 구분선을 없앴다. footer·`.pinned` 구분선, 스크롤 그림자, drawer·ConfirmDialog 규칙은 그대로다. 머리글 높이를 계산에 쓰는 곳은 없다. 토큰 변경 없음.
 
+**v1.3.7 (PANEL-GLASS, 2026-11-07 사용자 피드백):** 데스크톱(768px 이상) side panel은 공유 glass 대신 전용 토큰 `--color-panel-glass`(light `rgba(246, 248, 252, 0.85)`, dark `rgba(30, 38, 51, 0.85)`)와 `--panel-glass-brightness`(light 1, dark 0.7)를 쓴다. 공유 `--glass-brightness` light 1.3은 밝은 페이지의 배경을 순백으로 잘라 panel이 `--color-glass`의 tint가 아니라 흰색으로 보였다. 모바일 sheet·paired 전체 화면·reduced transparency·blur 미지원은 `--color-glass-solid`로 유지하고 `.glass-surface`의 gradient 층도 그대로다. 다른 glass 표면과 `ModalDialog`(`.qz-modal`, glass가 아님)는 바뀌지 않는다. [UX12-GLASS](screens/ux12-glass.md)·[UX12-GLASSBTN](screens/ux12-glass-buttons.md) AC01을 고쳤다.
+
+**v1.3.8 (PANEL-HEADER 하단 sheet, 2026-11-07 사용자 피드백):** v1.3.6이 없앤 머리글 구분선을 하단 sheet에서만 되돌렸다: 폭 768px 미만의 `FloatingSidePanel` sheet와 paired 전체 화면 sheet의 `> .header` 아래 1px `--color-border`. 데스크톱 side panel과 `ModalDialog`(항상 가운데)는 그대로 구분선이 없다. 토큰 변경 없음.
+
 **v1.3.3 추가 (사용자 결정 2026-11-06):** glass blur는 PDF 읽기 영역을 덮어도 된다. 이전 체크리스트의 "PDF 읽기 영역을 glass blur로 가리지 않음"을 없앤다. 모바일 sheet, 태블릿 목차 panel, reduced transparency, blur 미지원의 단색은 각자의 이유로 유지한다.
 
-**v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`(VIEW-RESULT 2026-11-07부터 `--color-success-fill`), 오답일 때 고른 보기 `--color-border-strong`(회색), 오답일 때 정답 보기 `--color-danger`(같은 날부터 `--color-danger-fill`)(사용자 결정: 정답 보기를 빨간 테두리로). border-strong은 풀이 panel이 놓이는 표면(surface·canvas·surface-muted·glass-solid) 대비 비텍스트 3:1 이상이다(border-strong 3.25/3.61, `contrast.test.ts`). VIEW-RESULT의 success·danger 채움은 light에서 표면 위 2.65~2.95:1로 3:1에 약간 못 미치지만 체크·X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 같이 있어 색만으로 전달하지 않는다(`contrast.test.ts`의 `RESULT_MARK_MIN` 2.6). 테두리 색은 의미를 보강할 뿐이고 각 행의 체크/X 아이콘과 보이지 않는 "정답"·"내 선택" 설명이 의미를 전달한다(UX12 VIEW-2).
+**v1.2.6 (UX7-QDISPLAY, 2026-11-01 사용자 피드백):** 객관식 제출 뒤 보기 행 테두리(§4.1 "채점 결과 테두리")는 새 토큰 없이 기존 의미 토큰을 쓴다: 맞힌 보기 `--color-success`(VIEW-RESULT 2026-11-07부터 `--color-success-fill`, RESULT-PRIMARY 2026-11-07부터 `--color-accent`), 오답일 때 정답 보기 `--color-danger`(같은 날부터 `--color-danger-fill`)(사용자 결정: 정답 보기를 빨간 테두리로). VIEW-RESULT의 success·danger 채움은 light에서 표면 위 2.65~2.95:1로 3:1에 약간 못 미친다(`contrast.test.ts`의 `RESULT_MARK_MIN` 2.6). RESULT-MARKS(2026-11-07)부터 아이콘이 없으므로 이 허용의 근거는 테두리 있음/없음의 구별(2px, 투명 행과 대비)과 보이지 않는 "정답"·"내 선택" 설명(UX12 VIEW-2)이며, 색만으로 전달하지 않는다.
 
 **상태 점은 테두리(stroke)를 두지 않는다**(HEATMAP-PALETTE 2026-11-04, 사용자 요청 "border 삭제"; 채움 색만으로 그리고, 가장 연한 light `unseen`(`#E7ECF0`)은 표면 대비 약 1.2:1이지만 그대로 둔다 — 사용자 결정). 상태 필터(색 견본 + 상태 텍스트)가 범례 역할을 한다(UX3c 2026-10-20: 상시 범례·상태 요약 삭제, 사용자 결정). 작고 색만 있는 점으로 WCAG 텍스트 대비를 충족하는 것으로 오해하지 않는다. 색 외 상태 설명을 tooltip, 텍스트 요약, screen reader label로 제공한다.
 
@@ -159,8 +165,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-focus: #A2B3FF;
   --color-glass: rgba(30, 38, 51, 0.65);
   --color-glass-solid: #1E2633;
+  --color-panel-glass: rgba(30, 38, 51, 0.85);
   --glass-gradient: linear-gradient(135deg, rgba(140, 160, 255, 0.05), rgba(190, 160, 255, 0.05));
   --glass-brightness: 0.7;
+  --panel-glass-brightness: 0.7;
   --color-glass-stroke: rgba(255,255,255,.12);
   --question-status-unseen: #3A4554;
   --question-status-viewed: #8591A1;
@@ -217,8 +225,10 @@ light stop은 `--color-accent` 자체가 아니라 옅은 하늘색·연보라�
   --color-focus: #356CFF;
   --color-glass: rgba(246,248,252,.7);
   --color-glass-solid: #F6F8FC;
+  --color-panel-glass: rgba(246, 248, 252, 0.85);
   --glass-gradient: linear-gradient(135deg, rgba(235, 247, 255, 0.2), rgba(252, 242, 255, 0.2));
   --glass-brightness: 1.3;
+  --panel-glass-brightness: 1;
   --color-glass-stroke: rgba(255,255,255,.66);
   --question-status-unseen: #E7ECF0;
   --question-status-viewed: #ACB6C2;
@@ -352,7 +362,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
 - **Toggle 버튼:** 꺼진 상태는 배경 없이 경계만 보인다(UX10-UI). 켜짐은 배경 채움 + `aria-pressed`(또는 바뀌는 label) + 굵기/아이콘으로 전달하며 색만으로 구분하지 않는다. `Button`/`IconButton` primitive가 `aria-pressed`/`data-state`를 보고 처리하므로 기능 코드는 테두리·배경을 따로 지정하지 않는다.
 - **경계 없는 버튼 (UX12 DESIGN-1, 2026-11-06, 사용자 요청):** UX10-UI의 "모든 버튼은 경계를 보인다"를 바꿨다. 기본 상태에 배경과 경계가 모두 없어도 되는 버튼은 아이콘 ghost(`IconButton` ghost, toggle 제외), `Button`의 `borderless`(`data-borderless`), 즐겨찾기·다시 풀기 표시 study toggle(`.qz-study-toggle`, HOME-TOGGLE 2026-11-07 사용자 요청)뿐이다. `borderless`는 풀이 footer의 `다시 풀기`에도 쓴다. `borderless`는 뒤로가기, 프로필·Workspace 전환 trigger, 접기/펼치기, `더 보기`, 목록 항목 제목 버튼에만 쓴다. 기능 CSS의 제목·접기/펼치기·아이콘 전용 버튼은 `1px solid transparent`로 같은 크기를 유지한다. `새 대화` 같은 일반 ghost 텍스트 버튼, primary, secondary, toggle, tab, 입력류는 경계를 유지한다. `forced-colors`에서는 kit 버튼이 모두 `ButtonText` 테두리를 그린다. `packages/ui/test/control-boundary.test.ts`가 이 목록을 지킨다.
 - **테두리 최소화:** Badge·tab 수 표시에는 테두리·원형 배경을 두지 않는다. 구분선은 1px `--color-border`. 2px는 오류 입력(`aria-invalid`)과 focus ring에만 쓴다. 입력 필드·체크박스·라디오의 평소 경계는 `--color-border-strong`이고 스위치 track은 `--color-switch-track` 채움이 경계를 맡으며(테두리는 채움보다 연함, v1.2.2), focus 중에는 아래 규칙대로 focus 색으로 바뀐다.
-- **채점 결과 테두리 (v1.2.6, UX7-QDISPLAY 2026-11-01):** 풀이 panel(QPLAY-01)의 객관식 보기 행은 제출 전부터 2px 투명 테두리를 갖고, 제출 결과가 오면 테두리 색만 바뀐다(두께가 그대로라 레이아웃이 움직이지 않는다). 정답이면 고른 보기가 `--color-success-fill`, 오답이면 고른 보기가 `--color-border-strong`(회색)이고 정답 보기가 `--color-danger-fill`이다(VIEW-RESULT 2026-11-07: Heatmap과 같은 초록·빨강, 글자는 `--color-success`·`--color-danger` 그대로)(복수 정답 오답에서 고른 정답 보기도 정답 보기이므로 빨간 테두리). 각 표시 행에는 체크(정답 보기)·X(오답으로 고른 보기) 아이콘이 행 끝에 붙고 "정답"·"내 선택"·"정답 · 내 선택" 글자는 화면에 보이지 않은 채 radio/checkbox의 `aria-describedby`로 읽힌다(색만으로 전달하지 않음, UX12 VIEW-2). 객관식 결과 문장 "정답입니다."·"오답입니다."도 `qz-visually-hidden`으로 `role="status"`로만 남고, 제출 뒤 focus는 보기 영역(`role="group"`, 이름 = 결과 문장)으로 가서 focus ring이 보인다. 아이콘 자리는 제출 전부터 비어 있어 행이 움직이지 않는다. forced-colors에서는 표시 행 테두리가 `Highlight`(정답 보기·맞힌 보기)·`GrayText`(오답으로 고른 보기)이고 표시 없는 행은 `Canvas`로 보이지 않는다. 이 테두리는 "2px는 오류 입력과 focus ring에만" 규칙의 예외이며, 정답 보기 표시(문제 상세의 2px `--color-success-fill` 정답 테두리)와 같은 두께다.
+- **채점 결과 테두리 (v1.2.6, UX7-QDISPLAY 2026-11-01):** 풀이 panel(QPLAY-01)의 객관식 보기 행은 제출 전부터 2px 투명 테두리를 갖고, 제출 결과가 오면 테두리 색만 바뀐다(두께가 그대로라 레이아웃이 움직이지 않는다). 정답이면 고른 보기가 `--color-accent`(panel 안에서는 on-glass 단계, RESULT-PRIMARY 2026-11-07 사용자 피드백; 이전 `--color-success-fill`. forced-colors는 `Highlight` 그대로), 오답이면 정답 보기만 `--color-danger-fill`이고 오답으로 고른 보기는 테두리 없이 평범한 행이다(RESULT-MARKS 2026-11-07)(VIEW-RESULT 2026-11-07: Heatmap과 같은 초록·빨강, 글자는 `--color-success`·`--color-danger` 그대로)(복수 정답 오답에서 고른 정답 보기도 정답 보기이므로 빨간 테두리). 체크·X 아이콘은 없고(RESULT-MARKS) "정답"·"내 선택"·"정답 · 내 선택" 글자는 화면에 보이지 않은 채 radio/checkbox의 `aria-describedby`로 읽힌다(색만으로 전달하지 않음, UX12 VIEW-2). 객관식 결과 문장 "정답입니다."·"오답입니다."도 `qz-visually-hidden`으로 `role="status"`로만 남고, 제출 뒤 focus는 보기 영역(`role="group"`, 이름 = 결과 문장)으로 가서 focus ring이 보인다. 행 끝 여백은 제출 전부터 그대로라 행이 움직이지 않는다. forced-colors에서는 표시 행 테두리가 `Highlight`(정답 보기·맞힌 보기)이고 표시 없는 행은 `Canvas`로 보이지 않는다. 이 테두리는 "2px는 오류 입력과 focus ring에만" 규칙의 예외이며, 정답 보기 표시(문제 상세의 2px `--color-success-fill` 정답 테두리)와 같은 두께다.
 - **문제 본문 타이포그래피 (UX9-QTYPE 2026-11-02, 사용자 요청):** 공유 문제 본문(`QuestionBody` — 풀이 panel·범위 풀이·모의고사 풀이/관리·문제 상세·공유 보기)의 발문과 보기는 `--font-size-body-lg`(16)다(이전 `--font-size-body` 14). 발문은 빈 줄로 나뉜 문단마다 `<p>`로 그리고 문단 사이는 `--space-3`(12px; 이전에는 빈 줄 한 줄 = 22.4px)이며, 한 문단 안의 행간은 그대로 `--line-height-relaxed`(1.6)다. 보기 행 사이 간격은 `--space-1`(4px; 이전 `--space-2` 8px)이고 행 안쪽 여백(`--space-2` `--space-3`)과 2px 채점 테두리는 그대로라 한 줄 보기의 터치 높이 44px가 유지된다. 풀이 보기 label의 줄 높이는 kit의 24px(20px radio/checkbox에 첫 줄이 가운데 맞음)를 그대로 쓴다. 해설·허용 답안·채점 기준·결과 문구·메타 정보는 바뀌지 않는다.
 - **Focus:** `:focus-visible` ring은 2px `--color-focus`(forced-colors에서는 `Highlight`)이며, 메뉴·Select 항목의 ring도 키보드 focus(`:focus-visible`)에서만 그린다(pointer hover는 배경만).
 - **Focus 경계는 하나:** 테두리가 있는 요소는 자기 테두리와 별도의 focus ring이 겹쳐 이중 테두리로 보이지 않게 한다. focus 중에는 테두리 색을 `--color-focus`로 바꾸고 ring을 그 위에 그린다. 테두리 두께는 바꾸지 않으므로 레이아웃 이동이 없다.
@@ -373,7 +383,7 @@ Panel이 떠 있어도 본문을 읽기 쉬워야 하므로 배경 glass 효과�
   | 홈 `즐겨찾기만` 칩 켜짐(`aria-pressed="true"`, UX12 HOME-6) | 투명 + `--color-accent` 글자·테두리 + 체크 아이콘 | `--color-state-hover` | `--color-state-pressed` | 체크 아이콘·`aria-pressed`·semibold가 상태를 전달 |
   | tab trigger | 투명 | `--color-state-hover` + text-primary | `--color-state-pressed` | `--color-state-selected` 배경 + text-primary + `aria-selected` (하단 bar 없음, UX4) |
   | 체크박스·라디오 | `--color-border-strong` 경계 | 꺼짐: 경계 `--color-text-primary`, 켜짐: 채움·경계 `--color-accent-hover` | — | accent 채움 |
-  | 객관식 보기 행(`QuestionBody`, UX12 VIEW-2) | 꺼짐: 경계 `--color-option-control` | 행 hover: 경계 `--color-option-control-hover` 2px(바깥 크기 유지, 글자 굵기 변화 없음, 2026-11-07 사용자 피드백, 비활성 제외) | — | accent 채움 |
+  | 객관식 보기 행(`QuestionBody`, UX12 VIEW-2) | 꺼짐: 경계 `--color-option-control` | 행 hover: 경계 `--color-option-control-hover` 1px + `--color-state-hover` 채움(OPTION-HOVER-FILL, 크기 유지, 글자 굵기 변화 없음, 2026-11-07 사용자 피드백, 선택된 보기·비활성 제외) | — | accent 채움 |
   | 스위치 | `--color-switch-track` 채움 + 더 연한 `--color-switch-track-border` | 꺼짐: 채움 `--color-switch-track-hover`, 켜짐: 채움 `--color-accent-hover` | — | accent 채움 + `--color-switch-track-checked-border` |
   | 기능 CSS의 버튼(segmented view switch, 목록 항목 버튼, 제목 버튼·링크, 접기/펼치기, outline tree 항목) | 각자 | `--color-state-hover`(view switch 꺼진 칸은 text-primary도) | view switch: `--color-state-pressed` | 표면·배경·굵기 + `aria-pressed`/`aria-current` (왼쪽/아래 accent bar 없음, UX4) |
   | 텍스트 버튼(`linkButton`)·링크 | 밑줄 | `linkButton`은 `--color-state-hover` + 밑줄 굵게, 본문 링크는 밑줄 표시, 목록 제목 링크는 `--color-state-hover` + 밑줄 | — | — |

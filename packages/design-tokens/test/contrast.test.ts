@@ -105,16 +105,24 @@ const REQUIRED: Pair[] = [
   ),
   ['color-on-accent', 'color-switch-track', NON_TEXT_MIN],
   ['color-on-accent', 'color-switch-track-hover', NON_TEXT_MIN],
-  // UX7-QDISPLAY: graded MCQ option borders (QPLAY-01-AC12) — wrong choice border-strong — on
-  // every surface the practice panel sits on. The correct and wrong-answer borders and marks use
-  // the heatmap's green and red (VIEW-RESULT 2026-11-07); see RESULT_MARK_MIN below.
+  // border-strong (no longer a graded-option border since RESULT-MARKS) on every surface the
+  // practice panel sits on. The correct-answer borders use the heatmap's green and red
+  // (VIEW-RESULT 2026-11-07); see RESULT_MARK_MIN below.
   ...(['color-border-strong'] as const).flatMap((fg) =>
     (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
       (bg): Pair => [fg, bg, NON_TEXT_MIN],
     ),
   ),
-  // Result marks in the heatmap's colors: the light fills measure 2.65 to 2.95:1 on the panel surfaces, and
-  // the check/X icon and the hidden wording carry the state, so colour is never the only signal.
+  // RESULT-PRIMARY: the right pick's border is the primary colour (the on-glass step inside the panel).
+  ...(['color-accent', 'color-accent-on-glass'] as const).flatMap((fg) =>
+    (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
+      (bg): Pair => [fg, bg, NON_TEXT_MIN],
+    ),
+  ),
+  // Wrong-answer borders (danger) and the success fill (still the correct-answer border of the revision
+  // view) in the heatmap's colors: the light fills measure 2.65 to 2.95:1 on the panel surfaces.
+  // RESULT-MARKS removed the check/X icons, so the allowance now rests on the 2px border being present
+  // versus absent on ungraded rows and on the hidden wording (assistive tech); colour is never the only signal.
   ...(['color-success-fill', 'color-danger-fill'] as const).flatMap((fg) =>
     (['color-surface', 'color-canvas', 'color-surface-muted', 'color-glass-solid'] as const).map(
       (bg): Pair => [fg, bg, RESULT_MARK_MIN],
@@ -252,6 +260,52 @@ describe.each(themeNames)('%s theme contrast', (theme) => {
     ] as const)('%s stays AA over a busy blurred backdrop', (fg) => {
       for (const bg of glassOver(busy)) {
         expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(TEXT_MIN);
+      }
+    });
+
+    // PANEL-GLASS: desktop side panels paint their own color and brightness over the backdrop. The
+    // same busy-backdrop pairs hold, and the panel stays tinted like --color-glass-solid.
+    const panelRgba = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(t['color-panel-glass']);
+    if (!panelRgba) throw new Error('color-panel-glass must be rgba()');
+    const panelAlpha = Number(panelRgba[4]);
+    const panelBrightness = Number(t['panel-glass-brightness']);
+    const panelOver = (backdrop: number[]) =>
+      painted(
+        over(
+          solid,
+          panelAlpha,
+          backdrop.map((c) => Math.min(255, c * panelBrightness)),
+        ),
+      );
+
+    it('panel glass is the solid fallback color at .7 to .9', () => {
+      expect(toHex(panelRgba.slice(1, 4).map(Number)).toLowerCase()).toBe(
+        t['color-glass-solid'].toLowerCase(),
+      );
+      expect(panelAlpha).toBeGreaterThanOrEqual(0.7);
+      expect(panelAlpha).toBeLessThanOrEqual(0.9);
+    });
+
+    it.each([
+      'color-text-primary',
+      'color-text-secondary',
+      'color-accent-on-glass',
+      'color-danger',
+      'color-success',
+      'color-warning',
+    ] as const)('%s stays AA over a busy blurred backdrop on the panel glass', (fg) => {
+      for (const bg of panelOver(busy)) {
+        expect(contrastRatio(t[fg], bg), bg).toBeGreaterThanOrEqual(TEXT_MIN);
+      }
+    });
+
+    it('primary text stays AA over a pure black or white backdrop on the panel glass', () => {
+      for (const backdrop of [0, 255]) {
+        for (const bg of panelOver([backdrop, backdrop, backdrop])) {
+          expect(contrastRatio(t['color-text-primary'], bg), `${backdrop}`).toBeGreaterThanOrEqual(
+            TEXT_MIN,
+          );
+        }
       }
     });
 

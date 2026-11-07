@@ -80,7 +80,7 @@ async function openPanel(page: Page) {
 }
 
 test(
-  'UX12-GLASSBTN-AC01 the top bar, menus and side panels really blur and show the backdrop',
+  'UX12-GLASSBTN-AC01 the top bar, menus and side panels really blur and show the backdrop (panels with their own glass color and brightness)',
   { tag: '@infra' },
   async ({ page, workspaceFactory }) => {
     const owner = await workspaceFactory.member('ux12-gb-01');
@@ -112,7 +112,8 @@ test(
     await page.emulateMedia({ colorScheme: 'light' });
     const panel = await surfaceOf(await openPanel(page));
     expect(panel.blur).toMatch(BLUR);
-    expect(panel.color).toMatch(/, 0\.7\)$/);
+    expect(panel.blur).toMatch(/brightness\(1\)/);
+    expect(panel.color).toMatch(/, 0\.85\)$/);
   },
 );
 

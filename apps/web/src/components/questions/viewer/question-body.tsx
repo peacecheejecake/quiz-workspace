@@ -10,7 +10,7 @@
 // The stem always goes through `displayStem` (QPLAY-01-AC13) and `stemItems` (QPLAY-01-AC14, the
 // 제시 항목 box) and the 보기 label stays hidden, the options' accessible name only. Options printed
 // as a table line up in columns (`optionGrid`, QTABLE-01).
-import { CheckIcon, Checkbox, CloseIcon, RadioGroup, Textarea } from '@quiz/ui';
+import { CheckIcon, Checkbox, RadioGroup, Textarea } from '@quiz/ui';
 import { useId, type ReactNode, type Ref } from 'react';
 import type { QuestionRevision } from '@/lib/questions/actions';
 import { OptionCells, OptionGridHead } from '@/components/questions/stem/option-grid';
@@ -192,28 +192,20 @@ function AnswerField({
     );
   }
   // UX7-QDISPLAY (QPLAY-01-AC12): every row keeps the same (transparent) border, and grading
-  // only colors it; the row-end icon and the hidden text linked as the description are the meaning.
+  // only colors the correct answer's; a wrong pick keeps the plain border. The hidden text linked as
+  // the description is the meaning for assistive tech (RESULT-MARKS: no check/X icons).
   const toneOf = (id: string) =>
     graded ? optionTone(id, correct, answer.selected, graded) : undefined;
   const mark = (id: string) => {
     const text = graded ? optionMark(id, correct, answer.selected) : undefined;
     if (!text) return undefined;
-    const tone = toneOf(id);
-    return (
-      <span className={styles.mark} data-option-mark={tone ? TONE_MARK[tone] : undefined}>
-        {tone === 'chosen' ? (
-          <CloseIcon width={16} height={16} strokeWidth={3} />
-        ) : tone ? (
-          <CheckIcon width={16} height={16} strokeWidth={3} />
-        ) : null}
-        <span className="qz-visually-hidden">{text}</span>
-      </span>
-    );
+    return <span className="qz-visually-hidden">{text}</span>;
   };
   const rowClass = (id: string) => {
     const tone = toneOf(id);
     const row = grid ? `${styles.option} ${styles.gridOption}` : styles.option;
-    return tone ? `${row} ${TONE_CLASS[tone]}` : row;
+    const toneClass = tone ? TONE_CLASS[tone] : undefined;
+    return toneClass ? `${row} ${toneClass}` : row;
   };
   const head = grid ? (
     <OptionGridHead grid={grid} numbered className={styles.optionGridHead} />
@@ -274,14 +266,8 @@ function AnswerField({
 
 const TONE_CLASS: Readonly<Record<OptionTone, string | undefined>> = {
   correct: styles.toneCorrect,
-  chosen: styles.toneChosen,
+  chosen: undefined,
   answer: styles.toneAnswer,
-};
-
-const TONE_MARK: Readonly<Record<OptionTone, 'correct' | 'wrong'>> = {
-  correct: 'correct',
-  chosen: 'wrong',
-  answer: 'correct',
 };
 
 /**

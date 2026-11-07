@@ -664,7 +664,9 @@ describe('UX7-QDISPLAY practice panel display (QPLAY-01-AC12/AC13)', () => {
     expect(chosen).toHaveAccessibleDescription('내 선택');
     expect(answer).toHaveAccessibleDescription('정답');
     expect(other).toHaveAccessibleDescription('');
-    expect(row(chosen).className).toMatch(/toneChosen/);
+    expect(row(chosen).className).toBe(plain);
+    expect(row(chosen).querySelector('svg')).toBeNull();
+    expect(row(answer).querySelector('svg')).toBeNull();
     expect(row(answer).className).toMatch(/toneAnswer/);
     expect(row(other).className).toBe(plain);
   });
