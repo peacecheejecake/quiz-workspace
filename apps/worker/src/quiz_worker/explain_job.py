@@ -48,7 +48,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from book_core.ask import AskSource
 from book_core.explain import (
@@ -74,7 +74,7 @@ from book_core.llm import (
 from book_core.llm.config import Effort
 from pydantic import BaseModel, ConfigDict
 
-from quiz_worker.adapters import WorkerNotConfiguredError
+from quiz_worker.adapters import WorkerNotConfiguredError, route_effort_or_default
 from quiz_worker.ask_job import error_code_of
 from quiz_worker.ask_store import AskStreamWriter, NullStreamWriter, StreamWriter, Usage
 from quiz_worker.explain_store import (
@@ -114,6 +114,7 @@ class ExplainJobDeps:
     llm: Explainer | None
     enabled: bool = True
     max_output_tokens: int = 1500
+    effort: Effort = EFFORT
     stop_check_seconds: float = 1.0
 
 
@@ -341,7 +342,7 @@ def run_explain(deps: ExplainJobDeps, ctx: JobContext, payload: ExplainPayloadV1
             question=question,
             sources=sources,
             max_output_tokens=deps.max_output_tokens,
-            effort=EFFORT,
+            effort=deps.effort,
             missing_option_ids=missing,
         )
         if attempt:
@@ -446,7 +447,7 @@ def build_explainer(settings: WorkerSettings) -> Explainer | None:
             hold_dir=Path(settings.ask_hold_dir) if settings.ask_hold_dir else None,
         )
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="AI_EXPLANATIONS")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     if config is None:
@@ -472,6 +473,7 @@ def explain_deps(settings: WorkerSettings, engine: Any) -> ExplainJobDeps:
         llm=build_explainer(settings) if settings.ai_explanations else None,
         enabled=settings.ai_explanations,
         max_output_tokens=settings.ai_explanation_max_output_tokens,
+        effort=cast(Effort, route_effort_or_default("AI_EXPLANATIONS", EFFORT)),
     )
 
 

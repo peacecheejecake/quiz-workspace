@@ -61,7 +61,7 @@ from book_core.ask import (
 from book_core.llm import LLMProviderError, TextDelta, TextStreamEnd
 from pydantic import BaseModel, ConfigDict
 
-from quiz_worker.adapters import WorkerNotConfiguredError
+from quiz_worker.adapters import WorkerNotConfiguredError, route_effort_or_default
 from quiz_worker.ask_store import (
     JOB_TYPE,
     AnswerRow,
@@ -513,7 +513,7 @@ def build_ask_llm(settings: WorkerSettings) -> AskAnswerer | None:
             hold_dir=Path(settings.ask_hold_dir) if settings.ask_hold_dir else None,
         )
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="ASK")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     if config is None:
@@ -539,7 +539,7 @@ def ask_deps(settings: WorkerSettings, engine: Any) -> AskJobDeps:
         llm=build_ask_llm(settings) if settings.ask_llm else None,
         enabled=settings.ask_llm,
         max_output_tokens=settings.ask_max_output_tokens,
-        effort=settings.ask_llm_effort,
+        effort=route_effort_or_default("ASK", settings.ask_llm_effort),
         history_turns=settings.ask_history_turns,
         llm_max_retries=settings.llm_max_retries,
         retention_days=settings.ask_retention_days,

@@ -619,3 +619,10 @@ def test_internal_api_url_is_optional_and_checked_without_echoing_values() -> No
         assert errors, bad
         assert all("API_INTERNAL_BASE_URL" in e for e in errors)
         assert not any(SECRET_MARK in e for e in errors)
+
+
+def test_json_object_rule() -> None:
+    rule = check_env.CHECKS["json_object"]
+    assert rule('{"m": {"input": 1, "output": 2}}') is None
+    assert rule("{not json") is not None
+    assert rule("[1]") is not None

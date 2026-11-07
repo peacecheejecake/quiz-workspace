@@ -393,7 +393,7 @@ def build_chapter_note_llm(settings: WorkerSettings) -> LLMClient | None:
         )
         return HoldBarrierLLMClient(ScenarioLLMClient.from_file(path), hold_dir)
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="CHAPTER_NOTES")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     return create_llm_client(config) if config is not None else None

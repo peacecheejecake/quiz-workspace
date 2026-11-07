@@ -23,6 +23,7 @@ from book_core.llm.config import (
     LLMPricing,
     LLMProvider,
     create_llm_client,
+    route_effort,
 )
 from book_core.llm.fake import FakeLLMClient, FakeLLMNotScriptedError, FakeLLMResponse
 from book_core.llm.streaming import (
@@ -63,4 +64,5 @@ __all__ = [
     "create_llm_client",
     "create_text_stream_client",
     "parse_structured_output",
+    "route_effort",
 ]

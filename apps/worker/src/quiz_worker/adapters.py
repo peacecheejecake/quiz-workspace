@@ -58,6 +58,16 @@ class WorkerNotConfiguredError(NonRetryableJobError):
     code = "worker_not_configured"
 
 
+def route_effort_or_default(route: str, default: str | None) -> str | None:
+    """`LLM_EFFORT_<route>` when set, else the route's own request effort (ASK_LLM_EFFORT / low)."""
+    from book_core.llm import LLMConfigError, route_effort
+
+    try:
+        return route_effort(route) or default
+    except LLMConfigError:
+        raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
+
+
 class IndexingFailedError(NonRetryableJobError):
     code = "indexing_failed"
 
