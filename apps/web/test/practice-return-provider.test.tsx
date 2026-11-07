@@ -19,6 +19,8 @@ const nav = vi.hoisted(() => ({
   prefetch: vi.fn(),
 }));
 const identityNavigate = vi.hoisted(() => vi.fn());
+const workspaceGone = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/workspaces/actions', () => ({ workspaceGoneAction: workspaceGone }));
 vi.mock('../src/lib/auth/identity-navigation', () => ({ navigateForIdentity: identityNavigate }));
 const ownerId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 type AuthCallback = (event: string, session?: { user: { id: string } } | null) => void;
@@ -74,6 +76,7 @@ afterEach(() => {
   nav.push.mockReset();
   nav.replace.mockReset();
   nav.prefetch.mockReset();
+  workspaceGone.mockReset();
   identityNavigate.mockReset();
   vi.useRealTimers();
   publishVerifiedUser(null);
@@ -737,21 +740,42 @@ it('UX11-RETURN-AC04 a stale tab click never verifies first; the shell identity 
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
 });
 
-it('UX11-RETURN-AC04 the workspace not-found page releases only that workspace target', () => {
-  const view = () => (
+function notFoundView() {
+  return (
     <PracticeReturnProvider userId={ownerId}>
       <PracticeReturnIdentity userId={ownerId} />
       <Activity />
       {nav.path.startsWith('/workspaces/') ? <ReleaseWorkspaceTarget key={nav.path} /> : null}
     </PracticeReturnProvider>
   );
-  const { rerender } = render(view());
+}
+
+it('UX11-RETURN-AC04 the workspace not-found page releases only that workspace target once the server says it is gone', async () => {
+  workspaceGone.mockResolvedValue(true);
+  const { rerender } = render(notFoundView());
   fireEvent.click(screen.getByText('activity'));
   nav.path = '/workspaces/99999999-9999-9999-9999-999999999999/documents';
-  rerender(view());
+  rerender(notFoundView());
+  await settleAsync();
+  expect(workspaceGone).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
   nav.path = `/workspaces/${workspaceId}/documents`;
-  rerender(view());
+  rerender(notFoundView());
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    '보던 문제를 더 이상 열 수 없습니다.',
+  );
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
-  expect(screen.getByRole('status')).toHaveTextContent('보던 문제를 더 이상 열 수 없습니다.');
 });
+
+it('UX11-RETURN-AC04 a not-found of a readable workspace keeps the target and shows no message', async () => {
+  workspaceGone.mockResolvedValue(false);
+  const { rerender } = render(notFoundView());
+  fireEvent.click(screen.getByText('activity'));
+  nav.path = `/workspaces/${workspaceId}/documents/x`;
+  rerender(notFoundView());
+  await waitFor(() => expect(workspaceGone).toHaveBeenCalledWith(workspaceId));
+  await settleAsync();
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+});
+const settleAsync = () => act(async () => void (await Promise.resolve()));

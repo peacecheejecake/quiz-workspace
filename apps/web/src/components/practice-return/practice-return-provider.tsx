@@ -27,6 +27,7 @@ import {
   returnHref,
   type ReturnTarget,
 } from '@/lib/questions/practice-return';
+import { workspaceGoneAction } from '@/lib/workspaces/actions';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import styles from './practice-return.module.css';
 
@@ -385,20 +386,31 @@ function PracticeRouteGate({ children }: { readonly children: ReactNode }) {
 }
 
 /**
- * Rendered by the not-found page of a workspace route (`notFound()` is only thrown for definitive
- * answers: unknown, foreign, deleted or revoked). Releases that workspace's return target, once.
- * The page reveals nothing: the id comes from the address the user already typed.
+ * Rendered by the not-found page below /workspaces. A page-level 404 (a missing document) in a
+ * readable workspace lands here as well, so the server is asked whether the workspace itself is
+ * gone (404) before the return target of that workspace is released, once. The page reveals
+ * nothing: the id comes from the address the user already typed.
  */
 export function ReleaseWorkspaceTarget() {
   const pathname = usePathname();
   const control = useOptionalPracticeReturn();
   const workspaceId = /^\/workspaces\/([0-9a-f-]{36})(?:\/|$)/i.exec(pathname)?.[1] ?? null;
-  // Decided on arrival, before the release below empties the target; the notice stays inline
-  // because this page replaces the shell that hosts the toasts.
-  const [announce] = useState(() => !!workspaceId && !!control?.holdsWorkspace(workspaceId));
+  const [announced, setAnnounced] = useState(false);
+  const holds = control?.holdsWorkspace;
   const release = control?.releaseWorkspace;
   useEffect(() => {
-    if (workspaceId) release?.(workspaceId);
-  }, [workspaceId, release]);
-  return announce ? <p role="status">{RETURN_TARGET_GONE}</p> : null;
+    if (!workspaceId || !holds?.(workspaceId)) return;
+    let current = true;
+    workspaceGoneAction(workspaceId).then(
+      (gone) => {
+        // The notice stays inline: this page replaces the shell that hosts the toasts.
+        if (current && gone && release?.(workspaceId)) setAnnounced(true);
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [workspaceId, holds, release]);
+  return announced ? <p role="status">{RETURN_TARGET_GONE}</p> : null;
 }
