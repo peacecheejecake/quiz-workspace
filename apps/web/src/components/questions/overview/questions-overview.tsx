@@ -61,6 +61,8 @@ import {
   setMyStateAction,
   type MyState,
 } from '@/lib/questions/practice-actions';
+import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
+import { RETURN_TARGET_GONE } from '@/lib/questions/practice-return';
 import { parseRunState, type RunUrlState } from '@/lib/questions/practice-runs';
 import { QUESTION_FAILURE_MESSAGES, type QuestionFailureKind } from '@/lib/questions/problems';
 import { QuestionDetailDialog, type DetailTarget } from '../detail/question-detail-dialog';
@@ -327,6 +329,7 @@ export function QuestionsOverview({
     (pinned && pinned.item.question_id === openId ? pinned : null);
   const openedId = openPlaced?.item.question_id ?? null;
 
+  const releaseTarget = useOptionalPracticeReturn()?.releaseTarget;
   const lookedUp = useRef(new Set<string>());
   const needsLookup = openId !== null && openPlaced === null;
   useEffect(() => {
@@ -338,15 +341,22 @@ export function QuestionsOverview({
       lookedUp.current.delete(openId);
       toast({ tone: 'error', title: '문제를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' });
     };
+    // A definitive "gone" for the question the return control points at clears it, once.
+    const gone = () => {
+      if (releaseTarget?.({ kind: 'question', workspaceId, questionId: openId }))
+        toast({ tone: 'error', title: RETURN_TARGET_GONE });
+    };
     lookupOverviewQuestionAction(workspaceId, openId).then((result) => {
       if (!result.ok) {
         if (isRetryableLookupFailure(result.kind)) transient();
+        else if (result.kind === 'notFound' || result.kind === 'forbidden') gone();
         return;
       }
       const placedQuestion = result.data;
       if (placedQuestion) setOutside((prev) => new Map(prev).set(openId, placedQuestion));
+      else gone();
     }, transient);
-  }, [needsLookup, openId, workspaceId, toast]);
+  }, [needsLookup, openId, workspaceId, toast, releaseTarget]);
 
   // Where focus returns on close: the opening dot and the heatmap order it was opened on.
   const lastOpened = useRef<string | null>(null);

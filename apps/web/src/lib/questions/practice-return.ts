@@ -30,6 +30,9 @@ export function makeReturnTarget(target: ReturnTarget): ReturnTarget | null {
   return { kind: 'run', workspaceId, runId: target.runId.toLowerCase(), position: target.position };
 }
 
+/** Shown once when the destination finds the return target gone (deleted, access lost). */
+export const RETURN_TARGET_GONE = '보던 문제를 더 이상 열 수 없습니다.';
+
 export function returnHref(target: ReturnTarget): string {
   const params =
     target.kind === 'question'

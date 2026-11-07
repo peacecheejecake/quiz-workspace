@@ -195,3 +195,20 @@ export async function restoreWorkspaceAction(
 export async function deleteWorkspaceAction(workspaceId: string): Promise<WorkspaceActionResult> {
   return lifecycle('delete', workspaceId);
 }
+
+/**
+ * Whether FastAPI answers 404 for this workspace (unknown, foreign, deleted, membership revoked).
+ * Read-only; any other outcome, including a failed call, is `false`.
+ */
+export async function workspaceGoneAction(workspaceId: string): Promise<boolean> {
+  if (!isWorkspaceId(workspaceId)) return false;
+  try {
+    const api = await createServerApiClient();
+    const { response } = await api.GET('/api/v1/workspaces/{workspace_id}', {
+      params: { path: { workspace_id: workspaceId } },
+    });
+    return response.status === 404;
+  } catch {
+    return false;
+  }
+}

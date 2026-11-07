@@ -391,3 +391,87 @@ test(
     expect(await identityPendingSeen(page)).toBe(false);
   },
 );
+
+test(
+  'UX11-RETURN-AC04 a target deleted meanwhile is reported once at the destination and the control is removed',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-gone-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    const question = await createQuestion(owner, ws.id, numberedMcq('return-gone', 1, 1));
+    await createQuestion(owner, ws.id, numberedMcq('return-gone', 2, 2));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    await owner.api.ok('DELETE', `/questions/${question.id}`, undefined, [204]);
+    await control.click();
+    await expect(page.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(1);
+    await expect(control).toBeHidden();
+    // The panel keeps its own error; no answer form opens for the deleted question.
+    await expect(panelUi.options(panelUi.numbered(page, 1))).toHaveCount(0);
+  },
+);
+
+test(
+  'UX11-RETURN-AC04 a workspace that is gone for the user shows not-found with the message and removes the control',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-ws-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, numberedMcq('return-ws', 1, 1));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    // Off the workspace page, so nothing there re-reads the workspace before the click.
+    await page.locator('a[href="/workspaces"]').first().click();
+    await expect(page).toHaveURL(/\/workspaces$/);
+    await expect(control).toBeVisible();
+    await owner.api.ok('DELETE', `/workspaces/${ws.id}`, undefined, [200, 202, 204]);
+    await control.click();
+    await expect(page.getByRole('heading', { name: '페이지를 찾을 수 없습니다' })).toBeVisible();
+    await expect(page.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(1);
+    await page.getByRole('link', { name: /Workspace 목록/ }).click();
+    await expect(page).toHaveURL(/\/workspaces$/);
+    await expect(control).toBeHidden();
+  },
+);
+
+test(
+  'UX11-RETURN-AC04 a missing document in the same workspace keeps the return target without a message',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-doc-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, numberedMcq('return-doc', 1, 1));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    // Client-side move to a missing document: the page's own 404, in a readable workspace.
+    await page.evaluate((href) => {
+      (window as unknown as { next: { router: { push(to: string): void } } }).next.router.push(
+        href,
+      );
+    }, `/workspaces/${ws.id}/documents/${randomUUID()}`);
+    await expect(page.getByRole('heading', { name: '페이지를 찾을 수 없습니다' })).toBeVisible();
+    await expect(page.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(0);
+    await expect(control).toBeVisible();
+  },
+);
