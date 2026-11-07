@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import sys
@@ -117,6 +118,14 @@ def _number(value: str) -> str | None:
     return None
 
 
+def _json_object(value: str) -> str | None:
+    try:
+        parsed = json.loads(value)
+    except ValueError:
+        return "must be a JSON object"
+    return None if isinstance(parsed, dict) else "must be a JSON object"
+
+
 def _not_fake(value: str) -> str | None:
     return "fake adapters are for local/test only" if value.strip().lower() == "fake" else None
 
@@ -173,6 +182,7 @@ CHECKS: dict[str, Rule] = {
     "min32": _min_chars(32),
     "nonempty": _min_chars(1),
     "number": _number,
+    "json_object": _json_object,
     "bool": _matches(r"(?i)true|false|1|0|yes|no", "must be true or false"),
     "not_fake": _not_fake,
     "embedder_mode": _embedder_mode,

@@ -1098,6 +1098,98 @@ kind = "config"
 check = "number"
 provider = "operator (provider price list)"
 
+[[var]]
+name = "LLM_MODEL_QUESTION_IMPORT"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_QUESTION_IMPORT"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT"
+
+[[var]]
+name = "LLM_MODEL_DOCUMENT_SUMMARY"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_DOCUMENT_SUMMARY"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT"
+
+[[var]]
+name = "LLM_MODEL_CHAPTER_NOTES"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_CHAPTER_NOTES"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT"
+
+[[var]]
+name = "LLM_MODEL_MOCK_EXAMS"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_MOCK_EXAMS"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT"
+
+[[var]]
+name = "LLM_MODEL_ASK"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_ASK"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT (ASK: ASK_LLM_EFFORT)"
+
+[[var]]
+name = "LLM_MODEL_AI_EXPLANATIONS"
+services = ["worker"]
+kind = "config"
+provider = "operator: model id for this route"
+note = "optional; unset uses LLM_MODEL"
+
+[[var]]
+name = "LLM_EFFORT_AI_EXPLANATIONS"
+services = ["worker"]
+kind = "config"
+provider = "default"
+note = "optional low | medium | high | xhigh | max; unset uses LLM_EFFORT (fixed low)"
+
+[[var]]
+name = "LLM_MODEL_PRICES"
+services = ["worker"]
+kind = "config"
+check = "json_object"
+provider = "operator (provider price list)"
+note = 'optional JSON {"<model id>": {"input": n, "output": n, "cache_read": n, "cache_write": n}} in USD/MTok, for route models other than LLM_MODEL; without an entry such a model records tokens but no cost_usd'
+
 # ------------------------------------------------------------------------------------------------
 # Forbidden in deployments (test-only switches, unsafe overrides)
 # ------------------------------------------------------------------------------------------------
