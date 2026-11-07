@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -181,9 +182,11 @@ class ScriptedClient:
 class Meter:
     """Runs one streamed call and keeps usage, time to first text and the text."""
 
-    def __init__(self, client: TextStreamClient) -> None:
+    def __init__(self, client: TextStreamClient, judge: TextStreamClient | None = None) -> None:
         self.client = client
+        self.judge = judge or client
         self.usage = LLMUsage()
+        self.judge_usage = LLMUsage()
         # Time to first text of answer / explanation generation only; judge calls are timed
         # apart so a short judge reply never pulls the latency numbers down.
         self.first_text_ms: list[float] = []
@@ -192,20 +195,24 @@ class Meter:
         self.judge_calls = 0
 
     def text(self, request: TextStreamRequest, *, judge: bool = False) -> tuple[str, bool]:
-        """(text, truncated). Usage and call counts include judge calls."""
+        """(text, truncated). Judge usage is kept apart; call counts include judge calls."""
         self.calls += 1
         self.judge_calls += judge
         timings = self.judge_first_text_ms if judge else self.first_text_ms
         start = time.perf_counter()
         parts: list[str] = []
         truncated = False
-        for event in self.client.stream_text(request):
+        client = self.judge if judge else self.client
+        for event in client.stream_text(request):
             if isinstance(event, TextDelta):
                 if not parts:
                     timings.append((time.perf_counter() - start) * 1000)
                 parts.append(event.text)
-            else:
-                self.usage = self.usage + event.usage
+            elif isinstance(event, TextStreamEnd):  # a TextStreamUsage repeats the end's input side
+                if judge:
+                    self.judge_usage = self.judge_usage + event.usage
+                else:
+                    self.usage = self.usage + event.usage
                 truncated = event.truncated
         return "".join(parts), truncated
 
@@ -308,7 +315,8 @@ def judge(meter: Meter, instruction: str, material: str) -> bool | None:
         prompt_version="eval.judge/v1",
         system=_JUDGE_SYSTEM,
         messages=(TextMessage("user", f"{instruction}\n\n{material}"),),
-        max_tokens=16,
+        max_tokens=2048,  # room for adaptive thinking before the one-word verdict
+        effort="low",
     )
     try:
         reply, _ = meter.text(request, judge=True)
@@ -520,7 +528,9 @@ def summarize(
             "count": len(meter.judge_first_text_ms),
             "p50": percentile(meter.judge_first_text_ms, 50),
         },
-        "usage": meter.usage.model_dump(),  # generation and judge calls together
+        "usage": meter.usage.model_dump(),  # generation calls only
+        "judge_model": meter.judge.model_name,
+        "judge_usage": meter.judge_usage.model_dump(),
         "first_text_ms": {
             "count": len(ms),
             "p50": percentile(ms, 50),
@@ -538,6 +548,17 @@ def client_for(provider: str, dataset: Dataset) -> TextStreamClient:
     return create_text_stream_client(config)
 
 
+def judge_client_for(provider: str, llm: TextStreamClient) -> TextStreamClient | None:
+    """A fixed judge (``EVAL_JUDGE_MODEL``) so runs of different models share one grader."""
+    model = os.environ.get("EVAL_JUDGE_MODEL", "").strip()
+    if provider != "llm" or not model:
+        return None
+    config = LLMConfig.from_env()
+    if config is None:
+        return None
+    return create_text_stream_client(config.model_copy(update={"model": model, "pricing": None}))
+
+
 def run(
     dataset_path: Path = DEFAULT_DATASET,
     *,
@@ -546,7 +567,7 @@ def run(
 ) -> dict[str, Any]:
     dataset = load_dataset(dataset_path)
     llm = client or client_for(provider, dataset)
-    meter = Meter(llm)
+    meter = Meter(llm, judge_client_for(provider, llm) if client is None else None)
     use_judge = provider == "llm"
     ask = [run_ask_case(dataset, c, meter, use_judge=use_judge) for c in dataset.ask_cases]
     explain = [run_explain_case(dataset, c, meter) for c in dataset.explain_cases]
@@ -574,7 +595,8 @@ def markdown(report: dict[str, Any]) -> str:
     lines = [
         "# AI question and AI explanation evaluation",
         "",
-        f"- provider: `{report['provider']}` · model: `{report['model']}`",
+        f"- provider: `{report['provider']}` · model: `{report['model']}` · "
+        f"judge: `{report['summary'].get('judge_model', '-')}`",
         f"- dataset: `{report['dataset']}` · ask cases: {s['ask_cases']} · "
         f"explanation cases: {s['explain_cases']}",
         "",
