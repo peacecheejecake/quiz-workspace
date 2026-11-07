@@ -21,20 +21,28 @@ import styles from './user-menu.module.css';
 
 export function SignOutButton({
   variant = 'secondary',
+  borderless = false,
 }: {
   variant?: 'primary' | 'secondary' | 'ghost';
+  borderless?: boolean;
 }) {
   return (
     <form action={signOutAction}>
-      <SignOutSubmit variant={variant} />
+      <SignOutSubmit variant={variant} borderless={borderless} />
     </form>
   );
 }
 
-function SignOutSubmit({ variant }: { variant: 'primary' | 'secondary' | 'ghost' }) {
+function SignOutSubmit({
+  variant,
+  borderless,
+}: {
+  variant: 'primary' | 'secondary' | 'ghost';
+  borderless: boolean;
+}) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant={variant} loading={pending}>
+    <Button type="submit" variant={variant} borderless={borderless} loading={pending}>
       로그아웃
     </Button>
   );
@@ -89,6 +97,7 @@ export function UserMenu({ email }: { email: string | undefined }) {
           href="/settings/preferences"
           className="qz-button qz-focus-ring"
           data-variant="ghost"
+          data-borderless
           onClick={close}
         >
           설정
@@ -97,14 +106,21 @@ export function UserMenu({ email }: { email: string | undefined }) {
           href="/settings/security"
           className="qz-button qz-focus-ring"
           data-variant="ghost"
+          data-borderless
           onClick={close}
         >
           계정 보안 설정
         </Link>
-        <Link href="/help" className="qz-button qz-focus-ring" data-variant="ghost" onClick={close}>
+        <Link
+          href="/help"
+          className="qz-button qz-focus-ring"
+          data-variant="ghost"
+          data-borderless
+          onClick={close}
+        >
           도움말
         </Link>
-        <SignOutButton variant="ghost" />
+        <SignOutButton variant="ghost" borderless />
       </PopoverContent>
     </Popover>
   );

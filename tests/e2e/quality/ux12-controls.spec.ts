@@ -89,6 +89,14 @@ test(
     await page.goto(`/workspaces/${ws.id}/search`);
     await expectInvisibleBoundary(userMenuTrigger(page));
     expect((await boundary(userMenuTrigger(page))).width).toBe('1px');
+    // PROFILE-MENU: the buttons inside the opened menu are borderless as well.
+    await userMenuTrigger(page).click();
+    const menu = page.getByRole('dialog', { name: /계정 메뉴|account menu/i });
+    for (const name of [/^설정$/, /계정 보안 설정/, /^도움말$/]) {
+      await expectInvisibleBoundary(menu.getByRole('link', { name }));
+    }
+    await expectInvisibleBoundary(menu.getByRole('button', { name: /^로그아웃$/ }));
+    await page.keyboard.press('Escape');
     const back = page.getByRole('link', { name: /Workspace 홈|workspace home/i });
     await expect(back).toBeVisible();
     expect((await boundary(back)).width).toBe('0px');

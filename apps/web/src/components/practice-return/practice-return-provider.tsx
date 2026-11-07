@@ -19,15 +19,15 @@ import { createPortal } from 'react-dom';
 import { navigateForIdentity } from '@/lib/auth/identity-navigation';
 import { isProtectedPath, isSignedOutOnlyPath } from '@/lib/auth/routes';
 import { publishVerifiedUser, suspendVerifiedUser } from '@/lib/auth/verified-user-events';
-import { lookupOverviewQuestionAction } from '@/lib/questions/practice-actions';
-import { createPracticeRunApi } from '@/lib/questions/practice-run-client';
 import {
   initialReturnState,
   makeReturnTarget,
   reduceReturnState,
+  RETURN_TARGET_GONE,
   returnHref,
   type ReturnTarget,
 } from '@/lib/questions/practice-return';
+import { workspaceGoneAction } from '@/lib/workspaces/actions';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 import styles from './practice-return.module.css';
 
@@ -35,11 +35,15 @@ interface ReturnContextValue {
   recordActivity: (target: ReturnTarget) => void;
   clearTarget: () => void;
   setVerifiedUser: (id: string) => void;
+  /** The destination could not read this target: clears it when it is the current one. */
+  releaseTarget: (target: ReturnTarget) => boolean;
+  /** The workspace itself is gone for this user: clears a target in it. */
+  releaseWorkspace: (workspaceId: string) => boolean;
+  holdsWorkspace: (workspaceId: string) => boolean;
 }
 const ReturnContext = createContext<ReturnContextValue | null>(null);
 const IDENTITY_RETRY_MS = 5000;
 const IDENTITY_NOTICE_DELAY_MS = 10_000;
-const TEMPORARY_FAILURE = '일시적인 오류로 문제를 확인하지 못했습니다. 다시 시도해 주세요.';
 const subscribeHydration = () => () => undefined;
 const clientSnapshot = () => true;
 const serverSnapshot = () => false;
@@ -67,7 +71,6 @@ export function PracticeReturnProvider({
   const identityReady = useRef(!!userId);
   const pendingActivity = useRef<ReturnTarget | null>(null);
   const acceptPendingActivity = useRef(false);
-  const generation = useRef(0);
   const verification = useRef(0);
   const verificationPending = useRef(false);
   const verificationSilent = useRef(false);
@@ -90,12 +93,9 @@ export function PracticeReturnProvider({
     setUser(id);
     if (identity.current !== id) {
       identity.current = id;
-      generation.current++;
       dispatch({ type: 'clear' });
     }
   }, []);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
   const portalReady = useSyncExternalStore(subscribeHydration, clientSnapshot, serverSnapshot);
   const modalOpen = useModalLayerOpen();
   const pathname = usePathname();
@@ -106,11 +106,30 @@ export function PracticeReturnProvider({
       if (acceptPendingActivity.current) pendingActivity.current = makeReturnTarget(target);
       return;
     }
-    generation.current++;
     dispatch({ type: 'activity', target });
   }, []);
+  const targetRef = useRef<ReturnTarget | null>(null);
+  targetRef.current = state.target;
+  const releaseTarget = useCallback((target: ReturnTarget) => {
+    const current = targetRef.current;
+    const wanted = makeReturnTarget(target);
+    if (!current || !wanted || returnHref(current) !== returnHref(wanted)) return false;
+    dispatch({ type: 'clear' });
+    targetRef.current = null;
+    return true;
+  }, []);
+  const holdsWorkspace = useCallback(
+    (workspaceId: string) => targetRef.current?.workspaceId === workspaceId.toLowerCase(),
+    [],
+  );
+  const releaseWorkspace = useCallback((workspaceId: string) => {
+    const current = targetRef.current;
+    if (!current || current.workspaceId !== workspaceId.toLowerCase()) return false;
+    dispatch({ type: 'clear' });
+    targetRef.current = null;
+    return true;
+  }, []);
   const clearTarget = useCallback(() => {
-    generation.current++;
     dispatch({ type: 'clear' });
   }, []);
 
@@ -195,7 +214,6 @@ export function PracticeReturnProvider({
         stopIdentityNotice();
         confirmedOwner.current = id;
         if (id !== identity.current) {
-          generation.current++;
           identity.current = id;
           acceptPendingActivity.current = false;
           pendingActivity.current = null;
@@ -220,7 +238,6 @@ export function PracticeReturnProvider({
         identityReady.current = id !== null;
         acceptPendingActivity.current = false;
         if (identityReady.current && pendingActivity.current) {
-          generation.current++;
           dispatch({ type: 'activity', target: pendingActivity.current });
           pendingActivity.current = null;
         }
@@ -268,50 +285,12 @@ export function PracticeReturnProvider({
     };
   }, [verifyIdentity]);
 
-  async function returnToTarget() {
-    const target = state.target;
-    if (!target || busy) return;
-    const requestGeneration = generation.current;
-    setBusy(true);
-    setMessage('');
-    try {
-      const verified = await verifyIdentity({ silent: true });
-      if (requestGeneration !== generation.current) return;
-      if (!verified) {
-        if (verificationPending.current) setMessage(TEMPORARY_FAILURE);
-        return;
-      }
-      let valid: boolean;
-      let temporary = false;
-      if (target.kind === 'question') {
-        const result = await lookupOverviewQuestionAction(target.workspaceId, target.questionId);
-        valid = result.ok && result.data !== null;
-        temporary = !result.ok && result.kind === 'unavailable';
-      } else {
-        const api = createPracticeRunApi(target.workspaceId);
-        const run = await api.getRun(target.runId);
-        const item = run.ok ? await api.getItem(target.runId, target.position) : null;
-        valid = !!item && item.ok && item.data.available;
-        temporary =
-          (!run.ok && run.kind === 'unavailable') ||
-          (!!item && !item.ok && item.kind === 'unavailable');
-      }
-      if (requestGeneration !== generation.current) return;
-      if (valid) router.push(returnHref(target));
-      else if (temporary) setMessage(TEMPORARY_FAILURE);
-      else {
-        dispatch({ type: 'clear' });
-        setMessage('보던 문제를 더 이상 열 수 없습니다.');
-      }
-    } catch {
-      if (requestGeneration !== generation.current) return;
-      setMessage(TEMPORARY_FAILURE);
-    } finally {
-      setBusy(false);
-    }
+  // No pre-check: FastAPI authorises every read of the destination, which renders under the
+  // current session. An unreadable target is reported by the destination (releaseTarget).
+  function returnToTarget() {
+    if (state.target) router.push(returnHref(state.target));
   }
   const dismiss = () => {
-    generation.current++;
     dispatch({ type: 'dismiss' });
   };
   const controlRef = useRef<HTMLDivElement>(null);
@@ -333,8 +312,25 @@ export function PracticeReturnProvider({
     !modalOpen &&
     !!state.target &&
     !state.dismissed;
+  // Warm the route shell (the destination's loading boundary) once per shown target. The
+  // destination page is a read-only server render, so a prefetch records nothing.
+  const prefetchHref = visible && state.target ? returnHref(state.target) : null;
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  useEffect(() => {
+    if (prefetchHref) routerRef.current.prefetch(prefetchHref);
+  }, [prefetchHref]);
   return (
-    <ReturnContext.Provider value={{ recordActivity, clearTarget, setVerifiedUser }}>
+    <ReturnContext.Provider
+      value={{
+        recordActivity,
+        clearTarget,
+        setVerifiedUser,
+        releaseTarget,
+        releaseWorkspace,
+        holdsWorkspace,
+      }}
+    >
       {children}
       {portalReady && (!modalOpen || identityPending || identityNotice) && protectedRoute
         ? createPortal(
@@ -347,11 +343,6 @@ export function PracticeReturnProvider({
               ) : null}
               <Suspense fallback={null}>
                 <PracticeRouteGate>
-                  {message && !identityPending && !identityNotice && !modalOpen ? (
-                    <p className={`${styles.message} glass-surface`} role="status">
-                      {message}
-                    </p>
-                  ) : null}
                   {visible ? (
                     <div
                       ref={controlRef}
@@ -363,7 +354,6 @@ export function PracticeReturnProvider({
                         icon={<ArrowLeftIcon />}
                         className={styles.target}
                         onClick={returnToTarget}
-                        disabled={busy}
                       />
                       <IconButton
                         label="복귀 버튼 닫기"
@@ -393,4 +383,34 @@ export function PracticeReturnIdentity({ userId }: { readonly userId: string }) 
 function PracticeRouteGate({ children }: { readonly children: ReactNode }) {
   const search = useSearchParams();
   return search.has('question') || search.has('practice') ? null : children;
+}
+
+/**
+ * Rendered by the not-found page below /workspaces. A page-level 404 (a missing document) in a
+ * readable workspace lands here as well, so the server is asked whether the workspace itself is
+ * gone (404) before the return target of that workspace is released, once. The page reveals
+ * nothing: the id comes from the address the user already typed.
+ */
+export function ReleaseWorkspaceTarget() {
+  const pathname = usePathname();
+  const control = useOptionalPracticeReturn();
+  const workspaceId = /^\/workspaces\/([0-9a-f-]{36})(?:\/|$)/i.exec(pathname)?.[1] ?? null;
+  const [announced, setAnnounced] = useState(false);
+  const holds = control?.holdsWorkspace;
+  const release = control?.releaseWorkspace;
+  useEffect(() => {
+    if (!workspaceId || !holds?.(workspaceId)) return;
+    let current = true;
+    workspaceGoneAction(workspaceId).then(
+      (gone) => {
+        // The notice stays inline: this page replaces the shell that hosts the toasts.
+        if (current && gone && release?.(workspaceId)) setAnnounced(true);
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [workspaceId, holds, release]);
+  return announced ? <p role="status">{RETURN_TARGET_GONE}</p> : null;
 }

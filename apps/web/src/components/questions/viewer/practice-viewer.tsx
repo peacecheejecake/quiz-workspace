@@ -28,6 +28,7 @@ import {
   FloatingSidePanel,
   RetryToggle,
   questionTypeLabels,
+  useToast,
 } from '@quiz/ui';
 import {
   useEffect,
@@ -47,6 +48,7 @@ import {
   type StudyActionResult,
   type SubmitResult,
 } from '@/lib/questions/practice-actions';
+import { RETURN_TARGET_GONE } from '@/lib/questions/practice-return';
 import { useOptionalPracticeReturn } from '@/components/practice-return/practice-return-provider';
 import { AiExplanation } from '@/components/questions/ai-explanation/ai-explanation';
 import { RelatedSources } from '@/components/questions/related-sources/related-sources';
@@ -232,6 +234,15 @@ export function PracticeViewer({
   const questionId = question?.id ?? null;
   const returnControl = useOptionalPracticeReturn();
   const recordActivity = returnControl?.recordActivity;
+  const { toast } = useToast();
+  // Read by the opening effect, which must not restart when they change.
+  const releaseGone = useRef<(id: string) => void>(() => undefined);
+  useLayoutEffect(() => {
+    releaseGone.current = (id) => {
+      if (returnControl?.releaseTarget({ kind: 'question', workspaceId, questionId: id }))
+        toast({ tone: 'error', title: RETURN_TARGET_GONE });
+    };
+  });
   // The last open question keeps rendering while the panel animates closed.
   const [shown, setShown] = useState(question);
   if (question && question !== shown) setShown(question);
@@ -338,6 +349,9 @@ export function PracticeViewer({
       const apply = () => {
         if (!current) return;
         if (!opened.ok) {
+          // The question the return control points at is gone: report it once (a temporary
+          // failure keeps the target).
+          if (opened.kind === 'notFound' || opened.kind === 'forbidden') releaseGone.current(id);
           setSession({ status: 'error', message: opened.message, key });
           return;
         }

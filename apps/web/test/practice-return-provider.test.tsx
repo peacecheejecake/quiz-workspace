@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   PracticeReturnIdentity,
   PracticeReturnProvider,
+  ReleaseWorkspaceTarget,
   usePracticeReturn,
 } from '../src/components/practice-return/practice-return-provider';
 import { publishVerifiedUser } from '../src/lib/auth/verified-user-events';
@@ -15,18 +16,24 @@ const nav = vi.hoisted(() => ({
   search: '',
   push: vi.fn(),
   replace: vi.fn(),
+  prefetch: vi.fn(),
 }));
-const lookup = vi.hoisted(() => vi.fn());
 const identityNavigate = vi.hoisted(() => vi.fn());
+const workspaceGone = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/workspaces/actions', () => ({ workspaceGoneAction: workspaceGone }));
 vi.mock('../src/lib/auth/identity-navigation', () => ({ navigateForIdentity: identityNavigate }));
 const ownerId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
-const runApi = vi.hoisted(() => ({ getRun: vi.fn(), getItem: vi.fn() }));
 type AuthCallback = (event: string, session?: { user: { id: string } } | null) => void;
 const auth = vi.hoisted(() => ({ callback: (() => undefined) as AuthCallback }));
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.path,
   useSearchParams: () => new URLSearchParams(nav.search),
-  useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: vi.fn() }),
+  useRouter: () => ({
+    push: nav.push,
+    replace: nav.replace,
+    prefetch: nav.prefetch,
+    refresh: vi.fn(),
+  }),
 }));
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseBrowserClient: () => ({
@@ -38,8 +45,6 @@ vi.mock('@/lib/supabase/client', () => ({
     },
   }),
 }));
-vi.mock('@/lib/questions/practice-run-client', () => ({ createPracticeRunApi: () => runApi }));
-vi.mock('@/lib/questions/practice-actions', () => ({ lookupOverviewQuestionAction: lookup }));
 const workspaceId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const questionId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 function Activity() {
@@ -70,21 +75,11 @@ afterEach(() => {
   nav.search = '';
   nav.push.mockReset();
   nav.replace.mockReset();
-  lookup.mockReset();
-  runApi.getRun.mockReset();
-  runApi.getItem.mockReset();
+  nav.prefetch.mockReset();
+  workspaceGone.mockReset();
   identityNavigate.mockReset();
   vi.useRealTimers();
   publishVerifiedUser(null);
-});
-it('UX11-RETURN-AC02 validates the last target before navigating', async () => {
-  lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
-  await waitFor(() =>
-    expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
-  );
 });
 it('UX11-RETURN-AC03 dismisses the control until another activity', () => {
   setup();
@@ -111,15 +106,6 @@ it('UX12-GESTURE-AC08 a swipe down dismisses like the close button', () => {
   expect(nav.push).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('activity'));
   expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
-});
-it('UX11-RETURN-AC04 removes an unavailable target and reports it', async () => {
-  lookup.mockResolvedValue({ ok: true, data: null });
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
-  expect(await screen.findByText(/더 이상 열 수 없습니다/)).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
-  expect(nav.push).not.toHaveBeenCalled();
 });
 it('UX11-RETURN-AC02 hides while a practice route is open', () => {
   nav.search = `question=${questionId}`;
@@ -159,30 +145,6 @@ it('UX11-RETURN-AC05 hides the control under a modal and restores it after closi
   );
 });
 
-it('UX11-RETURN-AC04 clears on logout and ignores an in-flight validation', async () => {
-  let resolve!: (value: unknown) => void;
-  lookup.mockReturnValue(
-    new Promise((done) => {
-      resolve = done;
-    }),
-  );
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
-  await waitFor(() => expect(lookup).toHaveBeenCalled());
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => new Response(JSON.stringify({ id: null }), { status: 200 })),
-  );
-  act(() => auth.callback('SIGNED_OUT'));
-  await waitFor(() =>
-    expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull(),
-  );
-  await act(async () => resolve({ ok: true, data: { id: questionId } }));
-  expect(nav.push).not.toHaveBeenCalled();
-  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
-});
-
 it('UX11-RETURN-AC04 clears the target when a different verified account arrives', () => {
   function SwitchAccount() {
     const { setVerifiedUser } = usePracticeReturn();
@@ -198,46 +160,11 @@ it('UX11-RETURN-AC04 clears the target when a different verified account arrives
   fireEvent.click(screen.getByText('switch account'));
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
 });
-it('UX11-RETURN-AC04 keeps the target when a transient validation fails', async () => {
-  lookup.mockResolvedValue({ ok: false, kind: 'unavailable' });
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
-  expect(await screen.findByText(/다시 시도/)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
-});
-
 it('UX11-RETURN-AC04 does not show the return control on a public sharing route', () => {
   nav.path = '/share/example';
   setup();
   fireEvent.click(screen.getByText('activity'));
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
-});
-
-it('UX11-RETURN-AC02 revalidates and returns to the same run position', async () => {
-  const runId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
-  runApi.getRun.mockResolvedValue({ ok: true, data: {} });
-  runApi.getItem.mockResolvedValue({ ok: true, data: { available: true } });
-  function RunActivity() {
-    const { recordActivity } = usePracticeReturn();
-    return (
-      <button onClick={() => recordActivity({ kind: 'run', workspaceId, runId, position: 12 })}>
-        run activity
-      </button>
-    );
-  }
-  render(
-    <PracticeReturnProvider userId={ownerId}>
-      <PracticeReturnIdentity userId={ownerId} />
-      <RunActivity />
-    </PracticeReturnProvider>,
-  );
-  fireEvent.click(screen.getByText('run activity'));
-  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
-  await waitFor(() =>
-    expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?practice=${runId}&i=12`),
-  );
-  expect(runApi.getItem).toHaveBeenCalledWith(runId, 12);
 });
 
 it('UX11-RETURN-AC04 fences a changed server identity on focus without an auth event', async () => {
@@ -530,37 +457,6 @@ it.each(['focus', 'pageshow'])(
   },
 );
 
-it('UX11-RETURN-AC04 the return click keeps the control mounted and only marks it busy', async () => {
-  lookup.mockResolvedValue({ ok: true, data: { id: questionId } });
-  const identity = deferredIdentity();
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  const button = returnButton();
-  fireEvent.click(button);
-  expect(document.body).not.toHaveAttribute('data-identity-pending');
-  expect(returnButton()).toBe(button);
-  expect(button).toBeDisabled();
-  await identity.reply(ownerId);
-  await waitFor(() =>
-    expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
-  );
-  expect(document.body).not.toHaveAttribute('data-identity-pending');
-});
-
-it('UX11-RETURN-AC04 a return click during an outage reports a temporary failure and keeps the target', async () => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => new Response(null, { status: 503 })),
-  );
-  setup();
-  fireEvent.click(screen.getByText('activity'));
-  fireEvent.click(returnButton());
-  expect(await screen.findByText(/다시 시도/)).toBeInTheDocument();
-  expect(returnButton()).toBeEnabled();
-  expect(document.body).not.toHaveAttribute('data-identity-pending');
-  expect(nav.push).not.toHaveBeenCalled();
-});
-
 it('UX11-RETURN-AC04 buffers activity during a silent check and applies it for the same owner', async () => {
   const identity = deferredIdentity();
   setup();
@@ -743,3 +639,143 @@ it('UX11-RETURN-AC04 an auth-event outage keeps the page hidden and explains why
   expect(await screen.findByRole('status')).toHaveTextContent('연결');
   expect(document.body).toHaveAttribute('data-identity-pending');
 });
+
+it('UX11-RETURN-AC02 prefetches the return route once per shown target, not per render', async () => {
+  const { rerender } = setup();
+  expect(nav.prefetch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('activity'));
+  await waitFor(() =>
+    expect(nav.prefetch).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`),
+  );
+  rerender(
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <Activity />
+    </PracticeReturnProvider>,
+  );
+  expect(nav.prefetch).toHaveBeenCalledTimes(1);
+});
+
+it('UX11-RETURN-AC02 the return click navigates at once, without an identity or validity request', () => {
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ id: ownerId })));
+  vi.stubGlobal('fetch', fetcher);
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?question=${questionId}`);
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeEnabled();
+});
+
+it('UX11-RETURN-AC02 returns to the same run position', () => {
+  const runId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  function RunActivity() {
+    const { recordActivity } = usePracticeReturn();
+    return (
+      <button onClick={() => recordActivity({ kind: 'run', workspaceId, runId, position: 12 })}>
+        run activity
+      </button>
+    );
+  }
+  render(
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <RunActivity />
+    </PracticeReturnProvider>,
+  );
+  fireEvent.click(screen.getByText('run activity'));
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  expect(nav.push).toHaveBeenCalledWith(`/workspaces/${workspaceId}?practice=${runId}&i=12`);
+});
+
+function Release({ id }: { readonly id: string }) {
+  const { releaseTarget } = usePracticeReturn();
+  return (
+    <button
+      onClick={() => {
+        released.push(releaseTarget({ kind: 'question', workspaceId, questionId: id }));
+      }}
+    >
+      release {id.slice(0, 2)}
+    </button>
+  );
+}
+const released: boolean[] = [];
+
+it('UX11-RETURN-AC04 the destination releases only the current target, once', () => {
+  released.length = 0;
+  render(
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <Activity />
+      <Release id={questionId} />
+      <Release id="99999999-9999-9999-9999-999999999999" />
+    </PracticeReturnProvider>,
+  );
+  fireEvent.click(screen.getByText('activity'));
+  fireEvent.click(screen.getByText('release 99'));
+  expect(released).toEqual([false]);
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+  fireEvent.click(screen.getByText('release bb'));
+  fireEvent.click(screen.getByText('release bb'));
+  expect(released).toEqual([false, true, false]);
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+});
+
+it('UX11-RETURN-AC04 a stale tab click never verifies first; the shell identity of the destination clears the old target', async () => {
+  setup();
+  fireEvent.click(screen.getByText('activity'));
+  fireEvent.click(screen.getByRole('button', { name: '보던 문제로 돌아가기' }));
+  expect(nav.push).toHaveBeenCalledTimes(1);
+  // The destination shell verifies the current session user: a different account clears the
+  // old account's target and fences the screen.
+  const other = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ id: other }), { status: 200 })),
+  );
+  act(() => publishVerifiedUser(null));
+  fireEvent.focus(window);
+  await waitFor(() => expect(identityNavigate).toHaveBeenCalledWith(other));
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+});
+
+function notFoundView() {
+  return (
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <Activity />
+      {nav.path.startsWith('/workspaces/') ? <ReleaseWorkspaceTarget key={nav.path} /> : null}
+    </PracticeReturnProvider>
+  );
+}
+
+it('UX11-RETURN-AC04 the workspace not-found page releases only that workspace target once the server says it is gone', async () => {
+  workspaceGone.mockResolvedValue(true);
+  const { rerender } = render(notFoundView());
+  fireEvent.click(screen.getByText('activity'));
+  nav.path = '/workspaces/99999999-9999-9999-9999-999999999999/documents';
+  rerender(notFoundView());
+  await settleAsync();
+  expect(workspaceGone).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+  nav.path = `/workspaces/${workspaceId}/documents`;
+  rerender(notFoundView());
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    '보던 문제를 더 이상 열 수 없습니다.',
+  );
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+});
+
+it('UX11-RETURN-AC04 a not-found of a readable workspace keeps the target and shows no message', async () => {
+  workspaceGone.mockResolvedValue(false);
+  const { rerender } = render(notFoundView());
+  fireEvent.click(screen.getByText('activity'));
+  nav.path = `/workspaces/${workspaceId}/documents/x`;
+  rerender(notFoundView());
+  await waitFor(() => expect(workspaceGone).toHaveBeenCalledWith(workspaceId));
+  await settleAsync();
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+});
+const settleAsync = () => act(async () => void (await Promise.resolve()));
