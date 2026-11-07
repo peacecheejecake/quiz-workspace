@@ -200,29 +200,35 @@ test.describe('return bar', () => {
   );
 
   test(
-    'UX12-GLASS-AC06 the return message shares the bar surface and sits above it',
+    'UX12-GLASS-AC06 the target-gone message is one toast and the return bar leaves with it',
     { tag: '@infra' },
     async ({ page, workspaceFactory }) => {
-      await openOverview(page, workspaceFactory, 'ux12-glass-06');
-      const bar = await showReturnBar(page);
-      // The lookup is a server action: a POST to the page itself.
-      await page.route(
-        (url) => url.pathname === new URL(page.url()).pathname,
-        (route) => (route.request().method() === 'POST' ? route.abort() : route.fallback()),
-      );
-      await page.getByRole('button', { name: RETURN_LABEL }).click();
-      const message = page
-        .locator('[data-app-global-control="practice-return"]')
-        .getByRole('status');
-      await expect(message).toBeVisible();
+      const owner = await workspaceFactory.member('ux12-glass-06');
+      const ws = await workspaceFactory.create(owner);
+      const question = await createQuestion(owner, ws.id, {
+        question_number: 1,
+        ...mcqInput('UX12 glass 문제 1', ['가', '나', '다', '라'], 1),
+      });
+      await createQuestion(owner, ws.id, {
+        question_number: 2,
+        ...mcqInput('UX12 glass 문제 2', ['가', '나', '다', '라'], 1),
+      });
+      await signInAs(page, owner.user);
+      await page.goto(overviewPath(ws.id));
+      await overviewUi.dot(page, 1).click();
+      const panel = panelUi.numbered(page, 1);
+      await expect(panelUi.options(panel).first()).toBeVisible();
+      await panelUi.close(panel).click();
+      const bar = page.locator('[data-app-global-control="practice-return"]');
+      await expect(page.getByRole('button', { name: RETURN_LABEL })).toBeVisible();
 
-      const [barSurface, messageSurface] = [await surfaceOf(bar), await surfaceOf(message)];
-      expect(messageSurface.image).toMatch(GRADIENT);
-      expect(messageSurface).toEqual(barSurface);
-      const [barShape, messageShape] = [await shapeOf(bar), await shapeOf(message)];
-      expect(messageShape.radius).toBe('20px');
-      expect(messageShape.radius).toBe(barShape.radius);
-      expect(messageShape.bottom).toBeLessThanOrEqual(barShape.top);
+      await owner.api.ok('DELETE', `/questions/${question.id}`, undefined, [204]);
+      await page.getByRole('button', { name: RETURN_LABEL }).click();
+      const message = page.getByText('보던 문제를 더 이상 열 수 없습니다.');
+      await expect(message).toHaveCount(1);
+      // Not a surface of the return control: nothing of the bar remains beside it.
+      await expect(bar.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: RETURN_LABEL })).toBeHidden();
     },
   );
 });
