@@ -102,7 +102,10 @@ def test_sends_structured_output_request_and_returns_validated_model() -> None:
     body = json.loads(sent.content)
     assert body["model"] == "test-model"
     assert body["max_tokens"] == 16000
-    assert body["system"] == "system rules"
+    assert body["system"] == [
+        {"type": "text", "text": "system rules", "cache_control": {"type": "ephemeral"}}
+    ]
+    assert "cache_control" not in body  # no automatic top-level marker
     assert body["messages"] == [{"role": "user", "content": REQUEST.prompt}]
     assert body["output_config"]["effort"] == "low"
     fmt = body["output_config"]["format"]

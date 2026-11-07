@@ -71,3 +71,15 @@ def test_real_provider_generates_a_validated_paraphrase() -> None:
     assert result.variants or result.rejected
     assert result.llm_calls
     assert result.llm_calls[0].usage.input_tokens > 0
+
+
+def test_real_provider_reads_the_cached_system_prompt_on_a_repeat_call() -> None:
+    config = LLMConfig.from_env()
+    assert config is not None, "set LLM_API_KEY and LLM_MODEL to run llm-marked tests"
+    client = create_llm_client(config)
+    request = build_request(SYNTHETIC_QUESTION, [])
+
+    client.complete(request, LLMQuestion)  # writes the cache entry (readable once it responded)
+    second = client.complete(request, LLMQuestion)
+
+    assert second.info.usage.cache_read_input_tokens > 0
