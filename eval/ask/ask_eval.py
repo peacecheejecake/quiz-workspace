@@ -208,7 +208,7 @@ class Meter:
                 if not parts:
                     timings.append((time.perf_counter() - start) * 1000)
                 parts.append(event.text)
-            else:
+            elif isinstance(event, TextStreamEnd):  # a TextStreamUsage repeats the end's input side
                 if judge:
                     self.judge_usage = self.judge_usage + event.usage
                 else:
