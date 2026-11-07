@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   PracticeReturnIdentity,
   PracticeReturnProvider,
+  ReleaseWorkspaceTarget,
   usePracticeReturn,
 } from '../src/components/practice-return/practice-return-provider';
 import { publishVerifiedUser } from '../src/lib/auth/verified-user-events';
@@ -734,4 +735,23 @@ it('UX11-RETURN-AC04 a stale tab click never verifies first; the shell identity 
   fireEvent.focus(window);
   await waitFor(() => expect(identityNavigate).toHaveBeenCalledWith(other));
   expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+});
+
+it('UX11-RETURN-AC04 the workspace not-found page releases only that workspace target', () => {
+  const view = () => (
+    <PracticeReturnProvider userId={ownerId}>
+      <PracticeReturnIdentity userId={ownerId} />
+      <Activity />
+      {nav.path.startsWith('/workspaces/') ? <ReleaseWorkspaceTarget key={nav.path} /> : null}
+    </PracticeReturnProvider>
+  );
+  const { rerender } = render(view());
+  fireEvent.click(screen.getByText('activity'));
+  nav.path = '/workspaces/99999999-9999-9999-9999-999999999999/documents';
+  rerender(view());
+  expect(screen.getByRole('button', { name: '보던 문제로 돌아가기' })).toBeTruthy();
+  nav.path = `/workspaces/${workspaceId}/documents`;
+  rerender(view());
+  expect(screen.queryByRole('button', { name: '보던 문제로 돌아가기' })).toBeNull();
+  expect(screen.getByRole('status')).toHaveTextContent('보던 문제를 더 이상 열 수 없습니다.');
 });

@@ -23,6 +23,7 @@ import {
   initialReturnState,
   makeReturnTarget,
   reduceReturnState,
+  RETURN_TARGET_GONE,
   returnHref,
   type ReturnTarget,
 } from '@/lib/questions/practice-return';
@@ -35,6 +36,9 @@ interface ReturnContextValue {
   setVerifiedUser: (id: string) => void;
   /** The destination could not read this target: clears it when it is the current one. */
   releaseTarget: (target: ReturnTarget) => boolean;
+  /** The workspace itself is gone for this user: clears a target in it. */
+  releaseWorkspace: (workspaceId: string) => boolean;
+  holdsWorkspace: (workspaceId: string) => boolean;
 }
 const ReturnContext = createContext<ReturnContextValue | null>(null);
 const IDENTITY_RETRY_MS = 5000;
@@ -109,6 +113,17 @@ export function PracticeReturnProvider({
     const current = targetRef.current;
     const wanted = makeReturnTarget(target);
     if (!current || !wanted || returnHref(current) !== returnHref(wanted)) return false;
+    dispatch({ type: 'clear' });
+    targetRef.current = null;
+    return true;
+  }, []);
+  const holdsWorkspace = useCallback(
+    (workspaceId: string) => targetRef.current?.workspaceId === workspaceId.toLowerCase(),
+    [],
+  );
+  const releaseWorkspace = useCallback((workspaceId: string) => {
+    const current = targetRef.current;
+    if (!current || current.workspaceId !== workspaceId.toLowerCase()) return false;
     dispatch({ type: 'clear' });
     targetRef.current = null;
     return true;
@@ -305,7 +320,16 @@ export function PracticeReturnProvider({
     if (prefetchHref) routerRef.current.prefetch(prefetchHref);
   }, [prefetchHref]);
   return (
-    <ReturnContext.Provider value={{ recordActivity, clearTarget, setVerifiedUser, releaseTarget }}>
+    <ReturnContext.Provider
+      value={{
+        recordActivity,
+        clearTarget,
+        setVerifiedUser,
+        releaseTarget,
+        releaseWorkspace,
+        holdsWorkspace,
+      }}
+    >
       {children}
       {portalReady && (!modalOpen || identityPending || identityNotice) && protectedRoute
         ? createPortal(
@@ -358,4 +382,23 @@ export function PracticeReturnIdentity({ userId }: { readonly userId: string }) 
 function PracticeRouteGate({ children }: { readonly children: ReactNode }) {
   const search = useSearchParams();
   return search.has('question') || search.has('practice') ? null : children;
+}
+
+/**
+ * Rendered by the not-found page of a workspace route (`notFound()` is only thrown for definitive
+ * answers: unknown, foreign, deleted or revoked). Releases that workspace's return target, once.
+ * The page reveals nothing: the id comes from the address the user already typed.
+ */
+export function ReleaseWorkspaceTarget() {
+  const pathname = usePathname();
+  const control = useOptionalPracticeReturn();
+  const workspaceId = /^\/workspaces\/([0-9a-f-]{36})(?:\/|$)/i.exec(pathname)?.[1] ?? null;
+  // Decided on arrival, before the release below empties the target; the notice stays inline
+  // because this page replaces the shell that hosts the toasts.
+  const [announce] = useState(() => !!workspaceId && !!control?.holdsWorkspace(workspaceId));
+  const release = control?.releaseWorkspace;
+  useEffect(() => {
+    if (workspaceId) release?.(workspaceId);
+  }, [workspaceId, release]);
+  return announce ? <p role="status">{RETURN_TARGET_GONE}</p> : null;
 }

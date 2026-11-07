@@ -417,3 +417,33 @@ test(
     await expect(panelUi.options(panelUi.numbered(page, 1))).toHaveCount(0);
   },
 );
+
+test(
+  'UX11-RETURN-AC04 a workspace that is gone for the user shows not-found with the message and removes the control',
+  { tag: '@infra' },
+  async ({ page, workspaceFactory }) => {
+    const owner = await workspaceFactory.member(`return-ws-${randomUUID().slice(0, 8)}`);
+    const ws = await workspaceFactory.create(owner);
+    await createQuestion(owner, ws.id, numberedMcq('return-ws', 1, 1));
+    await signInAs(page, owner.user);
+    await page.goto(overviewPath(ws.id));
+    await overviewUi.dot(page, 1).click();
+    const panel = panelUi.numbered(page, 1);
+    await expect(panelUi.options(panel).first()).toBeVisible();
+    await panelUi.close(panel).click();
+    const control = page.getByRole('button', { name: '보던 문제로 돌아가기' });
+    await expect(control).toBeVisible();
+
+    // Off the workspace page, so nothing there re-reads the workspace before the click.
+    await page.locator('a[href="/workspaces"]').first().click();
+    await expect(page).toHaveURL(/\/workspaces$/);
+    await expect(control).toBeVisible();
+    await owner.api.ok('DELETE', `/workspaces/${ws.id}`, undefined, [200, 202, 204]);
+    await control.click();
+    await expect(page.getByRole('heading', { name: '페이지를 찾을 수 없습니다' })).toBeVisible();
+    await expect(page.getByText('보던 문제를 더 이상 열 수 없습니다.')).toHaveCount(1);
+    await page.getByRole('link', { name: /Workspace 목록/ }).click();
+    await expect(page).toHaveURL(/\/workspaces$/);
+    await expect(control).toBeHidden();
+  },
+);
