@@ -1949,6 +1949,7 @@ class _SlowClient:
         self._lock = threading.Lock()
         self._running = 0
         self.peak = 0
+        self.running_at_start: list[int] = []
 
     @property
     def model_name(self) -> str:
@@ -1956,6 +1957,7 @@ class _SlowClient:
 
     def complete[T: BaseModel](self, request: LLMRequest, schema: type[T]) -> LLMResult[T]:
         with self._lock:
+            self.running_at_start.append(self._running)
             self._running += 1
             self.peak = max(self.peak, self._running)
         try:
@@ -1993,6 +1995,16 @@ def test_concurrency_bound_is_respected(limit: int) -> None:
     assert client.peak <= limit
     if limit > 1:
         assert client.peak > 1
+
+
+def test_the_first_refinement_call_runs_alone_so_the_rest_can_read_its_cache() -> None:
+    client = _SlowClient(_scripted())
+    QuestionExtractor(client).extract(  # type: ignore[arg-type]
+        _document(), document_id=DOC_ID, concurrency=4
+    )
+    assert client.running_at_start[0] == 0
+    assert len(client.running_at_start) > 2
+    assert client.peak > 1  # the remaining calls still overlap
 
 
 def test_progress_is_monotonic_and_ends_at_total() -> None:

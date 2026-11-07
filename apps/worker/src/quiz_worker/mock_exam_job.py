@@ -467,14 +467,17 @@ class _Pipeline:
         concurrency = max(1, self.deps.concurrency)
         with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="mock-exam") as pool:
             running: dict[Future[_Answer], _Task] = {}
+            # The first call goes alone so the others can read the prompt cache it writes.
+            limit = 1
             while pending or running:
-                while pending and error is None and len(running) < concurrency:
+                while pending and error is None and len(running) < limit:
                     self.ctx.check_cancelled()
                     task = pending.popleft()
                     running[pool.submit(self._call, task)] = task
                 if not running:
                     break
                 done, _ = wait(running, return_when=FIRST_COMPLETED)
+                limit = concurrency
                 for future in done:
                     running.pop(future)
                     answer = future.result()  # a BaseException (e.g. a kill) propagates

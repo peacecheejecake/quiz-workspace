@@ -11,6 +11,7 @@ import pytest
 from book_core.llm.mock_exam_scenarios import MockExamScenarioLLM
 from pydantic import ValidationError
 from quiz_worker.celery_app import default_definitions
+from quiz_worker.errors import JobError
 from quiz_worker.mock_exam_job import budget_from_settings, build_mock_exam_llm
 from quiz_worker.mock_exam_store import JOB_TYPE
 from quiz_worker.settings import Environment, WorkerSettings, mock_exam_budget_problem
@@ -92,3 +93,72 @@ def test_the_real_provider_gets_the_mock_exam_output_budget(
     )  # type: ignore[call-arg]
     build_mock_exam_llm(settings)
     assert [c.max_tokens for c in seen] == [8000]
+
+
+def _run_fake_pipeline(
+    *, concurrency: int, fail_first: bool = False
+) -> tuple[list[int], list[int]]:
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from quiz_worker.mock_exam_job import _Pipeline, _Task
+
+    lock = threading.Lock()
+    running = 0
+    at_start: list[int] = []
+    settled: list[int] = []
+
+    def call(task: Any) -> Any:
+        nonlocal running
+        with lock:
+            at_start.append(running)
+            running += 1
+        try:
+            time.sleep(0.03)
+        finally:
+            with lock:
+                running -= 1
+        err = fail_first and task.positions == (0,)
+        return SimpleNamespace(task=task, provider_error=ValueError("x") if err else None)
+
+    def settle(answer: Any) -> list[Any]:
+        settled.extend(answer.task.positions)
+        return []
+
+    fake = SimpleNamespace(
+        deps=SimpleNamespace(concurrency=concurrency),
+        ctx=SimpleNamespace(check_cancelled=lambda: None),
+        _call=call,
+        _settle=settle,
+    )
+    tasks = [_Task((i,), False) for i in range(5)]
+    try:
+        _Pipeline._run(fake, tasks)  # type: ignore[arg-type]
+    except JobError:
+        settled.append(-1)  # the provider error surfaced
+    return at_start, settled
+
+
+def test_mock_exam_the_first_call_runs_alone_then_the_rest_overlap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import quiz_worker.mock_exam_job as job
+
+    monkeypatch.setattr(job, "_provider_error", lambda exc: JobError("x"))
+    at_start, settled = _run_fake_pipeline(concurrency=3)
+    assert at_start[0] == 0
+    assert at_start[1] == 0  # the second call starts only after the first finished
+    assert max(at_start) > 0
+    assert sorted(settled) == [0, 1, 2, 3, 4]
+
+
+def test_mock_exam_a_failed_first_call_keeps_the_existing_error_handling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import quiz_worker.mock_exam_job as job
+
+    monkeypatch.setattr(job, "_provider_error", lambda exc: JobError("x"))
+    at_start, settled = _run_fake_pipeline(concurrency=3, fail_first=True)
+    assert settled == [-1]
+    assert at_start == [0]  # nothing else was started after the failed first call
