@@ -20,6 +20,9 @@ Environment variables:
 - ``LLM_PRICE_INPUT_USD_PER_MTOK`` / ``LLM_PRICE_OUTPUT_USD_PER_MTOK`` (optional, both or
   neither; plus optional ``LLM_PRICE_CACHE_READ_USD_PER_MTOK`` /
   ``LLM_PRICE_CACHE_WRITE_USD_PER_MTOK``): enables ``cost_usd`` in usage accounting.
+  The Anthropic client caches the system prompt, and ``input_tokens`` then excludes cached
+  tokens: set both cache prices too, since unset ones fall back to the input price (for example
+  Opus 5.5: read 0.20, write 5.00 USD/MTok).
 """
 
 from __future__ import annotations
