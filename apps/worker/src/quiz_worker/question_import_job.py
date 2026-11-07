@@ -405,7 +405,7 @@ def build_llm(settings: WorkerSettings) -> tuple[LLMClient | None, str | None]:
     from book_core.llm import LLMConfig, LLMConfigError, create_llm_client
 
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="QUESTION_IMPORT")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     if config is None:

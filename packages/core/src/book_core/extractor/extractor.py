@@ -22,7 +22,7 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
 from typing import Annotated, Literal
@@ -213,9 +213,13 @@ class QuestionExtractor:
             )
             futures: dict[Future[tuple[_Candidate, bool, LLMCallInfo | None]], int] = {}
             try:
-                futures = {
-                    pool.submit(_refine, llm, candidates[i], contexts[i]): i for i in refinable
-                }
+                # The first call goes alone so the others can read the prompt cache it writes.
+                first = refinable[0]
+                futures = {pool.submit(_refine, llm, candidates[first], contexts[first]): first}
+                if concurrency > 1:
+                    wait(futures)
+                for i in refinable[1:]:
+                    futures[pool.submit(_refine, llm, candidates[i], contexts[i])] = i
                 for future in as_completed(futures):
                     results[futures[future]] = future.result()
                     done += 1

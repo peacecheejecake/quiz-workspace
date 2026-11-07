@@ -467,14 +467,17 @@ class _Pipeline:
         concurrency = max(1, self.deps.concurrency)
         with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="mock-exam") as pool:
             running: dict[Future[_Answer], _Task] = {}
+            # The first call goes alone so the others can read the prompt cache it writes.
+            limit = 1
             while pending or running:
-                while pending and error is None and len(running) < concurrency:
+                while pending and error is None and len(running) < limit:
                     self.ctx.check_cancelled()
                     task = pending.popleft()
                     running[pool.submit(self._call, task)] = task
                 if not running:
                     break
                 done, _ = wait(running, return_when=FIRST_COMPLETED)
+                limit = concurrency
                 for future in done:
                     running.pop(future)
                     answer = future.result()  # a BaseException (e.g. a kill) propagates
@@ -637,7 +640,7 @@ def build_mock_exam_llm(settings: WorkerSettings) -> LLMClient | None:
             max_output_tokens=settings.mock_exam_max_output_tokens,
         )
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="MOCK_EXAMS")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     if config is None:

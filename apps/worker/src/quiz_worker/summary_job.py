@@ -371,7 +371,7 @@ def build_summarizer(settings: WorkerSettings) -> Summarizer | None:
     if settings.is_test:
         return ExtractiveFakeSummarizer()
     try:
-        config = LLMConfig.from_env()
+        config = LLMConfig.from_env(route="DOCUMENT_SUMMARY")
     except LLMConfigError:
         raise WorkerNotConfiguredError("the LLM configuration is invalid") from None
     return LLMSummarizer(create_llm_client(config)) if config is not None else None

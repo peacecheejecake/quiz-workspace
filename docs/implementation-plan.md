@@ -879,6 +879,7 @@ Wave는 권장 순서이며, 실제로는 §4 그래프의 의존이 충족된 T
 | 2026-11-06 | UX12-ASK(D-10): AI 질문의 답에서 `AI 생성` badge와 `다시 생성` 버튼을 뺀다. ASK-SPEC 2026-11-01 사용자 결정(답마다 `AI 생성` 표시, 성공한 답에도 `다시 생성`)을 뒤집는다. 실패·중지 답의 `다시 시도`, 안내 문구, 예전 대화의 "답 k/n"은 남기고 API `/regenerate`와 계약은 바꾸지 않는다. 대화 화면의 `새 대화`도 뺀다(찾을 수 없는 대화 상태만 예외). | 사용자 결정 D-10, [UX12 계획](implementation/ux12/index.md) §4.7, [UX12-ASK](screens/ux12-ask.md) |
 | 2026-11-06 | UX12-HOME-1: 데스크톱 `--heatmap-cell`을 다시 28px로 올린다(marker 21px, 간격 7px, 1/3 규칙 유지). touch 셀은 24px 유지. UX5-UI의 28px → 24px 결정을 뒤집는다. | 사용자 요청 "desktop → cell 크기 더 크게(28px?)", [UX12 계획](implementation/ux12/index.md) HOME-1 |
 | 2026-11-06 | UX12-SHARE(D-9): 링크마다 `include_notes`·`include_ai_explanations`·`include_summary`(기본 켜짐)와 `include_owner_records`(기본 꺼짐)를 둔다. 옵션을 켠 링크에 한해 2026-11-02 결정(하이라이트·풀이는 게스트에게 없음, workspace-sharing §1·§3·§11)을 뒤집는다. 끈 링크의 차단은 그대로다. Fork는 옵션을 manifest에 고정하고 commit에서 현재 값과 AND 하며 옵션 변경으로 취소하지 않는다. 풀이 이력은 제출 답안 없이 결과·시각만 준다. | 사용자 항목 "공유 설정 > 포함할 항목", 사용자 결정 2026-11-06. 근거는 workspace-sharing §12 |
+| 2026-11-07 | **사용자 결정(LLM-ROUTE, 모델 비교)**: "haiku-5.5로 낮춰도 될지 검토" → 합성 eval(ask·explain·mock·notes·summaries; ask 채점은 고정 judge `claude-sonnet-5-5`)으로 Sonnet 5.5·Haiku 5.5 비교. 결과: mock 통과율 Sonnet 100%·Haiku 83~92%(`inverted_answer_mismatch`), ask(production effort low) 오거절 Sonnet 0/17·Haiku 4/17, explain 정답 일치 양쪽 100%, notes·summaries 동등 이상. 결정: 경로별 모델 설정(`LLM_MODEL_<ROUTE>`·`LLM_EFFORT_<ROUTE>`·`LLM_MODEL_PRICES`)을 두고, 배포 뒤 AI 해설·요약·챕터 노트만 `claude-haiku-5-5` effort high로 전환한다. 모의고사·AI 질문·문제 추출(LLM eval 없음)은 Sonnet 5.5 유지. |
 
 ### UX10 사용자 결정 — 2026-11-05
 
@@ -1146,3 +1147,5 @@ UX10-CI 로컬 완료: 2d51ef57, 독립 리뷰 20261106-000127 log 지적 없음
 QPLAY-01-AC05의 최초 `viewed` 검사 실패/재시도 통과는 제목만 보이는 loading placeholder를 문제 열람 완료로 간주한 테스트 경합이었다. adf67be5는 각 방문 문제와 마지막 딥링크에서 보기 네 개의 표시를 기다린다(독립 리뷰 002919 log 지적 없음). URL·뒤/앞 이동·재로드·세 문제 모두 viewed 검증은 유지한다. 담당자 양 브라우저 각 3회, main 6건 통과. QPLAY-01-AC14·QOV-01-AC14는 변경 없이 양 브라우저 각 3회 및 이번 CI에서 통과해 추정 수정은 하지 않았다.
 
 UX10-CI 공식 Ubuntu archive 변경 뒤 이번 실행의 모든 E2E runner는 의존성 설치를 수 분 내 마쳤다. 기존 40분 이상 Azure mirror 지연은 재현되지 않았으며, 전체 검증 gate·버전은 그대로다. 이후 커밋의 최종 GREEN 및 병합·배포 결과는 PR 실행 기록으로 확인한다.
+
+CACHE-1 ✅ 구조화 출력 호출의 `system` 블록에 prompt cache breakpoint(5분 TTL)를 두고, 문제 추출·모의고사의 첫 호출을 단독 실행해 나머지가 캐시를 읽게 했다(728d1f7a, 0160289e, b8600d64, 6c48475b; Codex 리뷰 P2 2건 수정, 재리뷰 지적 없음). 실제 캐시 적중은 `LLM_API_KEY`가 있는 환경의 `make test-llm`·`cache_read_tokens` 로그로 확인해야 한다. 후속: 챕터 노트·요약 usage의 캐시 토큰은 API 계약 변경이, 모의고사는 DB 컬럼 추가가 필요해 이번 범위에서 뺐다.

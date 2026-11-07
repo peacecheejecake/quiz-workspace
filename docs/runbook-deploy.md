@@ -283,7 +283,7 @@ make deploy-prepare REF=main ENV=production ARGS="--db-url-env SUPABASE_DB_URL -
 
 - `worker`: `LLM_API_KEY`(secret, password manager → Railway에 직접), `LLM_MODEL`(승인된 모델 id, 기본값 없음).
 - `api`: `LLM_MODEL` — **worker와 글자까지 같은 값**(check-env `same`). API는 비밀 키를 받지 않는다(`LLM_API_KEY`를 `api`·Vercel에 넣지 않는다).
-- 비용 기록(선택, `worker`): `LLM_PRICE_INPUT_USD_PER_MTOK`·`LLM_PRICE_OUTPUT_USD_PER_MTOK`(둘 다 넣거나 둘 다 빼기; 선택 `LLM_PRICE_CACHE_READ_USD_PER_MTOK`·`LLM_PRICE_CACHE_WRITE_USD_PER_MTOK`). 값은 제공자 가격표의 USD/백만 token. 넣으면 요약 run과 노트의 `usage.cost_usd`, job 결과(counts·usage만)에 호출 비용이 기록된다. 없으면 token 수만 기록된다.
+- 비용 기록(선택, `worker`): `LLM_PRICE_INPUT_USD_PER_MTOK`·`LLM_PRICE_OUTPUT_USD_PER_MTOK`(둘 다 넣거나 둘 다 빼기; 선택 `LLM_PRICE_CACHE_READ_USD_PER_MTOK`·`LLM_PRICE_CACHE_WRITE_USD_PER_MTOK`). 값은 제공자 가격표의 USD/백만 token. 프롬프트 캐싱이 켜져 있으므로(`input_tokens`는 캐시된 token을 제외한다) 캐시 단가 두 값도 함께 넣는다 — 비워 두면 입력 단가로 계산된다(예: Opus 5.5 읽기 0.20, 쓰기 5.00 USD/MTok). 넣으면 요약 run과 노트의 `usage.cost_usd`, job 결과(counts·usage만)에 호출 비용이 기록된다. 없으면 token 수만 기록된다.
 - 한도(기본값 유지 권장, `worker`): `WORKER_SUMMARY_CHAPTER_CHARS=24000`(이보다 긴 장은 나눠 요약 후 병합 — 호출 수 증가), `WORKER_SUMMARY_MAX_INPUT_CHARS=1500000`(넘는 문서는 LLM 호출 없이 `summary_too_large`). `LLM_TIMEOUT_SECONDS`·`LLM_MAX_RETRIES`·`LLM_MAX_TOKENS`는 문제 생성과 공유.
 
 **비용 가늠**(단가는 제공자 가격표로 계산: 비용 ≈ (input token × 입력 단가 + output token × 출력 단가) / 1,000,000)

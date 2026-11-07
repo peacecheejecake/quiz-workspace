@@ -22,6 +22,7 @@ from book_core.llm import (
     LLMRequest,
     LLMUsage,
     create_llm_client,
+    route_effort,
 )
 from book_core.llm.anthropic_client import AnthropicLLMClient, strict_json_schema
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
@@ -102,7 +103,10 @@ def test_sends_structured_output_request_and_returns_validated_model() -> None:
     body = json.loads(sent.content)
     assert body["model"] == "test-model"
     assert body["max_tokens"] == 16000
-    assert body["system"] == "system rules"
+    assert body["system"] == [
+        {"type": "text", "text": "system rules", "cache_control": {"type": "ephemeral"}}
+    ]
+    assert "cache_control" not in body  # no automatic top-level marker
     assert body["messages"] == [{"role": "user", "content": REQUEST.prompt}]
     assert body["output_config"]["effort"] == "low"
     fmt = body["output_config"]["format"]
@@ -340,6 +344,94 @@ def test_config_errors_name_fields_not_values() -> None:
             {"LLM_API_KEY": SECRET_KEY, "LLM_MODEL": "m", "LLM_MAX_RETRIES": "SECRET-ish"}
         )
     assert "max_retries" in str(info.value)
+    assert "SECRET" not in str(info.value)
+
+
+def _cfg(env: dict[str, str], route: str | None = None) -> LLMConfig:
+    config = LLMConfig.from_env(env, route=route)
+    assert config is not None
+    return config
+
+
+BASE_ENV = {"LLM_API_KEY": SECRET_KEY, "LLM_MODEL": "claude-sonnet-5-5"}
+PRICED_ENV = {
+    **BASE_ENV,
+    "LLM_PRICE_INPUT_USD_PER_MTOK": "2",
+    "LLM_PRICE_OUTPUT_USD_PER_MTOK": "10",
+}
+
+
+def test_route_model_overrides_and_falls_back() -> None:
+    env = {**BASE_ENV, "LLM_MODEL_ASK": "claude-haiku-5-5"}
+    models = (_cfg(env, "ASK").model, _cfg(env, "CHAPTER_NOTES").model, _cfg(env).model)
+    assert models == ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-sonnet-5-5")
+
+
+def test_route_effort_precedence() -> None:
+    env = {**BASE_ENV, "LLM_EFFORT": "low", "LLM_EFFORT_ASK": "high"}
+    assert (_cfg(env, "ASK").effort, _cfg(env, "MOCK_EXAMS").effort) == ("high", "low")
+    assert route_effort("ASK", env) == "high"
+    assert route_effort("MOCK_EXAMS", env) is None
+    with pytest.raises(LLMConfigError, match="LLM_EFFORT_ASK") as info:
+        route_effort("ASK", {"LLM_EFFORT_ASK": "SECRET-ish"})
+    assert "SECRET" not in str(info.value)
+
+
+def test_unknown_route_and_missing_model_still_fail() -> None:
+    with pytest.raises(LLMConfigError):
+        LLMConfig.from_env(BASE_ENV, route="NOPE")
+    with pytest.raises(LLMConfigError, match="LLM_MODEL"):
+        LLMConfig.from_env({"LLM_API_KEY": SECRET_KEY, "LLM_MODEL_ASK": "m"}, route="ASK")
+    assert LLMConfig.from_env({"LLM_MODEL_ASK": "m"}, route="ASK") is None
+
+
+def test_pricing_follows_the_resolved_model() -> None:
+    prices = '{"claude-haiku-5-5": {"input": 1, "output": 5, "cache_read": 0.1}}'
+    env = {
+        **PRICED_ENV,
+        "LLM_MODEL_ASK": "claude-haiku-5-5",
+        "LLM_MODEL_MOCK_EXAMS": "other-model",
+        "LLM_MODEL_PRICES": prices,
+    }
+    ask, mock, base = _cfg(env, "ASK"), _cfg(env, "MOCK_EXAMS"), _cfg(env, "CHAPTER_NOTES")
+    assert ask.pricing == LLMPricing(
+        input_usd_per_mtok=1, output_usd_per_mtok=5, cache_read_usd_per_mtok=0.1
+    )
+    assert mock.pricing is None
+    assert base.pricing == LLMPricing(input_usd_per_mtok=2, output_usd_per_mtok=10)
+
+
+def test_model_prices_entry_beats_legacy_prices_for_the_base_model() -> None:
+    env = {
+        **PRICED_ENV,
+        "LLM_MODEL_PRICES": '{"claude-sonnet-5-5": {"input": 3, "output": 15}}',
+    }
+    config = LLMConfig.from_env(env)
+    assert config is not None
+    assert config.pricing == LLMPricing(input_usd_per_mtok=3, output_usd_per_mtok=15)
+
+
+def test_route_model_without_a_price_has_no_pricing_without_model_prices() -> None:
+    config = LLMConfig.from_env({**PRICED_ENV, "LLM_MODEL_ASK": "claude-haiku-5-5"}, route="ASK")
+    assert config is not None
+    assert config.pricing is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "{not json SECRET-VALUE",
+        '["SECRET-VALUE"]',
+        '{"m": "SECRET-VALUE"}',
+        '{"m": {"input": 1}}',
+        '{"m": {"input": 1, "output": "SECRET-VALUE"}}',
+        '{"m": {"input": -1, "output": 1}}',
+        '{"m": {"input": 1, "output": 1, "SECRET-VALUE": 1}}',
+    ],
+)
+def test_invalid_model_prices_name_the_variable_only(bad: str) -> None:
+    with pytest.raises(LLMConfigError, match="LLM_MODEL_PRICES") as info:
+        LLMConfig.from_env({**BASE_ENV, "LLM_MODEL_PRICES": bad})
     assert "SECRET" not in str(info.value)
 
 
