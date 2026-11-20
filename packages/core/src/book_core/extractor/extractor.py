@@ -948,9 +948,9 @@ def _resolve_tables(
     the text checks compare against the print. ``corrected``: the same stem where a table with the
     printed text in the same order (any order of its tokens when the request carried images, as
     a layout model can read a box's lines in the wrong order) but other cell boundaries (the
-    model put a text in the right cell using the image) keeps the model's cells, and ``tables`` are the cells of every table
-    in it; ``None`` when nothing was corrected. A table with other text is left as the model
-    wrote it, so the printed-text check rejects the stem.
+    model put a text in the right cell using the image) keeps the model's cells, and
+    ``tables`` are the cells of every table in it; ``None`` when nothing was corrected. A table
+    with other text is left as the model wrote it, so the printed-text check rejects the stem.
     """
     segments = split_pipe_blocks(stem)
     positions = [i for i, (is_table, _) in enumerate(segments) if is_table]
