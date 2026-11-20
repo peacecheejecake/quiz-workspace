@@ -157,6 +157,9 @@ class RawQuestion:
     """The cells of the tables in ``stem_parts``, in order (UX12-STEMTABLE)."""
     options: list[RawOption] = field(default_factory=list)
     figures: list[RawFigure] = field(default_factory=list)
+    shared_figures: list[RawFigure] = field(default_factory=list)
+    """Labelled figures printed elsewhere that this question refers to; their printed text was
+    added to the stem (``resolve_shared_figures``)."""
     trailing: list[SourceLine] = field(default_factory=list)
     block_indices: list[int] = field(default_factory=list)
     bare_number: bool = False
@@ -245,6 +248,16 @@ def _table_once(table: TableContent) -> str | None:
     if not table.spans:
         return None
     return gfm_table(table.model_copy(update={"rows": table.rows_once()}))
+
+
+def add_shared_figure_text(question: RawQuestion, figure: RawFigure) -> None:
+    """Add the printed text of a shared figure to the stem, once per question and figure."""
+    if figure.image is None or not figure.image.text.strip():
+        return
+    if any(f is figure for f in question.shared_figures):
+        return
+    question.stem_parts.append(FigurePart(_figure_text(figure.image)))
+    question.shared_figures.append(figure)
 
 
 def _figure_text(block: Block) -> str:

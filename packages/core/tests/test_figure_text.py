@@ -134,3 +134,19 @@ def test_a_table_without_merged_cells_reaches_the_model_unchanged() -> None:
     plain = TableContent(rows=(("a", "b"), ("1", "2")), header_rows=1)
     ((_, request),) = llm_requests(_doc("1. 표를 보고 답하시오.", plain, *OPTIONS))
     assert "| a | b |\n| --- | --- |\n| 1 | 2 |" in request.prompt
+
+
+def test_a_labelled_shared_figure_adds_its_text_after_the_referring_sentence() -> None:
+    shared = ("image", "Plant A\nPlant B")
+    doc = _doc(
+        shared, "[그림 3] 배치도", "1. [그림 3]의 A 단계를 쓰시오.", "2. 다른 문제를 쓰시오."
+    )
+    first = _extract_all(doc)[0]
+    assert first.stem == "[그림 3]의 A 단계를 쓰시오.\nPlant A\nPlant B"
+    assert _extract_all(doc)[1].stem == "다른 문제를 쓰시오."
+    request = llm_requests(doc)[0][1]
+    assert "[그림]\nPlant A\nPlant B" in request.prompt
+
+
+def _extract_all(doc: ParsedDocument) -> list[QuestionDraft]:
+    return list(QuestionExtractor(None).extract(doc, document_id="t").drafts)

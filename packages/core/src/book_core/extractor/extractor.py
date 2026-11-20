@@ -55,6 +55,7 @@ from book_core.extractor.segment import (
     RawQuestion,
     Segmentation,
     SourceLine,
+    add_shared_figure_text,
     answer_entries,
     infer_type,
     segment_chapters,
@@ -347,11 +348,15 @@ def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
         seen[raw.number] += 1
         duplicate = counts[raw.number] > 1
         last = max(raw.block_indices)
+        figures = _figures(raw, labelled)
+        for figure in figures:
+            if all(figure is not own for own in raw.figures):
+                add_shared_figure_text(raw, figure)
         contexts.append(
             _Context(
                 raw=raw,
                 entries=raw.answer if raw.answer else keyed[id(raw)],
-                figures=_figures(raw, labelled),
+                figures=figures,
                 next_block=blocks[last + 1] if last + 1 < len(blocks) else None,
                 occurrence=seen[raw.number] if duplicate else 0,
             )
@@ -625,12 +630,14 @@ def _source_lines(raw: RawQuestion, figures: Sequence[RawFigure]) -> list[str]:
             ordered.append((line.block_index, line.prompt or line.text))
     # The printed text of a figure that is part of the stem follows its marker line; repeated
     # lines inside a figure (two boxes labelled "B") are all kept.
-    for figure in raw.figures:
-        if figure.text_in_stem and figure.image is not None:
-            ordered.append((figure.block_index, FIGURE_MARKER))
-            ordered += [
-                (figure.block_index, text) for text in figure.image.text.split("\n") if text.strip()
-            ]
+    own = [f for f in raw.figures if f.text_in_stem]
+    # A shared figure's text sits after the stem, where the stem puts it.
+    after_stem = max((ln.block_index for ln in raw.stem_lines), default=0)
+    placed = [(f, f.block_index) for f in own] + [(f, after_stem) for f in raw.shared_figures]
+    for figure, key in placed:
+        if figure.image is not None:
+            ordered.append((key, FIGURE_MARKER))
+            ordered += [(key, text) for text in figure.image.text.split("\n") if text.strip()]
     ordered.sort(key=lambda item: item[0])  # stable: the marker stays before its text
     return [text for _, text in ordered]
 

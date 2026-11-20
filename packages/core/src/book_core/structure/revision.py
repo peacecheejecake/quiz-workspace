@@ -122,6 +122,11 @@ def build_revision(
 
 
 def _edited_table(block: Block, text: str) -> TableContent:
+    if block.table is not None:
+        # The text as the table prints it (covered cells empty, empty lines dropped): unchanged.
+        printed = "\n".join(" | ".join(row).rstrip() for row in block.table.rows_once())
+        if text == normalize_block_text(printed, BlockType.TABLE, dehyphenate=False):
+            return block.table
     rows = tuple(tuple(cell.strip() for cell in line.split("|")) for line in text.split("\n"))
     if block.table is not None and rows in (block.table.rows_once(), block.table.rows):
         return block.table  # same cells, same merges
