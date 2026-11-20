@@ -123,7 +123,7 @@ def build_revision(
 
 def _edited_table(block: Block, text: str) -> TableContent:
     rows = tuple(tuple(cell.strip() for cell in line.split("|")) for line in text.split("\n"))
-    if block.table is not None and rows == block.table.rows:
+    if block.table is not None and rows in (block.table.rows_once(), block.table.rows):
         return block.table  # same cells, same merges
     header_rows = block.table.header_rows if block.table is not None else 0
     try:
@@ -142,7 +142,7 @@ def _edited_block(block: Block, raw: str) -> Block | None:
     if block.type is BlockType.TABLE:
         table = _edited_table(block, text)
         update["table"] = table
-        update["text"] = "\n".join(" | ".join(row) for row in table.rows)
+        update["text"] = "\n".join(" | ".join(row).rstrip() for row in table.rows_once())
     if update["text"] == block.text and update.get("table", block.table) == block.table:
         return None
     return Block.model_validate({**block.model_dump(), **update})

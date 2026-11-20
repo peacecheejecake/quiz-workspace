@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict
 from book_core.llm import LLMRequest
 
 EXTRACT_TASK = "questions.extract"
-EXTRACT_PROMPT_VERSION = "questions.extract/v5"
+EXTRACT_PROMPT_VERSION = "questions.extract/v6"
 
 SYSTEM_PROMPT = """\
 You convert one printed exam question into structured data for a question bank.
@@ -38,6 +38,11 @@ Rules:
 - Tables: lines starting with "|" are the rows of a table printed in the question. Copy them
   verbatim into the stem where they were printed, one row per line and the "| --- |" row included,
   with a blank line before and after the table. Never rewrite, summarize or drop a table.
+- Tables: a merged cell is printed once; the cells it covers are empty. Copy that as given.
+- Figures: a line "[그림]" marks a figure printed in the question; the lines after it (up to the
+  next line of the question) are the text printed inside the figure (labels of a diagram, a
+  family tree, ...). Keep those lines in the stem verbatim, one per line, after the sentence that
+  refers to the figure. Never copy the "[그림]" marker itself and never describe the figure.
 - Do not include the question number in the stem or the option labels in option texts.
 - question_type: MCQ when the question has options; ESSAY when it asks for a written
   explanation (e.g. 서술하시오, 설명하시오, explain, describe); otherwise SHORT_ANSWER.
@@ -67,7 +72,7 @@ class LLMAnswer(BaseModel):
 
 
 class LLMQuestion(BaseModel):
-    """Structured output schema of ``questions.extract/v5``."""
+    """Structured output schema of ``questions.extract/v6``."""
 
     model_config = ConfigDict(extra="forbid")
 

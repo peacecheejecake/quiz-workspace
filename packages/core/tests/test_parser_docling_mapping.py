@@ -273,9 +273,9 @@ def test_block_ids_are_stable_and_content_addressed(parsed: ParsedDocument) -> N
     assert differing[0][0].startswith("p1-b003-")
 
 
-def test_picture_text_keeps_only_chapter_labels() -> None:
+def test_picture_text_keeps_chapter_labels_as_blocks_and_the_rest_as_image_text() -> None:
     """A chapter opener page Docling reads as one picture: its label and title survive as text
-    after the image; other text inside pictures (figure labels) stays dropped."""
+    after the image; the other text inside a picture (figure labels) is the image's text."""
     doc = DoclingDocument(name="opener")
     doc.add_page(page_no=1, size=Size(width=WIDTH, height=HEIGHT))
     opener = doc.add_picture(prov=_prov(1, 0, 790, 600, 400))
@@ -293,14 +293,57 @@ def test_picture_text_keeps_only_chapter_labels() -> None:
         )
     blocks = _convert(doc, [True]).blocks
     assert [(b.type, b.text) for b in blocks] == [
-        (BlockType.IMAGE, ""),
+        (BlockType.IMAGE, "Publisher"),
         (BlockType.TEXT, "제 2 장"),
         (BlockType.TEXT, "응용"),
-        (BlockType.IMAGE, ""),
+        (BlockType.IMAGE, "Axis 10\nChapter 7 is summarised in this figure legend"),
     ]
     label = blocks[1]
     assert label.locations[0].page == 1
     assert label.locations[0].bbox == BBox(x0=200, y0=200, x1=400, y1=220)
+
+
+def test_a_diagram_keeps_its_printed_text_in_reading_order() -> None:
+    doc = DoclingDocument(name="tree")
+    doc.add_page(page_no=1, size=Size(width=WIDTH, height=HEIGHT))
+    tree = doc.add_picture(prov=_prov(1, 50, 600, 550, 300))
+    for text, top in (("A", 580), ("(70 y,  spouse of B)", 540), ("B", 500), ("B", 460)):
+        doc.add_text(
+            label=DocItemLabel.TEXT, text=text, parent=tree, prov=_prov(1, 60, top, 300, top - 10)
+        )
+    caption = doc.add_text(
+        label=DocItemLabel.CAPTION,
+        text="Figure 2. Family",
+        parent=tree,
+        prov=_prov(1, 60, 290, 300, 280),
+    )
+    tree.captions.append(caption.get_ref())
+    blocks = _convert(doc, [True]).blocks
+    assert [(b.type, b.text) for b in blocks] == [
+        (BlockType.IMAGE, "A\n(70 y, spouse of B)\nB\nB"),
+        (BlockType.TEXT, "Figure 2. Family"),
+    ]
+    assert blocks[0].caption_block_id == blocks[1].id
+
+
+def test_a_merged_cell_is_printed_once_in_the_table_text_but_stays_in_the_rows() -> None:
+    doc = DoclingDocument(name="merged")
+    doc.add_page(page_no=1, size=Size(width=WIDTH, height=HEIGHT))
+    cells = [
+        _merged("- payee: Kim", 0, 0, 1, 3),
+        _cell("a", 1, 0),
+        _cell("b", 1, 1),
+        _cell("c", 1, 2),
+        _merged("Head", 2, 0, 1, 2),
+        _cell("z", 2, 2),
+    ]
+    data = TableData(num_rows=3, num_cols=3, table_cells=cells)
+    doc.add_table(data=data, prov=_prov(1, 50, 600, 550, 500))
+    (block,) = _convert(doc, [True]).blocks
+    assert block.text == "- payee: Kim |  | \na | b | c\nHead |  | z"
+    assert block.table is not None
+    assert block.table.rows[0] == ("- payee: Kim",) * 3
+    assert block.table.rows[2] == ("Head", "Head", "z")
 
 
 def test_page_count_mismatch_is_an_error() -> None:

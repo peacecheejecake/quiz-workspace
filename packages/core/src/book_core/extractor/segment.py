@@ -42,7 +42,7 @@ from book_core.contracts import (
     SourceLocation,
     TableContent,
 )
-from book_core.export import md_table
+from book_core.export import gfm_table, md_table
 from book_core.question.labels import (
     CIRCLED_DIGITS,
     answer_option_keys,
@@ -113,6 +113,8 @@ class SourceLine:
     text: str
     block: Block
     block_index: int
+    prompt: str | None = None
+    """What the model sees instead of ``text`` (a merged table cell printed once)."""
 
 
 @dataclass(slots=True)
@@ -122,11 +124,24 @@ class RawOption:
     lines: list[SourceLine]
 
 
+FIGURE_MARKER = "[그림]"
+"""Line the model sees before a figure's printed text; it is no printed text itself."""
+
+
+class FigurePart(str):
+    """A stem part holding the printed text of a figure (lines joined with ``\\n``)."""
+
+    __slots__ = ()
+
+
 @dataclass(slots=True)
 class RawFigure:
     label: str | None
     image: Block | None
     caption: SourceLine | None
+    block_index: int = -1
+    text_in_stem: bool = False
+    """The figure's printed text was added to the stem (one ``FigurePart``)."""
 
 
 # A source line that prints a list item (questions.md §4 12).
@@ -161,13 +176,22 @@ class RawQuestion:
         line break, and a table stands apart by blank lines (questions.md §4 11, 12)."""
         text = ""
         after_table = False
+        after_figure = False
         for part in self.stem_parts:
             if not part:
                 continue
-            table = split_pipe_blocks(part) == [(True, part)]
-            gap = "\n\n" if table or after_table else "\n" if _ITEM_LINE.match(part) else " "
+            figure = isinstance(part, FigurePart)
+            table = not figure and split_pipe_blocks(part) == [(True, part)]
+            gap = (
+                "\n\n"
+                if table or after_table
+                else "\n"
+                if figure or after_figure or _ITEM_LINE.match(part)
+                else " "
+            )
             text += gap + part if text else part
             after_table = table
+            after_figure = figure
         return break_stem_items(text.strip())
 
     @property
@@ -213,6 +237,18 @@ class Segmentation:
 
 def _norm_label(label: str) -> str:
     return re.sub(r"\s+", "", label).lower().replace("fig.", "figure").replace("fig", "figure")
+
+
+def _table_once(table: TableContent) -> str | None:
+    """The GFM table with each merged cell's text once (covered cells empty), ``None`` when
+    the table has no merged cells."""
+    if not table.spans:
+        return None
+    return gfm_table(table.model_copy(update={"rows": table.rows_once()}))
+
+
+def _figure_text(block: Block) -> str:
+    return "\n".join(line.strip() for line in block.text.split("\n") if line.strip())
 
 
 def _lines(blocks: Sequence[Block]) -> list[tuple[int, Block, list[str]]]:
@@ -632,12 +668,16 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
     for index, block, lines in _lines(blocks):
         position += 0 if lines else 1
         if block.type is BlockType.IMAGE:
-            figure = RawFigure(label=None, image=block, caption=None)
+            figure = RawFigure(label=None, image=block, caption=None, block_index=index)
             if block.caption_block_id is not None:
                 caption_owner[block.caption_block_id] = figure
             if current is not None and not in_answer_key and not current.answered:
                 current.figures.append(figure)
                 current.block_indices.append(index)
+                if block.text.strip() and not current.options:
+                    # The printed text of the figure follows the sentence that refers to it.
+                    current.stem_parts.append(FigurePart(_figure_text(block)))
+                    figure.text_in_stem = True
             else:
                 loose_figures.append(figure)
             continue
@@ -666,7 +706,12 @@ def segment(blocks: Sequence[Block], *, in_answer_key: bool = False) -> Segmenta
                     current.stem_parts.append(table)
                     current.stem_tables.append(block.table)
                     current.stem_lines.append(
-                        SourceLine(text=table, block=block, block_index=index)
+                        SourceLine(
+                            text=table,
+                            block=block,
+                            block_index=index,
+                            prompt=_table_once(block.table),
+                        )
                     )
             continue
 

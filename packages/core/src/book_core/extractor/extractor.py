@@ -2,7 +2,7 @@
 
 Pipeline (questions.md §6): printed reading order (``reading_order``) -> rule-based
 pre-extraction (numbering, options, figures, answer key, page/bbox provenance) -> optional LLM
-refinement per question (``questions.extract/v5``, structured output, own source text only) ->
+refinement per question (``questions.extract/v6``, structured output, own source text only) ->
 structural validation -> drafts with ``review_status=pending``, ``origin=pdf_import`` and
 validation issues.
 
@@ -49,6 +49,7 @@ from book_core.contracts.common import Identifier
 from book_core.extractor.llm_refine import LLMQuestion, build_request
 from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
+    FIGURE_MARKER,
     AnswerKeyEntry,
     RawFigure,
     RawQuestion,
@@ -73,6 +74,7 @@ from book_core.question import (
     aligned_stem_tables,
     answer_option_keys,
     canonical_key,
+    gfm_table,
     has_pipe_table,
     issue,
     loose_text,
@@ -616,12 +618,21 @@ def _source_lines(raw: RawQuestion, figures: Sequence[RawFigure]) -> list[str]:
         lines += option.lines
     lines += [f.caption for f in figures if f.caption is not None]
     seen: set[tuple[int, str]] = set()
-    ordered: list[str] = []
+    ordered: list[tuple[int, str]] = []
     for line in sorted(lines, key=lambda ln: ln.block_index):
         if (line.block_index, line.text) not in seen:
             seen.add((line.block_index, line.text))
-            ordered.append(line.text)
-    return ordered
+            ordered.append((line.block_index, line.prompt or line.text))
+    # The printed text of a figure that is part of the stem follows its marker line; repeated
+    # lines inside a figure (two boxes labelled "B") are all kept.
+    for figure in raw.figures:
+        if figure.text_in_stem and figure.image is not None:
+            ordered.append((figure.block_index, FIGURE_MARKER))
+            ordered += [
+                (figure.block_index, text) for text in figure.image.text.split("\n") if text.strip()
+            ]
+    ordered.sort(key=lambda item: item[0])  # stable: the marker stays before its text
+    return [text for _, text in ordered]
 
 
 def _request_lines(ctx: _Context) -> tuple[list[str], list[str]]:
@@ -737,7 +748,7 @@ def _verified_text(
     issues: list[ValidationIssue] = []
     keys = [canonical_key(o.label) for o in proposal.options]
     keys_ok = all(keys) and len(set(keys)) == len(keys)
-    llm_stem = proposal.stem.strip()
+    llm_stem = _restore_tables(proposal.stem.strip(), pre.stem_tables)
 
     if not pre.options and proposal.options:
         llm_options = [(k, o.text.strip()) for k, o in zip(keys, proposal.options, strict=True)]
@@ -802,6 +813,22 @@ def _verified_text(
             )
         )
     return stem, pre.options, issues
+
+
+def _restore_tables(stem: str, tables: Sequence[TableContent]) -> str:
+    """``stem`` with each pipe table the model saw with merged cells printed once swapped back
+    for the stem's own table (merged text repeated, as the structured cells expect)."""
+    once = {
+        loose_text(gfm_table(t.model_copy(update={"rows": t.rows_once()}))): gfm_table(t)
+        for t in tables
+        if t.spans
+    }
+    segments = split_pipe_blocks(stem)
+    if not once or not any(is_table and loose_text(text) in once for is_table, text in segments):
+        return stem
+    return "\n\n".join(
+        once.get(loose_text(text), text) if is_table else text for is_table, text in segments
+    )
 
 
 def _tables(stem: str) -> list[str]:
