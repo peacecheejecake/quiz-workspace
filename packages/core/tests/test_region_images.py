@@ -238,3 +238,36 @@ def test_a_stop_on_exception_while_rendering_keeps_the_rule_based_draft() -> Non
     assert extraction.refinement_incomplete
     assert client.calls == []
     assert "llm_unavailable" in _codes(draft)
+
+
+def _four_tables() -> tuple[ParsedDocument, list[tuple[tuple[str, ...], ...]]]:
+    tables: list[tuple[tuple[str, ...], ...]] = [
+        (("나:", f"t{n} a b"), ("김:", "c d")) for n in range(4)
+    ]
+    doc = _doc("1. 대화를 보고 답하시오.", *(TableContent(rows=t) for t in tables), *OPTIONS)
+    return doc, tables
+
+
+def _stem(tables: list[tuple[tuple[str, ...], ...]]) -> str:
+    return "대화를 보고 답하시오.\n\n" + "\n\n".join(_gfm(t) for t in tables)
+
+
+def test_only_tables_whose_crop_was_sent_accept_reordered_tokens() -> None:
+    doc, tables = _four_tables()
+    reordered = [*tables[:3], (("나:", "t3 a"), ("김:", "b c d"))]
+    # Fourth table: no crop (cap of 3) -> order-sensitive.
+    draft, client = _run(doc, _stem(reordered), _Renderer())
+    assert len(client.calls[0].images) == 3
+    assert "llm_text_rejected" in _codes(draft)
+    # Third table reordered: its crop was sent -> accepted.
+    moved = [*tables[:2], (("나:", "t2 a"), ("김:", "b c d")), tables[3]]
+    draft, _ = _run(doc, _stem(moved), _Renderer())
+    assert "llm_text_rejected" not in _codes(draft)
+
+
+def test_a_table_whose_render_failed_stays_order_sensitive() -> None:
+    def failing(page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        raise RuntimeError("PRIVATE")
+
+    draft = _dialogue(DIALOGUE_FIXED, failing)  # type: ignore[arg-type]
+    assert "llm_text_rejected" in _codes(draft)

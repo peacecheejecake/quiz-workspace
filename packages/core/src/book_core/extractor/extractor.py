@@ -229,7 +229,7 @@ class QuestionExtractor:
         # order never depends on completion order.
         refinable = [i for i, c in enumerate(candidates) if c.stem] if self._llm is not None else []
         results: dict[int, tuple[_Candidate, bool, LLMCallInfo | None]] = {}
-        images: dict[int, tuple[LLMImage, ...]] = {}
+        images: dict[int, _Crops] = {}
         done = 0
         for _ in range(total - len(refinable)):  # no LLM call needed: done at once
             done += 1
@@ -251,14 +251,20 @@ class QuestionExtractor:
                 first = refinable[0]
                 futures = {
                     pool.submit(
-                        _refine, llm, candidates[first], contexts[first], images.get(first, ())
+                        _refine,
+                        llm,
+                        candidates[first],
+                        contexts[first],
+                        images.get(first, _NO_CROPS),
                     ): first
                 }
                 if concurrency > 1:
                     wait(futures)
                 for i in refinable[1:]:
                     futures[
-                        pool.submit(_refine, llm, candidates[i], contexts[i], images.get(i, ()))
+                        pool.submit(
+                            _refine, llm, candidates[i], contexts[i], images.get(i, _NO_CROPS)
+                        )
                     ] = i
                 for future in as_completed(futures):
                     results[futures[future]] = future.result()
@@ -683,13 +689,24 @@ def _request_lines(ctx: _Context) -> tuple[list[str], list[str]]:
     return _source_lines(ctx.raw, ctx.figures), sorted({e.line.text for e in ctx.entries})
 
 
+@dataclass(frozen=True, slots=True)
+class _Crops:
+    images: tuple[LLMImage, ...] = ()
+    tables: frozenset[int] = frozenset()
+    """Indices (in ``stem_tables``) of the tables whose printed regions are all in ``images``."""
+
+
+_NO_CROPS = _Crops()
+
+
 def _region_images(
     raw: RawQuestion,
     render: PageRegionRenderer,
     stop_on: tuple[type[BaseException], ...] = (),
-) -> tuple[LLMImage, ...]:
+) -> _Crops:
     """PNG crops of the printed tables and figures whose text the model reads: one per page of
-    a block, in print order, at most ``MAX_QUESTION_IMAGES``. A failed render is skipped."""
+    a block, in print order, at most ``MAX_QUESTION_IMAGES``. A failed render is skipped. The
+    result also lists the stem tables whose every page region was sent."""
     blocks: dict[str, tuple[int, Block]] = {}
     for line in raw.stem_lines:
         block = line.block
@@ -702,9 +719,12 @@ def _region_images(
         if figure.image is not None:
             blocks.setdefault(figure.image.id, (max(raw.block_indices, default=0), figure.image))
     images: list[LLMImage] = []
+    imaged: set[int] = set()
     for _, block in sorted(blocks.values(), key=lambda item: item[0]):
+        complete = True
         for location in union_locations([block]):
             if location.bbox is None or len(images) >= MAX_QUESTION_IMAGES:
+                complete = False
                 continue
             box = location.bbox
             padded = BBox(
@@ -720,20 +740,25 @@ def _region_images(
                     raise
                 # Only the type: nothing about the page content.
                 logger.warning("page region render failed: %s", type(exc).__name__)
+                complete = False
                 continue
-            if png:
-                images.append(
-                    LLMImage(media_type="image/png", data=base64.b64encode(png).decode("ascii"))
-                )
-    return tuple(images)
+            if not png:
+                complete = False
+                continue
+            images.append(
+                LLMImage(media_type="image/png", data=base64.b64encode(png).decode("ascii"))
+            )
+        if complete:
+            imaged.update(n for n, t in enumerate(raw.stem_tables) if t is block.table)
+    return _Crops(tuple(images), frozenset(imaged))
 
 
 def _refine(
-    llm: LLMClient, pre: _Candidate, ctx: _Context, images: Sequence[LLMImage] = ()
+    llm: LLMClient, pre: _Candidate, ctx: _Context, crops: _Crops = _NO_CROPS
 ) -> tuple[_Candidate, bool, LLMCallInfo | None]:
     source, key_lines = _request_lines(ctx)
     entries = ctx.entries
-    request = build_request(source, key_lines, images)
+    request = build_request(source, key_lines, crops.images)
     try:
         result = llm.complete(request, LLMQuestion)
     except LLMOutputError as exc:
@@ -752,7 +777,7 @@ def _refine(
             )
         )
         return pre, False, None
-    merged = _merge(pre, result.output, entries, bool(images))
+    merged = _merge(pre, result.output, entries, crops.tables)
     merged.generator = GeneratorInfo(model=result.info.model, prompt_version=request.prompt_version)
     return merged, True, result.info
 
@@ -761,10 +786,10 @@ def _merge(
     pre: _Candidate,
     proposal: LLMQuestion,
     entries: Sequence[AnswerKeyEntry],
-    with_images: bool = False,
+    imaged: frozenset[int] = frozenset(),
 ) -> _Candidate:
     issues = list(pre.issues)
-    stem, options, text_issues, tables = _verified_text(pre, proposal, with_images)
+    stem, options, text_issues, tables = _verified_text(pre, proposal, imaged)
     issues += text_issues
 
     question_type = QuestionType(proposal.question_type)
@@ -824,7 +849,7 @@ def _merge(
 
 
 def _verified_text(
-    pre: _Candidate, proposal: LLMQuestion, with_images: bool = False
+    pre: _Candidate, proposal: LLMQuestion, imaged: frozenset[int] = frozenset()
 ) -> tuple[str, list[tuple[str, str]], list[ValidationIssue], tuple[TableContent, ...] | None]:
     """Stem and options from the LLM only where they match the printed spans.
 
@@ -840,7 +865,7 @@ def _verified_text(
     keys = [canonical_key(o.label) for o in proposal.options]
     keys_ok = all(keys) and len(set(keys)) == len(keys)
     llm_stem, corrected_stem, corrected_tables = _resolve_tables(
-        proposal.stem.strip(), pre.stem_tables, by_tokens=with_images
+        proposal.stem.strip(), pre.stem_tables, imaged=imaged
     )
 
     if not pre.options and proposal.options:
@@ -939,14 +964,14 @@ def _rebuilt_table(old: TableContent, rows: Sequence[Sequence[str]]) -> TableCon
 
 
 def _resolve_tables(
-    stem: str, tables: Sequence[TableContent], *, by_tokens: bool = False
+    stem: str, tables: Sequence[TableContent], *, imaged: frozenset[int] = frozenset()
 ) -> tuple[str, str, tuple[TableContent, ...] | None]:
     """``(restored, corrected, tables)`` for the model's ``stem``.
 
     ``restored``: each pipe table the model copied (merged cells printed once) or re-celled is
     swapped for the stem's own table (merged text repeated, as the structured cells expect), so
     the text checks compare against the print. ``corrected``: the same stem where a table with the
-    printed text in the same order (any order of its tokens when the request carried images, as
+    printed text in the same order (any order of its tokens when the table's crop was sent, as
     a layout model can read a box's lines in the wrong order) but other cell boundaries (the
     model put a text in the right cell using the image) keeps the model's cells, and
     ``tables`` are the cells of every table in it; ``None`` when nothing was corrected. A table
@@ -969,7 +994,7 @@ def _resolve_tables(
                 restored[pos] = corrected[pos] = own
                 swapped = True
         elif _letters(pipe_table_rows(text)) == _letters(table.rows_once()) or (
-            by_tokens and _tokens(pipe_table_rows(text)) == _tokens(table.rows_once())
+            n in imaged and _tokens(pipe_table_rows(text)) == _tokens(table.rows_once())
         ):
             rebuilt = _rebuilt_table(table, pipe_table_rows(text))
             restored[pos], corrected[pos], cells[n] = own, gfm_table(rebuilt), rebuilt
