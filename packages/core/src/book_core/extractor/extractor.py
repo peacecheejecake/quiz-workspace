@@ -230,9 +230,6 @@ class QuestionExtractor:
         refinable = [i for i, c in enumerate(candidates) if c.stem] if self._llm is not None else []
         results: dict[int, tuple[_Candidate, bool, LLMCallInfo | None]] = {}
         images: dict[int, tuple[LLMImage, ...]] = {}
-        if region_renderer is not None:
-            for i in refinable:
-                images[i] = _region_images(contexts[i].raw, region_renderer)
         done = 0
         for _ in range(total - len(refinable)):  # no LLM call needed: done at once
             done += 1
@@ -247,6 +244,9 @@ class QuestionExtractor:
             )
             futures: dict[Future[tuple[_Candidate, bool, LLMCallInfo | None]], int] = {}
             try:
+                if region_renderer is not None:
+                    for i in refinable:
+                        images[i] = _region_images(contexts[i].raw, region_renderer, stop_on)
                 # The first call goes alone so the others can read the prompt cache it writes.
                 first = refinable[0]
                 futures = {
@@ -683,7 +683,11 @@ def _request_lines(ctx: _Context) -> tuple[list[str], list[str]]:
     return _source_lines(ctx.raw, ctx.figures), sorted({e.line.text for e in ctx.entries})
 
 
-def _region_images(raw: RawQuestion, render: PageRegionRenderer) -> tuple[LLMImage, ...]:
+def _region_images(
+    raw: RawQuestion,
+    render: PageRegionRenderer,
+    stop_on: tuple[type[BaseException], ...] = (),
+) -> tuple[LLMImage, ...]:
     """PNG crops of the printed tables and figures whose text the model reads: one per page of
     a block, in print order, at most ``MAX_QUESTION_IMAGES``. A failed render is skipped."""
     blocks: dict[str, tuple[int, Block]] = {}
@@ -712,6 +716,8 @@ def _region_images(raw: RawQuestion, render: PageRegionRenderer) -> tuple[LLMIma
             try:
                 png = render(location.page, padded, max_edge=MAX_IMAGE_EDGE)
             except Exception as exc:
+                if stop_on and isinstance(exc, stop_on):
+                    raise
                 # Only the type: nothing about the page content.
                 logger.warning("page region render failed: %s", type(exc).__name__)
                 continue
@@ -746,7 +752,7 @@ def _refine(
             )
         )
         return pre, False, None
-    merged = _merge(pre, result.output, entries)
+    merged = _merge(pre, result.output, entries, bool(images))
     merged.generator = GeneratorInfo(model=result.info.model, prompt_version=request.prompt_version)
     return merged, True, result.info
 
@@ -755,9 +761,10 @@ def _merge(
     pre: _Candidate,
     proposal: LLMQuestion,
     entries: Sequence[AnswerKeyEntry],
+    with_images: bool = False,
 ) -> _Candidate:
     issues = list(pre.issues)
-    stem, options, text_issues, tables = _verified_text(pre, proposal)
+    stem, options, text_issues, tables = _verified_text(pre, proposal, with_images)
     issues += text_issues
 
     question_type = QuestionType(proposal.question_type)
@@ -817,7 +824,7 @@ def _merge(
 
 
 def _verified_text(
-    pre: _Candidate, proposal: LLMQuestion
+    pre: _Candidate, proposal: LLMQuestion, with_images: bool = False
 ) -> tuple[str, list[tuple[str, str]], list[ValidationIssue], tuple[TableContent, ...] | None]:
     """Stem and options from the LLM only where they match the printed spans.
 
@@ -833,7 +840,7 @@ def _verified_text(
     keys = [canonical_key(o.label) for o in proposal.options]
     keys_ok = all(keys) and len(set(keys)) == len(keys)
     llm_stem, corrected_stem, corrected_tables = _resolve_tables(
-        proposal.stem.strip(), pre.stem_tables
+        proposal.stem.strip(), pre.stem_tables, by_tokens=with_images
     )
 
     if not pre.options and proposal.options:
@@ -907,6 +914,11 @@ def _letters(rows: Sequence[Sequence[str]]) -> str:
     return loose_text("".join("".join(row) for row in rows))
 
 
+def _tokens(rows: Sequence[Sequence[str]]) -> Counter[str]:
+    """The whitespace-separated tokens of a table: order, cells and pipes do not matter."""
+    return Counter(tok for row in rows for cell in row for tok in cell.split())
+
+
 def _rebuilt_table(old: TableContent, rows: Sequence[Sequence[str]]) -> TableContent:
     """The model's cells as a table. A merged cell of ``old`` stays when it still fits (its
     start cell has text and the cells it covers are empty); its text is repeated again."""
@@ -927,15 +939,16 @@ def _rebuilt_table(old: TableContent, rows: Sequence[Sequence[str]]) -> TableCon
 
 
 def _resolve_tables(
-    stem: str, tables: Sequence[TableContent]
+    stem: str, tables: Sequence[TableContent], *, by_tokens: bool = False
 ) -> tuple[str, str, tuple[TableContent, ...] | None]:
     """``(restored, corrected, tables)`` for the model's ``stem``.
 
     ``restored``: each pipe table the model copied (merged cells printed once) or re-celled is
     swapped for the stem's own table (merged text repeated, as the structured cells expect), so
     the text checks compare against the print. ``corrected``: the same stem where a table with the
-    printed text in the same order but other cell boundaries (the model put a text in the right
-    cell using the image) keeps the model's cells, and ``tables`` are the cells of every table
+    printed text in the same order (any order of its tokens when the request carried images, as
+    a layout model can read a box's lines in the wrong order) but other cell boundaries (the
+    model put a text in the right cell using the image) keeps the model's cells, and ``tables`` are the cells of every table
     in it; ``None`` when nothing was corrected. A table with other text is left as the model
     wrote it, so the printed-text check rejects the stem.
     """
@@ -955,7 +968,9 @@ def _resolve_tables(
             if table.spans:
                 restored[pos] = corrected[pos] = own
                 swapped = True
-        elif _letters(pipe_table_rows(text)) == _letters(table.rows_once()):
+        elif _letters(pipe_table_rows(text)) == _letters(table.rows_once()) or (
+            by_tokens and _tokens(pipe_table_rows(text)) == _tokens(table.rows_once())
+        ):
             rebuilt = _rebuilt_table(table, pipe_table_rows(text))
             restored[pos], corrected[pos], cells[n] = own, gfm_table(rebuilt), rebuilt
             changed = swapped = True

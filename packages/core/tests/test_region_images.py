@@ -183,3 +183,58 @@ def test_reordered_text_is_rejected_even_with_the_same_letters() -> None:
     swapped = (("구분", "가", "나"), ("재산", "갑", ""), ("을", "부채", "x"))
     draft, _ = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(swapped)}")
     assert "llm_text_rejected" in _codes(draft)
+
+
+DIALOGUE = (
+    ("나팀원:", "신고대상 있나요? 주로 ISA 내"),
+    ("김팀장:", "개별주식은 신고대상이 아니야."),
+)
+DIALOGUE_FIXED = (
+    ("나팀원:", "신고대상 있나요?"),
+    ("김팀장:", "주로 ISA 내 개별주식은 신고대상이 아니야."),
+)
+
+
+def _dialogue(model: tuple[tuple[str, ...], ...], renderer: _Renderer | None) -> QuestionDraft:
+    doc = _doc("1. 대화를 보고 답하시오.", TableContent(rows=DIALOGUE), *OPTIONS)
+    return _run(doc, f"대화를 보고 답하시오.\n\n{_gfm(model)}", renderer)[0]
+
+
+def test_with_images_a_table_with_the_same_tokens_in_another_order_is_accepted() -> None:
+    draft = _dialogue(DIALOGUE_FIXED, _Renderer())
+    assert "llm_text_rejected" not in _codes(draft)
+    assert draft.stem_tables is not None
+    assert draft.stem_tables[0] is not None
+    assert draft.stem_tables[0].rows == DIALOGUE_FIXED
+
+
+def test_without_images_the_token_order_still_has_to_match() -> None:
+    assert "llm_text_rejected" in _codes(_dialogue(DIALOGUE_FIXED, None))
+
+
+def test_with_images_a_changed_added_or_dropped_token_is_rejected() -> None:
+    changed = (DIALOGUE_FIXED[0], ("김팀장:", "주로 ISA 내 개별주식은 신고대상이 아냐."))
+    dropped = (DIALOGUE_FIXED[0], ("김팀장:", "ISA 내 개별주식은 신고대상이 아니야."))
+    added = (DIALOGUE_FIXED[0], ("김팀장:", "주로 주로 ISA 내 개별주식은 신고대상이 아니야."))
+    for model in (changed, dropped, added):
+        draft = _dialogue(model, _Renderer())
+        assert "llm_text_rejected" in _codes(draft)
+        assert _gfm(DIALOGUE) in draft.stem
+
+
+class _SoftLimit(Exception):  # noqa: N818
+    pass
+
+
+def test_a_stop_on_exception_while_rendering_keeps_the_rule_based_draft() -> None:
+    def limit(page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        raise _SoftLimit
+
+    client = _client(f"표를 보고 답하시오.\n\n{_gfm(PRINTED)}")
+    extraction = QuestionExtractor(client).extract(
+        _doc(*TABLE_DOC), document_id="t", region_renderer=limit, stop_on=(_SoftLimit,)
+    )
+    (draft,) = extraction.drafts
+    assert extraction.refinement_incomplete
+    assert client.calls == []
+    assert "llm_unavailable" in _codes(draft)
