@@ -11,6 +11,7 @@ request bodies, i.e. question/book text, at DEBUG.
 - Thinking is left at the model default (never sent as disabled); ``effort`` is optional.
 - Retries: connection errors, timeouts, 408/409/429/5xx and ``x-should-retry: true``, with
   exponential backoff (0.5 s doubling, max 8 s, jitter) or the server's ``retry-after(-ms)``.
+- Images (printed book regions) go out as base64 image blocks and are never logged.
 - Logs carry metadata only (task, prompt version, model, fingerprint, tokens, latency, status);
   errors carry status, error type and request id, never prompt, output or error-body text.
 """
@@ -207,6 +208,21 @@ class AnthropicLLMClient:
 
     # --------------------------------------------------------------------------------------
 
+    @staticmethod
+    def _user_content(request: LLMRequest) -> str | list[dict[str, Any]]:
+        """The prompt text; with images, image blocks first and the text block after them."""
+        if not request.images:
+            return request.prompt
+        blocks: list[dict[str, Any]] = [
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": i.media_type, "data": i.data},
+            }
+            for i in request.images
+        ]
+        blocks.append({"type": "text", "text": request.prompt})
+        return blocks
+
     def _payload(self, request: LLMRequest, schema: type[BaseModel]) -> dict[str, Any]:
         output_config: dict[str, Any] = {
             "format": {"type": "json_schema", "schema": strict_json_schema(schema)}
@@ -216,7 +232,7 @@ class AnthropicLLMClient:
         payload: dict[str, Any] = {
             "model": self._config.model,
             "max_tokens": self._config.max_tokens,
-            "messages": [{"role": "user", "content": request.prompt}],
+            "messages": [{"role": "user", "content": self._user_content(request)}],
             "output_config": output_config,
         }
         if request.system is not None:

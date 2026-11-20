@@ -13,10 +13,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from book_core.llm import LLMRequest
+from book_core.llm import LLMImage, LLMRequest
 
 EXTRACT_TASK = "questions.extract"
-EXTRACT_PROMPT_VERSION = "questions.extract/v6"
+EXTRACT_PROMPT_VERSION = "questions.extract/v7"
 
 SYSTEM_PROMPT = """\
 You convert one printed exam question into structured data for a question bank.
@@ -43,6 +43,14 @@ Rules:
   next line of the question) are the text printed inside the figure (labels of a diagram, a
   family tree, ...). Keep those lines in the stem verbatim, one per line, after the sentence that
   refers to the figure. Never copy the "[그림]" marker itself and never describe the figure.
+- Images: when images come with the question, they show the printed table or figure of that
+  question (in the order they appear in the question). The text lines are read from the PDF by
+  a layout model and can put a word in the wrong table cell or row, or list the lines of a
+  figure in the wrong order. Use an image only to decide which cell / row a printed text
+  belongs to and in which order the lines of a figure are printed. Never add text that is not in
+  the printed lines, never drop any, and keep the table as "|" rows (header row, "| --- |" row,
+  one row per line) with the same cell count in every row; a merged cell is printed once.
+  Without an image, copy the lines as given.
 - Do not include the question number in the stem or the option labels in option texts.
 - question_type: MCQ when the question has options; ESSAY when it asks for a written
   explanation (e.g. 서술하시오, 설명하시오, explain, describe); otherwise SHORT_ANSWER.
@@ -72,7 +80,7 @@ class LLMAnswer(BaseModel):
 
 
 class LLMQuestion(BaseModel):
-    """Structured output schema of ``questions.extract/v6``."""
+    """Structured output schema of ``questions.extract/v7``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -83,7 +91,11 @@ class LLMQuestion(BaseModel):
     answer: LLMAnswer | None
 
 
-def build_request(question_lines: Sequence[str], answer_key_lines: Sequence[str]) -> LLMRequest:
+def build_request(
+    question_lines: Sequence[str],
+    answer_key_lines: Sequence[str],
+    images: Sequence[LLMImage] = (),
+) -> LLMRequest:
     """The request for one question. Deterministic: the same source gives the same fingerprint."""
     key = "\n".join(answer_key_lines) if answer_key_lines else "(none)"
     prompt = (
@@ -97,4 +109,5 @@ def build_request(question_lines: Sequence[str], answer_key_lines: Sequence[str]
         prompt_version=EXTRACT_PROMPT_VERSION,
         system=SYSTEM_PROMPT,
         prompt=prompt,
+        images=tuple(images),
     )
