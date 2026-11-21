@@ -134,6 +134,15 @@ class TableContent(CoreModel):
             del dumped["spans"]
         return dumped
 
+    def rows_once(self) -> tuple[tuple[str, ...], ...]:
+        """The rows with each merged cell's text only at its start and the cells it covers
+        empty: the grid keeps its shape, so the text is printed once (``a | b | c`` lines)."""
+        hidden = {cell for span in self.spans or () for cell in tuple(span.cells())[1:]}
+        return tuple(
+            tuple("" if (r, c) in hidden else text for c, text in enumerate(row))
+            for r, row in enumerate(self.rows)
+        )
+
     def row_cells(self) -> tuple[tuple[str, ...], ...]:
         """The rows with each merged cell's text only at its start: the cells a span hides are
         left out, so a row can have fewer cells or none."""
@@ -148,8 +157,11 @@ class Block(CoreModel):
     """One content block in reading order, with provenance to the original PDF.
 
     ``text`` may be empty for blocks without extractable text (e.g. an image without caption).
+    An image block's ``text`` is the printed text the parser found inside the picture (lines
+    joined with ``\n``, reading order), empty when there is none.
     A block can span pages, hence one or more ``locations``. Table blocks hold their rows as
-    ``a | b | c`` lines in ``text`` and the cells in ``table``. ``heading_level`` is the level the
+    ``a | b | c`` lines in ``text`` (a merged cell's text once, at its start; the cells it
+    covers are empty) and the cells in ``table``. ``heading_level`` is the level the
     parser detected for a heading (1 = top); it is a hint, the section tree lives in
     ``sections``. ``caption_block_id`` links an image or table to its caption block.
 

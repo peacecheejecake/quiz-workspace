@@ -109,6 +109,16 @@ def test_a_table_edit_drops_spans_and_an_unchanged_save_keeps_them() -> None:
     assert "spans" not in block_attributes(edited)["table"]
 
 
+def test_saving_the_printed_once_text_of_a_legacy_table_block_is_a_no_op() -> None:
+    table = TableContent(
+        rows=(("a", "a"), ("c", "d")),
+        header_rows=1,
+        spans=(TableSpan(row=0, col=0, col_span=2),),
+    )
+    block = _block(BlockType.TABLE, "a | a\nc | d", table=table)
+    assert edit_block(block, "a |\nc | d", source_sha256=SHA) is None
+
+
 def test_refusals_never_quote_the_text() -> None:
     book_text = "책 본문 일부"
     table = _block(BlockType.TABLE, "a | b", table=TableContent(rows=(("a", "b"),)))

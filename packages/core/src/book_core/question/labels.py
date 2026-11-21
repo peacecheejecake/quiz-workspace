@@ -158,6 +158,17 @@ def split_pipe_blocks(text: str) -> list[tuple[bool, str]]:
     return segments
 
 
+def pipe_table_rows(block: str) -> list[list[str]]:
+    """The cell texts of a pipe table segment (from ``split_pipe_blocks``) without its
+    delimiter row; ``<br>`` becomes a line break and cell escapes are undone."""
+    rows = [_pipe_cells(line) for line in block.split("\n")]
+    return [
+        [re.sub(r"\\(.)", r"\1", cell.replace("<br>", "\n")) for cell in row]
+        for i, row in enumerate(rows)
+        if row is not None and i != 1
+    ]
+
+
 def has_pipe_table(text: str) -> bool:
     return any(is_table for is_table, _ in split_pipe_blocks(text))
 

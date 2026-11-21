@@ -42,7 +42,8 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,7 +54,12 @@ from book_core.contracts import (
     QuestionType,
     SourceEvidence,
 )
-from book_core.extractor import EXTRACT_PROMPT_VERSION, ExtractedQuestion, QuestionExtractor
+from book_core.extractor import (
+    EXTRACT_PROMPT_VERSION,
+    ExtractedQuestion,
+    PageRegionRenderer,
+    QuestionExtractor,
+)
 from book_core.llm import LLMClient
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -61,11 +67,13 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from quiz_worker.adapters import WorkerNotConfiguredError
 from quiz_worker.document_store import (
     DocumentDeletedError,
+    DocumentRow,
     DocumentStore,
     PostgresDocumentStore,
     WorkspaceUnavailableError,
 )
 from quiz_worker.errors import JobCancelledError, NonRetryableJobError, is_retryable
+from quiz_worker.pdf_regions import open_pdf_regions
 from quiz_worker.question_import_store import (
     JOB_TYPE,
     DraftRow,
@@ -77,7 +85,13 @@ from quiz_worker.question_import_store import (
 from quiz_worker.retry import RetryPolicy
 from quiz_worker.runner import JobContext, JobDefinition, JobResult, TerminalReason
 from quiz_worker.settings import WorkerSettings
-from quiz_worker.storage import PARSED_BUCKET, ObjectMissingError, ObjectStorage, SupabaseStorage
+from quiz_worker.storage import (
+    PARSED_BUCKET,
+    SOURCE_BUCKET,
+    ObjectMissingError,
+    ObjectStorage,
+    SupabaseStorage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +135,9 @@ class ImportJobDeps:
     inject_failures: bool = False
     lock_wait_seconds: float = 60
     llm_concurrency: int = 1
+    source_max_bytes: int = 50 * 1024 * 1024
+    """Largest source PDF downloaded to crop tables / figures for the model (FIGTBL-2)."""
+    open_regions: Callable[[Path], AbstractContextManager[PageRegionRenderer]] = open_pdf_regions
 
 
 # --------------------------------------------------------------------------------------------
@@ -215,20 +232,22 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
 
     deps.imports.mark_running(run.id, ctx.job_id)
     progress("loading", 10)
-    source, canonical = _load_source(deps, ctx, run)
+    source, canonical, document = _load_source(deps, ctx, run)
     ctx.check_cancelled()
 
     progress("extracting", EXTRACT_START_PERCENT)
-    extraction = QuestionExtractor(deps.llm).extract(
-        source,
-        document_id=str(run.document_id),
-        revision_id=str(run.revision_id),
-        progress=_ExtractionProgress(progress),
-        concurrency=deps.llm_concurrency,
-        # Soft time limit while refining: save the drafts with what is refined so far
-        # (the hard limit still kills a stuck job).
-        stop_on=(SoftTimeLimitExceeded,),
-    )
+    with _region_renderer(deps, document) as renderer:
+        extraction = QuestionExtractor(deps.llm).extract(
+            source,
+            document_id=str(run.document_id),
+            revision_id=str(run.revision_id),
+            progress=_ExtractionProgress(progress),
+            concurrency=deps.llm_concurrency,
+            # Soft time limit while refining: save the drafts with what is refined so far
+            # (the hard limit still kills a stuck job).
+            stop_on=(SoftTimeLimitExceeded,),
+            region_renderer=renderer,
+        )
     if extraction.refinement_incomplete:
         logger.warning("question refinement incomplete: saving the rule-based remainder")
     drafts = [
@@ -269,9 +288,9 @@ def _pipeline(deps: ImportJobDeps, ctx: JobContext, payload: QuestionImportPaylo
 
 def _load_source(
     deps: ImportJobDeps, ctx: JobContext, run: RunRow
-) -> tuple[ParsedDocument | DocumentRevision, Mapping[str, str] | None]:
+) -> tuple[ParsedDocument | DocumentRevision, Mapping[str, str] | None, DocumentRow]:
     """The parser's `ParsedDocument` of the pinned revision (+ parser id -> canonical block id),
-    or the revision's canonical DB content when it has no artifact of its own."""
+    or the revision's canonical DB content when it has no artifact of its own, and the document."""
     assert run.document_id is not None  # noqa: S101 - checked by the caller
     assert run.revision_id is not None  # noqa: S101 - checked by the caller
     found = deps.documents.load(ctx.workspace_id, run.document_id, run.revision_id)
@@ -286,8 +305,41 @@ def _load_source(
     if revision.parsed_object_key:
         parsed = _download_parsed(deps.storage, revision.parsed_object_key)
         if parsed is not None:
-            return parsed, canonical_ids(content)
-    return content, None
+            return parsed, canonical_ids(content), document
+    return content, None, document
+
+
+@contextmanager
+def _region_renderer(
+    deps: ImportJobDeps, document: DocumentRow
+) -> Iterator[PageRegionRenderer | None]:
+    """A renderer over the document's source PDF while the LLM refines (its tables and figures
+    go to the model as images), else ``None``. A missing, oversized or unreadable PDF means no
+    images: only the reason is logged, never content or object keys."""
+    if deps.llm is None:
+        yield None
+        return
+    with tempfile.TemporaryDirectory(prefix="quiz-import-src-") as tmp, ExitStack() as stack:
+        yield _open_regions(deps, document, Path(tmp) / "source.pdf", stack)
+
+
+def _open_regions(
+    deps: ImportJobDeps, document: DocumentRow, path: Path, stack: ExitStack
+) -> PageRegionRenderer | None:
+    try:
+        deps.storage.download(
+            SOURCE_BUCKET,
+            document.source_object_key,
+            path,
+            max_bytes=min(deps.source_max_bytes, document.size_bytes),
+        )
+        return stack.enter_context(deps.open_regions(path))
+    except (JobCancelledError, SoftTimeLimitExceeded):
+        raise
+    except Exception as exc:
+        reason = exc.code if isinstance(exc, NonRetryableJobError) else type(exc).__name__
+        logger.warning("question images skipped: %s", reason)
+        return None
 
 
 def _download_parsed(storage: ObjectStorage, key: str) -> ParsedDocument | None:
@@ -440,6 +492,7 @@ def deps_from_settings(settings: WorkerSettings) -> ImportJobDeps:
         inject_failures=settings.is_test,
         lock_wait_seconds=settings.document_lock_wait_seconds,
         llm_concurrency=settings.question_import_llm_concurrency,
+        source_max_bytes=settings.pdf_max_bytes,
     )
 
 

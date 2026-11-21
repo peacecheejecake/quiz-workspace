@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import random
@@ -16,6 +17,7 @@ from book_core.llm import (
     LLMClient,
     LLMConfig,
     LLMConfigError,
+    LLMImage,
     LLMOutputError,
     LLMPricing,
     LLMProviderError,
@@ -447,3 +449,43 @@ def test_usage_adds_up() -> None:
         input_tokens=3, output_tokens=4, cost_usd=0.5
     )
     assert total == LLMUsage(input_tokens=4, output_tokens=6, cost_usd=0.5)
+
+
+def test_images_go_first_in_the_user_message_and_are_never_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    image = LLMImage(media_type="image/png", data="SU1BR0VCWVRFUw==")
+    request = REQUEST.model_copy(update={"images": (image, image)})
+    client, seen, _ = _client(_ok())
+    with caplog.at_level(logging.DEBUG):
+        client.complete(request, _Out)
+    body = json.loads(seen[0].content)
+    block = {
+        "type": "image",
+        "source": {"type": "base64", "media_type": "image/png", "data": image.data},
+    }
+    assert body["messages"] == [
+        {"role": "user", "content": [block, block, {"type": "text", "text": REQUEST.prompt}]}
+    ]
+    assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert image.data not in caplog.text
+    assert image.data not in repr(request)
+
+
+def test_fingerprint_is_unchanged_without_images_and_differs_with_them() -> None:
+    image = LLMImage(media_type="image/png", data="QQ==")
+    assert REQUEST.fingerprint() == REQUEST.model_copy(update={"images": ()}).fingerprint()
+    assert REQUEST.fingerprint() != REQUEST.model_copy(update={"images": (image,)}).fingerprint()
+    legacy = hashlib.sha256(
+        json.dumps(
+            {
+                "task": REQUEST.task,
+                "prompt_version": REQUEST.prompt_version,
+                "prompt": REQUEST.prompt,
+                "system": REQUEST.system,
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    assert REQUEST.fingerprint() == legacy

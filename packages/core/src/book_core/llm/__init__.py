@@ -10,6 +10,7 @@ not imported here so installs without the extra never import the SDK.
 from book_core.llm.base import (
     LLMCallInfo,
     LLMClient,
+    LLMImage,
     LLMOutputError,
     LLMProviderError,
     LLMRequest,
@@ -47,6 +48,7 @@ __all__ = [
     "LLMClient",
     "LLMConfig",
     "LLMConfigError",
+    "LLMImage",
     "LLMOutputError",
     "LLMPricing",
     "LLMProvider",
