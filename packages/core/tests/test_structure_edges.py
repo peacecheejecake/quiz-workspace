@@ -780,3 +780,54 @@ def test_sentences_starting_with_a_chapter_label_do_not_open_chapters(sentence: 
     block = next(b for b in result.revision.blocks if b.text == sentence)
     assert block.type is BlockType.TEXT
     assert sections[block.section_id or ""] == "Chapter 1 Introduction"
+
+
+def test_figure_text_is_indexed_as_text_and_a_merged_table_edit_keeps_its_spans() -> None:
+    from book_core.chunker import chunk_revision
+    from book_core.contracts import TableSpan
+    from book_core.structure import apply_edits, publish
+
+    merged = TableContent(
+        rows=(("Head", "Head"), ("a", "b")),
+        header_rows=1,
+        spans=(TableSpan(row=0, col=0, col_span=2),),
+    )
+    result = _manual(
+        [
+            B(BlockType.HEADING, "1장 계통도", 1, heading_level=1),
+            B(BlockType.IMAGE, "Root node\nLeaf node", 1),
+            B(BlockType.TABLE, "Head | \na | b", 1, table=merged),
+        ]
+    )
+    revision = publish(result.revision)
+    image = next(b for b in revision.blocks if b.type is BlockType.IMAGE)
+    assert image.text == "Root node\nLeaf node"
+    chunks = chunk_revision(revision).children
+    assert any("Root node" in c.content and "Leaf node" in c.content for c in chunks)
+
+    table = next(b for b in revision.blocks if b.type is BlockType.TABLE)
+    assert table.text == "Head |\na | b"
+    # The same text back (a no-op edit) keeps the cells and merges as they were.
+    assert apply_edits(revision, {table.id: table.text}, revision_id="r2").blocks == revision.blocks
+    changed = apply_edits(revision, {table.id: "Head | \na | c"}, revision_id="r3")
+    assert next(b for b in changed.blocks if b.id == table.id).table.rows[1] == ("a", "c")  # type: ignore[union-attr]
+
+
+def test_saving_unchanged_text_of_a_single_column_merged_table_keeps_the_rows() -> None:
+    from book_core.contracts import TableSpan
+    from book_core.structure import apply_edits, publish
+
+    table = TableContent(
+        rows=(("Head",), ("Head",), ("end",)), spans=(TableSpan(row=0, col=0, row_span=2),)
+    )
+    revision = publish(
+        _manual(
+            [
+                B(BlockType.HEADING, "1장 표", 1, heading_level=1),
+                B(BlockType.TABLE, "Head\n\nend", 1, table=table),
+            ]
+        ).revision
+    )
+    block = next(b for b in revision.blocks if b.type is BlockType.TABLE)
+    same = apply_edits(revision, {block.id: block.text}, revision_id="r2")
+    assert next(b for b in same.blocks if b.id == block.id).table == table

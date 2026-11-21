@@ -1,0 +1,273 @@
+"""FIGTBL-2: printed table / figure crops go with the refine request; corrected cells survive."""
+
+from __future__ import annotations
+
+import base64
+
+from book_core.contracts import (
+    BBox,
+    Block,
+    BlockType,
+    PageInfo,
+    ParsedDocument,
+    QuestionDraft,
+    SourceLocation,
+    TableContent,
+    TableSpan,
+)
+from book_core.extractor import MAX_IMAGE_EDGE, LLMOption, LLMQuestion, QuestionExtractor
+from book_core.llm import FakeLLMClient
+
+OPTIONS = ("① 응집", "② 침전")
+PRINTED = (("구분", "가", "나"), ("갑", "재산", ""), ("을", "부채", "x"))
+MERGED = TableContent(
+    rows=(("Kim", "Kim", "Kim"), ("a", "b", "c")),
+    spans=(TableSpan(row=0, col=0, col_span=3),),
+)
+
+
+def _gfm(rows: tuple[tuple[str, ...], ...]) -> str:
+    lines = ["| " + " | ".join(rows[0]) + " |", "|" + " --- |" * len(rows[0])]
+    return "\n".join(lines + ["| " + " | ".join(r) + " |" for r in rows[1:]])
+
+
+def _doc(*items: str | TableContent | tuple[str, str]) -> ParsedDocument:
+    blocks = []
+    for i, item in enumerate(items):
+        where = (SourceLocation(page=2, bbox=BBox(x0=60, y0=40 + 20 * i, x1=500, y1=55 + 20 * i)),)
+        if isinstance(item, str):
+            blocks.append(Block(id=f"b{i}", type=BlockType.TEXT, text=item, locations=where))
+        elif isinstance(item, TableContent):
+            text = "\n".join(" | ".join(r) for r in item.rows_once())
+            blocks.append(
+                Block(id=f"b{i}", type=BlockType.TABLE, text=text, locations=where, table=item)
+            )
+        else:
+            blocks.append(Block(id=f"b{i}", type=BlockType.IMAGE, text=item[1], locations=where))
+    return ParsedDocument(
+        source_path="t.pdf",
+        source_sha256="6" * 64,
+        parser_version="test",
+        pages=(PageInfo(page=2, width=595.0, height=842.0),),
+        blocks=tuple(blocks),
+    )
+
+
+class _Renderer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, BBox, int]] = []
+
+    def __call__(self, page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        self.calls.append((page, bbox, max_edge))
+        return b"PNG" + bytes([len(self.calls)])
+
+
+def _client(stem: str) -> FakeLLMClient:
+    client = FakeLLMClient()
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="MCQ",
+            multi_select=False,
+            stem=stem,
+            options=[LLMOption(label="①", text="응집"), LLMOption(label="②", text="침전")],
+            answer=None,
+        ),
+    )
+    return client
+
+
+def _run(
+    doc: ParsedDocument, stem: str, renderer: _Renderer | None = None
+) -> tuple[QuestionDraft, FakeLLMClient]:
+    client = _client(stem)
+    extraction = QuestionExtractor(client).extract(doc, document_id="t", region_renderer=renderer)
+    (draft,) = extraction.drafts
+    return draft, client
+
+
+def _codes(draft: QuestionDraft) -> set[str]:
+    return {v.code for v in draft.validations}
+
+
+TABLE_DOC = ("1. 표를 보고 답하시오.", TableContent(rows=PRINTED), *OPTIONS)
+
+
+def test_a_table_question_sends_a_padded_crop_and_a_figure_question_its_figure() -> None:
+    renderer = _Renderer()
+    _, client = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(PRINTED)}", renderer)
+    ((page, box, edge),) = renderer.calls
+    assert (page, edge) == (2, MAX_IMAGE_EDGE)
+    assert box.x0 < 60 < 500 < box.x1
+    assert box.y0 < 60 < 75 < box.y1
+    (image,) = client.calls[0].images
+    assert base64.b64decode(image.data) == b"PNG\x01"
+    assert image.media_type == "image/png"
+
+    figure = _Renderer()
+    _, client = _run(
+        _doc("1. 가계도를 보고 답하시오.", ("image", "A\nB"), *OPTIONS),
+        "가계도를 보고 답하시오.\nA\nB",
+        figure,
+    )
+    assert len(figure.calls) == 1
+    assert len(client.calls[0].images) == 1
+
+
+def test_no_renderer_or_nothing_printed_means_no_images_and_no_calls() -> None:
+    _, client = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(PRINTED)}")
+    assert client.calls[0].images == ()
+    renderer = _Renderer()
+    _, client = _run(_doc("1. 옳은 것은?", *OPTIONS), "옳은 것은?", renderer)
+    assert renderer.calls == []
+    assert client.calls[0].images == ()
+
+
+def test_at_most_three_images_per_question() -> None:
+    renderer = _Renderer()
+    tables = [TableContent(rows=(("h", str(n)), ("a", "b"))) for n in range(5)]
+    doc = _doc("1. 표를 보고 답하시오.", *tables, *OPTIONS)
+    stem = "표를 보고 답하시오.\n\n" + "\n\n".join(
+        _gfm((("h", str(n)), ("a", "b"))) for n in range(5)
+    )
+    _, client = _run(doc, stem, renderer)
+    assert len(renderer.calls) == 3
+    assert len(client.calls[0].images) == 3
+
+
+def test_a_failing_renderer_leaves_the_question_without_images() -> None:
+    def broken(page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        raise RuntimeError("PRIVATE")
+
+    client = _client(f"표를 보고 답하시오.\n\n{_gfm(PRINTED)}")
+    (draft,) = (
+        QuestionExtractor(client)
+        .extract(_doc(*TABLE_DOC), document_id="t", region_renderer=broken)
+        .drafts
+    )
+    assert client.calls[0].images == ()
+    assert "llm_text_rejected" not in _codes(draft)
+
+
+def test_cells_the_model_put_back_in_place_are_accepted_and_stored() -> None:
+    fixed = (("구분", "가", "나"), ("갑", "", "재산"), ("을", "부채", "x"))
+    draft, _ = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(fixed)}")
+    assert "llm_text_rejected" not in _codes(draft)
+    assert _gfm(fixed) in draft.stem
+    assert draft.stem_tables is not None
+    assert draft.stem_tables[0] is not None
+    assert draft.stem_tables[0].rows == fixed
+
+
+def test_a_corrected_table_keeps_the_merged_cell_that_still_fits() -> None:
+    doc = _doc("1. 표를 보고 답하시오.", MERGED, *OPTIONS)
+    model = (("Kim", "", ""), ("a", "", "bc"))
+    draft, _ = _run(doc, f"표를 보고 답하시오.\n\n{_gfm(model)}")
+    assert "llm_text_rejected" not in _codes(draft)
+    assert draft.stem_tables is not None
+    assert draft.stem_tables[0] is not None
+    table = draft.stem_tables[0]
+    assert table.rows == (("Kim", "Kim", "Kim"), ("a", "", "bc"))
+    assert table.spans == MERGED.spans
+
+
+def test_a_table_with_other_text_is_still_rejected() -> None:
+    altered = (("구분", "가", "나"), ("갑", "", "재물"), ("을", "부채", "x"))
+    draft, _ = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(altered)}")
+    assert "llm_text_rejected" in _codes(draft)
+    assert _gfm(PRINTED) in draft.stem
+    assert "재물" not in draft.stem
+
+
+def test_reordered_text_is_rejected_even_with_the_same_letters() -> None:
+    swapped = (("구분", "가", "나"), ("재산", "갑", ""), ("을", "부채", "x"))
+    draft, _ = _run(_doc(*TABLE_DOC), f"표를 보고 답하시오.\n\n{_gfm(swapped)}")
+    assert "llm_text_rejected" in _codes(draft)
+
+
+DIALOGUE = (
+    ("나팀원:", "신고대상 있나요? 주로 ISA 내"),
+    ("김팀장:", "개별주식은 신고대상이 아니야."),
+)
+DIALOGUE_FIXED = (
+    ("나팀원:", "신고대상 있나요?"),
+    ("김팀장:", "주로 ISA 내 개별주식은 신고대상이 아니야."),
+)
+
+
+def _dialogue(model: tuple[tuple[str, ...], ...], renderer: _Renderer | None) -> QuestionDraft:
+    doc = _doc("1. 대화를 보고 답하시오.", TableContent(rows=DIALOGUE), *OPTIONS)
+    return _run(doc, f"대화를 보고 답하시오.\n\n{_gfm(model)}", renderer)[0]
+
+
+def test_with_images_a_table_with_the_same_tokens_in_another_order_is_accepted() -> None:
+    draft = _dialogue(DIALOGUE_FIXED, _Renderer())
+    assert "llm_text_rejected" not in _codes(draft)
+    assert draft.stem_tables is not None
+    assert draft.stem_tables[0] is not None
+    assert draft.stem_tables[0].rows == DIALOGUE_FIXED
+
+
+def test_without_images_the_token_order_still_has_to_match() -> None:
+    assert "llm_text_rejected" in _codes(_dialogue(DIALOGUE_FIXED, None))
+
+
+def test_with_images_a_changed_added_or_dropped_token_is_rejected() -> None:
+    changed = (DIALOGUE_FIXED[0], ("김팀장:", "주로 ISA 내 개별주식은 신고대상이 아냐."))
+    dropped = (DIALOGUE_FIXED[0], ("김팀장:", "ISA 내 개별주식은 신고대상이 아니야."))
+    added = (DIALOGUE_FIXED[0], ("김팀장:", "주로 주로 ISA 내 개별주식은 신고대상이 아니야."))
+    for model in (changed, dropped, added):
+        draft = _dialogue(model, _Renderer())
+        assert "llm_text_rejected" in _codes(draft)
+        assert _gfm(DIALOGUE) in draft.stem
+
+
+class _SoftLimit(Exception):  # noqa: N818
+    pass
+
+
+def test_a_stop_on_exception_while_rendering_keeps_the_rule_based_draft() -> None:
+    def limit(page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        raise _SoftLimit
+
+    client = _client(f"표를 보고 답하시오.\n\n{_gfm(PRINTED)}")
+    extraction = QuestionExtractor(client).extract(
+        _doc(*TABLE_DOC), document_id="t", region_renderer=limit, stop_on=(_SoftLimit,)
+    )
+    (draft,) = extraction.drafts
+    assert extraction.refinement_incomplete
+    assert client.calls == []
+    assert "llm_unavailable" in _codes(draft)
+
+
+def _four_tables() -> tuple[ParsedDocument, list[tuple[tuple[str, ...], ...]]]:
+    tables: list[tuple[tuple[str, ...], ...]] = [
+        (("나:", f"t{n} a b"), ("김:", "c d")) for n in range(4)
+    ]
+    doc = _doc("1. 대화를 보고 답하시오.", *(TableContent(rows=t) for t in tables), *OPTIONS)
+    return doc, tables
+
+
+def _stem(tables: list[tuple[tuple[str, ...], ...]]) -> str:
+    return "대화를 보고 답하시오.\n\n" + "\n\n".join(_gfm(t) for t in tables)
+
+
+def test_only_tables_whose_crop_was_sent_accept_reordered_tokens() -> None:
+    doc, tables = _four_tables()
+    reordered = [*tables[:3], (("나:", "t3 a"), ("김:", "b c d"))]
+    # Fourth table: no crop (cap of 3) -> order-sensitive.
+    draft, client = _run(doc, _stem(reordered), _Renderer())
+    assert len(client.calls[0].images) == 3
+    assert "llm_text_rejected" in _codes(draft)
+    # Third table reordered: its crop was sent -> accepted.
+    moved = [*tables[:2], (("나:", "t2 a"), ("김:", "b c d")), tables[3]]
+    draft, _ = _run(doc, _stem(moved), _Renderer())
+    assert "llm_text_rejected" not in _codes(draft)
+
+
+def test_a_table_whose_render_failed_stays_order_sensitive() -> None:
+    def failing(page: int, bbox: BBox, *, max_edge: int) -> bytes | None:
+        raise RuntimeError("PRIVATE")
+
+    draft = _dialogue(DIALOGUE_FIXED, failing)  # type: ignore[arg-type]
+    assert "llm_text_rejected" in _codes(draft)

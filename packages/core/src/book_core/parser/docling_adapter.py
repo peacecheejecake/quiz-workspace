@@ -7,12 +7,16 @@ This is the only module in ``book_core`` that imports Docling. Mapping to the co
 - ``title``/``section_header`` -> ``heading`` (``heading_level`` = Docling's level, title = 1);
   text, paragraph, caption, footnote, reference, code and list items -> ``text`` (list items keep
   their printed marker, e.g. ``1.`` or ``A.``); ``formula`` -> ``formula``; ``table`` and
-  ``document_index`` (a printed TOC) -> ``table`` with cells; ``picture`` -> ``image`` with empty
-  text. Other items (forms, key-value regions) are skipped.
-- Text Docling nests inside a picture is figure content and dropped, except a Part/Chapter
-  label (``제1장`` / ``Chapter 3``) and the title line right after a bare label: designed chapter
-  opener pages are often one picture region, and the label is the only chapter signal. They
-  follow the image as ``text`` blocks; the structure step decides whether they open a chapter.
+  ``document_index`` (a printed TOC) -> ``table`` with cells; ``picture`` -> ``image`` whose text is
+  the printed text Docling nested inside it (see below). Other items (forms, key-value regions)
+  are skipped.
+- Text Docling nests inside a picture is figure content (a diagram's labels, a family tree):
+  it is the image block's ``text``, one line per nested item in reading order. A Part/Chapter
+  label (``제1장`` / ``Chapter 3``) and the title line right after a bare label also follow the
+  image as ``text`` blocks (designed chapter opener pages are often one picture region, and the
+  label is the only chapter signal); the structure step decides whether they open a chapter.
+- A merged table cell's text is printed once in a table block's ``text`` (at the span origin,
+  the covered cells are empty); ``table.rows`` keeps the repeated grid.
 - Captions are separate ``text`` blocks linked via ``caption_block_id``; a caption printed above
   its table/figure is placed before it in reading order.
 - OCR fallback: only RapidOCR, configured explicitly (Docling's auto engine selection silently
@@ -71,7 +75,7 @@ from book_core.parser._blocks import (
 from book_core.parser.base import ParserError, ParserOptions, sha256_hex
 from book_core.structure.numbering import NumberingKind, is_bare_label, parse_numbering
 
-ADAPTER_VERSION = 3
+ADAPTER_VERSION = 4
 """Bump when the Docling -> contract mapping changes output for the same Docling version."""
 
 _DROPPED_TEXT_LABELS = frozenset({DocItemLabel.PAGE_HEADER, DocItemLabel.PAGE_FOOTER})
@@ -361,7 +365,7 @@ def _draft(
     locs = tuple(locations)
     if isinstance(item, TableItem):
         table = _table(item)
-        text = table_text(table.rows) if table is not None else ""
+        text = table_text(table.rows_once()) if table is not None else ""
         return DraftBlock(type=BlockType.TABLE, text=text, locations=locs, table=table)
     if isinstance(item, PictureItem):
         return DraftBlock(type=BlockType.IMAGE, text="", locations=locs)
@@ -387,20 +391,33 @@ def _draft(
     return DraftBlock(type=BlockType.TEXT, text=text, locations=locs)
 
 
-def _picture_labels(
+def _picture_texts(
     picture: PictureItem, doc: DoclingDocument, pages: dict[int, PageInfo]
-) -> list[tuple[str, DraftBlock]]:
-    """Part/Chapter labels among the picture's text children, each with the title line that
-    follows a bare label (see the module docstring); everything else in the picture is dropped."""
+) -> list[tuple[str, str, list[SourceLocation]]]:
+    """``(ref, text, locations)`` of the picture's printed text children, in reading order."""
     texts: list[tuple[str, str, list[SourceLocation]]] = []
+    captions = {ref.cref for ref in picture.captions}  # separate blocks, linked by the caller
     for child_ref in picture.children:
         child = child_ref.resolve(doc)
-        if not isinstance(child, TextItem) or child.label in _DROPPED_TEXT_LABELS:
+        if (
+            not isinstance(child, TextItem)
+            or child.label in _DROPPED_TEXT_LABELS
+            or child.self_ref in captions
+        ):
             continue
         located = _page_locations(child, doc, pages)
         text = normalize_text(child.text)
         if located and text:
             texts.append((child.self_ref, text, [loc for loc, _ in located]))
+    return texts
+
+
+def _picture_labels(
+    picture: PictureItem, doc: DoclingDocument, pages: dict[int, PageInfo]
+) -> list[tuple[str, DraftBlock]]:
+    """Part/Chapter labels among the picture's text children, each with the title line that
+    follows a bare label (see the module docstring)."""
+    texts = _picture_texts(picture, doc, pages)
     out: list[tuple[str, DraftBlock]] = []
     for index, (ref, text, locations) in enumerate(texts):
         numbering = parse_numbering(text)
@@ -466,7 +483,13 @@ def _drafts(doc: DoclingDocument, pages: dict[int, PageInfo]) -> list[DraftBlock
         )
         entries.append((item.self_ref, draft, captions))
         if isinstance(item, PictureItem):
-            entries.extend((ref, label, []) for ref, label in _picture_labels(item, doc, pages))
+            labels = _picture_labels(item, doc, pages)
+            # Chapter labels follow as text blocks; they are not repeated in the image text.
+            label_refs = {ref for ref, _ in labels}
+            draft.text = "\n".join(
+                text for ref, text, _ in _picture_texts(item, doc, pages) if ref not in label_refs
+            )
+            entries.extend((ref, label, []) for ref, label in labels)
 
     by_ref = {ref: draft for ref, draft, _ in entries}
     owned = {cref for _, _, captions in entries for cref in captions if cref in by_ref}

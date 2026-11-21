@@ -8,18 +8,24 @@ tests/integration/questions/test_question_import_contract.py.
 from __future__ import annotations
 
 import hashlib
+import io
 import itertools
+import logging
 import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 import pytest
-from book_core.contracts import ParsedDocument
+from book_core.contracts import BBox, ParsedDocument
+from book_core.extractor import MAX_IMAGE_EDGE, LLMQuestion, QuestionExtractor
+from book_core.llm import FakeLLMClient
 from book_core.parser import FakeParser, document_from_pages
 from celery.exceptions import SoftTimeLimitExceeded
+from PIL import Image
 from quiz_worker.celery_app import default_definitions
 from quiz_worker.document_job import (
     DocumentJobDeps,
@@ -28,6 +34,7 @@ from quiz_worker.document_job import (
 )
 from quiz_worker.document_store import DocumentBusyError, DocumentRow, JobRow
 from quiz_worker.envelope import JobEnvelope
+from quiz_worker.pdf_regions import open_pdf_regions
 from quiz_worker.question_import_job import (
     IMPORT_FAILURE_MARKER,
     ImportJobDeps,
@@ -38,7 +45,7 @@ from quiz_worker.question_import_job import (
 from quiz_worker.question_import_store import JOB_TYPE, DraftRow, RunRow, TerminalRunStatus
 from quiz_worker.runner import JobRunner, RunOutcome
 from quiz_worker.settings import Environment, WorkerSettings
-from quiz_worker.storage import PARSED_BUCKET
+from quiz_worker.storage import PARSED_BUCKET, SOURCE_BUCKET
 from quiz_worker.store import InMemoryJobStore, JobStatus
 
 from .conftest import FakeClock
@@ -576,3 +583,107 @@ def test_soft_time_limit_while_refining_still_saves_the_rule_based_drafts(world:
     assert world.imports.llm == [(None, None)]  # nothing was refined: no LLM provenance
     for draft in world.imports.run_drafts(run.id):
         assert "llm_unavailable" in {v["code"] for v in draft.validations}
+
+
+# --- FIGTBL-2: table / figure crops of the source PDF go to the model ------------------------
+
+
+class _Spy:
+    """Records what the job hands to the extractor and which PDF it opened."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.renderer: object = "not called"
+        self.opened: list[Path] = []
+        original = QuestionExtractor.extract
+
+        def extract(extractor: Any, *args: Any, **kwargs: Any) -> Any:
+            self.renderer = kwargs.get("region_renderer")
+            if self.renderer is not None:
+                self.png = self.renderer(1, BBox(x0=50, y0=50, x1=300, y1=200), max_edge=1568)
+            return original(extractor, *args, **kwargs)
+
+        monkeypatch.setattr(QuestionExtractor, "extract", extract)
+
+    def open_regions(self, path: Path) -> Any:
+        self.opened.append(path)
+        return open_pdf_regions(path)
+
+
+def _llm_world(world: World, monkeypatch: pytest.MonkeyPatch) -> _Spy:
+    spy = _Spy(monkeypatch)
+    client = FakeLLMClient()
+    client.script(
+        "questions.extract",
+        LLMQuestion(
+            question_type="SHORT_ANSWER", multi_select=False, stem="x", options=[], answer=None
+        ),
+    )
+    world.deps.llm = client
+    world.deps.llm_model = "fake-llm"
+    world.deps.open_regions = spy.open_regions
+    return spy
+
+
+def test_with_the_llm_on_the_source_pdf_is_rendered_and_removed_afterwards(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = _llm_world(world, monkeypatch)
+    run = world.start(world.paper())
+
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert callable(spy.renderer)
+    assert spy.png is not None
+    assert spy.png.startswith(b"\x89PNG")
+    with Image.open(io.BytesIO(spy.png)) as image:
+        assert 0 < max(image.size) <= MAX_IMAGE_EDGE
+    (path,) = spy.opened
+    assert not path.exists()
+
+
+def test_a_missing_source_pdf_means_no_renderer_and_the_import_still_succeeds(
+    world: World, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    spy = _llm_world(world, monkeypatch)
+    document = world.paper()
+    del world.storage.objects[(SOURCE_BUCKET, document.source_object_key)]
+    run = world.start(document)
+
+    with caplog.at_level(logging.WARNING):
+        result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert spy.renderer is None
+    assert spy.opened == []
+    assert "question images skipped" in caplog.text
+    assert document.source_object_key not in caplog.text
+
+
+def test_an_unreadable_source_pdf_means_no_renderer(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = _llm_world(world, monkeypatch)
+    document = world.paper()
+    world.storage.objects[(SOURCE_BUCKET, document.source_object_key)] = b"not a pdf"
+    world.documents.documents[document.id] = replace(document, size_bytes=9)
+    run = world.start(world.documents.documents[document.id])
+
+    result = world.run(world.submit(run))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert spy.renderer is None
+
+
+def test_without_the_llm_the_source_pdf_is_not_downloaded(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spy = _Spy(monkeypatch)
+    document = world.paper()
+    downloads = world.storage.downloads
+
+    result = world.run(world.submit(world.start(document)))
+
+    assert result.outcome is RunOutcome.SUCCEEDED, result.error
+    assert spy.renderer is None
+    assert world.storage.downloads == downloads + 1  # the parse artifact only

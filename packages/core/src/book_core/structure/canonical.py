@@ -49,11 +49,12 @@ def _dehyphenate(text: str) -> str:
 
 def normalize_block_text(text: str, block_type: BlockType, *, dehyphenate: bool = True) -> str:
     """NFC, no soft hyphens (one between digits is a printed hyphen: ``-``), horizontal whitespace
-    collapsed; line breaks are kept only in tables (row separators). With ``dehyphenate``, EN
-    words broken at a line end are rejoined in text blocks. Wording is never changed."""
+    collapsed; line breaks are kept only in tables (row separators) and images (figure text
+    lines). With ``dehyphenate``, EN words broken at a line end are rejoined in text blocks.
+    Wording is never changed."""
     text = unicodedata.normalize("NFC", text)
     text = _DIGIT_SOFT_HYPHEN.sub("-", text).replace(_SOFT_HYPHEN, "")
-    if block_type is BlockType.TABLE:
+    if block_type in (BlockType.TABLE, BlockType.IMAGE):
         lines = (_HSPACE.sub(" ", line).strip() for line in text.split("\n"))
         return "\n".join(line for line in lines if line)
     text = " ".join(text.split())

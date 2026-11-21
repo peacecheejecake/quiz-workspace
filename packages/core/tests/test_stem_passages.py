@@ -37,6 +37,6 @@ def test_a_passage_wrapped_over_printed_lines_gets_the_same_shape() -> None:
 
 
 def test_the_refine_prompt_keeps_the_passage_shape() -> None:
-    assert EXTRACT_PROMPT_VERSION == "questions.extract/v5"
-    assert build_request(["옳은 것은?"], []).prompt_version == "questions.extract/v5"
+    assert EXTRACT_PROMPT_VERSION == "questions.extract/v7"
+    assert build_request(["옳은 것은?"], []).prompt_version == "questions.extract/v7"
     assert '"<제목>"' in SYSTEM_PROMPT

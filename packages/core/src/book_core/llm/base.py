@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Annotated, Protocol, get_args, runtime_checkable
+from typing import Annotated, Literal, Protocol, get_args, runtime_checkable
 
 from pydantic import BaseModel, Field, ValidationError
 
 from book_core.contracts.common import CoreModel, Identifier, NonEmptyText
+
+
+class LLMImage(CoreModel):
+    """An image sent with a request: base64 ``data`` of a PNG or JPEG.
+
+    Printed book content: never log it, and ``repr`` hides the bytes.
+    """
+
+    media_type: Literal["image/png", "image/jpeg"]
+    data: Annotated[str, Field(min_length=1, repr=False)]
 
 
 class LLMRequest(CoreModel):
@@ -16,10 +26,17 @@ class LLMRequest(CoreModel):
     prompt_version: NonEmptyText
     prompt: NonEmptyText
     system: str | None = None
+    images: tuple[LLMImage, ...] = ()
+    """Images shown before the prompt text (e.g. the printed table of a question)."""
 
     def fingerprint(self) -> str:
-        """Stable SHA-256 of the request, independent of process and hash seed."""
-        return hashlib.sha256(self.model_dump_json().encode("utf-8")).hexdigest()
+        """Stable SHA-256 of the request, independent of process and hash seed. A request
+        without images hashes as it did before images existed; images add their digests."""
+        text = self.model_dump_json(exclude={"images"})
+        digest = hashlib.sha256(text.encode("utf-8"))
+        for image in self.images:
+            digest.update(f"\n{image.media_type}:{image.data}".encode())
+        return digest.hexdigest()
 
 
 class LLMUsage(CoreModel):

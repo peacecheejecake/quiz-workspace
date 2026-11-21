@@ -2,7 +2,7 @@
 
 Pipeline (questions.md §6): printed reading order (``reading_order``) -> rule-based
 pre-extraction (numbering, options, figures, answer key, page/bbox provenance) -> optional LLM
-refinement per question (``questions.extract/v5``, structured output, own source text only) ->
+refinement per question (``questions.extract/v7``, structured output, own source text only) ->
 structural validation -> drafts with ``review_status=pending``, ``origin=pdf_import`` and
 validation issues.
 
@@ -18,6 +18,7 @@ its pre-extraction and gets a warning.
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from collections import Counter
@@ -25,11 +26,12 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 
 from pydantic import Field
 
 from book_core.contracts import (
+    BBox,
     Block,
     BlockType,
     CoreModel,
@@ -49,11 +51,13 @@ from book_core.contracts.common import Identifier
 from book_core.extractor.llm_refine import LLMQuestion, build_request
 from book_core.extractor.reading_order import reading_order
 from book_core.extractor.segment import (
+    FIGURE_MARKER,
     AnswerKeyEntry,
     RawFigure,
     RawQuestion,
     Segmentation,
     SourceLine,
+    add_shared_figure_text,
     answer_entries,
     infer_type,
     segment_chapters,
@@ -62,6 +66,7 @@ from book_core.extractor.segment import (
 from book_core.llm import (
     LLMCallInfo,
     LLMClient,
+    LLMImage,
     LLMOutputError,
     LLMProviderError,
     LLMRequest,
@@ -73,10 +78,12 @@ from book_core.question import (
     aligned_stem_tables,
     answer_option_keys,
     canonical_key,
+    gfm_table,
     has_pipe_table,
     issue,
     loose_text,
     option_id,
+    pipe_table_rows,
     split_pipe_blocks,
     structural_issues,
 )
@@ -84,6 +91,24 @@ from book_core.question import (
 logger = logging.getLogger("book_core.extractor")
 
 EXTRACTOR_VERSION = "book-core-question-extractor/2"
+
+MAX_QUESTION_IMAGES = 3
+"""Crops of printed tables / figures sent with one question's refinement request."""
+MAX_IMAGE_EDGE = 1568
+"""Longest edge, in pixels, of a crop."""
+CROP_PADDING_PT = 6.0
+"""Margin added around a table / figure box, in PDF points."""
+
+
+class PageRegionRenderer(Protocol):
+    """Renders a region of a source page as PNG bytes (``None`` when it cannot).
+
+    ``page`` is 1-based and ``bbox`` is in PDF points with the origin at the page's top-left
+    corner; the longest edge of the image must not exceed ``max_edge`` pixels.
+    """
+
+    def __call__(self, page: int, bbox: BBox, *, max_edge: int) -> bytes | None: ...
+
 
 _OUTLIER_MIN_QUESTIONS = 10
 """Multiple-choice questions before a document has a common option count."""
@@ -158,6 +183,7 @@ class QuestionExtractor:
         progress: Callable[[int, int], object] | None = None,
         concurrency: int = 1,
         stop_on: tuple[type[BaseException], ...] = (),
+        region_renderer: PageRegionRenderer | None = None,
     ) -> QuestionExtraction:
         """Extract drafts; ``progress(done, total)`` is monotonic and called from this thread.
 
@@ -165,6 +191,10 @@ class QuestionExtractor:
         concurrent use); output order and draft ids do not depend on it. If an exception in
         ``stop_on`` (e.g. a Celery soft time limit) arrives while refining, finished questions
         keep their refinement, the rest stay rule-based and ``refinement_incomplete`` is set.
+
+        With ``region_renderer``, a question whose stem has tables or figures sends their printed
+        regions (at most ``MAX_QUESTION_IMAGES``) as images with its refinement request; the
+        renderer is called from this thread only. Without it nothing is rendered.
         """
         blocks = reading_order(document.blocks)
         seg = segment_chapters(blocks)
@@ -199,6 +229,7 @@ class QuestionExtractor:
         # order never depends on completion order.
         refinable = [i for i, c in enumerate(candidates) if c.stem] if self._llm is not None else []
         results: dict[int, tuple[_Candidate, bool, LLMCallInfo | None]] = {}
+        images: dict[int, _Crops] = {}
         done = 0
         for _ in range(total - len(refinable)):  # no LLM call needed: done at once
             done += 1
@@ -213,13 +244,28 @@ class QuestionExtractor:
             )
             futures: dict[Future[tuple[_Candidate, bool, LLMCallInfo | None]], int] = {}
             try:
+                if region_renderer is not None:
+                    for i in refinable:
+                        images[i] = _region_images(contexts[i].raw, region_renderer, stop_on)
                 # The first call goes alone so the others can read the prompt cache it writes.
                 first = refinable[0]
-                futures = {pool.submit(_refine, llm, candidates[first], contexts[first]): first}
+                futures = {
+                    pool.submit(
+                        _refine,
+                        llm,
+                        candidates[first],
+                        contexts[first],
+                        images.get(first, _NO_CROPS),
+                    ): first
+                }
                 if concurrency > 1:
                     wait(futures)
                 for i in refinable[1:]:
-                    futures[pool.submit(_refine, llm, candidates[i], contexts[i])] = i
+                    futures[
+                        pool.submit(
+                            _refine, llm, candidates[i], contexts[i], images.get(i, _NO_CROPS)
+                        )
+                    ] = i
                 for future in as_completed(futures):
                     results[futures[future]] = future.result()
                     done += 1
@@ -345,11 +391,15 @@ def _contexts(seg: Segmentation, blocks: Sequence[Block]) -> list[_Context]:
         seen[raw.number] += 1
         duplicate = counts[raw.number] > 1
         last = max(raw.block_indices)
+        figures = _figures(raw, labelled)
+        for figure in figures:
+            if all(figure is not own for own in raw.figures):
+                add_shared_figure_text(raw, figure)
         contexts.append(
             _Context(
                 raw=raw,
                 entries=raw.answer if raw.answer else keyed[id(raw)],
-                figures=_figures(raw, labelled),
+                figures=figures,
                 next_block=blocks[last + 1] if last + 1 < len(blocks) else None,
                 occurrence=seen[raw.number] if duplicate else 0,
             )
@@ -616,24 +666,99 @@ def _source_lines(raw: RawQuestion, figures: Sequence[RawFigure]) -> list[str]:
         lines += option.lines
     lines += [f.caption for f in figures if f.caption is not None]
     seen: set[tuple[int, str]] = set()
-    ordered: list[str] = []
+    ordered: list[tuple[int, str]] = []
     for line in sorted(lines, key=lambda ln: ln.block_index):
         if (line.block_index, line.text) not in seen:
             seen.add((line.block_index, line.text))
-            ordered.append(line.text)
-    return ordered
+            ordered.append((line.block_index, line.prompt or line.text))
+    # The printed text of a figure that is part of the stem follows its marker line; repeated
+    # lines inside a figure (two boxes labelled "B") are all kept.
+    own = [f for f in raw.figures if f.text_in_stem]
+    # A shared figure's text sits after the stem, where the stem puts it.
+    after_stem = max((ln.block_index for ln in raw.stem_lines), default=0)
+    placed = [(f, f.block_index) for f in own] + [(f, after_stem) for f in raw.shared_figures]
+    for figure, key in placed:
+        if figure.image is not None:
+            ordered.append((key, FIGURE_MARKER))
+            ordered += [(key, text) for text in figure.image.text.split("\n") if text.strip()]
+    ordered.sort(key=lambda item: item[0])  # stable: the marker stays before its text
+    return [text for _, text in ordered]
 
 
 def _request_lines(ctx: _Context) -> tuple[list[str], list[str]]:
     return _source_lines(ctx.raw, ctx.figures), sorted({e.line.text for e in ctx.entries})
 
 
+@dataclass(frozen=True, slots=True)
+class _Crops:
+    images: tuple[LLMImage, ...] = ()
+    tables: frozenset[int] = frozenset()
+    """Indices (in ``stem_tables``) of the tables whose printed regions are all in ``images``."""
+
+
+_NO_CROPS = _Crops()
+
+
+def _region_images(
+    raw: RawQuestion,
+    render: PageRegionRenderer,
+    stop_on: tuple[type[BaseException], ...] = (),
+) -> _Crops:
+    """PNG crops of the printed tables and figures whose text the model reads: one per page of
+    a block, in print order, at most ``MAX_QUESTION_IMAGES``. A failed render is skipped. The
+    result also lists the stem tables whose every page region was sent."""
+    blocks: dict[str, tuple[int, Block]] = {}
+    for line in raw.stem_lines:
+        block = line.block
+        if block.type is BlockType.TABLE and any(block.table is t for t in raw.stem_tables):
+            blocks.setdefault(block.id, (line.block_index, block))
+    for figure in raw.figures:
+        if figure.text_in_stem and figure.image is not None:
+            blocks.setdefault(figure.image.id, (figure.block_index, figure.image))
+    for figure in raw.shared_figures:
+        if figure.image is not None:
+            blocks.setdefault(figure.image.id, (max(raw.block_indices, default=0), figure.image))
+    images: list[LLMImage] = []
+    imaged: set[int] = set()
+    for _, block in sorted(blocks.values(), key=lambda item: item[0]):
+        complete = True
+        for location in union_locations([block]):
+            if location.bbox is None or len(images) >= MAX_QUESTION_IMAGES:
+                complete = False
+                continue
+            box = location.bbox
+            padded = BBox(
+                x0=max(0.0, box.x0 - CROP_PADDING_PT),
+                y0=max(0.0, box.y0 - CROP_PADDING_PT),
+                x1=box.x1 + CROP_PADDING_PT,
+                y1=box.y1 + CROP_PADDING_PT,
+            )
+            try:
+                png = render(location.page, padded, max_edge=MAX_IMAGE_EDGE)
+            except Exception as exc:
+                if stop_on and isinstance(exc, stop_on):
+                    raise
+                # Only the type: nothing about the page content.
+                logger.warning("page region render failed: %s", type(exc).__name__)
+                complete = False
+                continue
+            if not png:
+                complete = False
+                continue
+            images.append(
+                LLMImage(media_type="image/png", data=base64.b64encode(png).decode("ascii"))
+            )
+        if complete:
+            imaged.update(n for n, t in enumerate(raw.stem_tables) if t is block.table)
+    return _Crops(tuple(images), frozenset(imaged))
+
+
 def _refine(
-    llm: LLMClient, pre: _Candidate, ctx: _Context
+    llm: LLMClient, pre: _Candidate, ctx: _Context, crops: _Crops = _NO_CROPS
 ) -> tuple[_Candidate, bool, LLMCallInfo | None]:
     source, key_lines = _request_lines(ctx)
     entries = ctx.entries
-    request = build_request(source, key_lines)
+    request = build_request(source, key_lines, crops.images)
     try:
         result = llm.complete(request, LLMQuestion)
     except LLMOutputError as exc:
@@ -652,7 +777,7 @@ def _refine(
             )
         )
         return pre, False, None
-    merged = _merge(pre, result.output, entries)
+    merged = _merge(pre, result.output, entries, crops.tables)
     merged.generator = GeneratorInfo(model=result.info.model, prompt_version=request.prompt_version)
     return merged, True, result.info
 
@@ -661,9 +786,10 @@ def _merge(
     pre: _Candidate,
     proposal: LLMQuestion,
     entries: Sequence[AnswerKeyEntry],
+    imaged: frozenset[int] = frozenset(),
 ) -> _Candidate:
     issues = list(pre.issues)
-    stem, options, text_issues = _verified_text(pre, proposal)
+    stem, options, text_issues, tables = _verified_text(pre, proposal, imaged)
     issues += text_issues
 
     question_type = QuestionType(proposal.question_type)
@@ -714,6 +840,7 @@ def _merge(
         question_type=question_type,
         multi_select=multi,
         stem=stem,
+        stem_tables=pre.stem_tables if tables is None else tables,
         options=options,
         correct_option_ids=correct,
         accepted_answers=accepted,
@@ -722,8 +849,8 @@ def _merge(
 
 
 def _verified_text(
-    pre: _Candidate, proposal: LLMQuestion
-) -> tuple[str, list[tuple[str, str]], list[ValidationIssue]]:
+    pre: _Candidate, proposal: LLMQuestion, imaged: frozenset[int] = frozenset()
+) -> tuple[str, list[tuple[str, str]], list[ValidationIssue], tuple[TableContent, ...] | None]:
     """Stem and options from the LLM only where they match the printed spans.
 
     Every label-text pair must be the printed one: with options found by the pre-extractor,
@@ -737,7 +864,9 @@ def _verified_text(
     issues: list[ValidationIssue] = []
     keys = [canonical_key(o.label) for o in proposal.options]
     keys_ok = all(keys) and len(set(keys)) == len(keys)
-    llm_stem = proposal.stem.strip()
+    llm_stem, corrected_stem, corrected_tables = _resolve_tables(
+        proposal.stem.strip(), pre.stem_tables, imaged=imaged
+    )
 
     if not pre.options and proposal.options:
         llm_options = [(k, o.text.strip()) for k, o in zip(keys, proposal.options, strict=True)]
@@ -749,7 +878,7 @@ def _verified_text(
             and _reproduces(pre.stem, llm_stem, llm_options)
             and _tables(llm_stem) == _tables(pre.stem)
         ):
-            return llm_stem, llm_options, issues
+            return corrected_stem, llm_options, issues, corrected_tables
         issues.append(
             issue(
                 "llm_text_rejected",
@@ -758,15 +887,16 @@ def _verified_text(
                 field="options",
             )
         )
-        return pre.stem, pre.options, issues
+        return pre.stem, pre.options, issues, None
 
     stem = pre.stem
+    tables: tuple[TableContent, ...] | None = None
     if (
         llm_stem
         and loose_text(llm_stem) == loose_text(pre.stem)
         and _tables(llm_stem) == _tables(pre.stem)
     ):
-        stem = llm_stem
+        stem, tables = corrected_stem, corrected_tables
     else:
         issues.append(
             issue(
@@ -776,7 +906,7 @@ def _verified_text(
             )
         )
     if not pre.options:
-        return stem, pre.options, issues
+        return stem, pre.options, issues, tables
     if not proposal.options:
         issues.append(
             issue(
@@ -801,7 +931,93 @@ def _verified_text(
                 field="options",
             )
         )
-    return stem, pre.options, issues
+    return stem, pre.options, issues, tables
+
+
+def _letters(rows: Sequence[Sequence[str]]) -> str:
+    """The printed text of a table in reading order, without spacing and cell boundaries."""
+    return loose_text("".join("".join(row) for row in rows))
+
+
+def _tokens(rows: Sequence[Sequence[str]]) -> Counter[str]:
+    """The whitespace-separated tokens of a table: order, cells and pipes do not matter."""
+    return Counter(tok for row in rows for cell in row for tok in cell.split())
+
+
+def _rebuilt_table(old: TableContent, rows: Sequence[Sequence[str]]) -> TableContent:
+    """The model's cells as a table. A merged cell of ``old`` stays when it still fits (its
+    start cell has text and the cells it covers are empty); its text is repeated again."""
+    grid = [list(row) for row in rows]
+    spans = []
+    if len(grid) == len(old.rows) and len(grid[0]) == len(old.rows[0]):
+        for span in old.spans or ():
+            start, *covered = span.cells()
+            if grid[start[0]][start[1]].strip() and not any(grid[r][c].strip() for r, c in covered):
+                spans.append(span)
+                for r, c in covered:
+                    grid[r][c] = grid[start[0]][start[1]]
+    return TableContent(
+        rows=tuple(tuple(row) for row in grid),
+        header_rows=min(old.header_rows, len(grid)),
+        spans=tuple(spans) or None,
+    )
+
+
+def _resolve_tables(
+    stem: str, tables: Sequence[TableContent], *, imaged: frozenset[int] = frozenset()
+) -> tuple[str, str, tuple[TableContent, ...] | None]:
+    """``(restored, corrected, tables)`` for the model's ``stem``.
+
+    ``restored``: each pipe table the model copied (merged cells printed once) or re-celled is
+    swapped for the stem's own table (merged text repeated, as the structured cells expect), so
+    the text checks compare against the print. ``corrected``: the same stem where a table with the
+    printed text in the same order (any order of its tokens when the table's crop was sent, as
+    a layout model can read a box's lines in the wrong order) but other cell boundaries (the
+    model put a text in the right cell using the image) keeps the model's cells, and
+    ``tables`` are the cells of every table in it; ``None`` when nothing was corrected. A table
+    with other text is left as the model wrote it, so the printed-text check rejects the stem.
+    """
+    segments = split_pipe_blocks(stem)
+    positions = [i for i, (is_table, _) in enumerate(segments) if is_table]
+    if not tables or len(positions) != len(tables):
+        return _restore_tables(stem, tables), stem, None
+    restored = [text for _, text in segments]
+    corrected = list(restored)
+    cells = list(tables)
+    changed = swapped = False
+    for n, (pos, table) in enumerate(zip(positions, tables, strict=True)):
+        text = segments[pos][1]
+        own = gfm_table(table)
+        once = gfm_table(table.model_copy(update={"rows": table.rows_once()}))
+        if loose_text(text) in {loose_text(own), loose_text(once)}:
+            if table.spans:
+                restored[pos] = corrected[pos] = own
+                swapped = True
+        elif _letters(pipe_table_rows(text)) == _letters(table.rows_once()) or (
+            n in imaged and _tokens(pipe_table_rows(text)) == _tokens(table.rows_once())
+        ):
+            rebuilt = _rebuilt_table(table, pipe_table_rows(text))
+            restored[pos], corrected[pos], cells[n] = own, gfm_table(rebuilt), rebuilt
+            changed = swapped = True
+    if not swapped:
+        return stem, stem, None
+    return "\n\n".join(restored), "\n\n".join(corrected), tuple(cells) if changed else None
+
+
+def _restore_tables(stem: str, tables: Sequence[TableContent]) -> str:
+    """``stem`` with each pipe table the model saw with merged cells printed once swapped back
+    for the stem's own table (the fallback when the table count differs from the stem's)."""
+    once = {
+        loose_text(gfm_table(t.model_copy(update={"rows": t.rows_once()}))): gfm_table(t)
+        for t in tables
+        if t.spans
+    }
+    segments = split_pipe_blocks(stem)
+    if not once or not any(is_table and loose_text(text) in once for is_table, text in segments):
+        return stem
+    return "\n\n".join(
+        once.get(loose_text(text), text) if is_table else text for is_table, text in segments
+    )
 
 
 def _tables(stem: str) -> list[str]:
