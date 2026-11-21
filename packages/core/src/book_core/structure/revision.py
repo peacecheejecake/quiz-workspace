@@ -146,6 +146,8 @@ def _edited_block(block: Block, raw: str) -> Block | None:
     update: dict[str, Any] = {"text": text, "edited": True}
     if block.type is BlockType.TABLE:
         table = _edited_table(block, text)
+        if table is block.table:
+            return None  # the table's own text, in the stored or the printed-once form
         update["table"] = table
         update["text"] = "\n".join(" | ".join(row).rstrip() for row in table.rows_once())
     if update["text"] == block.text and update.get("table", block.table) == block.table:
